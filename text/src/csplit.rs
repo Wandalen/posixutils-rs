@@ -59,6 +59,14 @@ struct SplitOps {
     ops: Vec<Operand>,
 }
 
+/// Increment a character by one.
+///
+/// # Examples
+///
+/// ```
+/// let c = 'a';
+/// assert_eq!(ascii_alphabet::inc_char(c), 'b');
+/// ```
 fn inc_char(ch: char) -> char {
     ((ch as u8) + 1) as char
 }
@@ -84,6 +92,39 @@ impl OutputState {
         }
     }
 
+    /// Increments the suffix of the output filename.
+    ///
+    /// This function increments the suffix of the output filename in lexicographic order.
+    /// It replaces 'z' with 'a' and carries over to the previous character if necessary.
+    /// If the maximum suffix is reached (e.g., 'zzz'), an error is returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `self` - A mutable reference to the `OutputState` struct.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<(), &'static str>` - `Ok(())` if the suffix is successfully incremented, otherwise an error message.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use your_crate_name::OutputState;
+    ///
+    /// let mut state = OutputState::new("prefix", 3);
+    /// assert_eq!(state.suffix, "");
+    ///
+    /// // Increment suffix from empty to "aaa"
+    /// assert_eq!(state.incr_suffix(), Ok(()));
+    /// assert_eq!(state.suffix, "aaa");
+    ///
+    /// // Increment suffix from "aaa" to "aab"
+    /// assert_eq!(state.incr_suffix(), Ok(()));
+    /// assert_eq!(state.suffix, "aab");
+    ///
+    /// // Increment suffix to maximum ('zzz') - returns error
+    /// assert_eq!(state.incr_suffix(), Err("maximum suffix reached"));
+    /// ```
     fn incr_suffix(&mut self) -> Result<(), &'static str> {
         assert!(self.suffix_len > 1);
 
@@ -114,6 +155,44 @@ impl OutputState {
         Err("maximum suffix reached")
     }
 
+
+    /// Opens the output file for writing.
+    ///
+    /// This function opens the output file for writing. If the output file is already open, it does nothing.
+    /// Otherwise, it increments the suffix of the output filename and creates a new file with the updated filename.
+    ///
+    /// # Arguments
+    ///
+    /// * `self` - A mutable reference to the `OutputState` struct.
+    ///
+    /// # Returns
+    ///
+    /// * `io::Result<()>` - `Ok(())` if the output file is successfully opened or already open, otherwise an error indicating the failure to open the file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is a problem creating or opening the output file.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::fs::File;
+    /// use std::io::{self, Write};
+    /// use your_crate_name::OutputState;
+    ///
+    /// let mut state = OutputState::new("prefix", 3);
+    ///
+    /// // Open the output file
+    /// assert!(state.open_output().is_ok());
+    ///
+    /// // Write to the output file
+    /// if let Some(ref mut file) = state.outf {
+    ///     writeln!(file, "Hello, world!").expect("Failed to write to file");
+    /// }
+    ///
+    /// // Close the output file
+    /// state.close_output();
+    /// ```
     fn open_output(&mut self) -> io::Result<()> {
         if self.outf.is_some() {
             return Ok(());
@@ -174,6 +253,27 @@ fn csplit_file(args: &Args, ctx: SplitOps) -> io::Result<()> {
     Ok(())
 }
 
+/// Finds the position of the delimiter in the input string, or None if the delimiter is not found.
+///
+/// # Arguments
+///
+/// * `s` - The input string to search in.
+/// * `delim` - The character to search for.
+///
+/// # Returns
+///
+/// * `Option<usize>` - Some(position) if the delimiter is found, None otherwise.
+///
+/// # Examples
+///
+/// ```
+/// use your_crate_name::escaped_end_pos;
+///
+/// assert_eq!(escaped_end_pos("foo/bar", '/'), Some(3));
+/// assert_eq!(escaped_end_pos("foo%bar", '%'), Some(3));
+/// assert_eq!(escaped_end_pos("foo\\bar", '\\'), Some(3));
+/// assert_eq!(escaped_end_pos("foo", '\\'), None);
+/// ```
 fn escaped_end_pos(s: &str, delim: char) -> Option<usize> {
     let mut first = true;
     let mut escaped = false;
@@ -193,6 +293,28 @@ fn escaped_end_pos(s: &str, delim: char) -> Option<usize> {
     return None;
 }
 
+/// Parses an operation string of the form `/regex/offset` or `%regex/offset` or `{n}` or `1..9`
+///
+/// # Arguments
+///
+/// * `opstr` - The string to parse
+/// * `delim` - The character that indicates the start of the operation string. If it is `'%'`, the operation is in skip mode.
+///
+/// # Returns
+///
+/// * `Result<Operand, std::io::Error>` - `Ok(Operand)` if the operation string is parsed successfully, otherwise an error indicating the failure to parse the operation string.
+///
+/// # Examples
+///
+/// ```
+/// use your_crate_name::escaped_end_pos;
+/// use your_crate_name::parse_op_rx;
+///
+/// assert_eq!(parse_op_rx("foo/bar/10", '/').unwrap(), Operand::Rx(Regex::new("bar").unwrap(), 10, false));
+/// assert_eq!(parse_op_rx("foo%bar/10", '%').unwrap(), Operand::Rx(Regex::new("bar").unwrap(), 10, true));
+/// assert_eq!(parse_op_rx("foo{3}", '{' as char).unwrap(), Operand::Repeat(3));
+/// assert_eq!(parse_op_rx("foo1", '1' as char).unwrap(), Operand::LineNum(1));
+/// ```
 fn parse_op_rx(opstr: &str, delim: char) -> io::Result<Operand> {
     // delimiter indicates skip-mode
     let is_skip = delim == '%';
@@ -232,6 +354,37 @@ fn parse_op_rx(opstr: &str, delim: char) -> io::Result<Operand> {
     }
 }
 
+
+/// Parses a repeat operand from a string.
+///
+/// This function parses a repeat operand from the input string. The repeat operand is specified
+/// within curly braces, indicating the number of times a certain pattern should be repeated.
+///
+/// # Arguments
+///
+/// * `opstr` - A string slice containing the operand to parse.
+///
+/// # Returns
+///
+/// * `io::Result<Operand>` - The parsed operand if successful, otherwise an error indicating
+///   the failure to parse the operand.
+///
+/// # Errors
+///
+/// Returns an error if the input string does not match the expected format or if there is a
+/// problem parsing the operand.
+///
+/// # Examples
+///
+/// ```
+/// use your_crate_name::{Operand, parse_op_repeat};
+///
+/// // Parse a valid repeat operand
+/// assert_eq!(parse_op_repeat("{3}"), Ok(Operand::Repeat(3)));
+///
+/// // Attempt to parse an invalid repeat operand - returns an error
+/// assert!(parse_op_repeat("{abc}").is_err());
+/// ```
 fn parse_op_repeat(opstr: &str) -> io::Result<Operand> {
     // a regex fully describes what must be parsed
     let re = Regex::new(r"^\{(\d+)}$").unwrap();
@@ -252,6 +405,37 @@ fn parse_op_repeat(opstr: &str) -> io::Result<Operand> {
     Err(Error::new(ErrorKind::Other, "invalid repeating operand"))
 }
 
+
+/// Parses a line number operand from a string.
+///
+/// This function parses a line number operand from the input string. The line number operand
+/// specifies a simple positive integer indicating the line number at which to perform a split.
+///
+/// # Arguments
+///
+/// * `opstr` - A string slice containing the operand to parse.
+///
+/// # Returns
+///
+/// * `io::Result<Operand>` - The parsed operand if successful, otherwise an error indicating
+///   the failure to parse the operand.
+///
+/// # Errors
+///
+/// Returns an error if the input string cannot be parsed as a positive integer or if there is
+/// a problem parsing the operand.
+///
+/// # Examples
+///
+/// ```
+/// use your_crate_name::{Operand, parse_op_linenum};
+///
+/// // Parse a valid line number operand
+/// assert_eq!(parse_op_linenum("100"), Ok(Operand::LineNum(100)));
+///
+/// // Attempt to parse an invalid line number operand - returns an error
+/// assert!(parse_op_linenum("abc").is_err());
+/// ```
 fn parse_op_linenum(opstr: &str) -> io::Result<Operand> {
     // parse simple positive integer
     match opstr.parse::<usize>() {
@@ -263,6 +447,26 @@ fn parse_op_linenum(opstr: &str) -> io::Result<Operand> {
     }
 }
 
+/// Parses operands from command-line arguments.
+///
+/// This function parses operands from the command-line arguments provided in the `Args` struct.
+/// It iterates over each operand string, determines its type based on the first character,
+/// and delegates parsing to specialized functions for regex patterns, line numbers, or repeats.
+///
+/// # Arguments
+///
+/// * `args` - A reference to the `Args` struct containing the command-line arguments.
+///
+/// # Returns
+///
+/// * `io::Result<SplitOps>` - The parsed operands wrapped in a `SplitOps` struct if successful,
+///   otherwise an error indicating the failure to parse the operands.
+///
+/// # Errors
+///
+/// Returns an error if any of the operand strings are invalid or if there is a problem parsing
+/// the operands.
+///
 fn parse_operands(args: &Args) -> io::Result<SplitOps> {
     let mut ops = Vec::new();
 
@@ -284,6 +488,8 @@ fn parse_operands(args: &Args) -> io::Result<SplitOps> {
 
     Ok(SplitOps { ops })
 }
+
+
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // parse command line arguments
