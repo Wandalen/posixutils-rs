@@ -155,7 +155,6 @@ impl OutputState {
         Err("maximum suffix reached")
     }
 
-
     /// Opens the output file for writing.
     ///
     /// This function opens the output file for writing. If the output file is already open, it does nothing.
@@ -218,6 +217,33 @@ impl OutputState {
     fn close_output(&mut self) {
         if self.outf.is_some() {
             self.outf = None;
+        }
+    }
+
+    pub fn split_by_line_number(
+        &self,
+        line_count: u32,
+        repeat: Option<u32>,
+        reader: &BufReader<Box<dyn Read>>,
+    ) {
+        let repeat = repeat.unwrap_or_default();
+        for _ in 0..repeat_num {
+            for _ in 0..line_count {
+                let mut line = String::new();
+                let n_read = reader.read_line(&mut line)?;
+                if n_read == 0 {
+                    break;
+                }
+            }
+            line_count = 0;
+            self.open_output()?;
+
+            // Write to the output file
+            if let Some(ref mut file) = self.outf {
+                file.write_all(&state.suffix.as_bytes())?;
+            }
+            // Close the output file
+            state.close_output();
         }
     }
 }
@@ -354,7 +380,6 @@ fn parse_op_rx(opstr: &str, delim: char) -> io::Result<Operand> {
     }
 }
 
-
 /// Parses a repeat operand from a string.
 ///
 /// This function parses a repeat operand from the input string. The repeat operand is specified
@@ -404,7 +429,6 @@ fn parse_op_repeat(opstr: &str) -> io::Result<Operand> {
     // error cases fall through to here
     Err(Error::new(ErrorKind::Other, "invalid repeating operand"))
 }
-
 
 /// Parses a line number operand from a string.
 ///
@@ -488,8 +512,6 @@ fn parse_operands(args: &Args) -> io::Result<SplitOps> {
 
     Ok(SplitOps { ops })
 }
-
-
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // parse command line arguments
