@@ -18,7 +18,7 @@ use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use regex::Regex;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, Error, ErrorKind, Read, Write};
+use std::io::{self, BufRead, BufReader, Error, ErrorKind, Read, Write};
 
 /// csplit - split files based on context
 #[derive(Parser, Debug)]
@@ -129,7 +129,7 @@ impl OutputState {
         assert!(self.suffix_len > 1);
 
         if self.suffix.is_empty() {
-            self.suffix = String::from("a".repeat(self.suffix_len as usize));
+            self.suffix = "a".repeat(self.suffix_len as usize);
             return Ok(());
         }
 
@@ -149,7 +149,7 @@ impl OutputState {
             if i == 0 {
                 break;
             }
-            i = i - 1;
+            i -= 1;
         }
 
         Err("maximum suffix reached")
@@ -208,7 +208,7 @@ impl OutputState {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&out_fn)?;
+            .open(out_fn)?;
         self.outf = Some(f);
 
         Ok(())
@@ -220,14 +220,14 @@ impl OutputState {
         }
     }
 
-    pub fn split_by_line_number(
+    /* pub fn split_by_line_number(
         &self,
         line_count: u32,
         repeat: Option<u32>,
         reader: &BufReader<Box<dyn Read>>,
-    ) {
+    ) -> io::Result<()> {
         let repeat = repeat.unwrap_or_default();
-        for _ in 0..repeat_num {
+        for _ in 0..repeat {
             for _ in 0..line_count {
                 let mut line = String::new();
                 let n_read = reader.read_line(&mut line)?;
@@ -240,19 +240,99 @@ impl OutputState {
 
             // Write to the output file
             if let Some(ref mut file) = self.outf {
-                file.write_all(&state.suffix.as_bytes())?;
+                file.write_all(&self.suffix.as_bytes())?;
             }
             // Close the output file
-            state.close_output();
+
+            self.close_output();
         }
-    }
+        Ok(())
+    } */
+
+    /* fn write_lines_from_range(
+        &self,
+        reader: &mut BufReader<Box<dyn Read>>,
+        start_line: usize,
+        end_line: usize,
+    ) -> io::Result<()> {
+        use std::io::Seek;
+        // Перехід до початкової лінії
+        reader.seek(SeekFrom::Start(0))?;
+        let mut current_line = 1;
+
+        let mut buffer = String::new();
+        let mut in_range = false;
+
+        // Читання рядків та запис у файл
+        while reader.read_line(&mut buffer)? > 0 {
+            if current_line >= start_line && current_line <= end_line {
+                in_range = true;
+            }
+
+            if in_range {
+                file.write_all(buffer.as_bytes())?;
+            }
+
+            if current_line == end_line {
+                break;
+            }
+
+            current_line += 1;
+            buffer.clear();
+        }
+
+        Ok(())
+    } */
 }
 
-fn output_line(_ctx: &SplitOps, _state: &mut OutputState, _line: &str) -> io::Result<()> {
+fn output_line(
+    ctx: &mut Vec<Operand>,
+    state: &mut OutputState,
+    line: &str,
+    lines: &mut String,
+) -> io::Result<()> {
+    match ctx.first().unwrap() {
+        Operand::LineNum(num) => {
+            if *num == state.in_line_no {
+                state.open_output()?;
+                state.outf.as_mut().unwrap().write_all(lines.as_bytes())?;
+                *lines = String::new();
+
+                if ctx.len() > 1 {
+                    if let Operand::Repeat(repeat) = &mut ctx[1] {
+                        *repeat -= 1;
+                        if *repeat == 0 {
+                            ctx.remove(0);
+                            ctx.remove(0);
+                        }
+                    }
+                }
+            }
+        }
+        Operand::Rx(regex, offset, skip) => {
+            if *num == state.in_line_no {
+                state.open_output()?;
+                state.outf.as_mut().unwrap().write_all(lines.as_bytes())?;
+                *lines = String::new();
+
+                if ctx.len() > 1 {
+                    if let Operand::Repeat(repeat) = &mut ctx[1] {
+                        *repeat -= 1;
+                        if *repeat == 0 {
+                            ctx.remove(0);
+                            ctx.remove(0);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
     Ok(())
 }
 
 fn csplit_file(args: &Args, ctx: SplitOps) -> io::Result<()> {
+    let mut split_options = ctx.ops;
     // open file, or stdin
     let file: Box<dyn Read> = {
         if args.filename == "-" {
@@ -264,14 +344,17 @@ fn csplit_file(args: &Args, ctx: SplitOps) -> io::Result<()> {
     let mut state = OutputState::new(&args.prefix, args.num);
     let mut reader = io::BufReader::new(file);
 
+    let mut lines = String::new();
+
     loop {
         let mut line = String::new();
         let n_read = reader.read_line(&mut line)?;
         if n_read == 0 {
             break;
         }
+        lines.push_str(&line);
 
-        output_line(&ctx, &mut state, &line)?;
+        output_line(&mut split_options, &mut state, &line, &mut lines)?;
 
         state.in_line_no += 1;
     }
@@ -290,22 +373,15 @@ fn csplit_file(args: &Args, ctx: SplitOps) -> io::Result<()> {
 ///
 /// * `Option<usize>` - Some(position) if the delimiter is found, None otherwise.
 ///
-/// # Examples
-///
-/// ```
-/// use your_crate_name::escaped_end_pos;
-///
-/// assert_eq!(escaped_end_pos("foo/bar", '/'), Some(3));
-/// assert_eq!(escaped_end_pos("foo%bar", '%'), Some(3));
-/// assert_eq!(escaped_end_pos("foo\\bar", '\\'), Some(3));
-/// assert_eq!(escaped_end_pos("foo", '\\'), None);
 /// ```
 fn escaped_end_pos(s: &str, delim: char) -> Option<usize> {
     let mut first = true;
     let mut escaped = false;
     for (i, ch) in s.chars().enumerate() {
         if first {
-            assert_eq!(ch, delim);
+            if ch != delim {
+                return None;
+            }
             first = false;
         } else if escaped {
             escaped = false;
@@ -316,7 +392,7 @@ fn escaped_end_pos(s: &str, delim: char) -> Option<usize> {
         }
     }
 
-    return None;
+    None
 }
 
 /// Parses an operation string of the form `/regex/offset` or `%regex/offset` or `{n}` or `1..9`
@@ -364,12 +440,12 @@ fn parse_op_rx(opstr: &str, delim: char) -> io::Result<Operand> {
     let mut offset_str = &opstr[end_pos + 1..];
 
     // if empty, we are done
-    if offset_str.len() == 0 {
+    if offset_str.is_empty() {
         return Ok(Operand::Rx(re, 0, is_skip));
     }
 
     // skip optional leading '+'
-    if offset_str.starts_with("+") {
+    if offset_str.starts_with('+') {
         offset_str = &opstr[end_pos + 2..];
     }
 
@@ -495,7 +571,7 @@ fn parse_operands(args: &Args) -> io::Result<SplitOps> {
     let mut ops = Vec::new();
 
     for opstr in &args.operands {
-        let first_ch = opstr.chars().nth(0).unwrap();
+        let first_ch = opstr.chars().next().unwrap();
 
         let op = {
             match first_ch {
@@ -533,4 +609,225 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_escaped_end_pos() {
+        // Test with escape characters
+        assert_eq!(escaped_end_pos("/def/", '/'), Some(4));
+
+        // Test with multiple escape characters
+        assert_eq!(escaped_end_pos("/defabc\\\\/", '/'), Some(9));
+
+        // Test with no delimiter found
+        assert_eq!(escaped_end_pos("abcdef", '/'), None);
+
+        // Test with delimiter at the beginning of the string
+        assert_eq!(escaped_end_pos("/abcdef", '/'), None);
+
+        // Test with empty string
+        assert_eq!(escaped_end_pos("", '/'), None);
+    }
+
+    #[test]
+    fn test_incr_suffix() {
+        // Test incrementing suffix with length 2
+        let mut state = OutputState::new("prefix", 2);
+        assert_eq!(state.suffix, "");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "aa");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "ab");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "ac");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "ad");
+
+        // Test incrementing suffix with length 3
+        let mut state = OutputState::new("prefix", 3);
+        assert_eq!(state.suffix, "");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "aaa");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "aab");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "aac");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "aad");
+        // Continue testing more increments as needed
+    }
+
+    #[test]
+    fn test_parse_op_rx() {
+        // Test valid regular expression operand without offset
+        let opstr = "/pattern/";
+        let delim = '/';
+        match parse_op_rx(opstr, delim) {
+            Ok(Operand::Rx(regex, offset, is_skip)) => {
+                assert_eq!(regex.as_str(), "pattern");
+                assert_eq!(offset, 0);
+                assert_eq!(is_skip, false);
+            }
+            _ => panic!("Expected Ok(Operand::Rx)"),
+        }
+
+        // Test valid regular expression operand with positive offset
+        let opstr = "/pattern/+3";
+        let delim = '/';
+        match parse_op_rx(opstr, delim) {
+            Ok(Operand::Rx(regex, offset, is_skip)) => {
+                assert_eq!(regex.as_str(), "pattern");
+                assert_eq!(offset, 3);
+                assert_eq!(is_skip, false);
+            }
+            _ => panic!("Expected Ok(Operand::Rx)"),
+        }
+
+        // Test valid regular expression operand with negative offset
+        let opstr = "/pattern/-2";
+        let delim = '/';
+        match parse_op_rx(opstr, delim) {
+            Ok(Operand::Rx(regex, offset, is_skip)) => {
+                assert_eq!(regex.as_str(), "pattern");
+                assert_eq!(offset, -2);
+                assert_eq!(is_skip, false);
+            }
+            _ => panic!("Expected Ok(Operand::Rx)"),
+        }
+
+        // Test valid regular expression operand with leading '+'
+        let opstr = "/pattern/+5";
+        let delim = '/';
+        match parse_op_rx(opstr, delim) {
+            Ok(Operand::Rx(regex, offset, is_skip)) => {
+                assert_eq!(regex.as_str(), "pattern");
+                assert_eq!(offset, 5);
+                assert_eq!(is_skip, false);
+            }
+            _ => panic!("Expected Ok(Operand::Rx)"),
+        }
+
+        // Test valid regular expression operand with skip mode
+        let opstr = "%pattern%";
+        let delim = '%';
+        match parse_op_rx(opstr, delim) {
+            Ok(Operand::Rx(regex, offset, is_skip)) => {
+                assert_eq!(regex.as_str(), "pattern");
+                assert_eq!(offset, 0);
+                assert_eq!(is_skip, true);
+            }
+            _ => panic!("Expected Ok(Operand::Rx)"),
+        }
+
+        // Test invalid regular expression operand
+        let opstr = "/pattern";
+        let delim = '/';
+        match parse_op_rx(opstr, delim) {
+            Err(e) => {
+                assert_eq!(e.kind(), ErrorKind::Other);
+                assert_eq!(e.to_string(), "invalid regex str");
+            }
+            _ => panic!("Expected Err"),
+        }
+    }
+
+    #[test]
+    fn test_parse_op_repeat() {
+        // Test valid repeating operand
+        let opstr = "{5}";
+        match parse_op_repeat(opstr) {
+            Ok(Operand::Repeat(n)) => assert_eq!(n, 5),
+            _ => panic!("Expected Ok(Operand::Repeat)"),
+        }
+
+        // Test invalid repeating operand (non-numeric)
+        let opstr = "{abc}";
+        match parse_op_repeat(opstr) {
+            Err(e) => {
+                assert_eq!(e.kind(), ErrorKind::Other);
+                assert_eq!(e.to_string(), "invalid repeating operand");
+            }
+            _ => panic!("Expected Err"),
+        }
+
+        // Test invalid repeating operand (missing braces)
+        let opstr = "5";
+        match parse_op_repeat(opstr) {
+            Err(e) => {
+                assert_eq!(e.kind(), ErrorKind::Other);
+                assert_eq!(e.to_string(), "invalid repeating operand");
+            }
+            _ => panic!("Expected Err"),
+        }
+    }
+
+    #[test]
+    fn test_parse_op_linenum() {
+        // Test valid line number operand
+        let opstr = "10";
+        match parse_op_linenum(opstr) {
+            Ok(Operand::LineNum(n)) => assert_eq!(n, 10),
+            _ => panic!("Expected Ok(Operand::LineNum)"),
+        }
+
+        // Test invalid line number operand (non-numeric)
+        let opstr = "abc";
+        match parse_op_linenum(opstr) {
+            Err(e) => {
+                assert_eq!(e.kind(), ErrorKind::Other);
+                assert_eq!(e.to_string(), "invalid digit found in string");
+            }
+            _ => panic!("Expected Err"),
+        }
+    }
+
+    #[test]
+    fn test_parse_operands() {
+        // Test valid operands
+        let args = Args {
+            prefix: String::from("xx"),
+            keep: false,
+            num: 2,
+            suppress: false,
+            filename: String::from("test.txt"),
+            operands: vec![
+                String::from("/pattern/+1"),
+                String::from("%skip%10"),
+                String::from("15"),
+                String::from("{3}"),
+            ],
+        };
+
+        match parse_operands(&args) {
+            Ok(ops) => {
+                assert_eq!(ops.ops.len(), 4);
+                match &ops.ops[0] {
+                    Operand::Rx(re, offset, _) => {
+                        assert_eq!(re.as_str(), "pattern");
+                        assert_eq!(*offset, 1);
+                    }
+                    _ => panic!("Expected Operand::Rx"),
+                }
+                match &ops.ops[1] {
+                    Operand::Rx(re, offset, _) => {
+                        assert_eq!(re.as_str(), "skip");
+                        assert_eq!(*offset, 10);
+                    }
+                    _ => panic!("Expected Operand::Rx"),
+                }
+                match &ops.ops[2] {
+                    Operand::LineNum(n) => assert_eq!(*n, 15),
+                    _ => panic!("Expected Operand::LineNum"),
+                }
+                match &ops.ops[3] {
+                    Operand::Repeat(n) => assert_eq!(*n, 3),
+                    _ => panic!("Expected Operand::Repeat"),
+                }
+            }
+            _ => panic!("Expected Ok(SplitOps)"),
+        }
+    }
 }
