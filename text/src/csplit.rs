@@ -18,7 +18,7 @@ use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use regex::Regex;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Error, ErrorKind, Read, Write};
+use std::io::{self, BufRead, Error, ErrorKind, Read, Write};
 
 /// csplit - split files based on context
 #[derive(Parser, Debug)]
@@ -37,7 +37,7 @@ struct Args {
     num: u32,
 
     /// Suppress the output of file size messages.
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = false)]
     suppress: bool,
 
     /// File to read as input.
@@ -59,18 +59,6 @@ struct SplitOps {
     ops: Vec<Operand>,
 }
 
-/// Increment a character by one.
-///
-/// # Examples
-///
-/// ```
-/// let c = 'a';
-/// assert_eq!(ascii_alphabet::inc_char(c), 'b');
-/// ```
-fn inc_char(ch: char) -> char {
-    ((ch as u8) + 1) as char
-}
-
 struct OutputState {
     prefix: String,
     in_line_no: usize,
@@ -85,7 +73,7 @@ impl OutputState {
     fn new(prefix: &str, suffix_len: u32) -> OutputState {
         OutputState {
             prefix: String::from(prefix),
-            in_line_no: 0,
+            in_line_no: 1,
             suffix: String::new(),
             suffix_len,
             outf: None,
@@ -94,9 +82,9 @@ impl OutputState {
 
     /// Increments the suffix of the output filename.
     ///
-    /// This function increments the suffix of the output filename in lexicographic order.
-    /// It replaces 'z' with 'a' and carries over to the previous character if necessary.
-    /// If the maximum suffix is reached (e.g., 'zzz'), an error is returned.
+    /// This function increments the suffix of the output filename in numeric order, starting from "00"
+    /// and incrementing by 1 each time until the maximum value specified by `suffix_len` is reached.
+    /// If the maximum suffix is reached, an error is returned.
     ///
     /// # Arguments
     ///
@@ -106,53 +94,27 @@ impl OutputState {
     ///
     /// * `Result<(), &'static str>` - `Ok(())` if the suffix is successfully incremented, otherwise an error message.
     ///
-    /// # Examples
+    /// # Panics
     ///
-    /// ```
-    /// use your_crate_name::OutputState;
+    /// This function will panic if `suffix_len` is less than 2, as the minimum suffix length is 2.
     ///
-    /// let mut state = OutputState::new("prefix", 3);
-    /// assert_eq!(state.suffix, "");
-    ///
-    /// // Increment suffix from empty to "aaa"
-    /// assert_eq!(state.incr_suffix(), Ok(()));
-    /// assert_eq!(state.suffix, "aaa");
-    ///
-    /// // Increment suffix from "aaa" to "aab"
-    /// assert_eq!(state.incr_suffix(), Ok(()));
-    /// assert_eq!(state.suffix, "aab");
-    ///
-    /// // Increment suffix to maximum ('zzz') - returns error
-    /// assert_eq!(state.incr_suffix(), Err("maximum suffix reached"));
-    /// ```
     fn incr_suffix(&mut self) -> Result<(), &'static str> {
-        assert!(self.suffix_len > 1);
+        assert!(self.suffix_len >= 2); // Minimum suffix length is 2
 
         if self.suffix.is_empty() {
-            self.suffix = "a".repeat(self.suffix_len as usize);
+            self.suffix = format!("{:01$}", 0, self.suffix_len as usize);
             return Ok(());
         }
 
-        assert!(self.suffix.len() > 1);
-        let mut i = self.suffix.len() - 1;
-        loop {
-            let ch = self.suffix.chars().nth(i).unwrap();
-            if ch != 'z' {
-                self.suffix
-                    .replace_range(i..i + 1, inc_char(ch).to_string().as_str());
-                return Ok(());
-            }
+        let mut number: u64 = self.suffix.parse().unwrap_or(0);
+        number += 1;
 
-            self.suffix
-                .replace_range(i..i + 1, 'a'.to_string().as_str());
-
-            if i == 0 {
-                break;
-            }
-            i -= 1;
+        if number >= 10_u64.pow(self.suffix_len) {
+            return Err("maximum suffix reached");
         }
 
-        Err("maximum suffix reached")
+        self.suffix = format!("{:01$}", number, self.suffix_len as usize);
+        Ok(())
     }
 
     /// Opens the output file for writing.
@@ -172,29 +134,9 @@ impl OutputState {
     ///
     /// Returns an error if there is a problem creating or opening the output file.
     ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::fs::File;
-    /// use std::io::{self, Write};
-    /// use your_crate_name::OutputState;
-    ///
-    /// let mut state = OutputState::new("prefix", 3);
-    ///
-    /// // Open the output file
-    /// assert!(state.open_output().is_ok());
-    ///
-    /// // Write to the output file
-    /// if let Some(ref mut file) = state.outf {
-    ///     writeln!(file, "Hello, world!").expect("Failed to write to file");
-    /// }
-    ///
-    /// // Close the output file
-    /// state.close_output();
-    /// ```
-    fn open_output(&mut self) -> io::Result<()> {
+    fn open_output(&mut self) -> io::Result<String> {
         if self.outf.is_some() {
-            return Ok(());
+            return Ok(String::new());
         }
 
         let inc_res = self.incr_suffix();
@@ -208,10 +150,10 @@ impl OutputState {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(out_fn)?;
+            .open(out_fn.clone())?;
         self.outf = Some(f);
 
-        Ok(())
+        Ok(out_fn)
     }
 
     fn close_output(&mut self) {
@@ -219,119 +161,27 @@ impl OutputState {
             self.outf = None;
         }
     }
-
-    /* pub fn split_by_line_number(
-        &self,
-        line_count: u32,
-        repeat: Option<u32>,
-        reader: &BufReader<Box<dyn Read>>,
-    ) -> io::Result<()> {
-        let repeat = repeat.unwrap_or_default();
-        for _ in 0..repeat {
-            for _ in 0..line_count {
-                let mut line = String::new();
-                let n_read = reader.read_line(&mut line)?;
-                if n_read == 0 {
-                    break;
-                }
-            }
-            line_count = 0;
-            self.open_output()?;
-
-            // Write to the output file
-            if let Some(ref mut file) = self.outf {
-                file.write_all(&self.suffix.as_bytes())?;
-            }
-            // Close the output file
-
-            self.close_output();
-        }
-        Ok(())
-    } */
-
-    /* fn write_lines_from_range(
-        &self,
-        reader: &mut BufReader<Box<dyn Read>>,
-        start_line: usize,
-        end_line: usize,
-    ) -> io::Result<()> {
-        use std::io::Seek;
-        // Перехід до початкової лінії
-        reader.seek(SeekFrom::Start(0))?;
-        let mut current_line = 1;
-
-        let mut buffer = String::new();
-        let mut in_range = false;
-
-        // Читання рядків та запис у файл
-        while reader.read_line(&mut buffer)? > 0 {
-            if current_line >= start_line && current_line <= end_line {
-                in_range = true;
-            }
-
-            if in_range {
-                file.write_all(buffer.as_bytes())?;
-            }
-
-            if current_line == end_line {
-                break;
-            }
-
-            current_line += 1;
-            buffer.clear();
-        }
-
-        Ok(())
-    } */
 }
 
-fn output_line(
-    ctx: &mut Vec<Operand>,
-    state: &mut OutputState,
-    line: &str,
-    lines: &mut String,
-) -> io::Result<()> {
-    match ctx.first().unwrap() {
-        Operand::LineNum(num) => {
-            if *num == state.in_line_no {
-                state.open_output()?;
-                state.outf.as_mut().unwrap().write_all(lines.as_bytes())?;
-                *lines = String::new();
-
-                if ctx.len() > 1 {
-                    if let Operand::Repeat(repeat) = &mut ctx[1] {
-                        *repeat -= 1;
-                        if *repeat == 0 {
-                            ctx.remove(0);
-                            ctx.remove(0);
-                        }
-                    }
-                }
-            }
-        }
-        Operand::Rx(regex, offset, skip) => {
-            if *num == state.in_line_no {
-                state.open_output()?;
-                state.outf.as_mut().unwrap().write_all(lines.as_bytes())?;
-                *lines = String::new();
-
-                if ctx.len() > 1 {
-                    if let Operand::Repeat(repeat) = &mut ctx[1] {
-                        *repeat -= 1;
-                        if *repeat == 0 {
-                            ctx.remove(0);
-                            ctx.remove(0);
-                        }
-                    }
-                }
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn csplit_file(args: &Args, ctx: SplitOps) -> io::Result<()> {
+/// Splits a file based on specified conditions.
+///
+/// This function splits a file based on the provided splitting options and writes
+/// the resulting parts to separate output files. It reads the input file line by
+/// line, applies the splitting options to determine where to split the file, and
+/// writes the parts to output files accordingly.
+///
+/// # Arguments
+///
+/// * `args` - The arguments specifying the file to split and the splitting options.
+/// * `ctx` - The context containing the splitting operations.
+/// * `new_files` - A mutable reference to a vector containing the names of the new output files.
+///
+/// # Returns
+///
+/// * `io::Result<()>` - `Ok(())` if the file is successfully split and the parts are written to output files,
+///   or an `io` error.
+///
+fn csplit_file(args: &Args, ctx: SplitOps, new_files: &mut Vec<String>) -> io::Result<()> {
     let mut split_options = ctx.ops;
     // open file, or stdin
     let file: Box<dyn Read> = {
@@ -350,15 +200,135 @@ fn csplit_file(args: &Args, ctx: SplitOps) -> io::Result<()> {
         let mut line = String::new();
         let n_read = reader.read_line(&mut line)?;
         if n_read == 0 {
+            process_lines(&mut lines, &mut state, new_files)?;
             break;
         }
         lines.push_str(&line);
 
-        output_line(&mut split_options, &mut state, &line, &mut lines)?;
+        if split_options.is_empty() {
+            continue;
+        }
+        match split_options.first().unwrap() {
+            Operand::LineNum(num) => {
+                if *num == state.in_line_no {
+                    process_lines(&mut lines, &mut state, new_files)?;
+                    state.in_line_no = 0;
+                    lines = String::new();
+
+                    if split_options.len() > 1 {
+                        if let Operand::Repeat(repeat) = &mut split_options[1] {
+                            *repeat -= 1;
+                            if *repeat == 0 {
+                                split_options.remove(0);
+                                split_options.remove(0);
+                            }
+                        }
+                    }
+                }
+            }
+            Operand::Rx(regex, offset, skip) => {
+                if regex.is_match(&line) {
+                    match offset.cmp(&0) {
+                        std::cmp::Ordering::Less => {
+                            let mut lines_vec: Vec<&str> = lines.lines().collect();
+
+                            let mut removed_lines_string = String::new();
+                            let length = lines_vec.len();
+                            if length >= offset.unsigned_abs() {
+                                let removed_lines =
+                                    lines_vec.split_off(length - offset.unsigned_abs());
+                                removed_lines_string = removed_lines.join("\n");
+                            }
+
+                            lines = lines_vec.join("\n");
+
+                            if *skip {
+                                lines.clear();
+                            } else {
+                                process_lines(&mut lines, &mut state, new_files)?;
+                            }
+                            lines = removed_lines_string;
+                        }
+                        std::cmp::Ordering::Equal => {
+                            if *skip {
+                                lines.clear();
+                                lines.push_str(&line);
+                            } else {
+                                process_lines(&mut lines, &mut state, new_files)?;
+                                lines = String::new();
+                            }
+                        }
+                        std::cmp::Ordering::Greater => {
+                            for _ in 0..*offset {
+                                let mut new_line = String::new();
+                                let n_read = reader.read_line(&mut new_line)?;
+                                if n_read == 0 {
+                                    break;
+                                }
+                                lines.push_str(&new_line);
+                            }
+
+                            if *skip {
+                                lines.clear();
+                            } else {
+                                process_lines(&mut lines, &mut state, new_files)?;
+                                lines = String::new();
+                            }
+                        }
+                    }
+
+                    if split_options.len() == 1 {
+                        split_options.remove(0);
+                    } else if split_options.len() > 1 {
+                        if let Operand::Repeat(repeat) = &mut split_options[1] {
+                            *repeat -= 1;
+                            if *repeat == 0 {
+                                split_options.remove(0);
+                                split_options.remove(0);
+                            }
+                        } else {
+                            split_options.remove(0);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
 
         state.in_line_no += 1;
     }
 
+    Ok(())
+}
+
+/// Processes lines and writes them to output.
+///
+/// This function is responsible for processing lines and writing them to the output
+/// according to the specified conditions. It opens the output stream, writes the lines
+/// to a file, adds the file name to the list of new files, and closes the output stream.
+///
+/// # Arguments
+///
+/// * `lines` - The lines to be processed and written.
+/// * `state` - The current output state.
+/// * `new_files` - The list of new files.
+///
+/// # Returns
+///
+/// * `io::Result<()>` - `Ok(())` if the lines are successfully processed and written to output,
+///   or an `io` error.
+///
+fn process_lines(
+    lines: &mut String,
+    state: &mut OutputState,
+    new_files: &mut Vec<String>,
+) -> io::Result<()> {
+    // Ваш блок коду для обробки рядків
+    let file_name = state.open_output()?;
+    state.outf.as_mut().unwrap().write_all(lines.as_bytes())?;
+    new_files.push(file_name);
+    println!("{}\n", lines.len());
+    state.close_output();
     Ok(())
 }
 
@@ -405,18 +375,6 @@ fn escaped_end_pos(s: &str, delim: char) -> Option<usize> {
 /// # Returns
 ///
 /// * `Result<Operand, std::io::Error>` - `Ok(Operand)` if the operation string is parsed successfully, otherwise an error indicating the failure to parse the operation string.
-///
-/// # Examples
-///
-/// ```
-/// use your_crate_name::escaped_end_pos;
-/// use your_crate_name::parse_op_rx;
-///
-/// assert_eq!(parse_op_rx("foo/bar/10", '/').unwrap(), Operand::Rx(Regex::new("bar").unwrap(), 10, false));
-/// assert_eq!(parse_op_rx("foo%bar/10", '%').unwrap(), Operand::Rx(Regex::new("bar").unwrap(), 10, true));
-/// assert_eq!(parse_op_rx("foo{3}", '{' as char).unwrap(), Operand::Repeat(3));
-/// assert_eq!(parse_op_rx("foo1", '1' as char).unwrap(), Operand::LineNum(1));
-/// ```
 fn parse_op_rx(opstr: &str, delim: char) -> io::Result<Operand> {
     // delimiter indicates skip-mode
     let is_skip = delim == '%';
@@ -475,17 +433,6 @@ fn parse_op_rx(opstr: &str, delim: char) -> io::Result<Operand> {
 /// Returns an error if the input string does not match the expected format or if there is a
 /// problem parsing the operand.
 ///
-/// # Examples
-///
-/// ```
-/// use your_crate_name::{Operand, parse_op_repeat};
-///
-/// // Parse a valid repeat operand
-/// assert_eq!(parse_op_repeat("{3}"), Ok(Operand::Repeat(3)));
-///
-/// // Attempt to parse an invalid repeat operand - returns an error
-/// assert!(parse_op_repeat("{abc}").is_err());
-/// ```
 fn parse_op_repeat(opstr: &str) -> io::Result<Operand> {
     // a regex fully describes what must be parsed
     let re = Regex::new(r"^\{(\d+)}$").unwrap();
@@ -525,17 +472,6 @@ fn parse_op_repeat(opstr: &str) -> io::Result<Operand> {
 /// Returns an error if the input string cannot be parsed as a positive integer or if there is
 /// a problem parsing the operand.
 ///
-/// # Examples
-///
-/// ```
-/// use your_crate_name::{Operand, parse_op_linenum};
-///
-/// // Parse a valid line number operand
-/// assert_eq!(parse_op_linenum("100"), Ok(Operand::LineNum(100)));
-///
-/// // Attempt to parse an invalid line number operand - returns an error
-/// assert!(parse_op_linenum("abc").is_err());
-/// ```
 fn parse_op_linenum(opstr: &str) -> io::Result<Operand> {
     // parse simple positive integer
     match opstr.parse::<usize>() {
@@ -599,12 +535,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ctx = parse_operands(&args)?;
 
     let mut exit_code = 0;
-
-    match csplit_file(&args, ctx) {
+    let mut new_files = vec![];
+    match csplit_file(&args, ctx, &mut new_files) {
         Ok(()) => {}
         Err(e) => {
             exit_code = 1;
             eprintln!("{}: {}", args.filename, e);
+            if !args.keep {
+                for file_name in new_files.iter() {
+                    fs::remove_file(file_name).unwrap();
+                }
+            }
         }
     }
 
@@ -638,25 +579,45 @@ mod tests {
         let mut state = OutputState::new("prefix", 2);
         assert_eq!(state.suffix, "");
         assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "aa");
+        assert_eq!(state.suffix, "00");
         assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "ab");
+        assert_eq!(state.suffix, "01");
         assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "ac");
+        assert_eq!(state.suffix, "02");
         assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "ad");
+        assert_eq!(state.suffix, "03");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "10");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "11");
 
         // Test incrementing suffix with length 3
         let mut state = OutputState::new("prefix", 3);
         assert_eq!(state.suffix, "");
         assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "aaa");
+        assert_eq!(state.suffix, "000");
         assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "aab");
+        assert_eq!(state.suffix, "001");
         assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "aac");
+        assert_eq!(state.suffix, "002");
         assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "aad");
+        assert_eq!(state.suffix, "003");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "010");
+        assert_eq!(state.incr_suffix(), Ok(()));
+        assert_eq!(state.suffix, "011");
         // Continue testing more increments as needed
     }
 
@@ -669,7 +630,7 @@ mod tests {
             Ok(Operand::Rx(regex, offset, is_skip)) => {
                 assert_eq!(regex.as_str(), "pattern");
                 assert_eq!(offset, 0);
-                assert_eq!(is_skip, false);
+                assert!(!is_skip);
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
@@ -681,7 +642,7 @@ mod tests {
             Ok(Operand::Rx(regex, offset, is_skip)) => {
                 assert_eq!(regex.as_str(), "pattern");
                 assert_eq!(offset, 3);
-                assert_eq!(is_skip, false);
+                assert!(!is_skip);
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
@@ -693,7 +654,7 @@ mod tests {
             Ok(Operand::Rx(regex, offset, is_skip)) => {
                 assert_eq!(regex.as_str(), "pattern");
                 assert_eq!(offset, -2);
-                assert_eq!(is_skip, false);
+                assert!(!is_skip);
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
@@ -705,7 +666,7 @@ mod tests {
             Ok(Operand::Rx(regex, offset, is_skip)) => {
                 assert_eq!(regex.as_str(), "pattern");
                 assert_eq!(offset, 5);
-                assert_eq!(is_skip, false);
+                assert!(!is_skip);
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
@@ -717,7 +678,7 @@ mod tests {
             Ok(Operand::Rx(regex, offset, is_skip)) => {
                 assert_eq!(regex.as_str(), "pattern");
                 assert_eq!(offset, 0);
-                assert_eq!(is_skip, true);
+                assert!(is_skip);
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
@@ -829,5 +790,112 @@ mod tests {
             }
             _ => panic!("Expected Ok(SplitOps)"),
         }
+    }
+
+    #[test]
+    fn test_split_text_file() {
+        // Test valid operands
+        let args = Args {
+            prefix: String::from("xx"),
+            keep: false,
+            num: 2,
+            suppress: false,
+            filename: String::from("tests/assets/test_file.txt"),
+            operands: vec![String::from("5"), String::from("{3}")],
+        };
+
+        let ctx = parse_operands(&args).unwrap();
+        let mut new_files = vec![];
+        match csplit_file(&args, ctx, &mut new_files) {
+            Ok(_) => {}
+            Err(e) => {
+                if !args.keep {
+                    for file_name in new_files.iter() {
+                        fs::remove_file(file_name).unwrap();
+                    }
+                }
+                panic!("{e}");
+            }
+        }
+
+        let mut file = File::open("xx00").unwrap();
+
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        let expected =
+            String::from("1sdfghnm\n2sadsgdhjmf\n3zcxbncvm vbm\n4asdbncv\n5adsbfdgfnfm\n");
+
+        assert_eq!(contents, expected);
+
+        let mut file = File::open("xx03").unwrap();
+
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        let expected = String::from("16\n17");
+
+        assert_eq!(contents, expected);
+
+        fs::remove_file("xx00").unwrap();
+        fs::remove_file("xx01").unwrap();
+        fs::remove_file("xx02").unwrap();
+        fs::remove_file("xx03").unwrap();
+    }
+
+    #[test]
+    fn test_split_c_file_2() {
+        // Test valid operands
+        let args = Args {
+            prefix: String::from("xx"),
+            keep: false,
+            num: 2,
+            suppress: false,
+            filename: String::from("tests/assets/test_file_c"),
+            operands: vec![
+                String::from(r"%main\(%"),
+                String::from("/^}/+1"),
+                String::from("{3}"),
+            ],
+        };
+
+        let ctx = parse_operands(&args).unwrap();
+
+        let mut new_files = vec![];
+        match csplit_file(&args, ctx, &mut new_files) {
+            Ok(_) => {}
+            Err(e) => {
+                if !args.keep {
+                    for file_name in new_files.iter() {
+                        fs::remove_file(file_name).unwrap();
+                    }
+                }
+                panic!("{e}");
+            }
+        }
+
+        let mut file = File::open("xx00").unwrap();
+
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        let expected =
+            String::from("int main() {\n    printf(\"Hello, world!\\n\");\n    return 0;\n}\n\n");
+
+        assert_eq!(contents, expected);
+
+        let mut file = File::open("xx03").unwrap();
+
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        let expected = String::from("void func3() {\n    printf(\"This is function 3\\n\");\n}\n");
+
+        assert_eq!(contents, expected);
+
+        fs::remove_file("xx00").unwrap();
+        fs::remove_file("xx01").unwrap();
+        fs::remove_file("xx02").unwrap();
+        fs::remove_file("xx03").unwrap();
     }
 }
