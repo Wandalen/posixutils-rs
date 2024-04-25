@@ -34,7 +34,7 @@ struct Args {
 
     /// Use number decimal digits to form filenames for the file pieces.
     #[arg(short, long, default_value_t = 2)]
-    num: u32,
+    num: u8,
 
     /// Suppress the output of file size messages.
     #[arg(short, long, default_value_t = false)]
@@ -68,13 +68,13 @@ struct OutputState {
     ///  A String representing the suffix to be added to file name.
     suffix: String,
     /// A u32 representing the length of the suffix.
-    suffix_len: u32,
+    suffix_len: u8,
     /// representing an output file if set to None, the output stream is not redirected to any file.
     outf: Option<File>,
 }
 
 impl OutputState {
-    fn new(prefix: &str, suffix_len: u32) -> OutputState {
+    fn new(prefix: &str, suffix_len: u8) -> OutputState {
         OutputState {
             prefix: String::from(prefix),
             in_line_no: 1,
@@ -113,7 +113,7 @@ impl OutputState {
         let mut number: u64 = self.suffix.parse().unwrap_or(0);
         number += 1;
 
-        if number >= 10_u64.pow(self.suffix_len) {
+        if number >= 10_u64.pow(self.suffix_len.into()) {
             return Err("maximum suffix reached");
         }
 
