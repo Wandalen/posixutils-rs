@@ -599,8 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_op_rx() {
-        // Test valid regular expression operand without offset
+    fn test_parse_op_rx_valid_without_offset() {
         let opstr = "/pattern/";
         let delim = '/';
         match parse_op_rx(opstr, delim) {
@@ -611,8 +610,10 @@ mod tests {
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
+    }
 
-        // Test valid regular expression operand with positive offset
+    #[test]
+    fn test_parse_op_rx_valid_with_positive_offset() {
         let opstr = "/pattern/+3";
         let delim = '/';
         match parse_op_rx(opstr, delim) {
@@ -623,8 +624,10 @@ mod tests {
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
+    }
 
-        // Test valid regular expression operand with negative offset
+    #[test]
+    fn test_parse_op_rx_valid_with_negative_offset() {
         let opstr = "/pattern/-2";
         let delim = '/';
         match parse_op_rx(opstr, delim) {
@@ -635,8 +638,10 @@ mod tests {
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
+    }
 
-        // Test valid regular expression operand with leading '+'
+    #[test]
+    fn test_parse_op_rx_valid_with_leading_plus() {
         let opstr = "/pattern/+5";
         let delim = '/';
         match parse_op_rx(opstr, delim) {
@@ -647,8 +652,10 @@ mod tests {
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
+    }
 
-        // Test valid regular expression operand with skip mode
+    #[test]
+    fn test_parse_op_rx_valid_with_skip_mode() {
         let opstr = "%pattern%";
         let delim = '%';
         match parse_op_rx(opstr, delim) {
@@ -659,8 +666,10 @@ mod tests {
             }
             _ => panic!("Expected Ok(Operand::Rx)"),
         }
+    }
 
-        // Test invalid regular expression operand
+    #[test]
+    fn test_parse_op_rx_invalid() {
         let opstr = "/pattern";
         let delim = '/';
         match parse_op_rx(opstr, delim) {
@@ -673,15 +682,16 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_op_repeat() {
-        // Test valid repeating operand
+    fn test_parse_op_repeat_valid() {
         let opstr = "{5}";
         match parse_op_repeat(opstr) {
             Ok(Operand::Repeat(n)) => assert_eq!(n, 5),
             _ => panic!("Expected Ok(Operand::Repeat)"),
         }
+    }
 
-        // Test invalid repeating operand (non-numeric)
+    #[test]
+    fn test_parse_op_repeat_invalid_non_numeric() {
         let opstr = "{abc}";
         match parse_op_repeat(opstr) {
             Err(e) => {
@@ -690,8 +700,10 @@ mod tests {
             }
             _ => panic!("Expected Err"),
         }
+    }
 
-        // Test invalid repeating operand (missing braces)
+    #[test]
+    fn test_parse_op_repeat_invalid_missing_braces() {
         let opstr = "5";
         match parse_op_repeat(opstr) {
             Err(e) => {
@@ -703,15 +715,16 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_op_linenum() {
-        // Test valid line number operand
+    fn test_parse_op_linenum_valid() {
         let opstr = "10";
         match parse_op_linenum(opstr) {
             Ok(Operand::LineNum(n)) => assert_eq!(n, 10),
             _ => panic!("Expected Ok(Operand::LineNum)"),
         }
+    }
 
-        // Test invalid line number operand (non-numeric)
+    #[test]
+    fn test_parse_op_linenum_invalid_non_numeric() {
         let opstr = "abc";
         match parse_op_linenum(opstr) {
             Err(e) => {
