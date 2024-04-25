@@ -200,7 +200,7 @@ fn csplit_file(args: &Args, ctx: SplitOps, new_files: &mut Vec<String>) -> io::R
         let mut line = String::new();
         let n_read = reader.read_line(&mut line)?;
         if n_read == 0 {
-            process_lines(&mut lines, &mut state, new_files)?;
+            process_lines(&mut lines, &mut state, new_files, args.suppress)?;
             break;
         }
         lines.push_str(&line);
@@ -211,7 +211,7 @@ fn csplit_file(args: &Args, ctx: SplitOps, new_files: &mut Vec<String>) -> io::R
         match split_options.first().unwrap() {
             Operand::LineNum(num) => {
                 if *num == state.in_line_no {
-                    process_lines(&mut lines, &mut state, new_files)?;
+                    process_lines(&mut lines, &mut state, new_files, args.suppress)?;
                     state.in_line_no = 0;
                     lines = String::new();
 
@@ -245,7 +245,7 @@ fn csplit_file(args: &Args, ctx: SplitOps, new_files: &mut Vec<String>) -> io::R
                             if *skip {
                                 lines.clear();
                             } else {
-                                process_lines(&mut lines, &mut state, new_files)?;
+                                process_lines(&mut lines, &mut state, new_files, args.suppress)?;
                             }
                             lines = removed_lines_string;
                         }
@@ -254,7 +254,7 @@ fn csplit_file(args: &Args, ctx: SplitOps, new_files: &mut Vec<String>) -> io::R
                                 lines.clear();
                                 lines.push_str(&line);
                             } else {
-                                process_lines(&mut lines, &mut state, new_files)?;
+                                process_lines(&mut lines, &mut state, new_files, args.suppress)?;
                                 lines = String::new();
                             }
                         }
@@ -271,7 +271,7 @@ fn csplit_file(args: &Args, ctx: SplitOps, new_files: &mut Vec<String>) -> io::R
                             if *skip {
                                 lines.clear();
                             } else {
-                                process_lines(&mut lines, &mut state, new_files)?;
+                                process_lines(&mut lines, &mut state, new_files, args.suppress)?;
                                 lines = String::new();
                             }
                         }
@@ -322,12 +322,16 @@ fn process_lines(
     lines: &mut String,
     state: &mut OutputState,
     new_files: &mut Vec<String>,
+    suppress: bool,
 ) -> io::Result<()> {
     // Ваш блок коду для обробки рядків
     let file_name = state.open_output()?;
     state.outf.as_mut().unwrap().write_all(lines.as_bytes())?;
     new_files.push(file_name);
-    println!("{}\n", lines.len());
+    if !suppress {
+        println!("{}\n", lines.len());
+    }
+
     state.close_output();
     Ok(())
 }
