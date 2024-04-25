@@ -59,13 +59,17 @@ struct SplitOps {
     ops: Vec<Operand>,
 }
 
+/// A structure that presents settings for creating files
 struct OutputState {
+    /// A String representing the prefix to be added to file name.
     prefix: String,
+    /// An usize representing the current line number in the file reader.
     in_line_no: usize,
-
+    ///  A String representing the suffix to be added to file name.
     suffix: String,
+    /// A u32 representing the length of the suffix.
     suffix_len: u32,
-
+    /// representing an output file if set to None, the output stream is not redirected to any file.
     outf: Option<File>,
 }
 
@@ -150,7 +154,7 @@ impl OutputState {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(out_fn.clone())?;
+            .open(&out_fn)?;
         self.outf = Some(f);
 
         Ok(out_fn)
@@ -324,7 +328,6 @@ fn process_lines(
     new_files: &mut Vec<String>,
     suppress: bool,
 ) -> io::Result<()> {
-    // Ваш блок коду для обробки рядків
     let file_name = state.open_output()?;
     state.outf.as_mut().unwrap().write_all(lines.as_bytes())?;
     new_files.push(file_name);
@@ -540,15 +543,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut exit_code = 0;
     let mut new_files = vec![];
-    match csplit_file(&args, ctx, &mut new_files) {
-        Ok(()) => {}
-        Err(e) => {
-            exit_code = 1;
-            eprintln!("{}: {}", args.filename, e);
-            if !args.keep {
-                for file_name in new_files.iter() {
-                    fs::remove_file(file_name).unwrap();
-                }
+    if let Err(err) = csplit_file(&args, ctx, &mut new_files) {
+        exit_code = 1;
+        eprintln!("{}: {}", args.filename, err);
+        if !args.keep {
+            for file_name in new_files.iter() {
+                fs::remove_file(file_name).unwrap();
             }
         }
     }
@@ -582,47 +582,20 @@ mod tests {
         // Test incrementing suffix with length 2
         let mut state = OutputState::new("prefix", 2);
         assert_eq!(state.suffix, "");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "00");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "01");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "02");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "03");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "10");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "11");
+
+        for i in 0..12 {
+            assert!(state.incr_suffix().is_ok());
+            assert_eq!(state.suffix, format!("{:02}", i));
+        }
 
         // Test incrementing suffix with length 3
         let mut state = OutputState::new("prefix", 3);
         assert_eq!(state.suffix, "");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "000");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "001");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "002");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "003");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "010");
-        assert_eq!(state.incr_suffix(), Ok(()));
-        assert_eq!(state.suffix, "011");
-        // Continue testing more increments as needed
+
+        for i in 0..12 {
+            assert!(state.incr_suffix().is_ok());
+            assert_eq!(state.suffix, format!("{:03}", i));
+        }
     }
 
     #[test]
