@@ -110,10 +110,10 @@ impl OutputState {
             return Ok(());
         }
 
-        let mut number: u64 = self.suffix.parse().unwrap_or(0);
+        let mut number: u32 = self.suffix.parse().unwrap_or(0);
         number += 1;
 
-        if number >= 10_u64.pow(self.suffix_len.into()) {
+        if number >= 10_u32.pow(self.suffix_len.into()) {
             return Err("maximum suffix reached");
         }
 
