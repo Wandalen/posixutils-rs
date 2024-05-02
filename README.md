@@ -38,7 +38,7 @@ https://github.com/jgarzik/posixutils
 ## Checklist of utilities
 
  - [ ] admin (SCCS)
- - [ ] ar (Development)
+ - [x] ar (Development)
  - [x] asa
  - [ ] at (cron cat.)
  - [ ] awk
@@ -58,7 +58,7 @@ https://github.com/jgarzik/posixutils
  - [ ] compress (compress cat.)
  - [x] cp
  - [ ] crontab (cron cat.)
- - [ ] csplit
+ - [x] csplit
  - [ ] ctags (Development)
  - [ ] cut
  - [ ] cxref (Development)
@@ -100,7 +100,7 @@ https://github.com/jgarzik/posixutils
  - [x] logger
  - [x] logname
  - [ ] lp
- - [ ] ls
+ - [x] ls
  - [ ] m4
  - [ ] mailx
  - [ ] make
@@ -148,7 +148,7 @@ https://github.com/jgarzik/posixutils
  - [ ] sort
  - [x] split
  - [ ] strings
- - [ ] strip (Development)
+ - [x] strip (Development)
  - [x] stty
  - [x] tabs
  - [ ] tail
@@ -177,7 +177,7 @@ https://github.com/jgarzik/posixutils
  - [ ] vi
  - [x] wc
  - [ ] what (SCCS)
- - [ ] who
+ - [x] who
  - [ ] write
  - [x] xargs
  - [ ] yacc (Development)
