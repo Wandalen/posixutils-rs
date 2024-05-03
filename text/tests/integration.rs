@@ -864,11 +864,6 @@ mod tests {
     fn test_cut_newline_14() {
         cut_test(&["-d", "\n", "-f", "1-", "-"], "\nb", "\nb\n");
     }
-}
-
-#[cfg(test)]
-mod tests_2 {
-    use crate::cut_test;
 
     #[test]
     fn test_out_delim_1() {
