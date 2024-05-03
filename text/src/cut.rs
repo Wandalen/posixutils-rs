@@ -340,14 +340,13 @@ fn cut_files(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                     println!("{}", cut_characters(&line, args.delimiter, &ranges))
                 }
                 ParseVariat::Fields(ranges) => {
-                    if args.delimiter.is_none() {
-                        println!("{}", line);
-                    } else {
-                        let result =
-                            cut_fields(&line, args.delimiter.unwrap(), &ranges, args.suppress);
+                    if let Some(delim) = args.delimiter {
+                        let result = cut_fields(&line, delim, &ranges, args.suppress);
                         if !result.1 {
                             println!("{}", result.0)
                         }
+                    } else {
+                        println!("{}", line);
                     }
                 }
             }
@@ -363,7 +362,7 @@ fn read_range(line: &str) -> Result<Vec<(i32, i32)>, String> {
             return Err("Invalid range, no endpopint".to_string());
         }
     }
-    let mut ranges: Vec<(i32, i32)> = ranges
+    let res: Result<Vec<(i32, i32)>, String> = ranges
         .iter()
         .map(|range| {
             let nums: Vec<&str> = range.split('-').collect();
@@ -371,7 +370,10 @@ fn read_range(line: &str) -> Result<Vec<(i32, i32)>, String> {
             let start = if nums[0].is_empty() {
                 0
             } else {
-                nums[0].parse::<i32>().unwrap() - 1
+                match nums[0].parse::<i32>() {
+                    Err(err) => return Err(err.to_string()),
+                    Ok(num) => num - 1,
+                }
             };
 
             let end = if range.len() == 1 {
@@ -379,11 +381,15 @@ fn read_range(line: &str) -> Result<Vec<(i32, i32)>, String> {
             } else if nums[1].is_empty() {
                 std::i32::MAX - 1
             } else {
-                nums[1].parse::<i32>().unwrap() - 1
+                match nums[1].parse::<i32>() {
+                    Err(err) => return Err(err.to_string()),
+                    Ok(num) => num - 1,
+                }
             };
-            (start, end)
+            Ok((start, end))
         })
         .collect();
+    let mut ranges = res?;
     for (start, end) in &ranges {
         if start > end {
             // Invalid range
