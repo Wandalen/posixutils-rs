@@ -9,11 +9,7 @@
 
 extern crate clap;
 extern crate plib;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    path::Path,
-};
+use std::io::{self, BufRead, Error, ErrorKind, Read};
 
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
@@ -70,19 +66,34 @@ enum ParseVariat {
 ///
 /// A vector containing the selected bytes from the input line based on the specified ranges.
 ///
-fn cut_bytes(line: &[u8], ranges: &Vec<(i32, i32)>) -> Vec<u8> {
+fn cut_bytes(line: &[u8], delim: Option<char>, ranges: &Vec<(i32, i32)>) -> Vec<u8> {
     let mut result = Vec::new();
 
     for (start, end) in ranges {
         let start = *start as usize;
         let end = *end as usize;
-        if line.get(start).is_some() && line.get(end).is_some() {
+        if line.get(start).is_some() {
             if start == end {
-                result.push(line[start])
+                result.push(line[start]);
+                if let Some(delim) = delim {
+                    for byte in delim.to_string().as_bytes() {
+                        result.push(*byte);
+                    }
+                }
             } else {
-                result.extend_from_slice(&line[start..end]);
+                for byte in line.iter().take(end + 1).skip(start) {
+                    result.push(*byte);
+                }
+                if let Some(delim) = delim {
+                    for byte in delim.to_string().as_bytes() {
+                        result.push(*byte);
+                    }
+                }
             }
         }
+    }
+    if delim.is_some() {
+        result.pop();
     }
 
     result
@@ -99,20 +110,32 @@ fn cut_bytes(line: &[u8], ranges: &Vec<(i32, i32)>) -> Vec<u8> {
 ///
 /// A string containing the selected characters from the input line based on the specified ranges, separated by the delimiter if provided.
 ///
-fn cut_characters(line: &str, ranges: &Vec<(i32, i32)>) -> String {
+fn cut_characters(line: &str, delim: Option<char>, ranges: &Vec<(i32, i32)>) -> String {
     let mut result = String::new();
     let chars: Vec<char> = line.chars().collect();
 
     for (start, end) in ranges {
         let start = *start as usize;
         let end = *end as usize;
-        if chars.get(start).is_some() && chars.get(end).is_some() {
+        if chars.get(start).is_some() {
             if start == end {
-                result.push(chars[start])
+                result.push(chars[start]);
+                if let Some(delim) = delim {
+                    result.push(delim);
+                }
             } else {
-                result.push_str(&line[start..end]);
+                let chars = line.chars();
+                for char in chars.take(end + 1).skip(start) {
+                    result.push(char);
+                }
+                if let Some(delim) = delim {
+                    result.push(delim);
+                }
             }
         }
+    }
+    if delim.is_some() {
+        result.pop();
     }
     result
 }
@@ -131,30 +154,44 @@ fn cut_characters(line: &str, ranges: &Vec<(i32, i32)>) -> String {
 /// A string containing the selected fields from the input line based on the specified ranges, separated by the delimiter.
 /// If `suppress` is `false` and the input line has no delimiter characters, the entire line is returned.
 ///
-fn cut_fields(line: &str, delim: char, ranges: &Vec<(i32, i32)>, suppress: bool) -> String {
+fn cut_fields(line: &str, delim: char, ranges: &Vec<(i32, i32)>, suppress: bool) -> (String, bool) {
     let mut result = String::new();
-    let fields: Vec<&str> = line.split(delim).collect();
+    let mut skip = false;
+    let delim_escaped = delim.escape_debug().to_string();
+    let mut fields: Vec<&str>;
+    if delim_escaped.len() > 1 {
+        fields = line.split(&delim_escaped).collect();
+    } else {
+        fields = line.split(delim).collect();
+    }
+
+    if fields.len() == 1 {
+        fields = vec![];
+    }
 
     for (start, end) in ranges {
         let start = *start as usize;
         let end = *end as usize;
-        if fields.get(start).is_some() && fields.get(end).is_some() {
-            if !result.is_empty() {
-                result.push(delim);
-            }
+        if fields.get(start).is_some() {
             if start == end {
-                result.push_str(fields[start])
+                result.push_str(fields[start]);
+                result.push(delim);
             } else {
-                for i in start..end {
-                    result.push_str(fields[i]);
+                for i in fields.iter().take(end + 1).skip(start) {
+                    result.push_str(i);
+                    result.push(delim);
                 }
             }
         }
     }
-    if result.is_empty() && !suppress {
+    result.pop();
+    if result.is_empty() && fields.is_empty() && !suppress {
         result.push_str(line);
     }
-    result
+    if result.is_empty() && fields.is_empty() && suppress {
+        skip = true;
+    }
+    (result, skip)
 }
 
 /// Processes files according to the provided arguments, cutting out selected fields, characters, or bytes.
@@ -174,93 +211,128 @@ fn cut_files(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     //     std::process::exit(1);
     // }
 
-    let files = args.clone().filenames;
+    // open files, or stdin
+
+    let readers: Vec<Box<dyn Read>> = if args.filenames.len() == 1 && args.filenames[0] == "-" {
+        vec![Box::new(io::stdin().lock())]
+    } else {
+        let mut bufs: Vec<Box<dyn Read>> = vec![];
+        for file in &args.filenames {
+            bufs.push(Box::new(std::fs::File::open(file)?))
+        }
+        bufs
+    };
 
     // Process each file
-    for file in files {
-        let path = Path::new(&file);
-        let display = path.display();
-        let file = match File::open(path) {
-            Err(why) => panic!("couldn't open {}: {}", display, why),
-            Ok(file) => file,
-        };
-
-        // Read file lines
-        let reader = BufReader::new(file);
+    for file in readers {
+        let reader = io::BufReader::new(file);
 
         let parse_option;
 
-        if let Some(bytes_list) = args.clone().bytes {
+        if let Some(bytes_list) = &args.bytes {
             let ranges: Vec<&str> = bytes_list.split(',').collect();
-
             let ranges: Vec<(i32, i32)> = ranges
                 .iter()
                 .map(|range| {
-                    let range: Vec<i32> =
-                        range.split('-').map(|num| num.parse().unwrap()).collect();
-                    if range.len() == 1 {
-                        (range[0] - 1, range[0] - 1)
+                    let nums: Vec<&str> = range.split('-').collect();
+
+                    let start = if nums[0].is_empty() {
+                        0
                     } else {
-                        (range[0] - 1, range[1] - 1)
-                    }
+                        nums[0].parse::<i32>().unwrap() - 1
+                    };
+
+                    let end = if range.len() == 1 {
+                        start
+                    } else if nums[1].is_empty() {
+                        std::i32::MAX - 1
+                    } else {
+                        nums[1].parse::<i32>().unwrap() - 1
+                    };
+                    (start, end)
                 })
                 .collect();
             parse_option = ParseVariat::Bytes(ranges);
-        } else if let Some(characters_list) = args.clone().characters {
+        } else if let Some(characters_list) = &args.characters {
             let ranges: Vec<&str> = characters_list.split(',').collect();
             let ranges: Vec<(i32, i32)> = ranges
                 .iter()
                 .map(|range| {
-                    let range: Vec<i32> =
-                        range.split('-').map(|num| num.parse().unwrap()).collect();
-                    if range.len() == 1 {
-                        (range[0] - 1, range[0] - 1)
+                    let nums: Vec<&str> = range.split('-').collect();
+
+                    let start = if nums[0].is_empty() {
+                        0
                     } else {
-                        (range[0] - 1, range[1] - 1)
-                    }
+                        nums[0].parse::<i32>().unwrap() - 1
+                    };
+
+                    let end = if range.len() == 1 {
+                        start
+                    } else if nums[1].is_empty() {
+                        std::i32::MAX - 1
+                    } else {
+                        nums[1].parse::<i32>().unwrap() - 1
+                    };
+                    (start, end)
                 })
                 .collect();
 
             parse_option = ParseVariat::Characters(ranges);
-        } else if let Some(fields_list) = args.clone().fields {
+        } else if let Some(fields_list) = &args.fields {
             let ranges: Vec<&str> = fields_list.split(',').collect();
             let ranges: Vec<(i32, i32)> = ranges
                 .iter()
                 .map(|range| {
-                    let range: Vec<i32> =
-                        range.split('-').map(|num| num.parse().unwrap()).collect();
-                    if range.len() == 1 {
-                        (range[0] - 1, range[0] - 1)
+                    let nums: Vec<&str> = range.split('-').collect();
+
+                    let start = if nums[0].is_empty() {
+                        0
                     } else {
-                        (range[0] - 1, range[1] - 1)
-                    }
+                        nums[0].parse::<i32>().unwrap() - 1
+                    };
+
+                    let end = if range.len() == 1 {
+                        start
+                    } else if nums[1].is_empty() {
+                        std::i32::MAX - 1
+                    } else {
+                        nums[1].parse::<i32>().unwrap() - 1
+                    };
+                    (start, end)
                 })
                 .collect();
             parse_option = ParseVariat::Fields(ranges);
         } else {
-            eprintln!("Invalid arguments");
-            std::process::exit(1);
+            return Err(Box::new(Error::new(ErrorKind::Other, "Invalid arguments")));
         }
 
         for line in reader.lines() {
             let line = line?;
             match parse_option.clone() {
                 ParseVariat::Bytes(ranges) => {
-                    println!("{:?}", cut_bytes(line.as_bytes(), &ranges))
+                    let bytes = cut_bytes(line.as_bytes(), args.delimiter, &ranges);
+                    match String::from_utf8(bytes) {
+                        Ok(string) => println!("{}", string),
+                        Err(e) => eprintln!("Conversion error to string: {}", e),
+                    }
                 }
                 ParseVariat::Characters(ranges) => {
-                    println!("{}", cut_characters(&line, &ranges))
+                    println!("{}", cut_characters(&line, args.delimiter, &ranges))
                 }
                 ParseVariat::Fields(ranges) => {
-                    println!(
-                        "{}",
-                        cut_fields(
+                    if args.delimiter.is_none() {
+                        println!("{}", line);
+                    } else {
+                        let result = cut_fields(
                             &line,
                             args.clone().delimiter.unwrap(),
                             &ranges,
-                            args.clone().suppress
-                        )
-                    )
+                            args.clone().suppress,
+                        );
+                        if !result.1 {
+                            println!("{}", result.0)
+                        }
+                    }
                 }
             }
         }
@@ -283,4 +355,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_cut_escape_character_1() {
+        // Test valid operands
+        let args = Args {
+            bytes: None,
+            characters: None,
+            fields: Some("1".to_string()),
+            delimiter: Some('\n'),
+            no_split: false,
+            filenames: vec!["tests/assets/escape_character_1.txt".to_string()],
+            suppress: true,
+        };
+
+        cut_files(args).unwrap();
+    }
+
+    #[test]
+    fn test_cut_4() {
+        // Test valid operands
+        let args = Args {
+            bytes: None,
+            characters: Some("1-3".to_string()),
+            fields: None,
+            delimiter: Some(':'),
+            no_split: false,
+            filenames: vec!["tests/assets/text.txt".to_string()],
+            suppress: false,
+        };
+
+        cut_files(args).unwrap();
+    }
 }
