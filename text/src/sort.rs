@@ -9,9 +9,10 @@
 
 extern crate clap;
 extern crate plib;
+use std::cmp::Ordering;
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead, BufReader, BufWriter, Write},
     path::PathBuf,
 };
 
@@ -105,17 +106,144 @@ impl Args {
     }
 }
 
-// Function for sorting lines in the input vector
-fn sort_lines(mut lines: Vec<String>, reverse: bool, dictionary_order: bool) -> Vec<String> {
-    if dictionary_order {
-        lines.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+struct RangeField {
+    field_number: usize,
+    first_character: usize,
+}
+
+impl RangeField {
+    fn new() -> RangeField {
+        Self {
+            field_number: 0,
+            first_character: 0,
+        }
+    }
+}
+
+// Function for trimming and concatenating strings from a vector
+fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField>)) -> String {
+    let mut result = String::new();
+
+    let start_field = key_range.0.field_number - 1; // Subtract 1, because the indices start from 0
+    let start_char = key_range.0.first_character - 1;
+
+    let end_field = match &key_range.1 {
+        Some(range) => range.field_number - 1,
+        None => line.len() - 1,
+    };
+    let end_char = key_range.1.as_ref().map(|range| range.first_character - 1);
+
+    for (i, field) in line.iter().enumerate() {
+        if i >= start_field && i <= end_field {
+            let start = if i == start_field { start_char } else { 0 };
+            let end = if i == end_field {
+                if let Some(char) = end_char {
+                    char
+                } else {
+                    field.len() - 1
+                }
+            } else {
+                field.len() - 1
+            };
+            result.push_str(&field[start..=end]);
+        }
+    }
+
+    result
+}
+
+// Function for comparing two strings by key
+fn compare_key(
+    line1: &str,
+    line2: &str,
+    key_range: &(RangeField, Option<RangeField>),
+    numeric: bool,
+) -> Ordering {
+    let line1 = cut_line_by_range(line1.split_whitespace().collect(), key_range);
+    let line2 = cut_line_by_range(line2.split_whitespace().collect(), key_range);
+
+    // Compare keys
+    if numeric {
+        // If the keys are represented by numbers, compare them as numbers
+        let num1: i64 = line1.parse().unwrap_or(0);
+        let num2: i64 = line2.parse().unwrap_or(0);
+        num1.cmp(&num2)
     } else {
-        lines.sort_unstable();
+        // Otherwise, we compare as strings
+        line1.cmp(&line2)
     }
-    if reverse {
-        lines.reverse();
+}
+
+// Function for sorting strings by key
+fn sort_lines(file_path: &str, key_range: &str) -> std::io::Result<()> {
+    // Open the file for reading
+    let file_in = File::open(file_path)?;
+    let reader = BufReader::new(file_in);
+
+    // Read lines from a file
+    let mut lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
+
+    // Split the key range with commas
+    let key_ranges: Vec<&str> = key_range.split(',').collect();
+    let mut key_ranges = key_ranges.iter();
+    let mut numeric = false;
+
+    // Convert key ranges to numeric representations
+    let mut ranges: (RangeField, Option<RangeField>) = (RangeField::new(), None);
+
+    ranges.0 = {
+        let mut key_range = key_ranges.next().unwrap().to_string();
+        if key_range.contains('n') {
+            key_range = key_range.replace('n', "");
+            numeric = true;
+        }
+        let mut parts = key_range.split('.');
+        let start_1: usize = parts.next().unwrap().parse().unwrap();
+        let start_2: usize = parts.next().unwrap_or("0").parse().unwrap();
+        RangeField {
+            field_number: start_1,
+            first_character: start_2,
+        }
+    };
+    ranges.1 = {
+        if let Some(key_range) = key_ranges.next() {
+            let mut key_range = key_range.to_string();
+            if key_range.contains('n') {
+                key_range = key_range.replace('n', "");
+                numeric = true;
+            }
+            let mut parts = key_range.split('.');
+            let start_1: usize = parts.next().unwrap().parse().unwrap();
+            let start_2: usize = parts.next().unwrap_or("0").parse().unwrap();
+            Some(RangeField {
+                field_number: start_1,
+                first_character: start_2,
+            })
+        } else {
+            None
+        }
+    };
+
+    // Sort strings by keys
+    lines.sort_by(|a, b| {
+        let ordering = compare_key(a, b, &ranges, numeric);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+
+        Ordering::Equal
+    });
+
+    // Open the file for writing
+    let file_out = File::create(file_path)?;
+    let mut writer = BufWriter::new(file_out);
+
+    // Write the sorted strings to a file
+    for line in lines {
+        writeln!(writer, "{}", line)?;
     }
-    lines
+
+    Ok(())
 }
 
 // Function for merging sorted files
@@ -132,11 +260,6 @@ fn merge_sorted_files(files: Vec<File>, reverse: bool, dictionary_order: bool) -
         for line in reader.lines() {
             lines.push(line?);
         }
-    }
-
-    // Sorting and displaying sorted strings
-    for line in sort_lines(lines, reverse, dictionary_order) {
-        println!("{}", line);
     }
 
     Ok(())
