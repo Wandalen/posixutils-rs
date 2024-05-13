@@ -93,6 +93,30 @@ impl Args {
             return Err("Options '-c' and '-C' cannot be used together".to_string());
         }
 
+        // Check if conflicting options are used together
+        if self.dictionary_order && self.ignore_nonprintable {
+            return Err("Options '-d' and '-i' cannot be used together".to_string());
+        }
+
+        // Check if conflicting options are used together
+        if self.dictionary_order && self.numeric_sort {
+            return Err("Options '-d' and '-n' cannot be used together".to_string());
+        }
+
+        // Check if conflicting options are used together
+        if self.numeric_sort && self.ignore_nonprintable {
+            return Err("Options '-n' and '-i' cannot be used together".to_string());
+        }
+
+        // Check if conflicting options are used together
+        if self.ignore_leading_blanks && self.key_definition.is_none() {
+            return Err("Options '-b' can be used together with '-k' ".to_string());
+        }
+        // Check if conflicting options are used together
+        if self.field_separator.is_some() && self.key_definition.is_none() {
+            return Err("Options '-t' can be used together with '-k' ".to_string());
+        }
+
         Ok(())
     }
 }
@@ -156,11 +180,11 @@ fn compare_key(
     // Compare keys
     if numeric {
         // If the keys are represented by numbers, compare them as numbers
-        let num1: u64 = extract_number(&line1)
+        let num1: u64 = numeric_sort(&line1)
             .unwrap_or("0".to_string())
             .parse()
             .unwrap_or(0);
-        let num2: u64 = extract_number(&line1)
+        let num2: u64 = numeric_sort(&line1)
             .unwrap_or("0".to_string())
             .parse()
             .unwrap_or(0);
@@ -172,12 +196,12 @@ fn compare_key(
 }
 
 // Function to extract a number from a string, ignoring other characters
-fn extract_number(input: &str) -> Option<String> {
+fn numeric_sort(input: &str) -> Option<String> {
     let mut result = String::new();
     let mut found_number = false;
 
     for c in input.chars() {
-        if c.is_digit(10) || c == '-' || c == '.' {
+        if c.is_ascii_digit() || c == '-' || c == '.' {
             found_number = true;
             result.push(c);
         } else if found_number {
@@ -192,50 +216,146 @@ fn extract_number(input: &str) -> Option<String> {
     }
 }
 
+fn dictionary_order(line: &str) -> String {
+    line.chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .collect::<String>()
+}
+
+fn fold_case(line: &str) -> String {
+    line.to_uppercase()
+}
+
+fn ignore_nonprintable(line: &str) -> String {
+    line.chars()
+        .filter(|&c| c.is_ascii() && c.is_ascii_graphic())
+        .collect()
+}
+
+fn generate_range(key_range: &str) -> (RangeField, bool, bool, bool, bool, bool, bool) {
+    let mut numeric = false;
+    let mut ignore_leading_blanks = false;
+    let mut reverse = false;
+    let mut ignore_nonprintable = false;
+    let mut fold_case = false;
+    let mut dictionary_order = false;
+
+    let mut key_range = key_range.to_string();
+    if key_range.contains('n') {
+        key_range = key_range.replace('n', "");
+        numeric = true;
+    }
+    if key_range.contains('b') {
+        key_range = key_range.replace('b', "");
+        ignore_leading_blanks = true;
+    }
+    if key_range.contains('r') {
+        key_range = key_range.replace('r', "");
+        reverse = true;
+    }
+    if key_range.contains('i') {
+        key_range = key_range.replace('i', "");
+        ignore_nonprintable = true;
+    }
+    if key_range.contains('f') {
+        key_range = key_range.replace('f', "");
+        fold_case = true;
+    }
+    if key_range.contains('d') {
+        key_range = key_range.replace('d', "");
+        dictionary_order = true;
+    }
+    let mut parts = key_range.split('.');
+    let start_1: usize = parts.next().unwrap().parse().unwrap();
+    let start_2: usize = parts.next().unwrap_or("1").parse().unwrap();
+    let range_result = RangeField {
+        field_number: start_1 - 1,
+        first_character: start_2 - 1,
+    };
+
+    (
+        range_result,
+        numeric,
+        ignore_leading_blanks,
+        reverse,
+        ignore_nonprintable,
+        fold_case,
+        dictionary_order,
+    )
+}
+
 // Function for sorting strings by key
-fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<String> {
-    let mut reader = io::BufReader::new(reader);
+fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<()> {
+    let reader = io::BufReader::new(reader);
 
     // Read lines from a file
     let mut lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
 
-    if let Some(key_range) = args.key_definition {
+    if args.dictionary_order {
+        for line in &mut lines {
+            *line = dictionary_order(line);
+        }
+    }
+
+    if args.fold_case {
+        for line in &mut lines {
+            *line = fold_case(line);
+        }
+    }
+
+    if args.ignore_nonprintable {
+        for line in &mut lines {
+            *line = ignore_nonprintable(line);
+        }
+    }
+
+    if args.numeric_sort {
+        for line in &mut lines {
+            *line = numeric_sort(line).unwrap_or("0".to_string());
+        }
+    }
+
+    if let Some(key_range) = &args.key_definition {
         // Split the key range with commas
         let key_ranges: Vec<&str> = key_range.split(',').collect();
         let mut key_ranges = key_ranges.iter();
         let mut numeric = false;
+        let mut ignore_leading_blanks = false;
+        let mut reverse = false;
+        let mut ignore_nonprintable = false;
+        let mut fold_case = false;
+        let mut dictionary_order = false;
 
         // Convert key ranges to numeric representations
         let mut ranges: (RangeField, Option<RangeField>) = (RangeField::new(), None);
 
         ranges.0 = {
             let mut key_range = key_ranges.next().unwrap().to_string();
-            if key_range.contains('n') {
-                key_range = key_range.replace('n', "");
-                numeric = true;
-            }
-            let mut parts = key_range.split('.');
-            let start_1: usize = parts.next().unwrap().parse().unwrap();
-            let start_2: usize = parts.next().unwrap_or("1").parse().unwrap();
-            RangeField {
-                field_number: start_1 - 1,
-                first_character: start_2 - 1,
-            }
+            let (
+                range_result,
+                numeric,
+                ignore_leading_blanks,
+                reverse,
+                ignore_nonprintable,
+                fold_case,
+                dictionary_order,
+            ) = generate_range(&key_range);
+
+            range_result
         };
         ranges.1 = {
             if let Some(key_range) = key_ranges.next() {
                 let mut key_range = key_range.to_string();
-                if key_range.contains('n') {
-                    key_range = key_range.replace('n', "");
-                    numeric = true;
-                }
-                let mut parts = key_range.split('.');
-                let start_1: usize = parts.next().unwrap().parse().unwrap();
-                let start_2: usize = parts.next().unwrap_or("1").parse().unwrap();
-                Some(RangeField {
-                    field_number: start_1 - 1,
-                    first_character: start_2 - 1,
-                })
+                let (
+                    range_result,
+                    numeric,
+                    ignore_leading_blanks,
+                    reverse,
+                    ignore_nonprintable,
+                    fold_case,
+                    dictionary_order,
+                ) = generate_range(&key_range);
+                Some(range_result)
             } else {
                 None
             }
@@ -251,17 +371,14 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<String> {
             Ordering::Equal
         });
     } else {
-        lines.sort_by(|a, b| {
-            a.chars()
-                .collect::<String>()
-                .cmp(&b.chars().collect::<String>())
-        });
+        lines.sort();
     }
 
+    if args.reverse {
+        lines.reverse();
+    }
 
-    
-
-    if let Some(file_path) = args.output_file {
+    if let Some(file_path) = &args.output_file {
         // Open the file for writing
         let file_out = File::create(file_path)?;
         let mut writer = BufWriter::new(file_out);
@@ -270,6 +387,9 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<String> {
         for line in lines {
             writeln!(writer, "{}", line)?;
         }
+    } else {
+        let result = lines.join("\n");
+        print!("{result}");
     }
 
     Ok(())
