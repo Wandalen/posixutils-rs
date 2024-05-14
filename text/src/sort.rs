@@ -10,10 +10,11 @@
 extern crate clap;
 extern crate plib;
 use std::cmp::Ordering;
-use std::io::Read;
+
+use std::io::{ErrorKind, Read};
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, BufWriter, Write},
+    io::{self, BufRead, BufReader, BufWriter, Error, Write},
     path::PathBuf,
 };
 
@@ -151,7 +152,7 @@ impl RangeField {
 fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField>)) -> String {
     let mut result = String::new();
 
-    let start_field = key_range.0.field_number; // Subtract 1, because the indices start from 0
+    let start_field = key_range.0.field_number;
     let start_char = key_range.0.first_character;
 
     let end_field = match &key_range.1 {
@@ -163,15 +164,22 @@ fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField
     for (i, field) in line.iter().enumerate() {
         if i >= start_field && i <= end_field {
             let start = if i == start_field { start_char } else { 0 };
-            let end = if i == end_field {
+            let mut end = if i == end_field {
                 if let Some(char) = end_char {
-                    char
+                    if char == usize::MAX - 1 {
+                        field.len() - 1
+                    } else {
+                        char
+                    }
                 } else {
                     field.len() - 1
                 }
             } else {
                 field.len() - 1
             };
+            if end >= field.len() {
+                end = field.len() - 1;
+            }
             result.push_str(&field[start..=end]);
         }
     }
@@ -179,36 +187,13 @@ fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField
     result
 }
 
-// Function for comparing two strings by key
-fn compare_key(line1: &str, line2: &str, key_range: &(RangeField, Option<RangeField>)) -> Ordering {
-    let line1 = cut_line_by_range(line1.split_whitespace().collect(), key_range);
-    let line2 = cut_line_by_range(line2.split_whitespace().collect(), key_range);
-
-    // Compare keys
-    if key_range.0.numeric_sort {
-        // If the keys are represented by numbers, compare them as numbers
-        let num1: i64 = numeric_sort(&line1)
-            .unwrap_or("0".to_string())
-            .parse()
-            .unwrap_or(0);
-        let num2: i64 = numeric_sort(&line1)
-            .unwrap_or("0".to_string())
-            .parse()
-            .unwrap_or(0);
-        num1.cmp(&num2)
-    } else {
-        // Otherwise, we compare as strings
-        line1.cmp(&line2)
-    }
-}
-
 // Function to extract a number from a string, ignoring other characters
-fn numeric_sort(input: &str) -> Option<String> {
+fn numeric_sort_filter(input: &str) -> Option<String> {
     let mut result = String::new();
     let mut found_number = false;
 
     for c in input.chars() {
-        if c.is_ascii_digit() || c == '-' || c == '.' {
+        if c.is_ascii_digit() || c == '-' || c == '.' || c == '*' {
             found_number = true;
             result.push(c);
         } else if found_number {
@@ -223,29 +208,59 @@ fn numeric_sort(input: &str) -> Option<String> {
     }
 }
 
-fn dictionary_order(line: &str) -> String {
+fn compare_numeric(line1: &str, line2: &str) -> Ordering {
+    let line1 = numeric_sort_filter(line1).unwrap_or("0".to_string());
+    let line2 = numeric_sort_filter(line2).unwrap_or("0".to_string());
+    let a_num = line1.parse::<f64>().ok();
+
+    let b_num = line2.parse::<f64>().ok();
+
+    match (a_num, b_num) {
+        (Some(a_val), Some(b_val)) => a_val.partial_cmp(&b_val).unwrap_or(Ordering::Equal),
+        (Some(_), None) => Ordering::Greater,
+        (None, Some(_)) => Ordering::Less,
+        (None, None) => line1.cmp(&line2),
+    }
+}
+
+fn dictionary_order_filter(line: &str) -> String {
     line.chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace())
         .collect::<String>()
 }
 
-/* fn fold_case(line: &str) -> String {
-    line.to_uppercase()
-} */
-
-fn ignore_nonprintable(line: &str) -> String {
+fn ignore_nonprintable_filter(line: &str) -> String {
     line.chars()
         .filter(|&c| c.is_ascii() && c.is_ascii_graphic())
         .collect()
 }
 
-fn generate_range(key_range: &str) -> RangeField {
-    let mut numeric_sort = false;
-    let mut ignore_leading_blanks = false;
-    let mut reverse = false;
-    let mut ignore_nonprintable = false;
-    let mut fold_case = false;
-    let mut dictionary_order = false;
+fn generate_range(
+    key_range: &str,
+    args: &Args,
+    first: bool,
+) -> Result<RangeField, Box<dyn std::error::Error>> {
+    let mut numeric_sort = args.numeric_sort;
+    let mut ignore_leading_blanks = args.ignore_leading_blanks;
+    let mut reverse = args.reverse;
+    let mut ignore_nonprintable = args.ignore_nonprintable;
+    let mut fold_case = args.fold_case;
+    let mut dictionary_order = args.dictionary_order;
+
+    if key_range.contains('n')
+        || key_range.contains('b')
+        || key_range.contains('r')
+        || key_range.contains('i')
+        || key_range.contains('f')
+        || key_range.contains('d')
+    {
+        numeric_sort = false;
+        ignore_leading_blanks = false;
+        reverse = false;
+        ignore_nonprintable = false;
+        fold_case = false;
+        dictionary_order = false;
+    }
 
     let mut key_range = key_range.to_string();
     if key_range.contains('n') {
@@ -273,9 +288,29 @@ fn generate_range(key_range: &str) -> RangeField {
         dictionary_order = true;
     }
     let mut parts = key_range.split('.');
-    let start_1: usize = parts.next().unwrap().parse().unwrap();
-    let start_2: usize = parts.next().unwrap_or("1").parse().unwrap();
-    RangeField {
+    let start_1: usize = parts
+        .next()
+        .unwrap()
+        .parse()
+        .map_err(|err| Box::new(Error::new(ErrorKind::Other, err)))?;
+
+    let start_2 = parts.next();
+    let mut start_2: usize = match first {
+        true => start_2
+            .unwrap_or("1")
+            .parse()
+            .map_err(|err| Box::new(Error::new(ErrorKind::Other, err)))?,
+        false => start_2
+            .unwrap_or(&usize::MAX.to_string())
+            .parse()
+            .map_err(|err| Box::new(Error::new(ErrorKind::Other, err)))?,
+    };
+
+    if !first && start_2 == 0 {
+        start_2 = usize::MAX;
+    }
+
+    Ok(RangeField {
         field_number: start_1 - 1,
         first_character: start_2 - 1,
         numeric_sort,
@@ -284,7 +319,7 @@ fn generate_range(key_range: &str) -> RangeField {
         ignore_nonprintable,
         fold_case,
         dictionary_order,
-    }
+    })
 }
 
 fn remove_duplicates(lines: &mut Vec<String>) {
@@ -307,38 +342,97 @@ fn remove_duplicates(lines: &mut Vec<String>) {
     *lines = result;
 }
 
+// Function for comparing two strings by key
+fn compare_key(
+    line1: &str,
+    line2: &str,
+    key_range: &(RangeField, Option<RangeField>),
+    field_separator: Option<char>,
+    ignore_leading_blanks: bool,
+) -> Ordering {
+    let mut line1 = {
+        if let Some(separator) = field_separator {
+            cut_line_by_range(line1.split(separator).collect(), key_range)
+        } else {
+            cut_line_by_range(line1.split_whitespace().collect(), key_range)
+        }
+    };
+    let mut line2 = {
+        if let Some(separator) = field_separator {
+            cut_line_by_range(line2.split(separator).collect(), key_range)
+        } else {
+            cut_line_by_range(line2.split_whitespace().collect(), key_range)
+        }
+    };
+
+    // Compare keys
+    if key_range.0.numeric_sort {
+        // If the keys are represented by numbers, compare them as numbers
+        return compare_numeric(&line1, &line2);
+    } else if key_range.0.dictionary_order {
+        line1 = dictionary_order_filter(&line1);
+        line2 = dictionary_order_filter(&line2);
+    } else if key_range.0.ignore_nonprintable {
+        line1 = ignore_nonprintable_filter(&line1);
+        line2 = ignore_nonprintable_filter(&line2);
+    }
+
+    if key_range.0.fold_case {
+        let cmp = line1.to_uppercase().cmp(&line2.to_uppercase());
+        if cmp == std::cmp::Ordering::Equal {
+            line1.cmp(&line2)
+        } else {
+            cmp
+        }
+    } else {
+        line1.cmp(&line2)
+    }
+}
+
+fn compare_lines(
+    line1: &str,
+    line2: &str,
+    dictionary_order: bool,
+    fold_case: bool,
+    ignore_nonprintable: bool,
+    numeric_sort: bool,
+) -> Ordering {
+    let mut line1 = line1.to_string();
+    let mut line2 = line2.to_string();
+
+    if numeric_sort {
+        return compare_numeric(&line1, &line2);
+    } else if dictionary_order {
+        line1 = dictionary_order_filter(&line1);
+        line2 = dictionary_order_filter(&line2);
+    } else if ignore_nonprintable {
+        line1 = ignore_nonprintable_filter(&line1);
+        line2 = ignore_nonprintable_filter(&line2);
+    }
+
+    if fold_case {
+        let cmp = line1.to_uppercase().cmp(&line2.to_uppercase());
+        if cmp == std::cmp::Ordering::Equal {
+            line1.cmp(&line2)
+        } else {
+            cmp
+        }
+    } else {
+        line1.cmp(&line2)
+    }
+}
+
 // Function for sorting strings by key
-fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<()> {
+fn sort_lines(args: &Args, reader: Box<dyn Read>) -> Result<(), Box<dyn std::error::Error>> {
     let reader = io::BufReader::new(reader);
 
     // Read lines from a file
     let mut lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
 
-    if args.dictionary_order {
-        for line in &mut lines {
-            *line = dictionary_order(line);
-        }
-    }
-
-    /* if args.fold_case {
-        for line in &mut lines {
-            *line = fold_case(line);
-        }
-    } */
-
-    if args.ignore_nonprintable {
-        for line in &mut lines {
-            *line = ignore_nonprintable(line);
-        }
-    }
-
-    if args.numeric_sort {
-        for line in &mut lines {
-            *line = numeric_sort(line).unwrap_or("0".to_string());
-        }
-    }
-
     if let Some(key_range) = &args.key_definition {
+        if key_range.is_empty() {
+            return Err(Box::new(Error::new(ErrorKind::Other, "Key range is empty")));
+        }
         // Split the key range with commas
         let key_ranges: Vec<&str> = key_range.split(',').collect();
         let mut key_ranges = key_ranges.iter();
@@ -347,53 +441,59 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<()> {
         let mut ranges: (RangeField, Option<RangeField>) = (RangeField::new(), None);
 
         ranges.0 = {
-            let mut key_range = key_ranges.next().unwrap().to_string();
-            generate_range(&key_range)
+            let key_range = key_ranges.next().unwrap().to_string();
+            generate_range(&key_range, args, true)?
         };
         ranges.1 = {
             if let Some(key_range) = key_ranges.next() {
-                let mut key_range = key_range.to_string();
-
-                Some(generate_range(&key_range))
+                Some(generate_range(key_range, args, false)?)
             } else {
                 None
             }
         };
 
+        let mut duplicates = vec![];
         // Sort strings by keys
         lines.sort_by(|a, b| {
-            let ordering = compare_key(a, b, &ranges);
-            if ordering != Ordering::Equal {
-                return ordering;
+            let ordering = compare_key(
+                a,
+                b,
+                &ranges,
+                args.field_separator,
+                args.ignore_leading_blanks,
+            );
+            if let Ordering::Equal = ordering {
+                duplicates.push(a.to_string());
             }
-
-            Ordering::Equal
+            ordering
         });
-    } else if args.fold_case {
-        lines.sort_by(|a, b| {
-            let cmp = a.to_uppercase().cmp(&b.to_uppercase());
-            if cmp == std::cmp::Ordering::Equal {
-                a.cmp(b)
-            } else {
-                cmp
-            }
-        });
-    } else if args.numeric_sort {
-        lines.sort_by(|a, b| {
-            let num1: i64 = a.parse().unwrap_or(0);
-            let num2: i64 = b.parse().unwrap_or(0);
-            num1.cmp(&num2)
-        });
+        if args.unique {
+            lines.retain(|line| !duplicates.contains(line));
+        }
     } else {
-        lines.sort();
+        let mut duplicates = vec![];
+        lines.sort_by(|a, b| {
+            let ord = compare_lines(
+                a,
+                b,
+                args.dictionary_order,
+                args.fold_case,
+                args.ignore_nonprintable,
+                args.numeric_sort,
+            );
+            if let Ordering::Equal = ord {
+                duplicates.push(a.to_string());
+            }
+            ord
+        });
+
+        if args.unique {
+            lines.retain(|line| !duplicates.contains(line));
+        }
     }
 
     if args.reverse {
         lines.reverse();
-    }
-
-    if args.unique {
-        remove_duplicates(&mut lines);
     }
 
     if let Some(file_path) = &args.output_file {
@@ -505,15 +605,15 @@ mod tests {
             check_order_without_war_mess: false,
             merge_only: false,
             output_file: None,
-            unique: false,
-            dictionary_order: false,
+            unique: true,
+            dictionary_order: true,
             fold_case: false,
             ignore_nonprintable: false,
-            numeric_sort: true,
+            numeric_sort: false,
             reverse: false,
             ignore_leading_blanks: false,
             field_separator: None,
-            key_definition: None,
+            key_definition: Some("1.3nb,1.3".to_string()),
             filenames: vec!["tests/assets/input.txt".into()],
         };
         args.validate_args().unwrap();
