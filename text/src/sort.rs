@@ -124,6 +124,12 @@ impl Args {
 struct RangeField {
     field_number: usize,
     first_character: usize,
+    numeric_sort: bool,
+    ignore_leading_blanks: bool,
+    reverse: bool,
+    ignore_nonprintable: bool,
+    fold_case: bool,
+    dictionary_order: bool,
 }
 
 impl RangeField {
@@ -131,6 +137,12 @@ impl RangeField {
         Self {
             field_number: 0,
             first_character: 0,
+            numeric_sort: false,
+            ignore_leading_blanks: false,
+            reverse: false,
+            ignore_nonprintable: false,
+            fold_case: false,
+            dictionary_order: false,
         }
     }
 }
@@ -168,23 +180,18 @@ fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField
 }
 
 // Function for comparing two strings by key
-fn compare_key(
-    line1: &str,
-    line2: &str,
-    key_range: &(RangeField, Option<RangeField>),
-    numeric: bool,
-) -> Ordering {
+fn compare_key(line1: &str, line2: &str, key_range: &(RangeField, Option<RangeField>)) -> Ordering {
     let line1 = cut_line_by_range(line1.split_whitespace().collect(), key_range);
     let line2 = cut_line_by_range(line2.split_whitespace().collect(), key_range);
 
     // Compare keys
-    if numeric {
+    if key_range.0.numeric_sort {
         // If the keys are represented by numbers, compare them as numbers
-        let num1: u64 = numeric_sort(&line1)
+        let num1: i64 = numeric_sort(&line1)
             .unwrap_or("0".to_string())
             .parse()
             .unwrap_or(0);
-        let num2: u64 = numeric_sort(&line1)
+        let num2: i64 = numeric_sort(&line1)
             .unwrap_or("0".to_string())
             .parse()
             .unwrap_or(0);
@@ -222,9 +229,9 @@ fn dictionary_order(line: &str) -> String {
         .collect::<String>()
 }
 
-fn fold_case(line: &str) -> String {
+/* fn fold_case(line: &str) -> String {
     line.to_uppercase()
-}
+} */
 
 fn ignore_nonprintable(line: &str) -> String {
     line.chars()
@@ -232,8 +239,8 @@ fn ignore_nonprintable(line: &str) -> String {
         .collect()
 }
 
-fn generate_range(key_range: &str) -> (RangeField, bool, bool, bool, bool, bool, bool) {
-    let mut numeric = false;
+fn generate_range(key_range: &str) -> RangeField {
+    let mut numeric_sort = false;
     let mut ignore_leading_blanks = false;
     let mut reverse = false;
     let mut ignore_nonprintable = false;
@@ -243,7 +250,7 @@ fn generate_range(key_range: &str) -> (RangeField, bool, bool, bool, bool, bool,
     let mut key_range = key_range.to_string();
     if key_range.contains('n') {
         key_range = key_range.replace('n', "");
-        numeric = true;
+        numeric_sort = true;
     }
     if key_range.contains('b') {
         key_range = key_range.replace('b', "");
@@ -268,20 +275,36 @@ fn generate_range(key_range: &str) -> (RangeField, bool, bool, bool, bool, bool,
     let mut parts = key_range.split('.');
     let start_1: usize = parts.next().unwrap().parse().unwrap();
     let start_2: usize = parts.next().unwrap_or("1").parse().unwrap();
-    let range_result = RangeField {
+    RangeField {
         field_number: start_1 - 1,
         first_character: start_2 - 1,
-    };
-
-    (
-        range_result,
-        numeric,
+        numeric_sort,
         ignore_leading_blanks,
         reverse,
         ignore_nonprintable,
         fold_case,
         dictionary_order,
-    )
+    }
+}
+
+fn remove_duplicates(lines: &mut Vec<String>) {
+    if lines.is_empty() {
+        return;
+    }
+
+    let mut result = Vec::with_capacity(lines.len());
+    let mut prev = &lines[0];
+
+    result.push(prev.clone());
+
+    for line in &lines[1..] {
+        if line != prev {
+            result.push(line.clone());
+        }
+        prev = line;
+    }
+
+    *lines = result;
 }
 
 // Function for sorting strings by key
@@ -297,11 +320,11 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<()> {
         }
     }
 
-    if args.fold_case {
+    /* if args.fold_case {
         for line in &mut lines {
             *line = fold_case(line);
         }
-    }
+    } */
 
     if args.ignore_nonprintable {
         for line in &mut lines {
@@ -319,43 +342,19 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<()> {
         // Split the key range with commas
         let key_ranges: Vec<&str> = key_range.split(',').collect();
         let mut key_ranges = key_ranges.iter();
-        let mut numeric = false;
-        let mut ignore_leading_blanks = false;
-        let mut reverse = false;
-        let mut ignore_nonprintable = false;
-        let mut fold_case = false;
-        let mut dictionary_order = false;
 
         // Convert key ranges to numeric representations
         let mut ranges: (RangeField, Option<RangeField>) = (RangeField::new(), None);
 
         ranges.0 = {
             let mut key_range = key_ranges.next().unwrap().to_string();
-            let (
-                range_result,
-                numeric,
-                ignore_leading_blanks,
-                reverse,
-                ignore_nonprintable,
-                fold_case,
-                dictionary_order,
-            ) = generate_range(&key_range);
-
-            range_result
+            generate_range(&key_range)
         };
         ranges.1 = {
             if let Some(key_range) = key_ranges.next() {
                 let mut key_range = key_range.to_string();
-                let (
-                    range_result,
-                    numeric,
-                    ignore_leading_blanks,
-                    reverse,
-                    ignore_nonprintable,
-                    fold_case,
-                    dictionary_order,
-                ) = generate_range(&key_range);
-                Some(range_result)
+
+                Some(generate_range(&key_range))
             } else {
                 None
             }
@@ -363,12 +362,27 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<()> {
 
         // Sort strings by keys
         lines.sort_by(|a, b| {
-            let ordering = compare_key(a, b, &ranges, numeric);
+            let ordering = compare_key(a, b, &ranges);
             if ordering != Ordering::Equal {
                 return ordering;
             }
 
             Ordering::Equal
+        });
+    } else if args.fold_case {
+        lines.sort_by(|a, b| {
+            let cmp = a.to_uppercase().cmp(&b.to_uppercase());
+            if cmp == std::cmp::Ordering::Equal {
+                a.cmp(b)
+            } else {
+                cmp
+            }
+        });
+    } else if args.numeric_sort {
+        lines.sort_by(|a, b| {
+            let num1: i64 = a.parse().unwrap_or(0);
+            let num2: i64 = b.parse().unwrap_or(0);
+            num1.cmp(&num2)
         });
     } else {
         lines.sort();
@@ -376,6 +390,10 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<()> {
 
     if args.reverse {
         lines.reverse();
+    }
+
+    if args.unique {
+        remove_duplicates(&mut lines);
     }
 
     if let Some(file_path) = &args.output_file {
@@ -389,7 +407,7 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> std::io::Result<()> {
         }
     } else {
         let result = lines.join("\n");
-        print!("{result}");
+        println!("{result}");
     }
 
     Ok(())
@@ -453,4 +471,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_1() {
+        let args = Args {
+            check_order: false,
+            check_order_without_war_mess: false,
+            merge_only: false,
+            output_file: None,
+            unique: false,
+            dictionary_order: false,
+            fold_case: true,
+            ignore_nonprintable: false,
+            numeric_sort: false,
+            reverse: false,
+            ignore_leading_blanks: false,
+            field_separator: None,
+            key_definition: None,
+            filenames: vec!["tests/assets/input.txt".into()],
+        };
+        args.validate_args().unwrap();
+
+        sort(&args).unwrap();
+    }
+    #[test]
+    fn test_2() {
+        let args = Args {
+            check_order: false,
+            check_order_without_war_mess: false,
+            merge_only: false,
+            output_file: None,
+            unique: false,
+            dictionary_order: false,
+            fold_case: false,
+            ignore_nonprintable: false,
+            numeric_sort: true,
+            reverse: false,
+            ignore_leading_blanks: false,
+            field_separator: None,
+            key_definition: None,
+            filenames: vec!["tests/assets/input.txt".into()],
+        };
+        args.validate_args().unwrap();
+
+        sort(&args).unwrap();
+    }
 }

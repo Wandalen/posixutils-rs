@@ -1401,7 +1401,7 @@ mod sort_tests {
     #[test]
     fn test_20a() {
         sort_test(
-            &[],
+            &["-"],
             "_________U__free\n_________U__malloc\n_________U__abort\n\
          _________U__memcpy\n_________U__memset\n_________U_dyld_stub_binding_helper\n\
          _________U__malloc\n_________U___iob\n_________U__abort\n_________U__fprintf\n",
@@ -1414,7 +1414,7 @@ mod sort_tests {
 
     #[test]
     fn test_21a() {
-        sort_test(&[], "A\na\n_\n", "A\n_\na\n");
+        sort_test(&["-"], "A\na\n_\n", "A\n_\na\n");
     }
 
     #[test]
@@ -1467,11 +1467,11 @@ mod sort_tests {
 
     #[test]
     fn test_nul_nls() {
-        sort_test(&[], "\0b\n\0a\n", "\0a\n\0b\n");
+        sort_test(&["-"], "\0b\n\0a\n", "\0a\n\0b\n");
     }
 
     #[test]
     fn test_use_nl() {
-        sort_test(&[], "\n\t\n", "\n\t\n");
+        sort_test(&["-"], "\n\t\n", "\n\t\n");
     }
 }
