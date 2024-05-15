@@ -206,6 +206,34 @@ fn update_range_field(mut field1: RangeField, mut field2: RangeField) -> (RangeF
     (field1, field2)
 }
 
+/// Compares two RangeField objects based on their field numbers and first characters.
+///
+/// This function takes references to two RangeField objects and compares them based on their
+/// field numbers and first characters. If the field number of the first object is less than
+/// the field number of the second object, it returns true. If the field numbers are equal,
+/// it compares the first characters, returning true if the first character of the first object
+/// is less than or equal to the first character of the second object. Otherwise, it returns false.
+///
+/// # Arguments
+///
+/// * `field1` - A reference to the first RangeField object to compare.
+/// * `field2` - A reference to the second RangeField object to compare.
+///
+/// # Returns
+///
+/// A boolean value indicating whether the first RangeField object is less than or equal to
+/// the second RangeField object based on their field numbers and first characters.
+///
+fn compare_range_fields(field1: &RangeField, field2: &RangeField) -> bool {
+    if field1.field_number < field2.field_number {
+        true
+    } else if field1.field_number == field2.field_number {
+        field1.first_character <= field2.first_character
+    } else {
+        false
+    }
+}
+
 /// Trims and concatenates substrings from a vector of strings based on a specified range.
 ///
 /// This function takes a vector of string slices and a key range, then extracts and concatenates
@@ -480,6 +508,30 @@ fn generate_range(
     })
 }
 
+/// Cuts a line into fields based on the provided RangeField object(s) and field separator.
+///
+/// This function takes a line of text, a RangeField object or a tuple of two RangeField objects
+/// representing the key range(s), and an optional field separator character. It then splits the line
+/// into fields according to the provided separator or space character, and returns a string containing
+/// the selected fields based on the key range(s).
+///
+/// If a field separator character is provided, the line is split using that separator.
+/// If no separator is provided, the line is split using space (' ') as the separator.
+///
+/// # Arguments
+///
+/// * `line` - A reference to the input line of text to be cut into fields.
+/// * `key_range` - A tuple containing one or two RangeField objects representing the key range(s).
+///   The first RangeField object represents the primary key range, and the second one represents
+///   the secondary key range. If only one key range is provided, the second element of the tuple
+///   should be None.
+/// * `field_separator` - An optional character used to separate fields in the line. If None, space
+///   (' ') is used as the default separator.
+///
+/// # Returns
+///
+/// A string containing the selected fields based on the key range(s).
+///
 fn cut_line(
     line: &str,
     key_range: &(RangeField, Option<RangeField>),
@@ -531,38 +583,8 @@ fn compare_key(
     key_range: &(RangeField, Option<RangeField>),
     field_separator: Option<char>,
 ) -> Ordering {
-    let mut line1 = {
-        if let Some(separator) = field_separator {
-            let split = line1.split(separator);
-            cut_line_by_range(split.collect(), key_range)
-        } else {
-            let split: Vec<&str> = line1.split(' ').collect();
-
-            cut_line_by_range(
-                merge_empty_lines(split)
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect(),
-                key_range,
-            )
-        }
-    };
-    let mut line2 = {
-        if let Some(separator) = field_separator {
-            let split = line2.split(separator);
-            cut_line_by_range(split.collect(), key_range)
-        } else {
-            let split: Vec<&str> = line2.split(' ').collect();
-
-            cut_line_by_range(
-                merge_empty_lines(split)
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect(),
-                key_range,
-            )
-        }
-    };
+    let mut line1 = cut_line(line1, key_range, field_separator);
+    let mut line2 = cut_line(line2, key_range, field_separator);
 
     // Compare keys
     if key_range.0.numeric_sort {
@@ -730,6 +752,12 @@ fn create_ranges(
 
     ranges.0 = {
         let key_range = key_ranges.next().unwrap().to_string();
+        if key_range == "0" {
+            return Err(Box::new(Error::new(
+                ErrorKind::Other,
+                "the key can't be zero.",
+            )));
+        }
         generate_range(&key_range, args, true)?
     };
     ranges.1 = {
@@ -741,6 +769,13 @@ fn create_ranges(
     };
     if let Some(range_2) = ranges.1 {
         let (range_1, range_2) = update_range_field(ranges.0, range_2);
+        if !compare_range_fields(&range_1, &range_2) {
+            return Err(Box::new(Error::new(
+                ErrorKind::Other,
+                "keys fields with end position before start!",
+            )));
+        }
+
         ranges = (range_1, Some(range_2));
     }
 
@@ -775,6 +810,13 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> Result<(), Box<dyn std::err
 
     if !args.key_definition.is_empty() {
         let key_range = &args.key_definition[0];
+
+        if key_range.is_empty() {
+            return Err(Box::new(Error::new(
+                ErrorKind::Other,
+                "key must be non-empty",
+            )));
+        }
 
         let ranges = create_ranges(key_range, args)?;
         let ranges_2 = match args.key_definition.get(1) {
@@ -834,20 +876,18 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> Result<(), Box<dyn std::err
             return Ok(());
         }
     } else if args.check_order {
-        if args.unique {
-            if !duplicates.is_empty() {
-                eprintln!(
-                    "Duplicate key was found! \"{}\"",
-                    duplicates.first().unwrap()
-                );
-            } else if let Some((index, line)) = find_first_difference(&lines, &result_lines) {
-                eprintln!(
-                    "The order of the lines is not correct on line {}:`{}`",
-                    index, line
-                );
-            }
+        if args.unique && !duplicates.is_empty() {
+            let message = format!("Duplicate key was found! `{}`", duplicates.first().unwrap());
+            return Err(Box::new(Error::new(ErrorKind::Other, message)));
         }
-
+        if let Some((index, line)) = find_first_difference(&lines, &result_lines) {
+            let message = format!(
+                "The order of the lines is not correct on line {}:`{}`",
+                index + 1,
+                line
+            );
+            return Err(Box::new(Error::new(ErrorKind::Other, message)));
+        }
         return Ok(());
     } else if let Some(file_path) = &args.output_file {
         // Open the file for writing
@@ -990,60 +1030,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_1() {
-        let args = Args {
-            check_order: false,
-            check_order_without_war_mess: false,
-            merge_only: false,
-            output_file: None,
-            unique: false,
-            dictionary_order: false,
-            fold_case: false,
-            ignore_nonprintable: false,
-            numeric_sort: false,
-            reverse: true,
-            ignore_leading_blanks: false,
-            field_separator: None,
-            key_definition: vec![],
-            filenames: vec!["tests/assets/input.txt".into()],
-        };
-        args.validate_args().unwrap();
-
-        sort(&args).unwrap();
-
-        let line = " 901   100";
-
-        let c: Vec<&str> = line.split(' ').collect();
-        dbg!(&c);
-        let r = merge_empty_lines(c);
-        println!("{:?}", r);
-    }
-    #[test]
-    fn test_2() {
-        let args = Args {
-            check_order: false,
-            check_order_without_war_mess: false,
-            merge_only: false,
-            output_file: None,
-            unique: false,
-            dictionary_order: false,
-            fold_case: false,
-            ignore_nonprintable: false,
-            numeric_sort: false,
-            reverse: false,
-            ignore_leading_blanks: false,
-            field_separator: None,
-            key_definition: vec!["2".to_string()],
-            filenames: vec!["tests/assets/input.txt".into()],
-        };
-        args.validate_args().unwrap();
-
-        sort(&args).unwrap();
-    }
 }
