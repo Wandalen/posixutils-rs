@@ -1379,9 +1379,6 @@ mod sort_tests {
 
     #[test]
     fn test_11d() {
-        // Before 1.22m, the first key comparison reported equality.
-        // With 1.22m, they compare different: "a" sorts before "a\n",
-        // and the second key spec isn't even used.
         sort_test(
             &["-t:", "-k2,2b", "-k3,3", "-"],
             "z:a :b\na\t:a\n",
