@@ -14,7 +14,7 @@ use std::cmp::Ordering;
 use std::io::{ErrorKind, Read};
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, BufWriter, Error, Write},
+    io::{self, BufRead, BufWriter, Error, Write},
     path::PathBuf,
 };
 
@@ -76,7 +76,7 @@ struct Args {
 
     /// Specify the key definition for sorting
     #[arg(short = 'k')]
-    key_definition: Option<String>,
+    key_definition: Vec<String>,
 
     /// Input files
     filenames: Vec<PathBuf>,
@@ -110,11 +110,11 @@ impl Args {
         }
 
         // Check if conflicting options are used together
-        if self.ignore_leading_blanks && self.key_definition.is_none() {
+        if self.ignore_leading_blanks && self.key_definition.is_empty() {
             return Err("Options '-b' can be used together with '-k' ".to_string());
         }
         // Check if conflicting options are used together
-        if self.field_separator.is_some() && self.key_definition.is_none() {
+        if self.field_separator.is_some() && self.key_definition.is_empty() {
             return Err("Options '-t' can be used together with '-k' ".to_string());
         }
 
@@ -122,14 +122,31 @@ impl Args {
     }
 }
 
+/// A struct representing a range field with various sorting and comparison options.
 struct RangeField {
+    /// The number of the field to be considered in the range.
     field_number: usize,
+
+    /// The position of the first character in the field to start comparison.
     first_character: usize,
+
+    /// A boolean flag to indicate if the field should be sorted numerically.
     numeric_sort: bool,
+
+    /// A boolean flag to indicate if leading blanks should be ignored during comparison.
     ignore_leading_blanks: bool,
+
+    /// A boolean flag to indicate if the sort order should be reversed.
     reverse: bool,
+
+    /// A boolean flag to indicate if non-printable characters should be ignored during comparison.
     ignore_nonprintable: bool,
+
+    /// A boolean flag to indicate if the case should be folded (case-insensitive comparison).
     fold_case: bool,
+
+    /// A boolean flag to indicate if the field should be compared in dictionary order
+    /// (considers only alphanumeric characters and blanks).
     dictionary_order: bool,
 }
 
@@ -148,7 +165,24 @@ impl RangeField {
     }
 }
 
-// Function for trimming and concatenating strings from a vector
+/// Trims and concatenates substrings from a vector of strings based on a specified range.
+///
+/// This function takes a vector of string slices and a key range, then extracts and concatenates
+/// the substrings from the specified range. The range is defined by a tuple of `RangeField`
+/// structs, where the first element defines the start of the range, and the optional second element
+/// defines the end of the range.
+///
+/// # Arguments
+///
+/// * `line` - A vector of string slices representing the fields to be processed.
+/// * `key_range` - A tuple containing two elements:
+///     * The first `RangeField` specifies the starting field and character position.
+///     * An optional `RangeField` that specifies the ending field and character position.
+///
+/// # Returns
+///
+/// A `String` that contains the concatenated result of the specified range of substrings.
+///
 fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField>)) -> String {
     let mut result = String::new();
 
@@ -187,7 +221,21 @@ fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField
     result
 }
 
-// Function to extract a number from a string, ignoring other characters
+/// Extracts a number from a string, ignoring other characters.
+///
+/// This function processes an input string and extracts the first sequence of characters that can
+/// be part of a number (including digits, a minus sign, a decimal point, and an asterisk). If no
+/// such sequence is found, it returns `None`.
+///
+/// # Arguments
+///
+/// * `input` - A string slice (`&str`) containing the input to be processed.
+///
+/// # Returns
+///
+/// An `Option<String>` containing the extracted number if found, or `None` if no numeric sequence
+/// is found.
+///
 fn numeric_sort_filter(input: &str) -> Option<String> {
     let mut result = String::new();
     let mut found_number = false;
@@ -208,6 +256,26 @@ fn numeric_sort_filter(input: &str) -> Option<String> {
     }
 }
 
+/// Compares two strings numerically, extracting numbers and performing a numeric comparison.
+///
+/// This function extracts the first numeric sequence from each input string using
+/// `numeric_sort_filter` and then compares these sequences as floating-point numbers (`f64`).
+/// If no valid numeric sequence is found, it defaults to comparing the strings lexicographically.
+///
+/// # Arguments
+///
+/// * `line1` - A string slice (`&str`) representing the first input string.
+/// * `line2` - A string slice (`&str`) representing the second input string.
+///
+/// # Returns
+///
+/// An `Ordering` value (`Ordering::Less`, `Ordering::Greater`, or `Ordering::Equal`) indicating
+/// the result of the comparison:
+/// * `Ordering::Less` if the first number is less than the second.
+/// * `Ordering::Greater` if the first number is greater than the second.
+/// * `Ordering::Equal` if the numbers are equal or if both strings lack numeric sequences and are
+///   equal lexicographically.
+///
 fn compare_numeric(line1: &str, line2: &str) -> Ordering {
     let line1 = numeric_sort_filter(line1).unwrap_or("0".to_string());
     let line2 = numeric_sort_filter(line2).unwrap_or("0".to_string());
@@ -223,18 +291,62 @@ fn compare_numeric(line1: &str, line2: &str) -> Ordering {
     }
 }
 
+/// Filters a string to include only alphanumeric characters and whitespace.
+///
+/// This function processes an input string and retains only the alphanumeric characters
+/// (`a-z`, `A-Z`, `0-9`) and whitespace characters, effectively removing all other characters.
+/// It is useful for preparing strings for dictionary-order comparisons.
+///
+/// # Arguments
+///
+/// * `line` - A string slice (`&str`) representing the input string to be filtered.
+///
+/// # Returns
+///
+/// A `String` containing only the alphanumeric and whitespace characters from the input string.
+///
 fn dictionary_order_filter(line: &str) -> String {
     line.chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace())
         .collect::<String>()
 }
 
+/// Filters a string to include only printable ASCII characters.
+///
+/// This function processes an input string and retains only the ASCII characters that are
+/// considered printable and graphic (i.e., not control characters or whitespace).
+///
+/// # Arguments
+///
+/// * `line` - A string slice (`&str`) representing the input string to be filtered.
+///
+/// # Returns
+///
+/// A `String` containing only the printable ASCII characters from the input string.
+///
 fn ignore_nonprintable_filter(line: &str) -> String {
     line.chars()
         .filter(|&c| c.is_ascii() && c.is_ascii_graphic())
         .collect()
 }
 
+/// Generates a `RangeField` struct based on the specified key range and arguments.
+///
+/// This function constructs a `RangeField` struct based on the provided key range string
+/// and the arguments specified in the `Args` struct. It parses the key range string to
+/// determine various sorting and comparison options.
+///
+/// # Arguments
+///
+/// * `key_range` - A string slice (`&str`) representing the key range configuration.
+/// * `args` - A reference to an `Args` struct containing additional configuration options.
+/// * `first` - A boolean indicating whether this is the first part of a range.
+///
+/// # Returns
+///
+/// A `Result` containing the constructed `RangeField` if successful, or a `Box` containing
+/// a dynamic `Error` trait object if parsing or construction fails.
+///
 fn generate_range(
     key_range: &str,
     args: &Args,
@@ -256,7 +368,6 @@ fn generate_range(
     {
         numeric_sort = false;
         ignore_leading_blanks = false;
-        reverse = false;
         ignore_nonprintable = false;
         fold_case = false;
         dictionary_order = false;
@@ -322,53 +433,77 @@ fn generate_range(
     })
 }
 
-fn remove_duplicates(lines: &mut Vec<String>) {
-    if lines.is_empty() {
-        return;
-    }
-
-    let mut result = Vec::with_capacity(lines.len());
-    let mut prev = &lines[0];
-
-    result.push(prev.clone());
-
-    for line in &lines[1..] {
-        if line != prev {
-            result.push(line.clone());
-        }
-        prev = line;
-    }
-
-    *lines = result;
-}
-
-// Function for comparing two strings by key
+/// Compares two strings based on a specified key range and optional field separator.
+///
+/// This function compares two strings (`line1` and `line2`) based on a specified key range,
+/// taking into account optional field separation if provided. It applies sorting and comparison
+/// rules defined in the `RangeField` struct associated with the key range.
+///
+/// # Arguments
+///
+/// * `line1` - A string slice (`&str`) representing the first input string to be compared.
+/// * `line2` - A string slice (`&str`) representing the second input string to be compared.
+/// * `key_range` - A tuple containing two elements:
+///     * The first `RangeField` specifies the key range configuration for both strings.
+///     * An optional `RangeField` specifies the end of the key range if different from the start.
+/// * `field_separator` - An optional character specifying the field separator for splitting
+///   strings into fields before comparison. If `None`, whitespace is used as the separator.
+///
+/// # Returns
+///
+/// An `Ordering` value (`Ordering::Less`, `Ordering::Greater`, or `Ordering::Equal`) indicating
+/// the result of the comparison:
+/// * `Ordering::Less` if `line1` is less than `line2` according to the specified key range.
+/// * `Ordering::Greater` if `line1` is greater than `line2` according to the specified key range.
+/// * `Ordering::Equal` if `line1` and `line2` are equal within the specified key range.
+///
 fn compare_key(
     line1: &str,
     line2: &str,
     key_range: &(RangeField, Option<RangeField>),
     field_separator: Option<char>,
-    ignore_leading_blanks: bool,
 ) -> Ordering {
     let mut line1 = {
         if let Some(separator) = field_separator {
-            cut_line_by_range(line1.split(separator).collect(), key_range)
-        } else {
+            let split = line1.split(separator);
+            if key_range.0.ignore_leading_blanks {
+                cut_line_by_range(split.skip_while(|s| s.is_empty()).collect(), key_range)
+            } else {
+                cut_line_by_range(split.collect(), key_range)
+            }
+        } else if key_range.0.ignore_leading_blanks {
             cut_line_by_range(line1.split_whitespace().collect(), key_range)
+        } else {
+            cut_line_by_range(line1.split(' ').collect(), key_range)
         }
     };
     let mut line2 = {
         if let Some(separator) = field_separator {
-            cut_line_by_range(line2.split(separator).collect(), key_range)
-        } else {
+            let split = line2.split(separator);
+            if key_range.0.ignore_leading_blanks {
+                cut_line_by_range(split.skip_while(|s| s.is_empty()).collect(), key_range)
+            } else {
+                cut_line_by_range(split.collect(), key_range)
+            }
+        } else if key_range.0.ignore_leading_blanks {
             cut_line_by_range(line2.split_whitespace().collect(), key_range)
+        } else {
+            cut_line_by_range(line2.split(' ').collect(), key_range)
         }
     };
 
     // Compare keys
     if key_range.0.numeric_sort {
         // If the keys are represented by numbers, compare them as numbers
-        return compare_numeric(&line1, &line2);
+        let mut result = compare_numeric(&line1, &line2);
+        if key_range.0.reverse {
+            match result {
+                Ordering::Less => result = Ordering::Greater,
+                Ordering::Greater => result = Ordering::Less,
+                _ => (),
+            }
+        }
+        return result;
     } else if key_range.0.dictionary_order {
         line1 = dictionary_order_filter(&line1);
         line2 = dictionary_order_filter(&line2);
@@ -377,18 +512,52 @@ fn compare_key(
         line2 = ignore_nonprintable_filter(&line2);
     }
 
+    let result;
+
     if key_range.0.fold_case {
         let cmp = line1.to_uppercase().cmp(&line2.to_uppercase());
         if cmp == std::cmp::Ordering::Equal {
-            line1.cmp(&line2)
+            result = line1.cmp(&line2);
         } else {
-            cmp
+            result = cmp;
         }
     } else {
-        line1.cmp(&line2)
+        result = line1.cmp(&line2);
+    }
+    if key_range.0.reverse {
+        match result {
+            Ordering::Less => Ordering::Greater,
+            Ordering::Greater => Ordering::Less,
+            _ => Ordering::Equal,
+        }
+    } else {
+        result
     }
 }
 
+/// Compares two lines of text based on specified sorting and comparison options.
+///
+/// This function compares two lines of text (`line1` and `line2`) based on specified
+/// sorting and comparison options. It supports options for numeric sorting, dictionary
+/// ordering, case folding, and ignoring non-printable characters.
+///
+/// # Arguments
+///
+/// * `line1` - A string slice (`&str`) representing the first line of text to be compared.
+/// * `line2` - A string slice (`&str`) representing the second line of text to be compared.
+/// * `dictionary_order` - A boolean indicating whether to use dictionary ordering.
+/// * `fold_case` - A boolean indicating whether to fold case during comparison.
+/// * `ignore_nonprintable` - A boolean indicating whether to ignore non-printable characters.
+/// * `numeric_sort` - A boolean indicating whether to perform numeric sorting.
+///
+/// # Returns
+///
+/// An `Ordering` value (`Ordering::Less`, `Ordering::Greater`, or `Ordering::Equal`)
+/// indicating the result of the comparison:
+/// * `Ordering::Less` if `line1` is less than `line2` according to the specified options.
+/// * `Ordering::Greater` if `line1` is greater than `line2` according to the specified options.
+/// * `Ordering::Equal` if `line1` and `line2` are equal within the specified options.
+///
 fn compare_lines(
     line1: &str,
     line2: &str,
@@ -422,57 +591,140 @@ fn compare_lines(
     }
 }
 
-// Function for sorting strings by key
+/// Finds the first differing line between two slices of strings.
+///
+/// This function iterates over two slices of strings (`lines_1` and `lines_2`)
+/// and finds the index and content of the first line where they differ.
+/// If the slices have different lengths, it returns the index and content
+/// of the first line from `lines_1` that doesn't have a corresponding line
+/// in `lines_2`.
+///
+/// # Arguments
+///
+/// * `lines_1` - A slice of strings (`&[String]`) representing the first set of lines.
+/// * `lines_2` - A slice of strings (`&[String]`) representing the second set of lines.
+///
+/// # Returns
+///
+/// An `Option` containing a tuple:
+/// - If differing lines are found, it returns the index of the differing line and its content.
+/// - If the slices have different lengths, it returns the index and content of the first
+///   additional line from `lines_1` compared to `lines_2`.
+/// - If the slices are identical, it returns `None`.
+///
+fn find_first_difference(lines_1: &[String], lines_2: &[String]) -> Option<(usize, String)> {
+    let min_length = std::cmp::min(lines_1.len(), lines_2.len());
+
+    for i in 0..min_length {
+        if lines_1[i] != lines_2[i] {
+            return Some((i, lines_1[i].clone()));
+        }
+    }
+
+    if lines_1.len() != lines_2.len() {
+        return Some((min_length, lines_1.get(min_length).unwrap().to_string()));
+    }
+
+    None
+}
+
+/// Creates range fields based on the specified key range and arguments.
+///
+/// This function takes a key range string (`key_range`) and a reference to an `Args` struct (`args`)
+/// containing additional configuration options. It splits the key range string into individual
+/// range components separated by commas and generates corresponding `RangeField` structs for each
+/// component using the `generate_range` function.
+///
+/// # Arguments
+///
+/// * `key_range` - A string slice (`&str`) representing the key range configuration.
+/// * `args` - A reference to an `Args` struct containing additional configuration options.
+///
+/// # Returns
+///
+/// A `Result` containing a tuple `(RangeField, Option<RangeField>)` if successful, or a `Box`
+/// containing a dynamic `Error` trait object if parsing or construction fails.
+///
+fn create_ranges(
+    key_range: &str,
+    args: &Args,
+) -> Result<(RangeField, Option<RangeField>), Box<dyn std::error::Error>> {
+    // Split the key range with commas
+    let key_ranges: Vec<&str> = key_range.split(',').collect();
+    let mut key_ranges = key_ranges.iter();
+
+    // Convert key ranges to numeric representations
+    let mut ranges: (RangeField, Option<RangeField>) = (RangeField::new(), None);
+
+    ranges.0 = {
+        let key_range = key_ranges.next().unwrap().to_string();
+        generate_range(&key_range, args, true)?
+    };
+    ranges.1 = {
+        if let Some(key_range) = key_ranges.next() {
+            Some(generate_range(key_range, args, false)?)
+        } else {
+            None
+        }
+    };
+
+    Ok(ranges)
+}
+
+/// Sorts strings based on specified sorting criteria and writes the result to the output.
+///
+/// This function reads lines from the provided input reader and sorts them based on the
+/// specified sorting criteria in the `Args` struct. It supports sorting by key ranges,
+/// dictionary ordering, case folding, numeric sorting, and other options. The sorted
+/// lines are then written to the output, which can be a file or the standard output.
+///
+/// # Arguments
+///
+/// * `args` - A reference to an `Args` struct containing sorting and configuration options.
+/// * `reader` - A boxed reader implementing the `Read` trait, representing the input source.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure:
+/// * `Ok(())` if the sorting and writing process completes successfully.
+/// * `Err(Box<dyn Error>)` if an error occurs during sorting, reading, or writing.
+///
 fn sort_lines(args: &Args, reader: Box<dyn Read>) -> Result<(), Box<dyn std::error::Error>> {
     let reader = io::BufReader::new(reader);
 
     // Read lines from a file
-    let mut lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
+    let lines: Vec<String> = reader.lines().map(|l| l.unwrap()).collect();
+    let mut result_lines = lines.clone();
+    let mut duplicates = vec![];
 
-    if let Some(key_range) = &args.key_definition {
-        if key_range.is_empty() {
-            return Err(Box::new(Error::new(ErrorKind::Other, "Key range is empty")));
-        }
-        // Split the key range with commas
-        let key_ranges: Vec<&str> = key_range.split(',').collect();
-        let mut key_ranges = key_ranges.iter();
+    if !args.key_definition.is_empty() {
+        let key_range = &args.key_definition[0];
 
-        // Convert key ranges to numeric representations
-        let mut ranges: (RangeField, Option<RangeField>) = (RangeField::new(), None);
-
-        ranges.0 = {
-            let key_range = key_ranges.next().unwrap().to_string();
-            generate_range(&key_range, args, true)?
-        };
-        ranges.1 = {
-            if let Some(key_range) = key_ranges.next() {
-                Some(generate_range(key_range, args, false)?)
-            } else {
-                None
-            }
+        let ranges = create_ranges(key_range, args)?;
+        let ranges_2 = match args.key_definition.get(1) {
+            Some(key_range_2) => Some(create_ranges(key_range_2, args)?),
+            None => None,
         };
 
-        let mut duplicates = vec![];
         // Sort strings by keys
-        lines.sort_by(|a, b| {
-            let ordering = compare_key(
-                a,
-                b,
-                &ranges,
-                args.field_separator,
-                args.ignore_leading_blanks,
-            );
+        result_lines.sort_by(|a, b| {
+            let mut ordering = compare_key(a, b, &ranges, args.field_separator);
             if let Ordering::Equal = ordering {
-                duplicates.push(a.to_string());
+                if let Some(ranges_2) = &ranges_2 {
+                    let ordering_2 = compare_key(a, b, ranges_2, args.field_separator);
+                    if let Ordering::Equal = ordering_2 {
+                        duplicates.push(a.to_string());
+                    }
+                    ordering = ordering_2
+                }
             }
             ordering
         });
         if args.unique {
-            lines.retain(|line| !duplicates.contains(line));
+            result_lines.retain(|line| !duplicates.contains(line));
         }
     } else {
-        let mut duplicates = vec![];
-        lines.sort_by(|a, b| {
+        result_lines.sort_by(|a, b| {
             let ord = compare_lines(
                 a,
                 b,
@@ -488,32 +740,76 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> Result<(), Box<dyn std::err
         });
 
         if args.unique {
-            lines.retain(|line| !duplicates.contains(line));
+            result_lines.retain(|line| !duplicates.contains(line));
         }
     }
 
     if args.reverse {
-        lines.reverse();
+        result_lines.reverse();
     }
 
-    if let Some(file_path) = &args.output_file {
+    if args.check_order_without_war_mess {
+        if find_first_difference(&lines, &result_lines).is_some() {
+            return Err(Box::new(Error::new(
+                ErrorKind::Other,
+                "The order of the lines is not correct",
+            )));
+        } else {
+            return Ok(());
+        }
+    } else if args.check_order {
+        if args.unique {
+            if !duplicates.is_empty() {
+                eprintln!(
+                    "Duplicate key was found! \"{}\"",
+                    duplicates.first().unwrap()
+                );
+            } else if let Some((index, line)) = find_first_difference(&lines, &result_lines) {
+                eprintln!(
+                    "The order of the lines is not correct on line {}:`{}`",
+                    index, line
+                );
+            }
+        }
+
+        return Ok(());
+    } else if let Some(file_path) = &args.output_file {
         // Open the file for writing
         let file_out = File::create(file_path)?;
         let mut writer = BufWriter::new(file_out);
 
         // Write the sorted strings to a file
-        for line in lines {
+        for line in result_lines {
             writeln!(writer, "{}", line)?;
         }
     } else {
-        let result = lines.join("\n");
+        let result = result_lines.join("\n");
         println!("{result}");
     }
 
     Ok(())
 }
 
-// Function for merging sorted files
+/// Merges contents from multiple sorted files into a single output.
+///
+/// This function takes a vector of mutable references to readers (`paths`) representing
+/// sorted input files and an optional output file path (`output_path`). It reads from each
+/// input file sequentially and writes the contents to the output file or the standard output.
+///
+/// # Arguments
+///
+/// * `paths` - A mutable reference to a vector of readers (`Vec<Box<dyn Read>>`) representing
+///             sorted input files.
+/// * `output_path` - An optional string (`Option<String>`) representing the output file path.
+///                   If `Some`, the merged contents are written to the specified file; if `None`,
+///                   the contents are written to the standard output.
+///
+/// # Returns
+///
+/// An `io::Result` indicating success or failure:
+/// * `Ok(())` if the merging process completes successfully.
+/// * `Err(io::Error)` if an error occurs during file I/O or copying.
+///
 fn merge_files(paths: &mut Vec<Box<dyn Read>>, output_path: &Option<String>) -> io::Result<()> {
     let mut output_file: Box<dyn Write> = match output_path {
         Some(path) => Box::new(File::create(path)?),
@@ -530,6 +826,23 @@ fn merge_files(paths: &mut Vec<Box<dyn Read>>, output_path: &Option<String>) -> 
     Ok(())
 }
 
+/// Sorts the contents of input files or standard input based on specified criteria.
+///
+/// This function takes an `Args` struct containing sorting options and configuration and sorts
+/// the contents of input files or standard input accordingly. It supports sorting by key ranges,
+/// dictionary ordering, case folding, numeric sorting, and other options. The sorted contents
+/// can be written to the output or merged directly if specified.
+///
+/// # Arguments
+///
+/// * `args` - A reference to an `Args` struct containing sorting and configuration options.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure:
+/// * `Ok(())` if the sorting process completes successfully.
+/// * `Err(Box<dyn Error>)` if an error occurs during sorting or merging.
+///
 fn sort(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut readers: Vec<Box<dyn Read>> =
         if args.filenames.len() == 1 && args.filenames[0] == PathBuf::from("-") {
@@ -571,53 +884,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_1() {
-        let args = Args {
-            check_order: false,
-            check_order_without_war_mess: false,
-            merge_only: false,
-            output_file: None,
-            unique: false,
-            dictionary_order: false,
-            fold_case: true,
-            ignore_nonprintable: false,
-            numeric_sort: false,
-            reverse: false,
-            ignore_leading_blanks: false,
-            field_separator: None,
-            key_definition: None,
-            filenames: vec!["tests/assets/input.txt".into()],
-        };
-        args.validate_args().unwrap();
-
-        sort(&args).unwrap();
-    }
-    #[test]
-    fn test_2() {
-        let args = Args {
-            check_order: false,
-            check_order_without_war_mess: false,
-            merge_only: false,
-            output_file: None,
-            unique: true,
-            dictionary_order: true,
-            fold_case: false,
-            ignore_nonprintable: false,
-            numeric_sort: false,
-            reverse: false,
-            ignore_leading_blanks: false,
-            field_separator: None,
-            key_definition: Some("1.3nb,1.3".to_string()),
-            filenames: vec!["tests/assets/input.txt".into()],
-        };
-        args.validate_args().unwrap();
-
-        sort(&args).unwrap();
-    }
 }
