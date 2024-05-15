@@ -40,7 +40,7 @@ struct Args {
 
     /// Specify the name of an output file to be used instead of the standard output
     #[arg(short = 'o')]
-    output_file: Option<String>,
+    output_file: Option<PathBuf>,
 
     /// Unique: suppress all but one in each set of lines having equal keys
     #[arg(short = 'u')]
@@ -123,6 +123,7 @@ impl Args {
 }
 
 /// A struct representing a range field with various sorting and comparison options.
+#[derive(Clone)]
 struct RangeField {
     /// The number of the field to be considered in the range.
     field_number: usize,
@@ -165,6 +166,46 @@ impl RangeField {
     }
 }
 
+/// Updates two RangeField objects based on their comparison options.
+///
+/// This function takes two RangeField objects, compares their fields, and updates the fields
+/// according to the comparison options. If any of the comparison options (`dictionary_order`,
+/// `fold_case`, `ignore_nonprintable`, or `numeric_sort`) is true in either of the objects,
+/// it sets the same option to true in both objects.
+///
+/// # Arguments
+///
+/// * `field1` - The first RangeField object to compare and update.
+/// * `field2` - The second RangeField object to compare and update.
+///
+/// # Returns
+///
+/// A tuple containing the updated RangeField objects.
+///
+fn update_range_field(mut field1: RangeField, mut field2: RangeField) -> (RangeField, RangeField) {
+    if field1.dictionary_order || field2.dictionary_order {
+        field1.dictionary_order = true;
+        field2.dictionary_order = true;
+    }
+
+    if field1.fold_case || field2.fold_case {
+        field1.fold_case = true;
+        field2.fold_case = true;
+    }
+
+    if field1.ignore_nonprintable || field2.ignore_nonprintable {
+        field1.ignore_nonprintable = true;
+        field2.ignore_nonprintable = true;
+    }
+
+    if field1.numeric_sort || field2.numeric_sort {
+        field1.numeric_sort = true;
+        field2.numeric_sort = true;
+    }
+
+    (field1, field2)
+}
+
 /// Trims and concatenates substrings from a vector of strings based on a specified range.
 ///
 /// This function takes a vector of string slices and a key range, then extracts and concatenates
@@ -195,13 +236,24 @@ fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField
     };
     let end_char = key_range.1.as_ref().map(|range| range.first_character);
 
-    for (i, field) in line.iter().enumerate() {
+    for (i, field) in line.iter().skip(start_field).enumerate() {
+        let i = i + start_field;
         if i >= start_field && i <= end_field {
-            let start = if i == start_field { start_char } else { 0 };
+            let start = if i == start_field {
+                if key_range.0.ignore_leading_blanks {
+                    start_char + (field.len() - field.trim_start().len())
+                } else {
+                    start_char
+                }
+            } else {
+                0
+            };
             let mut end = if i == end_field {
                 if let Some(char) = end_char {
                     if char == usize::MAX - 1 {
                         field.len() - 1
+                    } else if key_range.clone().1.unwrap().ignore_leading_blanks {
+                        char + (field.len() - field.trim_start().len())
                     } else {
                         char
                     }
@@ -214,6 +266,7 @@ fn cut_line_by_range(line: Vec<&str>, key_range: &(RangeField, Option<RangeField
             if end >= field.len() {
                 end = field.len() - 1;
             }
+
             result.push_str(&field[start..=end]);
         }
     }
@@ -245,7 +298,7 @@ fn numeric_sort_filter(input: &str) -> Option<String> {
             found_number = true;
             result.push(c);
         } else if found_number {
-            break;
+            return Some(result);
         }
     }
 
@@ -280,15 +333,9 @@ fn compare_numeric(line1: &str, line2: &str) -> Ordering {
     let line1 = numeric_sort_filter(line1).unwrap_or("0".to_string());
     let line2 = numeric_sort_filter(line2).unwrap_or("0".to_string());
     let a_num = line1.parse::<f64>().ok();
-
     let b_num = line2.parse::<f64>().ok();
 
-    match (a_num, b_num) {
-        (Some(a_val), Some(b_val)) => a_val.partial_cmp(&b_val).unwrap_or(Ordering::Equal),
-        (Some(_), None) => Ordering::Greater,
-        (None, Some(_)) => Ordering::Less,
-        (None, None) => line1.cmp(&line2),
-    }
+    a_num.partial_cmp(&b_num).unwrap_or(Ordering::Equal)
 }
 
 /// Filters a string to include only alphanumeric characters and whitespace.
@@ -433,6 +480,27 @@ fn generate_range(
     })
 }
 
+fn cut_line(
+    line: &str,
+    key_range: &(RangeField, Option<RangeField>),
+    field_separator: Option<char>,
+) -> String {
+    if let Some(separator) = field_separator {
+        let split = line.split(separator);
+        cut_line_by_range(split.collect(), key_range)
+    } else {
+        let split: Vec<&str> = line.split(' ').collect();
+
+        cut_line_by_range(
+            merge_empty_lines(split)
+                .iter()
+                .map(|s| s.as_str())
+                .collect(),
+            key_range,
+        )
+    }
+}
+
 /// Compares two strings based on a specified key range and optional field separator.
 ///
 /// This function compares two strings (`line1` and `line2`) based on a specified key range,
@@ -466,29 +534,33 @@ fn compare_key(
     let mut line1 = {
         if let Some(separator) = field_separator {
             let split = line1.split(separator);
-            if key_range.0.ignore_leading_blanks {
-                cut_line_by_range(split.skip_while(|s| s.is_empty()).collect(), key_range)
-            } else {
-                cut_line_by_range(split.collect(), key_range)
-            }
-        } else if key_range.0.ignore_leading_blanks {
-            cut_line_by_range(line1.split_whitespace().collect(), key_range)
+            cut_line_by_range(split.collect(), key_range)
         } else {
-            cut_line_by_range(line1.split(' ').collect(), key_range)
+            let split: Vec<&str> = line1.split(' ').collect();
+
+            cut_line_by_range(
+                merge_empty_lines(split)
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect(),
+                key_range,
+            )
         }
     };
     let mut line2 = {
         if let Some(separator) = field_separator {
             let split = line2.split(separator);
-            if key_range.0.ignore_leading_blanks {
-                cut_line_by_range(split.skip_while(|s| s.is_empty()).collect(), key_range)
-            } else {
-                cut_line_by_range(split.collect(), key_range)
-            }
-        } else if key_range.0.ignore_leading_blanks {
-            cut_line_by_range(line2.split_whitespace().collect(), key_range)
+            cut_line_by_range(split.collect(), key_range)
         } else {
-            cut_line_by_range(line2.split(' ').collect(), key_range)
+            let split: Vec<&str> = line2.split(' ').collect();
+
+            cut_line_by_range(
+                merge_empty_lines(split)
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect(),
+                key_range,
+            )
         }
     };
 
@@ -667,6 +739,10 @@ fn create_ranges(
             None
         }
     };
+    if let Some(range_2) = ranges.1 {
+        let (range_1, range_2) = update_range_field(ranges.0, range_2);
+        ranges = (range_1, Some(range_2));
+    }
 
     Ok(ranges)
 }
@@ -810,7 +886,7 @@ fn sort_lines(args: &Args, reader: Box<dyn Read>) -> Result<(), Box<dyn std::err
 /// * `Ok(())` if the merging process completes successfully.
 /// * `Err(io::Error)` if an error occurs during file I/O or copying.
 ///
-fn merge_files(paths: &mut Vec<Box<dyn Read>>, output_path: &Option<String>) -> io::Result<()> {
+fn merge_files(paths: &mut Vec<Box<dyn Read>>, output_path: &Option<PathBuf>) -> io::Result<()> {
     let mut output_file: Box<dyn Write> = match output_path {
         Some(path) => Box::new(File::create(path)?),
         None => Box::new(io::stdout()),
@@ -824,6 +900,36 @@ fn merge_files(paths: &mut Vec<Box<dyn Read>>, output_path: &Option<String>) -> 
     }
 
     Ok(())
+}
+
+/// Merges consecutive empty strings in the input vector with the nearest non-empty string.
+/// Spaces are added to empty strings to align them with the nearest non-empty string.
+///
+/// # Arguments
+///
+/// * `vec` - A vector of string references (`&str`).
+///
+/// # Returns
+///
+/// A vector of strings (`Vec<String>`) where consecutive empty strings are merged with the nearest non-empty string.
+///
+fn merge_empty_lines(vec: Vec<&str>) -> Vec<String> {
+    let mut empty_count = 0;
+    let mut result = vec![];
+
+    for i in 0..vec.len() {
+        if vec[i].is_empty() {
+            empty_count += 1;
+        } else if empty_count > 0 {
+            let spaces = " ".repeat(empty_count);
+            result.push(format!("{}{}", spaces, vec[i]));
+            empty_count = 0;
+        } else {
+            result.push(vec[i].to_string());
+        }
+    }
+
+    result
 }
 
 /// Sorts the contents of input files or standard input based on specified criteria.
@@ -884,4 +990,60 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_1() {
+        let args = Args {
+            check_order: false,
+            check_order_without_war_mess: false,
+            merge_only: false,
+            output_file: None,
+            unique: false,
+            dictionary_order: false,
+            fold_case: false,
+            ignore_nonprintable: false,
+            numeric_sort: false,
+            reverse: true,
+            ignore_leading_blanks: false,
+            field_separator: None,
+            key_definition: vec![],
+            filenames: vec!["tests/assets/input.txt".into()],
+        };
+        args.validate_args().unwrap();
+
+        sort(&args).unwrap();
+
+        let line = " 901   100";
+
+        let c: Vec<&str> = line.split(' ').collect();
+        dbg!(&c);
+        let r = merge_empty_lines(c);
+        println!("{:?}", r);
+    }
+    #[test]
+    fn test_2() {
+        let args = Args {
+            check_order: false,
+            check_order_without_war_mess: false,
+            merge_only: false,
+            output_file: None,
+            unique: false,
+            dictionary_order: false,
+            fold_case: false,
+            ignore_nonprintable: false,
+            numeric_sort: false,
+            reverse: false,
+            ignore_leading_blanks: false,
+            field_separator: None,
+            key_definition: vec!["2".to_string()],
+            filenames: vec!["tests/assets/input.txt".into()],
+        };
+        args.validate_args().unwrap();
+
+        sort(&args).unwrap();
+    }
 }

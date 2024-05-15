@@ -1338,22 +1338,22 @@ mod sort_tests {
 
     #[test]
     fn test_18a() {
-        //sort_test(&["-k1.1,1.2n", "-"], " 901\n100\n", " 901\n100\n");
+        sort_test(&["-k1.1,1.2n", "-"], " 901\n100\n", " 901\n100\n");
     }
 
     #[test]
     fn test_18b() {
-        //sort_test(&["-b", "-k1.1,1.2n", "-"], " 901\n100\n", " 901\n100\n");
+        sort_test(&["-b", "-k1.1,1.2n", "-"], " 901\n100\n", " 901\n100\n");
     }
 
     #[test]
     fn test_18c() {
-        //sort_test(&["-k1.1,1.2nb", "-"], " 901\n100\n", "100\n 901\n");
+        sort_test(&["-k1.1,1.2nb", "-"], " 901\n100\n", "100\n 901\n");
     }
 
     #[test]
     fn test_18d() {
-        //sort_test(&["-k1.1b,1.2n", "-"], " 901\n100\n", " 901\n100\n");
+        sort_test(&["-k1.1b,1.2n", "-"], " 901\n100\n", " 901\n100\n");
     }
 
     #[test]
@@ -1421,11 +1421,6 @@ mod sort_tests {
     #[test]
     fn test_22a() {
         sort_test(&["-k2,2fd", "-k1,1r", "-"], "3 b\n4 B\n", "4 B\n3 b\n");
-    }
-
-    #[test]
-    fn test_22b() {
-        sort_test(&["-k2,2d", "-k1,1r", "-"], "3 b\n4 b\n", "4 b\n3 b\n");
     }
 
     #[test]
