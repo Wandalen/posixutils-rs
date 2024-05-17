@@ -1,6 +1,7 @@
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use nix::libc;
 use nix::sys::signal::{self, SigHandler, Signal};
+use nix::unistd::isatty;
 use plib::PROJECT_NAME;
 use std::env;
 use std::fs::{File, OpenOptions};
@@ -16,10 +17,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         signal::signal(Signal::SIGHUP, SigHandler::SigIgn).expect("Failed to ignore SIGHUP");
     }
 
-    // Redirecting stdout and stderr to the nohup.out file
-    let nohup_out_file =
-        get_nohup_out_file().expect("Failed to open nohup.out in current or home directory");
-
     // Getting the command and arguments
     let mut args = env::args().skip(1);
     let command = match args.next() {
@@ -30,33 +27,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // Redirecting stdout and stderr to the nohup.out file if they are connected to a terminal
+    if isatty(libc::STDOUT_FILENO)? || isatty(libc::STDERR_FILENO)? {
+        let nohup_out_file =
+            get_nohup_out_file().expect("Failed to open nohup.out in current or home directory");
+
+        if isatty(libc::STDOUT_FILENO)? {
+            let fd = nohup_out_file.0.as_raw_fd();
+            dup2(fd, libc::STDOUT_FILENO).expect("Failed to redirect stdout");
+            match nohup_out_file.1 {
+                NohupDir::Current => {
+                    eprintln!(
+                        "Name of the file to which the output is being appended: `nohup.out`"
+                    );
+                }
+                NohupDir::Home => {
+                    eprintln!(
+                        "Name of the file to which the output is being appended: `$HOME/nohup.out`"
+                    );
+                }
+            }
+        }
+
+        if isatty(libc::STDERR_FILENO)? {
+            let fd = nohup_out_file.0.as_raw_fd();
+            dup2(fd, libc::STDERR_FILENO).expect("Failed to redirect stderr");
+        }
+    }
+
     // Running the command
     let output = Command::new(command).args(args).output();
 
     match output {
         Ok(output) => {
-            if !output.stdout.is_empty() {
-                match nohup_out_file.1 {
-                    NohupDir::Current => {
-                        eprintln!(
-                            "Name of the file to which the output is being appended : `nohup.out`"
-                        )
-                    }
-                    NohupDir::Home => {
-                        eprintln!("Name of the file to which the output is being appended : `$HOME/nohup.out`")
-                    }
-                }
-
-                let fd = nohup_out_file.0.as_raw_fd();
-                dup2(fd, libc::STDOUT_FILENO).expect("Failed to redirect stdout");
-                dup2(fd, libc::STDERR_FILENO).expect("Failed to redirect stderr");
-                io::stdout().write_all(&output.stdout).unwrap();
-                io::stderr().write_all(&output.stderr).unwrap();
-            } else {
-                let fd = nohup_out_file.0.as_raw_fd();
-                dup2(fd, libc::STDERR_FILENO).expect("Failed to redirect stderr");
-                io::stderr().write_all(&output.stderr).unwrap();
-            }
+            io::stdout().write_all(&output.stdout).unwrap();
+            io::stderr().write_all(&output.stderr).unwrap();
 
             process::exit(output.status.code().unwrap_or(127));
         }
