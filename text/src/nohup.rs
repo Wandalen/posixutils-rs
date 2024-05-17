@@ -5,7 +5,7 @@ use nix::unistd::isatty;
 use plib::PROJECT_NAME;
 use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
+use std::io;
 use std::os::unix::io::AsRawFd;
 use std::process::{self, Command};
 
@@ -16,6 +16,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe {
         signal::signal(Signal::SIGHUP, SigHandler::SigIgn).expect("Failed to ignore SIGHUP");
     }
+
+    // Save the original stderr
+    let original_stderr = nix::unistd::dup(libc::STDERR_FILENO)?;
 
     // Getting the command and arguments
     let mut args = env::args().skip(1);
@@ -55,18 +58,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Running the command
-    let output = Command::new(command).args(args).output();
-
-    match output {
-        Ok(output) => {
-            io::stdout().write_all(&output.stdout).unwrap();
-            io::stderr().write_all(&output.stderr).unwrap();
-
-            process::exit(output.status.code().unwrap_or(127));
+    match Command::new(command).args(args).spawn() {
+        Ok(mut process) => {
+            process::exit(process.wait()?.code().unwrap_or(127));
         }
         Err(error) => {
             use std::io::ErrorKind;
+            // Restore the original stderr
+            dup2(original_stderr, libc::STDERR_FILENO).expect("Failed to restore stderr");
+            // Close the duplicated descriptor as it's no longer needed
+            nix::unistd::close(original_stderr)?;
             match error.kind() {
                 ErrorKind::NotFound => {
                     eprintln!("Error: command not found");
