@@ -1,7 +1,6 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -23,11 +22,9 @@ struct Args {
     unique: bool,
 
     /// Input file (if not specified, use stdin)
-    #[arg()]
     input_file: Option<PathBuf>,
 
     /// Output file (if not specified, use stdout)
-    #[arg()]
     output_file: Option<PathBuf>,
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,31 +55,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|line| line.expect("Unable to read line"))
         .collect();
 
-    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut last_line: Option<&String> = None;
+    let mut current_count = 0;
 
     for line in &lines {
-        *counts.entry(line.clone()).or_insert(0) += 1;
+        if Some(line) == last_line {
+            current_count += 1;
+        } else {
+            if let Some(last) = last_line {
+                output_result(&mut output, last, current_count, &args);
+            }
+            last_line = Some(line);
+            current_count = 1;
+        }
     }
 
-    let mut last_line = None;
-    for line in &lines {
-        let count = counts.get(line).unwrap();
-
-        if args.count {
-            writeln!(output, "{} {}", count, line).expect("Unable to write to output");
-        } else if args.repeated && *count > 1 {
-            if Some(line) != last_line {
-                writeln!(output, "{}", line).expect("Unable to write to output");
-            }
-        } else if args.unique && *count == 1 {
-            writeln!(output, "{}", line).expect("Unable to write to output");
-        } else if !args.repeated && !args.unique {
-            if Some(line) != last_line {
-                writeln!(output, "{}", line).expect("Unable to write to output");
-            }
-        }
-
-        last_line = Some(line);
+    if let Some(last) = last_line {
+        output_result(&mut output, last, current_count, &args);
     }
     Ok(())
+}
+
+fn output_result<W: Write>(output: &mut W, line: &str, count: usize, args: &Args) {
+    if args.count {
+        writeln!(output, "{} {}", count, line).expect("Unable to write to output");
+    } else if args.repeated && count > 1 {
+        writeln!(output, "{}", line).expect("Unable to write to output");
+    } else if args.unique && count == 1 {
+        writeln!(output, "{}", line).expect("Unable to write to output");
+    } else if !args.repeated && !args.unique {
+        writeln!(output, "{}", line).expect("Unable to write to output");
+    }
 }

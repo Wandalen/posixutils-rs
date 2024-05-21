@@ -1,0 +1,7 @@
+foo0 bar0 foo1 bar1
+bar0 foo1 bar1 foo1
+foo0 bar0 foo1 bar1
+
+foo0 bar0 foo1 bar1
+foo0 bar0 foo1 bar1
+bar0 foo1 bar1 foo0
