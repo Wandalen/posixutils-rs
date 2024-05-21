@@ -37,6 +37,11 @@ struct Args {
 }
 
 impl Args {
+    /// Validates the arguments to ensure no conflicting options are used together.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if conflicting options are found.
     fn validate_args(&self) -> Result<(), String> {
         // Check if conflicting options are used together
         if self.unique && self.repeated {
@@ -52,6 +57,15 @@ impl Args {
     }
 }
 
+/// Processes the input according to the specified arguments and writes the output.
+///
+/// # Arguments
+///
+/// * `args` - A reference to the `Args` struct containing the command line arguments.
+///
+/// # Errors
+///
+/// Returns an error if there is an issue reading the input or writing the output.
 fn uniq(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let input: Box<dyn BufRead> = match &args.input_file {
         Some(file) => {
@@ -96,6 +110,17 @@ fn uniq(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Processes a line according to the specified field and character options.
+///
+/// # Arguments
+///
+/// * `line` - The line to be processed.
+/// * `fields` - The number of fields to skip.
+/// * `chars` - The number of characters to skip.
+///
+/// # Returns
+///
+/// Returns the processed line as a `String`.
 fn process_line(line: &str, fields: Option<usize>, chars: Option<usize>) -> String {
     let mut processed_line = line.to_string();
     if line.is_empty() {
@@ -135,6 +160,18 @@ fn process_line(line: &str, fields: Option<usize>, chars: Option<usize>) -> Stri
     }
 }
 
+/// Writes the result to the output according to the specified arguments.
+///
+/// # Arguments
+///
+/// * `output` - The output writer.
+/// * `line` - The line to be written.
+/// * `count` - The count of the line occurrences.
+/// * `args` - A reference to the `Args` struct containing the command line arguments.
+///
+/// # Errors
+///
+/// Returns an error if there is an issue writing to the output.
 fn output_result<W: Write>(
     output: &mut W,
     line: &str,
@@ -153,6 +190,11 @@ fn output_result<W: Write>(
     Ok(())
 }
 
+/// The main function that initializes the application, parses the arguments, and runs the uniq function.
+///
+/// # Errors
+///
+/// Returns an error if there is an issue with the arguments or the uniq function.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
