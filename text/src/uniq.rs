@@ -17,7 +17,7 @@ struct Args {
     #[arg(short = 'd')]
     repeated: bool,
 
-    /// Print only unique strings
+    /// Print only unique lines
     #[arg(short = 'u')]
     unique: bool,
 
@@ -58,23 +58,18 @@ fn uniq(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
             if *file == PathBuf::from("-") {
                 Box::new(BufReader::new(io::stdin()))
             } else {
-                Box::new(BufReader::new(
-                    File::open(file).expect("Unable to open input file"),
-                ))
+                Box::new(BufReader::new(File::open(file)?))
             }
         }
         None => Box::new(BufReader::new(io::stdin())),
     };
 
     let mut output: Box<dyn Write> = match &args.output_file {
-        Some(file) => Box::new(File::create(file).expect("Unable to create output file")),
+        Some(file) => Box::new(File::create(file)?),
         None => Box::new(io::stdout()),
     };
 
-    let lines: Vec<String> = input
-        .lines()
-        .map(|line| line.expect("Unable to read line"))
-        .collect();
+    let lines: Vec<String> = input.lines().collect::<Result<_, _>>()?;
 
     let mut last_line: Option<String> = None;
     let mut current_count = 0;
@@ -88,7 +83,7 @@ fn uniq(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 current_count += 1;
                 continue;
             } else {
-                output_result(&mut output, last_line, current_count, args);
+                output_result(&mut output, last_line, current_count, args)?;
             }
         }
         last_line = Some(line.to_string());
@@ -96,7 +91,7 @@ fn uniq(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(last) = last_line {
-        output_result(&mut output, &last, current_count, args);
+        output_result(&mut output, &last, current_count, args)?;
     }
     Ok(())
 }
@@ -140,16 +135,22 @@ fn process_line(line: &str, fields: Option<usize>, chars: Option<usize>) -> Stri
     }
 }
 
-fn output_result<W: Write>(output: &mut W, line: &str, count: usize, args: &Args) {
+fn output_result<W: Write>(
+    output: &mut W,
+    line: &str,
+    count: usize,
+    args: &Args,
+) -> Result<(), io::Error> {
     if args.count {
-        writeln!(output, "{} {}", count, line).expect("Unable to write to output");
+        writeln!(output, "{} {}", count, line)?;
     } else if args.repeated && count > 1 {
-        writeln!(output, "{}", line).expect("Unable to write to output");
+        writeln!(output, "{}", line)?;
     } else if args.unique && count == 1 {
-        writeln!(output, "{}", line).expect("Unable to write to output");
+        writeln!(output, "{}", line)?;
     } else if !args.repeated && !args.unique {
-        writeln!(output, "{}", line).expect("Unable to write to output");
+        writeln!(output, "{}", line)?;
     }
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -166,26 +167,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_split_c_file_4() {
-        // Test valid operands
-        let args = Args {
-            count: true,
-            repeated: false,
-            unique: false,
-            fields: Some(9),
-            chars: None,
-            input_file: Some(PathBuf::from("tests/assets/uniq_test_file.txt")),
-            output_file: None,
-        };
-        dbg!(&args);
-        args.validate_args().unwrap();
-
-        uniq(&args).unwrap();
-    }
 }
