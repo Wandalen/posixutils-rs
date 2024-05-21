@@ -21,17 +21,38 @@ struct Args {
     #[arg(short = 'u')]
     unique: bool,
 
+    /// Ignore the first fields fields on each input line
+    #[arg(short = 'f')]
+    fields: Option<usize>,
+
+    /// Ignore the first chars characters on each input line
+    #[arg(short = 's')]
+    chars: Option<usize>,
+
     /// Input file (if not specified, use stdin)
     input_file: Option<PathBuf>,
 
     /// Output file (if not specified, use stdout)
     output_file: Option<PathBuf>,
 }
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
-    let args = Args::parse();
 
+impl Args {
+    fn validate_args(&self) -> Result<(), String> {
+        // Check if conflicting options are used together
+        if self.unique && self.repeated {
+            return Err("Options '-u' and '-d' cannot be used together".to_string());
+        }
+        if self.count && self.repeated {
+            return Err("Options '-c' and '-d' cannot be used together".to_string());
+        }
+        if self.count && self.unique {
+            return Err("Options '-c' and '-u' cannot be used together".to_string());
+        }
+        Ok(())
+    }
+}
+
+fn uniq(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let input: Box<dyn BufRead> = match &args.input_file {
         Some(file) => {
             if *file == PathBuf::from("-") {
@@ -55,25 +76,68 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|line| line.expect("Unable to read line"))
         .collect();
 
-    let mut last_line: Option<&String> = None;
+    let mut last_line: Option<String> = None;
     let mut current_count = 0;
 
     for line in &lines {
-        if Some(line) == last_line {
-            current_count += 1;
-        } else {
-            if let Some(last) = last_line {
-                output_result(&mut output, last, current_count, &args);
+        let processed_line = process_line(line, args.fields, args.chars);
+
+        if let Some(last_line) = &last_line {
+            let processed_last_line = process_line(last_line, args.fields, args.chars);
+            if processed_line == processed_last_line {
+                current_count += 1;
+                continue;
+            } else {
+                output_result(&mut output, last_line, current_count, args);
             }
-            last_line = Some(line);
-            current_count = 1;
         }
+        last_line = Some(line.to_string());
+        current_count = 1;
     }
 
     if let Some(last) = last_line {
-        output_result(&mut output, last, current_count, &args);
+        output_result(&mut output, &last, current_count, args);
     }
     Ok(())
+}
+
+fn process_line(line: &str, fields: Option<usize>, chars: Option<usize>) -> String {
+    let mut processed_line = line.to_string();
+    if line.is_empty() {
+        return line.to_string();
+    }
+    if let Some(f) = fields {
+        if f == 0 {
+            processed_line = line.to_string();
+        } else {
+            let mut field_count = 0;
+            let mut index = 0;
+            for (i, c) in line.char_indices() {
+                if c.is_whitespace() {
+                    if field_count >= f - 1 {
+                        break;
+                    }
+                    field_count += 1;
+                }
+                index = i + c.len_utf8();
+            }
+            processed_line = line[index..].to_string();
+        }
+    }
+
+    if let Some(c) = chars {
+        if c < processed_line.len() {
+            processed_line = processed_line[c..].to_string();
+        } else {
+            processed_line.clear();
+        }
+    }
+
+    if processed_line.is_empty() {
+        line.to_string()
+    } else {
+        processed_line
+    }
 }
 
 fn output_result<W: Write>(output: &mut W, line: &str, count: usize, args: &Args) {
@@ -85,5 +149,43 @@ fn output_result<W: Write>(output: &mut W, line: &str, count: usize, args: &Args
         writeln!(output, "{}", line).expect("Unable to write to output");
     } else if !args.repeated && !args.unique {
         writeln!(output, "{}", line).expect("Unable to write to output");
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+    let args = Args::parse();
+
+    args.validate_args()?;
+    let mut exit_code = 0;
+
+    if let Err(err) = uniq(&args) {
+        exit_code = 1;
+        eprintln!("{}", err);
+    }
+
+    std::process::exit(exit_code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_split_c_file_4() {
+        // Test valid operands
+        let args = Args {
+            count: true,
+            repeated: false,
+            unique: false,
+            fields: Some(9),
+            chars: None,
+            input_file: Some(PathBuf::from("tests/assets/uniq_test_file.txt")),
+            output_file: None,
+        };
+        dbg!(&args);
+        args.validate_args().unwrap();
+
+        uniq(&args).unwrap();
     }
 }
