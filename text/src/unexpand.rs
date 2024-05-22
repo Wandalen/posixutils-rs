@@ -1,8 +1,8 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, Read, Write};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -12,12 +12,12 @@ struct Args {
     all_spaces: bool,
 
     /// Specify tab stops
-    #[arg(short = 't', value_parser = parse_tablist)]
-    tablist: Option<Vec<usize>>,
+    #[arg(short = 't')]
+    tablist: Option<String>,
 
     /// Input files
     #[arg()]
-    files: Vec<String>,
+    files: Vec<PathBuf>,
 }
 
 fn parse_tablist(s: &str) -> Result<Vec<usize>, std::num::ParseIntError> {
@@ -29,34 +29,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
     let args = Args::parse();
 
-    let tablist = args.tablist.unwrap_or_else(|| vec![8]);
-    let all_spaces = args.all_spaces;
-    let files = args.files;
+    let mut exit_code = 0;
 
-    if files.is_empty() {
-        process_input(io::stdin().lock(), &tablist, all_spaces)?;
+    if let Err(err) = unexpand(&args) {
+        exit_code = 1;
+        eprintln!("{}", err);
+    }
+
+    std::process::exit(exit_code)
+}
+
+fn unexpand(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
+    let tablist = match &args.tablist {
+        Some(s) => parse_tablist(s)?,
+        None => vec![8],
+    };
+    let readers: Vec<Box<dyn Read>> = if (args.files.len() == 1
+        && args.files[0] == PathBuf::from("-"))
+        || args.files.is_empty()
+    {
+        vec![Box::new(io::stdin().lock())]
     } else {
-        for filename in files {
-            let file = File::open(filename)?;
-            let reader = BufReader::new(file);
-            process_input(reader, &tablist, all_spaces)?;
+        let mut bufs: Vec<Box<dyn Read>> = vec![];
+        for file in &args.files {
+            bufs.push(Box::new(std::fs::File::open(file)?))
+        }
+        bufs
+    };
+
+    let mut stdout = io::stdout();
+
+    for reader in readers {
+        let reader = io::BufReader::new(reader);
+        for line in reader.lines() {
+            let line = line?;
+            let converted_line = if args.all_spaces && args.tablist.is_none() {
+                convert_all_blanks(&line, &tablist)
+            } else {
+                convert_leading_blanks(&line, &tablist)
+            };
+            writeln!(stdout, "{}", converted_line)?;
         }
     }
 
-    Ok(())
-}
-
-fn process_input<R: BufRead>(reader: R, tablist: &[usize], all_spaces: bool) -> io::Result<()> {
-    let mut stdout = io::stdout();
-    for line in reader.lines() {
-        let line = line?;
-        let converted_line = if all_spaces {
-            convert_all_blanks(&line, tablist)
-        } else {
-            convert_leading_blanks(&line, tablist)
-        };
-        writeln!(stdout, "{}", converted_line)?;
-    }
     Ok(())
 }
 
@@ -76,7 +91,7 @@ fn convert_leading_blanks(line: &str, tablist: &[usize]) -> String {
 
     let mut col = 0;
     for &tabstop in tablist {
-        while space_count > 0 && col + 1 <= tabstop {
+        while space_count > 0 && col < tabstop {
             result.push('\t');
             space_count -= tabstop - col;
             col = tabstop;
@@ -146,4 +161,32 @@ fn convert_spaces_to_tabs(space_count: usize, mut col: usize, tablist: &[usize])
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_parse_operands() {
+        // Test valid operands
+        let args = Args {
+            all_spaces: true,
+            tablist: None,
+            files: vec![PathBuf::from("tests/assets/unexpand_test_file.txt")],
+        };
+
+        unexpand(&args).unwrap();
+    }
+
+    #[test]
+    fn test_parse_operands_2() {
+        // Test valid operands
+        let args = Args {
+            all_spaces: false,
+            tablist: Some("4,8,12".to_string()),
+            files: vec![PathBuf::from("tests/assets/unexpand_test_file.txt")],
+        };
+
+        unexpand(&args).unwrap();
+    }
 }

@@ -102,6 +102,19 @@ fn cut_test(args: &[&str], test_data: &str, expected_output: &str) {
     });
 }
 
+fn unexpand_test(args: &[&str], test_data: &str, expected_output: &str) {
+    let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+
+    run_test(TestPlan {
+        cmd: String::from("unexpand"),
+        args: str_args,
+        stdin_data: String::from(test_data),
+        expected_out: String::from(expected_output),
+        expected_err: String::from(""),
+        expected_exit_code: 0,
+    });
+}
+
 fn sort_test(
     args: &[&str],
     test_data: &str,
