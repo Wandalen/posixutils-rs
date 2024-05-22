@@ -131,17 +131,17 @@ fn process_line(line: &str, fields: Option<usize>, chars: Option<usize>) -> Stri
             processed_line = line.to_string();
         } else {
             let mut field_count = 0;
-            let mut index = 0;
-            for (i, c) in line.char_indices() {
+
+            let chars = line.chars().skip_while(|c| {
                 if c.is_whitespace() {
                     if field_count >= f - 1 {
-                        break;
+                        return false;
                     }
                     field_count += 1;
                 }
-                index = i + c.len_utf8();
-            }
-            processed_line = line[index..].to_string();
+                true
+            });
+            processed_line = chars.collect::<String>();
         }
     }
 
