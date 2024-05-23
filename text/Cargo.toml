@@ -47,6 +47,10 @@ name = "sort"
 path = "src/sort.rs"
 
 [[bin]]
+name = "tr"
+path = "src/tr.rs"
+
+[[bin]]
 name = "expand"
 path = "src/expand.rs"
 
