@@ -1,6 +1,4 @@
 use clap::Parser;
-use gettextrs::{bind_textdomain_codeset, textdomain};
-use plib::PROJECT_NAME;
 use std::collections::HashSet;
 use std::io::{self, Read};
 
@@ -17,7 +15,7 @@ struct Args {
     squeeze_repeats: bool,
 
     /// Use the complement of STRING1's characters
-    #[arg(short = 'c')]
+    #[arg(short = 'c', short_alias = 'C')]
     complement: bool,
 
     /// First string
@@ -35,6 +33,20 @@ fn expand_character_class(class: &str) -> Vec<char> {
         "[:lower:]" => ('a'..='z').collect(),
         "[:upper:]" => ('A'..='Z').collect(),
         "[:space:]" => vec![' ', '\t', '\n', '\r', '\x0b', '\x0c'],
+        "[:blank:]" => vec![' ', '\t'],
+        "[:cntrl:]" => (0..=31)
+            .chain(std::iter::once(127))
+            .map(|c| c as u8 as char)
+            .collect(),
+        "[:graph:]" => (33..=126).map(|c| c as u8 as char).collect(),
+        "[:print:]" => (32..=126).map(|c| c as u8 as char).collect(),
+        "[:punct:]" => (33..=47)
+            .chain(58..=64)
+            .chain(91..=96)
+            .chain(123..=126)
+            .map(|c| c as u8 as char)
+            .collect(),
+        "[:xdigit:]" => ('0'..='9').chain('A'..='F').chain('a'..='f').collect(),
         _ => vec![],
     }
 }
@@ -65,45 +77,67 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         .read_to_string(&mut input)
         .expect("Failed to read input");
 
-    let set1 = parse_set(&args.string1);
-    let set2 = args.string2.as_ref().map(|arg0| parse_set(arg0));
+    let mut set1 = parse_set(&args.string1);
+    let mut set2 = args.string2.as_ref().map(|arg0| parse_set(arg0));
 
-    let set1: HashSet<_> = if args.complement {
-        (0..=255)
-            .map(|c| c as u8 as char)
-            .filter(|c| !set1.contains(c))
-            .collect()
-    } else {
-        set1.into_iter().collect()
-    };
+    if args.complement {
+        let full_set: HashSet<_> = (0..=255).map(|c| c as u8 as char).collect();
+        let set1_set: HashSet<_> = set1.into_iter().collect();
+        set1 = full_set.difference(&set1_set).cloned().collect();
+    }
 
     if args.delete {
+        let set1: HashSet<_> = set1.into_iter().collect();
         let output: String = input.chars().filter(|c| !set1.contains(c)).collect();
         println!("{}", output);
     } else {
         let mut output = String::new();
         let mut previous_char: Option<char> = None;
 
-        for c in input.chars() {
-            if let Some(ref set2) = set2 {
-                if let Some(pos) = set1.iter().position(|&x| x == c) {
-                    let replacement = *set2.get(pos).unwrap_or(set2.last().unwrap());
-                    output.push(replacement);
-                } else {
-                    output.push(c);
+        if let Some(ref set2) = set2 {
+            let len1 = set1.len();
+            let len2 = set2.len();
+            if len2 < len1 {
+                if let Some(&last) = set2.last() {
+                    set2.extend(std::iter::repeat(last).take(len1 - len2));
                 }
-            } else if set1.contains(&c) {
-                if args.squeeze_repeats {
-                    if previous_char != Some(c) {
-                        output.push(c);
+            }
+
+            for c in input.chars() {
+                if let Some(pos) = set1.iter().position(|&x| x == c) {
+                    let replacement = set2[pos];
+                    if args.squeeze_repeats {
+                        if previous_char != Some(replacement) {
+                            output.push(replacement);
+                        }
+                    } else {
+                        output.push(replacement);
                     }
                 } else {
-                    continue;
+                    if args.squeeze_repeats {
+                        if previous_char != Some(c) {
+                            output.push(c);
+                        }
+                    } else {
+                        output.push(c);
+                    }
                 }
-            } else {
-                output.push(c);
+                previous_char = Some(c);
             }
-            previous_char = Some(c);
+        } else {
+            let set1: HashSet<_> = set1.into_iter().collect();
+            for c in input.chars() {
+                if !set1.contains(&c) {
+                    if args.squeeze_repeats {
+                        if previous_char != Some(c) {
+                            output.push(c);
+                        }
+                    } else {
+                        output.push(c);
+                    }
+                }
+                previous_char = Some(c);
+            }
         }
 
         println!("{}", output);
@@ -114,9 +148,6 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
     let mut exit_code = 0;
 
