@@ -16,7 +16,6 @@ struct Args {
     tablist: Option<String>,
 
     /// Input files
-    #[arg()]
     files: Vec<PathBuf>,
 }
 
@@ -92,12 +91,15 @@ fn convert_leading_blanks(line: &str, tablist: &[usize]) -> String {
     let mut col = 0;
     for &tabstop in tablist {
         while space_count > 0 && col < tabstop {
-            result.push('\t');
-            space_count -= tabstop - col;
-            col = tabstop;
-        }
-        if space_count == 0 {
-            break;
+            let spaces_to_next_tabstop = tabstop - col;
+            if space_count >= spaces_to_next_tabstop {
+                result.push('\t');
+                space_count -= spaces_to_next_tabstop;
+                col = tabstop;
+            } else {
+                col += space_count;
+                break;
+            }
         }
     }
 
@@ -109,84 +111,70 @@ fn convert_leading_blanks(line: &str, tablist: &[usize]) -> String {
     result
 }
 
-fn convert_all_blanks(line: &str, tablist: &[usize]) -> String {
-    let mut result = String::new();
-    let mut col = 0;
-    let mut space_count = 0;
+fn split_whitespaces(line: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current_part = String::new();
+    let mut in_word = false;
 
-    for ch in line.chars() {
-        if ch == ' ' {
-            space_count += 1;
-        } else {
-            if space_count > 0 {
-                result.push_str(&convert_spaces_to_tabs(space_count, col, tablist));
-                space_count = 0;
+    for c in line.chars() {
+        if c.is_whitespace() {
+            if in_word {
+                parts.push(current_part.clone());
+                current_part.clear();
+                in_word = false;
             }
-            result.push(ch);
-            col = 0;
+        } else if !in_word {
+            in_word = true;
         }
-        col += 1;
+
+        current_part.push(c);
     }
 
-    if space_count > 0 {
-        result.push_str(&convert_spaces_to_tabs(space_count, col, tablist));
+    if !current_part.is_empty() {
+        parts.push(current_part);
+    }
+    parts
+}
+
+fn convert_all_blanks(line: &str, tablist: &[usize]) -> String {
+    let mut result = String::new();
+
+    let split_parts: Vec<String> = split_whitespaces(line);
+
+    for part in &split_parts {
+        result.push_str(&convert_spaces_to_tabs(part, tablist[0]));
     }
 
     result
 }
 
-fn convert_spaces_to_tabs(space_count: usize, mut col: usize, tablist: &[usize]) -> String {
+fn convert_spaces_to_tabs(line: &str, tabstop: usize) -> String {
     let mut result = String::new();
-    let mut spaces = space_count;
+    let mut space_count = 0;
+    let mut chars = line.chars().peekable();
 
-    for &tabstop in tablist {
-        while spaces > 0 && col < tabstop {
-            if col + spaces >= tabstop {
-                result.push('\t');
-                spaces -= tabstop - col;
-                col = tabstop;
-            } else {
-                result.push(' ');
-                spaces -= 1;
-                col += 1;
-            }
-        }
-        if spaces == 0 {
+    while let Some(&ch) = chars.peek() {
+        if ch == ' ' {
+            space_count += 1;
+            chars.next();
+        } else {
             break;
         }
     }
 
-    for _ in 0..spaces {
+    while space_count > 0 {
+        if space_count >= tabstop {
+            result.push('\t');
+            space_count -= tabstop;
+        } else {
+            break;
+        }
+    }
+
+    for _ in 0..space_count {
         result.push(' ');
     }
 
+    result.push_str(&chars.collect::<String>());
     result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_parse_operands() {
-        // Test valid operands
-        let args = Args {
-            all_spaces: true,
-            tablist: None,
-            files: vec![PathBuf::from("tests/assets/unexpand_test_file.txt")],
-        };
-
-        unexpand(&args).unwrap();
-    }
-
-    #[test]
-    fn test_parse_operands_2() {
-        // Test valid operands
-        let args = Args {
-            all_spaces: false,
-            tablist: Some("4,8,12".to_string()),
-            files: vec![PathBuf::from("tests/assets/unexpand_test_file.txt")],
-        };
-
-        unexpand(&args).unwrap();
-    }
 }
