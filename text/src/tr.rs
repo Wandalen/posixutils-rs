@@ -51,6 +51,74 @@ fn expand_character_class(class: &str) -> Vec<char> {
     }
 }
 
+fn replace_with_pattern(pattern_from: &str, pattern_to: &str, text: &str) -> String {
+    let mut replacement_map: Vec<(char, String)> = Vec::new();
+    let mut iter_to = pattern_to.chars().peekable();
+    let mut current_to = String::new();
+
+    while let Some(c) = iter_to.next() {
+        if c == '[' {
+            if let Some(&next_c) = iter_to.peek() {
+                if next_c == ']' {
+                    iter_to.next(); // consume ']'
+                    replacement_map.push((c, current_to.clone()));
+                    current_to.clear();
+                } else if next_c == '*' {
+                    iter_to.next(); // consume '*'
+                    let mut n_str = String::new();
+                    while let Some(&ch) = iter_to.peek() {
+                        if ch.is_digit(10) {
+                            n_str.push(ch);
+                            iter_to.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    iter_to.next(); // consume ']'
+                    let n: usize = n_str.parse().unwrap_or(usize::MAX);
+                    let repeated_char = c.to_string().repeat(n);
+                    replacement_map.push((c, repeated_char));
+                } else {
+                    current_to.push(c);
+                }
+            }
+        } else {
+            current_to.push(c);
+        }
+    }
+
+    if !current_to.is_empty() {
+        for (i, c) in pattern_from.chars().enumerate() {
+            let replacement = if i < current_to.len() {
+                current_to.chars().nth(i).unwrap().to_string()
+            } else {
+                current_to.chars().last().unwrap().to_string()
+            };
+            replacement_map.push((c, replacement));
+        }
+    } else {
+        for (i, c) in pattern_from.chars().enumerate() {
+            let replacement = if i < pattern_to.len() {
+                pattern_to.chars().nth(i).unwrap().to_string()
+            } else {
+                pattern_to.chars().last().unwrap().to_string()
+            };
+            replacement_map.push((c, replacement));
+        }
+    }
+
+    let mut result = String::new();
+    for ch in text.chars() {
+        if let Some((_, replacement)) = replacement_map.iter().find(|(c, _)| *c == ch) {
+            result.push_str(replacement);
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
 fn expand_range(range: &str) -> Vec<char> {
     let mut chars = range.chars();
     if let (Some(start), Some('-'), Some(end)) = (chars.next(), chars.next(), chars.next()) {

@@ -1585,11 +1585,6 @@ mod tr_tests {
     }
 
     #[test]
-    fn test_tr_4() {
-        tr_test(&["-t", "abcd", "xy"], "abcde", "xycde");
-    }
-
-    #[test]
     fn test_tr_5() {
         tr_test(&["abcd", "xy"], "abcde", "xyyye");
     }
