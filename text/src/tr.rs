@@ -61,11 +61,29 @@ fn expand_range(range: &str) -> Vec<char> {
     range.chars().collect()
 }
 
+fn expand_repeated_character(repeated: &str) -> Vec<char> {
+    let mut chars = repeated.chars();
+    if let (Some('['), Some(c), Some('*'), Some(n), Some(']')) = (
+        chars.next(),
+        chars.next(),
+        chars.next(),
+        chars.next(),
+        chars.next_back(),
+    ) {
+        if let Some(n) = n.to_digit(10) {
+            return std::iter::repeat(c).take(n as usize).collect();
+        }
+    }
+    vec![]
+}
+
 fn parse_set(set: &str) -> Vec<char> {
     if set.starts_with("[:") && set.ends_with(":]") {
         expand_character_class(set)
     } else if set.contains('-') && set.len() == 3 {
         expand_range(set)
+    } else if set.starts_with('[') && set.ends_with(']') && set.contains('*') {
+        expand_repeated_character(set)
     } else {
         set.chars().collect()
     }
@@ -94,7 +112,7 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         let mut output = String::new();
         let mut previous_char: Option<char> = None;
 
-        if let Some(ref set2) = set2 {
+        if let Some(ref mut set2) = set2 {
             let len1 = set1.len();
             let len2 = set2.len();
             if len2 < len1 {
