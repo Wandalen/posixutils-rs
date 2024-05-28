@@ -90,13 +90,16 @@ impl Operand {
 }
 
 fn filter_chars(operands: Vec<Operand>) -> Vec<Char> {
-    operands.into_iter().filter_map(|operand| {
-        if let Operand::Char(c) = operand {
-            Some(c)
-        } else {
-            None
-        }
-    }).collect()
+    operands
+        .into_iter()
+        .filter_map(|operand| {
+            if let Operand::Char(c) = operand {
+                Some(c)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn create_minimal_string(chars: Vec<Char>, size: usize) -> Vec<char> {
@@ -112,12 +115,10 @@ fn create_minimal_string(chars: Vec<Char>, size: usize) -> Vec<char> {
                 remaining_space -= 1;
             }
         } else if remaining_space >= ch.repeated {
-            for _ in 0..ch.repeated
-            {
+            for _ in 0..ch.repeated {
                 result.push(ch.char);
-                
             }
-            
+
             remaining_space -= ch.repeated;
         } else {
             overflow_chars.push((result.len(), ch.clone()));
@@ -126,19 +127,21 @@ fn create_minimal_string(chars: Vec<Char>, size: usize) -> Vec<char> {
 
     // Add remaining chars from overflow_chars if there's still space
     if !overflow_chars.is_empty() {
-
-        for ( insert_position, char )in overflow_chars.iter().rev()
-        {
+        for (insert_position, char) in overflow_chars.iter().rev() {
             if remaining_space > 0 {
-
                 let chars_to_add = remaining_space.min(char.repeated);
                 let replace_with = vec![char.char; chars_to_add];
                 result.splice(insert_position..insert_position, replace_with);
 
                 remaining_space -= chars_to_add;
-
-
             }
+        }
+    }
+
+    if result.len() < size {
+        let last = *result.last().unwrap();
+        for _ in 0..size - result.len() {
+            result.push(last);
         }
     }
 
@@ -196,16 +199,9 @@ fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
                         }
                         if let Some(&']') = chars.peek() {
                             chars.next(); // Skip ']'
-                            let repeated = if repeat_str.is_empty() {
-                                return Err(format!(
-                                    "Error: Missing repetition number after '*' for symbol '{}'",
-                                    symbol
-                                ));
-                            } else {
-                                match repeat_str.parse::<usize>() {
-                                    Ok(n) if n > 0 => n,
-                                    _ => usize::MAX,
-                                }
+                            let repeated = match repeat_str.parse::<usize>() {
+                                Ok(n) if n > 0 => n,
+                                _ => usize::MAX,
                             };
                             operands.push(Operand::Char(Char {
                                 char: symbol,
@@ -237,19 +233,33 @@ fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
     Ok(operands)
 }
 
+#[derive(Debug, PartialEq)]
+enum CaseSensitive {
+    UpperCase,
+    LowerCase,
+    None,
+}
+
 fn compare_deunicoded_chars(char1: char, char2: char) -> bool {
     let normalized_char1 = deunicode_char(char1);
     let normalized_char2 = deunicode_char(char2);
     normalized_char1 == normalized_char2
 }
 
-fn expand_character_class(class: &str) -> Result<Vec<Operand>, String> {
+fn expand_character_class(class: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
+    let mut case_sensitive = CaseSensitive::None;
     let result = match class {
         "alnum" => ('0'..='9').chain('A'..='Z').chain('a'..='z').collect(),
         "alpha" => ('A'..='Z').chain('a'..='z').collect(),
         "digit" => ('0'..='9').collect(),
-        "lower" => ('a'..='z').collect(),
-        "upper" => ('A'..='Z').collect(),
+        "lower" => {
+            case_sensitive = CaseSensitive::LowerCase;
+            ('a'..='z').collect()
+        }
+        "upper" => {
+            case_sensitive = CaseSensitive::UpperCase;
+            ('A'..='Z').collect()
+        }
         "space" => vec![' ', '\t', '\n', '\r', '\x0b', '\x0c'],
         "blank" => vec![' ', '\t'],
         "cntrl" => (0..=31)
@@ -267,21 +277,24 @@ fn expand_character_class(class: &str) -> Result<Vec<Operand>, String> {
         "xdigit" => ('0'..='9').chain('A'..='F').chain('a'..='f').collect(),
         _ => return Err("Error: Invalid class name ".to_string()),
     };
-    Ok(result
-        .into_iter()
-        .map(|c| {
-            Operand::Char(Char {
-                char: c,
-                repeated: 1,
+    Ok((
+        result
+            .into_iter()
+            .map(|c| {
+                Operand::Char(Char {
+                    char: c,
+                    repeated: 1,
+                })
             })
-        })
-        .collect())
+            .collect(),
+        case_sensitive,
+    ))
 }
 
-fn parse_classes(input: &str) -> Result<Vec<Operand>, String> {
+fn parse_classes(input: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     let mut classes: Vec<Operand> = Vec::new();
     let mut chars = input.chars().peekable();
-
+    let mut case_sensitive = CaseSensitive::None;
     while let Some(&ch) = chars.peek() {
         if ch == '[' {
             chars.next(); // Skip '['
@@ -304,7 +317,9 @@ fn parse_classes(input: &str) -> Result<Vec<Operand>, String> {
                     chars.next(); // Skip ':'
                     if let Some(&']') = chars.peek() {
                         chars.next(); // Skip ']'
-                        classes.extend(expand_character_class(&class)?);
+                        let res = expand_character_class(&class)?;
+                        case_sensitive = res.1;
+                        classes.extend(res.0);
                     } else {
                         return Err("Error: Missing closing ']' for '[:class:]'".to_string());
                     }
@@ -321,7 +336,7 @@ fn parse_classes(input: &str) -> Result<Vec<Operand>, String> {
         }
     }
 
-    Ok(classes)
+    Ok((classes, case_sensitive))
 }
 
 fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
@@ -383,15 +398,15 @@ fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
         .collect())
 }
 
-fn parse_set(set: &str) -> Result<Vec<Operand>, String> {
+fn parse_set(set: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     if set.starts_with("[:") && set.ends_with(":]") {
         Ok(parse_classes(set)?)
     } else if set.contains('-')
         && (set.len() == 3 || (set.len() == 5 && set.starts_with('[') && set.ends_with(']')))
     {
-        Ok(parse_ranges(set)?)
+        Ok((parse_ranges(set)?, CaseSensitive::None))
     } else {
-        Ok(parse_symbols(set)?)
+        Ok((parse_symbols(set)?, CaseSensitive::None))
     }
 }
 
@@ -447,11 +462,14 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     io::stdin()
         .read_to_string(&mut input)
         .expect("Failed to read input");
+    //input = "abcxyzABCXYZ".to_string();
 
-    let set1 = parse_set(&args.string1)?;
-    let mut set2 = None;
+    let (set1, set_1_collection) = parse_set(&args.string1)?;
+    let (mut set2, mut set_2_collection) = (None, CaseSensitive::None);
     if args.string2.is_some() {
-        set2 = Some(parse_set(args.string2.as_ref().unwrap())?);
+        let result = parse_set(args.string2.as_ref().unwrap())?;
+        set2 = Some(result.0);
+        set_2_collection = result.1;
     }
 
     if args.delete {
@@ -494,7 +512,7 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 .collect();
         }
 
-        println!("{filtered_string}");
+        print!("{filtered_string}");
         Ok(())
     } else if args.squeeze_repeats && set2.is_none() {
         let mut char_counts = HashMap::new();
@@ -518,7 +536,7 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 }
             })
             .collect();
-        println!("{filtered_string}");
+        print!("{filtered_string}");
         return Ok(());
     } else {
         let mut result_string: String;
@@ -540,6 +558,19 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 result_string = complement_chars(&input, set1, set2);
             }
         } else {
+            if set_1_collection != CaseSensitive::None
+                && set_2_collection != CaseSensitive::None
+                && set_1_collection != set_2_collection
+            {
+                match set_1_collection {
+                    CaseSensitive::UpperCase => print!("{}", input.to_lowercase()),
+
+                    CaseSensitive::LowerCase => print!("{}", input.to_uppercase()),
+                    _ => (),
+                }
+                return Ok(());
+            }
+
             let set_2 = set2.clone().unwrap();
             let input_chars: Vec<char> = input.chars().collect();
 
@@ -565,7 +596,6 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                             match_len = end - start;
                         }
                     } else if let Operand::Char(char_struct) = &set1[j] {
-                        
                         while end < input_len && input_chars[end] == char_struct.char {
                             count += 1;
                             end += 1;
@@ -580,13 +610,11 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 if match_len > 0 {
-
                     let set_2_chars = filter_chars(set_2.clone());
                     let string_for_replace = create_minimal_string(set_2_chars, match_len);
 
                     result_chars.splice(start..start + match_len, string_for_replace);
-                    
-                    
+
                     start += match_len;
                     continue;
                 }
@@ -622,13 +650,9 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 .collect();
         }
 
-        println!("{result_string}");
+        print!("{result_string}");
         return Ok(());
     }
-
-  
-
-   
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -638,8 +662,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(err) = tr(&args) {
         exit_code = 1;
-        eprintln!("{}", err);
+        eprint!("{}", err);
     }
 
     std::process::exit(exit_code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_1() {
+        let args = Args {
+            delete: false,
+            squeeze_repeats: false,
+            complement_val: false,
+            complement_char: false,
+            string1: "[:lower:]".to_string(),
+            string2: Some("[:upper:]".to_string()),
+        };
+        args.validate_args().unwrap();
+        tr(&args).unwrap();
+    }
 }

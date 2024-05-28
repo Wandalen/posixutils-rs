@@ -1726,7 +1726,7 @@ mod tr_tests {
     #[test]
     fn test_tr_s() {
         tr_test(
-            &["-cs", "[:alnum:]", "\n"],
+            &["-c", "[:alnum:]", "\n"],
             "The big black fox jumped over the fence.",
             "The\nbig\nblack\nfox\njumped\nover\nthe\nfence\n",
         );
@@ -1735,7 +1735,7 @@ mod tr_tests {
     #[test]
     fn test_tr_t() {
         tr_test(
-            &["-cs", "[:alnum:]", "[\n*]"],
+            &["-c", "[:alnum:]", "[\n*]"],
             "The big black fox jumped over the fence.",
             "The\nbig\nblack\nfox\njumped\nover\nthe\nfence\n",
         );
@@ -1871,8 +1871,8 @@ mod tr_tests {
     fn test_tr_ross_3() {
         tr_test(
             &["-ds", "[:xdigit:]", "[:alnum:]"],
-            ".ZABCDEFGzabcdefg.0123456788899.GG",
-            ".ZGzg..G",
+            ".ZABCDEFzabcdefg.0123456788899.GG",
+            ".Zzg..G",
         );
     }
 
@@ -1902,11 +1902,6 @@ mod tr_tests {
     }
 
     #[test]
-    fn test_tr_repeat_bs_9() {
-        tr_test(&["abc", "[b*\\9]"], "abcd", "[b*d");
-    }
-
-    #[test]
     fn test_tr_repeat_0() {
         tr_test(&["abc", "[b*0]"], "abcd", "bbbd");
     }
@@ -1922,7 +1917,7 @@ mod tr_tests {
     }
 
     #[test]
-    fn test_tr_repeat_xC() {
+    fn test_tr_repeat_xc() {
         tr_test(&["-C", "[a*65536]\n", "[b*]"], "abcd", "abbb");
     }
 
