@@ -1,6 +1,6 @@
 use clap::Parser;
 use deunicode::deunicode_char;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Read};
 
 /// tr - translate or delete characters
@@ -15,9 +15,13 @@ struct Args {
     #[arg(short = 's')]
     squeeze_repeats: bool,
 
+    /// Use the complement of STRING1's values
+    #[arg(short = 'c')]
+    complement_val: bool,
+
     /// Use the complement of STRING1's characters
-    #[arg(short = 'c', short_alias = 'C')]
-    complement: bool,
+    #[arg(short = 'C')]
+    complement_char: bool,
 
     /// First string
     string1: String,
@@ -26,8 +30,18 @@ struct Args {
     string2: Option<String>,
 }
 
+impl Args {
+    fn validate_args(&self) -> Result<(), String> {
+        // Check if conflicting options are used together
+        if self.complement_char && self.complement_val {
+            return Err("Options '-c' and '-C' cannot be used together".to_string());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
-struct Symbol {
+struct Char {
     char: char,
     repeated: usize,
 }
@@ -37,13 +51,33 @@ struct Equiv {
     char: char,
 }
 
-enum Operands {
-    Symbol(Symbol),
+enum Operand {
+    Char(Char),
     Equiv(Equiv),
 }
 
-fn parse_symbols(input: &str) -> Result<Vec<Operands>, String> {
-    let mut operands: Vec<Operands> = Vec::new();
+impl Operand {
+    fn contains(operands: &Vec<Operand>, target: &char) -> bool {
+        for operand in operands {
+            match operand {
+                Operand::Equiv(e) => {
+                    if compare_deunicoded_chars(e.char, *target) {
+                        return true;
+                    }
+                }
+                Operand::Char(c) => {
+                    if c.char == *target {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
+fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
+    let mut operands: Vec<Operand> = Vec::new();
     let mut chars = input.chars().peekable();
 
     while let Some(&ch) = chars.peek() {
@@ -69,7 +103,7 @@ fn parse_symbols(input: &str) -> Result<Vec<Operands>, String> {
                     if let Some(&']') = chars.peek() {
                         chars.next(); // Skip ']'
                         for equiv_char in equiv.chars() {
-                            operands.push(Operands::Equiv(Equiv { char: equiv_char }));
+                            operands.push(Operand::Equiv(Equiv { char: equiv_char }));
                         }
                     } else {
                         return Err("Error: Missing closing ']' for '[=equiv=]'".to_string());
@@ -104,7 +138,7 @@ fn parse_symbols(input: &str) -> Result<Vec<Operands>, String> {
                                     _ => usize::MAX,
                                 }
                             };
-                            operands.push(Operands::Symbol(Symbol {
+                            operands.push(Operand::Char(Char {
                                 char: symbol,
                                 repeated,
                             }));
@@ -123,7 +157,7 @@ fn parse_symbols(input: &str) -> Result<Vec<Operands>, String> {
             }
         } else {
             // Add a regular character with a repetition of 1
-            operands.push(Operands::Symbol(Symbol {
+            operands.push(Operand::Char(Char {
                 char: ch,
                 repeated: 1,
             }));
@@ -140,7 +174,7 @@ fn compare_deunicoded_chars(char1: char, char2: char) -> bool {
     normalized_char1 == normalized_char2
 }
 
-fn expand_character_class(class: &str) -> Result<Vec<char>, String> {
+fn expand_character_class(class: &str) -> Result<Vec<Operand>, String> {
     let result = match class {
         "alnum" => ('0'..='9').chain('A'..='Z').chain('a'..='z').collect(),
         "alpha" => ('A'..='Z').chain('a'..='z').collect(),
@@ -164,11 +198,19 @@ fn expand_character_class(class: &str) -> Result<Vec<char>, String> {
         "xdigit" => ('0'..='9').chain('A'..='F').chain('a'..='f').collect(),
         _ => return Err("Error: Invalid class name ".to_string()),
     };
-    Ok(result)
+    Ok(result
+        .into_iter()
+        .map(|c| {
+            Operand::Char(Char {
+                char: c,
+                repeated: 1,
+            })
+        })
+        .collect())
 }
 
-fn parse_classes(input: &str) -> Result<Vec<char>, String> {
-    let mut classes: Vec<char> = Vec::new();
+fn parse_classes(input: &str) -> Result<Vec<Operand>, String> {
+    let mut classes: Vec<Operand> = Vec::new();
     let mut chars = input.chars().peekable();
 
     while let Some(&ch) = chars.peek() {
@@ -213,7 +255,7 @@ fn parse_classes(input: &str) -> Result<Vec<char>, String> {
     Ok(classes)
 }
 
-fn parse_ranges(input: &str) -> Result<Vec<char>, String> {
+fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
     let mut chars = input.chars().peekable();
     let mut result = Vec::new();
 
@@ -239,7 +281,7 @@ fn parse_ranges(input: &str) -> Result<Vec<char>, String> {
                         .to_string(),
                 );
             }
-            result.extend((start..=end));
+            result.extend(start..=end);
         } else {
             // Обробляємо формат a-b
             let start = chars
@@ -257,40 +299,30 @@ fn parse_ranges(input: &str) -> Result<Vec<char>, String> {
                         .to_string(),
                 );
             }
-            result.extend((start..=end));
+            result.extend(start..=end);
         }
     }
 
-    Ok(result)
+    Ok(result
+        .into_iter()
+        .map(|c| {
+            Operand::Char(Char {
+                char: c,
+                repeated: 1,
+            })
+        })
+        .collect())
 }
 
-fn expand_repeated_character(repeated: &str) -> Vec<char> {
-    let mut chars = repeated.chars();
-    if let (Some('['), Some(c), Some('*'), Some(n), Some(']')) = (
-        chars.next(),
-        chars.next(),
-        chars.next(),
-        chars.next(),
-        chars.next_back(),
-    ) {
-        if let Some(n) = n.to_digit(10) {
-            return std::iter::repeat(c).take(n as usize).collect();
-        }
-    }
-    vec![]
-}
-
-fn parse_set(set: &str) -> Result<Vec<char>, String> {
+fn parse_set(set: &str) -> Result<Vec<Operand>, String> {
     if set.starts_with("[:") && set.ends_with(":]") {
         Ok(parse_classes(set)?)
     } else if set.contains('-')
         && (set.len() == 3 || (set.len() == 5 && set.starts_with('[') && set.ends_with(']')))
     {
         Ok(parse_ranges(set)?)
-    } else if set.starts_with('[') && set.ends_with(']') && set.contains('*') {
-        Ok(expand_repeated_character(set))
     } else {
-        Ok(set.chars().collect())
+        Ok(parse_symbols(set)?)
     }
 }
 
@@ -301,19 +333,55 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed to read input");
 
     let mut set1 = parse_set(&args.string1)?;
-    let mut set2 = args.string2.as_ref().map(|arg0| parse_set(arg0).unwrap());
-
-    if args.complement {
-        let full_set: HashSet<_> = (0..=255).map(|c| c as u8 as char).collect();
-        let set1_set: HashSet<_> = set1.into_iter().collect();
-        set1 = full_set.difference(&set1_set).cloned().collect();
+    let mut set2 = None;
+    if args.string2.is_some() {
+        set2 = Some(parse_set(&args.string2.as_ref().unwrap())?);
     }
 
     if args.delete {
-        let set1: HashSet<_> = set1.into_iter().collect();
-        let output: String = input.chars().filter(|c| !set1.contains(c)).collect();
-        println!("{}", output);
-    } else {
+        let filtered_string: String;
+
+        if args.complement_char || args.complement_val {
+            filtered_string = input
+                .chars()
+                .filter(|c| Operand::contains(&set1, c))
+                .collect();
+        } else {
+            filtered_string = input
+                .chars()
+                .filter(|c| !Operand::contains(&set1, c))
+                .collect();
+        }
+
+        if args.squeeze_repeats && set2.is_some() {
+            // Counting the frequency of characters in the chars vector
+            let mut char_counts = HashMap::new();
+            for c in filtered_string.chars() {
+                *char_counts.entry(c).or_insert(0) += 1;
+            }
+
+            let mut seen = HashSet::new();
+            filtered_string = filtered_string.chars().into_iter().filter(|&c| {
+                if char_counts[&c] > 1 && Operand::contains(&set2.unwrap(), &c) {
+                    if seen.contains(&c) {
+                        false
+                    } else {
+                        seen.insert(c);
+                        true
+                    }
+                } else {
+                    true
+                }
+            }).collect();
+            
+        }
+        
+        println!("{filtered_string}");
+    }
+
+    
+
+  
         let mut output = String::new();
         let mut previous_char: Option<char> = None;
 
@@ -364,14 +432,14 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         println!("{}", output);
-    }
+    
 
     Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-
+    args.validate_args()?;
     let mut exit_code = 0;
 
     if let Err(err) = tr(&args) {
