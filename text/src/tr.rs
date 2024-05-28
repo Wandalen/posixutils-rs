@@ -36,21 +36,34 @@ impl Args {
         if self.complement_char && self.complement_val {
             return Err("Options '-c' and '-C' cannot be used together".to_string());
         }
+        if self.squeeze_repeats
+            && self.string2.is_none()
+            && (self.complement_char || self.complement_val)
+            && !self.delete
+        {
+            return Err("Option '-c' or '-C' may only be used with 2 strings".to_string());
+        }
+
+        if !self.squeeze_repeats && !self.delete && self.string2.is_none() {
+            return Err("Need two strings operand".to_string());
+        }
+
         Ok(())
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Char {
     char: char,
     repeated: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Equiv {
     char: char,
 }
 
+#[derive(Debug, Clone)]
 enum Operand {
     Char(Char),
     Equiv(Equiv),
@@ -326,20 +339,67 @@ fn parse_set(set: &str) -> Result<Vec<Operand>, String> {
     }
 }
 
+fn complement_chars(input: &str, chars1: Vec<Operand>, mut chars2: Vec<Operand>) -> String {
+    // Create a variable to store the result
+    let mut result = String::new();
+
+    // Initialize the index for the chars2 vector
+    let mut chars2_index = 0;
+
+    // Convert the input string to a character vector for easy processing
+    let input_chars: Vec<char> = input.chars().collect();
+
+    // Go through each character in the input string
+    for &ch in &input_chars {
+        // Check if the character is in the chars1 vector
+        if Operand::contains(&chars1, &ch) {
+            // If the character is in the chars1 vector, add it to the result without changing it
+            result.push(ch);
+        } else {
+            // If the character is not in the chars1 vector, replace it with a character from the chars2 vector
+            // Add the character from the chars2 vector to the result
+            let operand = &mut chars2[chars2_index];
+            match operand {
+                Operand::Char(char) => {
+                    result.push(char.char);
+                    char.repeated -= 1;
+
+                    if char.repeated > 0 {
+                        continue;
+                    }
+                }
+                Operand::Equiv(equiv) => {
+                    result.push(equiv.char);
+                }
+            }
+
+            // Increase the index for the chars2 vector
+            chars2_index += 1;
+
+            // If the index has reached the end of the chars2 vector, reset it to zero
+            if chars2_index >= chars2.len() {
+                chars2_index = 0;
+            }
+        }
+    }
+
+    result
+}
+
 fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut input = String::new();
     io::stdin()
         .read_to_string(&mut input)
         .expect("Failed to read input");
 
-    let mut set1 = parse_set(&args.string1)?;
+    let set1 = parse_set(&args.string1)?;
     let mut set2 = None;
     if args.string2.is_some() {
         set2 = Some(parse_set(&args.string2.as_ref().unwrap())?);
     }
 
     if args.delete {
-        let filtered_string: String;
+        let mut filtered_string: String;
 
         if args.complement_char || args.complement_val {
             filtered_string = input
@@ -361,8 +421,37 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let mut seen = HashSet::new();
-            filtered_string = filtered_string.chars().into_iter().filter(|&c| {
-                if char_counts[&c] > 1 && Operand::contains(&set2.unwrap(), &c) {
+            filtered_string = filtered_string
+                .chars()
+                .into_iter()
+                .filter(|&c| {
+                    if char_counts[&c] > 1 && Operand::contains(set2.as_ref().unwrap(), &c) {
+                        if seen.contains(&c) {
+                            false
+                        } else {
+                            seen.insert(c);
+                            true
+                        }
+                    } else {
+                        true
+                    }
+                })
+                .collect();
+        }
+
+        println!("{filtered_string}");
+        return Ok(());
+    } else if args.squeeze_repeats && set2.is_none() {
+        let mut char_counts = HashMap::new();
+        for c in input.chars() {
+            *char_counts.entry(c).or_insert(0) += 1;
+        }
+
+        let mut seen = HashSet::new();
+        let filtered_string: String = input
+            .chars()
+            .filter(|&c| {
+                if char_counts[&c] > 1 && Operand::contains(&set1, &c) {
                     if seen.contains(&c) {
                         false
                     } else {
@@ -372,67 +461,112 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     true
                 }
-            }).collect();
-            
-        }
-        
+            })
+            .collect();
         println!("{filtered_string}");
-    }
+        return Ok(());
+    } else {
+        let mut result_string: String;
 
-    
+        if args.complement_char || args.complement_val {
+            if args.complement_char {
+                result_string = complement_chars(&input, set1, set2.clone().unwrap());
+            } else {
+                let mut set2 = set2.clone().unwrap();
+                set2.sort_by(|a, b| match (a, b) {
+                    (Operand::Char(char1), Operand::Char(char2)) => char1.char.cmp(&char2.char),
+                    (Operand::Equiv(equiv1), Operand::Equiv(equiv2)) => {
+                        equiv1.char.cmp(&equiv2.char)
+                    }
+                    (Operand::Char(char1), Operand::Equiv(equiv2)) => char1.char.cmp(&equiv2.char),
+                    (Operand::Equiv(equiv1), Operand::Char(char2)) => equiv1.char.cmp(&char2.char),
+                });
 
-  
-        let mut output = String::new();
-        let mut previous_char: Option<char> = None;
+                result_string = complement_chars(&input, set1, set2);
+            }
+        } else {
+            result_string = String::new();
+        }
 
-        if let Some(ref mut set2) = set2 {
-            let len1 = set1.len();
-            let len2 = set2.len();
-            if len2 < len1 {
-                if let Some(&last) = set2.last() {
-                    set2.extend(std::iter::repeat(last).take(len1 - len2));
-                }
+        if args.squeeze_repeats {
+            // Counting the frequency of characters in the chars vector
+            let mut char_counts = HashMap::new();
+            for c in result_string.chars() {
+                *char_counts.entry(c).or_insert(0) += 1;
             }
 
-            for c in input.chars() {
-                if let Some(pos) = set1.iter().position(|&x| x == c) {
-                    let replacement = set2[pos];
-                    if args.squeeze_repeats {
-                        if previous_char != Some(replacement) {
-                            output.push(replacement);
+            let mut seen = HashSet::new();
+            result_string = result_string
+                .chars()
+                .filter(|&c| {
+                    if char_counts[&c] > 1 && Operand::contains(set2.as_ref().unwrap(), &c) {
+                        if seen.contains(&c) {
+                            false
+                        } else {
+                            seen.insert(c);
+                            true
                         }
                     } else {
+                        true
+                    }
+                })
+                .collect();
+        }
+
+        println!("{result_string}");
+        return Ok(());
+    }
+
+    /*   let mut output = String::new();
+    let mut previous_char: Option<char> = None;
+
+    if let Some(ref mut set2) = set2 {
+        let len1 = set1.len();
+        let len2 = set2.len();
+        if len2 < len1 {
+            if let Some(&last) = set2.last() {
+                set2.extend(std::iter::repeat(last).take(len1 - len2));
+            }
+        }
+
+        for c in input.chars() {
+            if let Some(pos) = set1.iter().position(|&x| x == c) {
+                let replacement = set2[pos];
+                if args.squeeze_repeats {
+                    if previous_char != Some(replacement) {
                         output.push(replacement);
                     }
                 } else {
-                    if args.squeeze_repeats {
-                        if previous_char != Some(c) {
-                            output.push(c);
-                        }
-                    } else {
+                    output.push(replacement);
+                }
+            } else {
+                if args.squeeze_repeats {
+                    if previous_char != Some(c) {
                         output.push(c);
                     }
+                } else {
+                    output.push(c);
                 }
-                previous_char = Some(c);
             }
-        } else {
-            let set1: HashSet<_> = set1.into_iter().collect();
-            for c in input.chars() {
-                if !set1.contains(&c) {
-                    if args.squeeze_repeats {
-                        if previous_char != Some(c) {
-                            output.push(c);
-                        }
-                    } else {
-                        output.push(c);
-                    }
-                }
-                previous_char = Some(c);
-            }
+            previous_char = Some(c);
         }
+    } else {
+        let set1: HashSet<_> = set1.into_iter().collect();
+        for c in input.chars() {
+            if !set1.contains(&c) {
+                if args.squeeze_repeats {
+                    if previous_char != Some(c) {
+                        output.push(c);
+                    }
+                } else {
+                    output.push(c);
+                }
+            }
+            previous_char = Some(c);
+        }
+    }
 
-        println!("{}", output);
-    
+    println!("{}", output); */
 
     Ok(())
 }
