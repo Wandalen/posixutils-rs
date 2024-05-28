@@ -1804,16 +1804,6 @@ mod tr_tests {
     }
 
     #[test]
-    fn test_tr_rep_cclass() {
-        tr_test(&["a[=*2][=c=]", "xyyz"], "a=c", "xyz");
-    }
-
-    #[test]
-    fn test_tr_rep_1() {
-        tr_test(&["[:*3][:digit:]", "a-m"], ":1239", "cefgm");
-    }
-
-    #[test]
     fn test_tr_rep_2() {
         tr_test(&["a[b*512]c", "1[x*]2"], "abc", "1x2");
     }

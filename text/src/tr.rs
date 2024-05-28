@@ -1,4 +1,5 @@
 use clap::Parser;
+use deunicode::deunicode_char;
 use std::collections::HashSet;
 use std::io::{self, Read};
 
@@ -25,108 +26,242 @@ struct Args {
     string2: Option<String>,
 }
 
-fn expand_character_class(class: &str) -> Vec<char> {
-    match class {
-        "[:alnum:]" => ('0'..='9').chain('A'..='Z').chain('a'..='z').collect(),
-        "[:alpha:]" => ('A'..='Z').chain('a'..='z').collect(),
-        "[:digit:]" => ('0'..='9').collect(),
-        "[:lower:]" => ('a'..='z').collect(),
-        "[:upper:]" => ('A'..='Z').collect(),
-        "[:space:]" => vec![' ', '\t', '\n', '\r', '\x0b', '\x0c'],
-        "[:blank:]" => vec![' ', '\t'],
-        "[:cntrl:]" => (0..=31)
+#[derive(Debug)]
+struct Symbol {
+    char: char,
+    repeated: usize,
+}
+
+#[derive(Debug)]
+struct Equiv {
+    char: char,
+}
+
+enum Operands {
+    Symbol(Symbol),
+    Equiv(Equiv),
+}
+
+fn parse_symbols(input: &str) -> Result<Vec<Operands>, String> {
+    let mut operands: Vec<Operands> = Vec::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(&ch) = chars.peek() {
+        if ch == '[' {
+            chars.next(); // Skip '['
+            if let Some(&'=') = chars.peek() {
+                // Processing the format [=equiv=]
+                chars.next(); // Skip '='
+                let mut equiv = String::new();
+                while let Some(&next_ch) = chars.peek() {
+                    if next_ch != '=' {
+                        equiv.push(next_ch);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if equiv.is_empty() {
+                    return Err("Error: Missing equiv symbol after '[='".to_string());
+                }
+                if let Some(&'=') = chars.peek() {
+                    chars.next(); // Skip '='
+                    if let Some(&']') = chars.peek() {
+                        chars.next(); // Skip ']'
+                        for equiv_char in equiv.chars() {
+                            operands.push(Operands::Equiv(Equiv { char: equiv_char }));
+                        }
+                    } else {
+                        return Err("Error: Missing closing ']' for '[=equiv=]'".to_string());
+                    }
+                } else {
+                    return Err("Error: Missing '=' before ']' for '[=equiv=]'".to_string());
+                }
+            } else {
+                // Processing the format [x*n]
+                if let Some(symbol) = chars.next() {
+                    if let Some(&'*') = chars.peek() {
+                        chars.next(); // Skip '*'
+                        let mut repeat_str = String::new();
+                        while let Some(&digit) = chars.peek() {
+                            if digit.is_ascii_digit() {
+                                repeat_str.push(digit);
+                                chars.next();
+                            } else {
+                                break;
+                            }
+                        }
+                        if let Some(&']') = chars.peek() {
+                            chars.next(); // Skip ']'
+                            let repeated = if repeat_str.is_empty() {
+                                return Err(format!(
+                                    "Error: Missing repetition number after '*' for symbol '{}'",
+                                    symbol
+                                ));
+                            } else {
+                                match repeat_str.parse::<usize>() {
+                                    Ok(n) if n > 0 => n,
+                                    _ => usize::MAX,
+                                }
+                            };
+                            operands.push(Operands::Symbol(Symbol {
+                                char: symbol,
+                                repeated,
+                            }));
+                        } else {
+                            return Err("Error: Missing closing ']'".to_string());
+                        }
+                    } else {
+                        return Err(format!(
+                            "Error: Missing '*' after '[' for symbol '{}'",
+                            symbol
+                        ));
+                    }
+                } else {
+                    return Err("Error: Missing symbol after '['".to_string());
+                }
+            }
+        } else {
+            // Add a regular character with a repetition of 1
+            operands.push(Operands::Symbol(Symbol {
+                char: ch,
+                repeated: 1,
+            }));
+            chars.next();
+        }
+    }
+
+    Ok(operands)
+}
+
+fn compare_deunicoded_chars(char1: char, char2: char) -> bool {
+    let normalized_char1 = deunicode_char(char1);
+    let normalized_char2 = deunicode_char(char2);
+    normalized_char1 == normalized_char2
+}
+
+fn expand_character_class(class: &str) -> Result<Vec<char>, String> {
+    let result = match class {
+        "alnum" => ('0'..='9').chain('A'..='Z').chain('a'..='z').collect(),
+        "alpha" => ('A'..='Z').chain('a'..='z').collect(),
+        "digit" => ('0'..='9').collect(),
+        "lower" => ('a'..='z').collect(),
+        "upper" => ('A'..='Z').collect(),
+        "space" => vec![' ', '\t', '\n', '\r', '\x0b', '\x0c'],
+        "blank" => vec![' ', '\t'],
+        "cntrl" => (0..=31)
             .chain(std::iter::once(127))
             .map(|c| c as u8 as char)
             .collect(),
-        "[:graph:]" => (33..=126).map(|c| c as u8 as char).collect(),
-        "[:print:]" => (32..=126).map(|c| c as u8 as char).collect(),
-        "[:punct:]" => (33..=47)
+        "graph" => (33..=126).map(|c| c as u8 as char).collect(),
+        "print" => (32..=126).map(|c| c as u8 as char).collect(),
+        "punct" => (33..=47)
             .chain(58..=64)
             .chain(91..=96)
             .chain(123..=126)
             .map(|c| c as u8 as char)
             .collect(),
-        "[:xdigit:]" => ('0'..='9').chain('A'..='F').chain('a'..='f').collect(),
-        _ => vec![],
-    }
+        "xdigit" => ('0'..='9').chain('A'..='F').chain('a'..='f').collect(),
+        _ => return Err("Error: Invalid class name ".to_string()),
+    };
+    Ok(result)
 }
 
-fn replace_with_pattern(pattern_from: &str, pattern_to: &str, text: &str) -> String {
-    let mut replacement_map: Vec<(char, String)> = Vec::new();
-    let mut iter_to = pattern_to.chars().peekable();
-    let mut current_to = String::new();
+fn parse_classes(input: &str) -> Result<Vec<char>, String> {
+    let mut classes: Vec<char> = Vec::new();
+    let mut chars = input.chars().peekable();
 
-    while let Some(c) = iter_to.next() {
-        if c == '[' {
-            if let Some(&next_c) = iter_to.peek() {
-                if next_c == ']' {
-                    iter_to.next(); // consume ']'
-                    replacement_map.push((c, current_to.clone()));
-                    current_to.clear();
-                } else if next_c == '*' {
-                    iter_to.next(); // consume '*'
-                    let mut n_str = String::new();
-                    while let Some(&ch) = iter_to.peek() {
-                        if ch.is_digit(10) {
-                            n_str.push(ch);
-                            iter_to.next();
-                        } else {
-                            break;
-                        }
+    while let Some(&ch) = chars.peek() {
+        if ch == '[' {
+            chars.next(); // Skip '['
+            if let Some(&':') = chars.peek() {
+                // Processing the [:class:] format
+                chars.next(); // Skip ':'
+                let mut class = String::new();
+                while let Some(&next_ch) = chars.peek() {
+                    if next_ch != ':' {
+                        class.push(next_ch);
+                        chars.next();
+                    } else {
+                        break;
                     }
-                    iter_to.next(); // consume ']'
-                    let n: usize = n_str.parse().unwrap_or(usize::MAX);
-                    let repeated_char = c.to_string().repeat(n);
-                    replacement_map.push((c, repeated_char));
-                } else {
-                    current_to.push(c);
                 }
+                if class.is_empty() {
+                    return Err("Error: Missing class name after '[:'".to_string());
+                }
+                if let Some(&':') = chars.peek() {
+                    chars.next(); // Skip ':'
+                    if let Some(&']') = chars.peek() {
+                        chars.next(); // Skip ']'
+                        classes.extend(expand_character_class(&class)?);
+                    } else {
+                        return Err("Error: Missing closing ']' for '[:class:]'".to_string());
+                    }
+                } else {
+                    return Err("Error: Missing ':' before ']' for '[:class:]'".to_string());
+                }
+            } else {
+                // Skip to the next character
+                chars.next();
             }
         } else {
-            current_to.push(c);
+            // Skip to the next character
+            chars.next();
         }
     }
 
-    if !current_to.is_empty() {
-        for (i, c) in pattern_from.chars().enumerate() {
-            let replacement = if i < current_to.len() {
-                current_to.chars().nth(i).unwrap().to_string()
-            } else {
-                current_to.chars().last().unwrap().to_string()
-            };
-            replacement_map.push((c, replacement));
-        }
-    } else {
-        for (i, c) in pattern_from.chars().enumerate() {
-            let replacement = if i < pattern_to.len() {
-                pattern_to.chars().nth(i).unwrap().to_string()
-            } else {
-                pattern_to.chars().last().unwrap().to_string()
-            };
-            replacement_map.push((c, replacement));
-        }
-    }
-
-    let mut result = String::new();
-    for ch in text.chars() {
-        if let Some((_, replacement)) = replacement_map.iter().find(|(c, _)| *c == ch) {
-            result.push_str(replacement);
-        } else {
-            result.push(ch);
-        }
-    }
-
-    result
+    Ok(classes)
 }
 
-fn expand_range(range: &str) -> Vec<char> {
-    let mut chars = range.chars();
-    if let (Some(start), Some('-'), Some(end)) = (chars.next(), chars.next(), chars.next()) {
-        if start <= end {
-            return (start..=end).collect();
+fn parse_ranges(input: &str) -> Result<Vec<char>, String> {
+    let mut chars = input.chars().peekable();
+    let mut result = Vec::new();
+
+    while let Some(&ch) = chars.peek() {
+        if ch == '[' {
+            // Обробляємо формат [a-b]
+            chars.next(); // Пропускаємо '['
+            let start = chars
+                .next()
+                .ok_or("Error: Missing start character in range")?;
+            if chars.next() != Some('-') {
+                return Err("Error: Missing '-' in range".to_string());
+            }
+            let end = chars
+                .next()
+                .ok_or("Error: Missing end character in range")?;
+            if chars.next() != Some(']') {
+                return Err("Error: Missing closing ']' in range".to_string());
+            }
+            if start > end {
+                return Err(
+                    "Error: Invalid range: start character is greater than end character"
+                        .to_string(),
+                );
+            }
+            result.extend((start..=end));
+        } else {
+            // Обробляємо формат a-b
+            let start = chars
+                .next()
+                .ok_or("Error: Missing start character in range")?;
+            if chars.next() != Some('-') {
+                return Err("Error: Missing '-' in range".to_string());
+            }
+            let end = chars
+                .next()
+                .ok_or("Error: Missing end character in range")?;
+            if start > end {
+                return Err(
+                    "Error: Invalid range: start character is greater than end character"
+                        .to_string(),
+                );
+            }
+            result.extend((start..=end));
         }
     }
-    range.chars().collect()
+
+    Ok(result)
 }
 
 fn expand_repeated_character(repeated: &str) -> Vec<char> {
@@ -145,15 +280,17 @@ fn expand_repeated_character(repeated: &str) -> Vec<char> {
     vec![]
 }
 
-fn parse_set(set: &str) -> Vec<char> {
+fn parse_set(set: &str) -> Result<Vec<char>, String> {
     if set.starts_with("[:") && set.ends_with(":]") {
-        expand_character_class(set)
-    } else if set.contains('-') && set.len() == 3 {
-        expand_range(set)
+        Ok(parse_classes(set)?)
+    } else if set.contains('-')
+        && (set.len() == 3 || (set.len() == 5 && set.starts_with('[') && set.ends_with(']')))
+    {
+        Ok(parse_ranges(set)?)
     } else if set.starts_with('[') && set.ends_with(']') && set.contains('*') {
-        expand_repeated_character(set)
+        Ok(expand_repeated_character(set))
     } else {
-        set.chars().collect()
+        Ok(set.chars().collect())
     }
 }
 
@@ -163,8 +300,8 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         .read_to_string(&mut input)
         .expect("Failed to read input");
 
-    let mut set1 = parse_set(&args.string1);
-    let mut set2 = args.string2.as_ref().map(|arg0| parse_set(arg0));
+    let mut set1 = parse_set(&args.string1)?;
+    let mut set2 = args.string2.as_ref().map(|arg0| parse_set(arg0).unwrap());
 
     if args.complement {
         let full_set: HashSet<_> = (0..=255).map(|c| c as u8 as char).collect();
