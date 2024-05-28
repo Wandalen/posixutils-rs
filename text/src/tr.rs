@@ -89,6 +89,62 @@ impl Operand {
     }
 }
 
+fn filter_chars(operands: Vec<Operand>) -> Vec<Char> {
+    operands.into_iter().filter_map(|operand| {
+        if let Operand::Char(c) = operand {
+            Some(c)
+        } else {
+            None
+        }
+    }).collect()
+}
+
+fn create_minimal_string(chars: Vec<Char>, size: usize) -> Vec<char> {
+    let mut result = vec![];
+    let mut remaining_space = size;
+    let mut overflow_chars: Vec<(usize, Char)> = vec![];
+
+    // Add chars with repeated == 1 to the result
+    for ch in &chars {
+        if ch.repeated == 1 {
+            if remaining_space > 0 {
+                result.push(ch.char);
+                remaining_space -= 1;
+            }
+        } else if remaining_space >= ch.repeated {
+            for _ in 0..ch.repeated
+            {
+                result.push(ch.char);
+                
+            }
+            
+            remaining_space -= ch.repeated;
+        } else {
+            overflow_chars.push((result.len(), ch.clone()));
+        }
+    }
+
+    // Add remaining chars from overflow_chars if there's still space
+    if !overflow_chars.is_empty() {
+
+        for ( insert_position, char )in overflow_chars.iter().rev()
+        {
+            if remaining_space > 0 {
+
+                let chars_to_add = remaining_space.min(char.repeated);
+                let replace_with = vec![char.char; chars_to_add];
+                result.splice(insert_position..insert_position, replace_with);
+
+                remaining_space -= chars_to_add;
+
+
+            }
+        }
+    }
+
+    result
+}
+
 fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
     let mut operands: Vec<Operand> = Vec::new();
     let mut chars = input.chars().peekable();
@@ -395,7 +451,7 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let set1 = parse_set(&args.string1)?;
     let mut set2 = None;
     if args.string2.is_some() {
-        set2 = Some(parse_set(&args.string2.as_ref().unwrap())?);
+        set2 = Some(parse_set(args.string2.as_ref().unwrap())?);
     }
 
     if args.delete {
@@ -423,7 +479,6 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
             let mut seen = HashSet::new();
             filtered_string = filtered_string
                 .chars()
-                .into_iter()
                 .filter(|&c| {
                     if char_counts[&c] > 1 && Operand::contains(set2.as_ref().unwrap(), &c) {
                         if seen.contains(&c) {
@@ -440,7 +495,7 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         println!("{filtered_string}");
-        return Ok(());
+        Ok(())
     } else if args.squeeze_repeats && set2.is_none() {
         let mut char_counts = HashMap::new();
         for c in input.chars() {
@@ -485,7 +540,61 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 result_string = complement_chars(&input, set1, set2);
             }
         } else {
-            result_string = String::new();
+            let set_2 = set2.clone().unwrap();
+            let input_chars: Vec<char> = input.chars().collect();
+
+            let mut result_chars = input_chars.clone();
+            let input_len = input_chars.len();
+
+            let mut start = 0;
+            let end_loop = input_len;
+
+            while start < end_loop {
+                let mut match_len = 0;
+                let mut j = 0;
+                let mut end = start;
+
+                while j < set1.len() && end < input_len {
+                    let mut count = 0;
+
+                    if let Operand::Equiv(equiv) = &set1[j] {
+                        if end < input_len && compare_deunicoded_chars(equiv.char, input_chars[end])
+                        {
+                            j += 1;
+                            end += 1;
+                            match_len = end - start;
+                        }
+                    } else if let Operand::Char(char_struct) = &set1[j] {
+                        
+                        while end < input_len && input_chars[end] == char_struct.char {
+                            count += 1;
+                            end += 1;
+                        }
+                        if count != 0 && count <= char_struct.repeated {
+                            j += 1;
+                            match_len = end - start;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                if match_len > 0 {
+
+                    let set_2_chars = filter_chars(set_2.clone());
+                    let string_for_replace = create_minimal_string(set_2_chars, match_len);
+
+                    result_chars.splice(start..start + match_len, string_for_replace);
+                    
+                    
+                    start += match_len;
+                    continue;
+                }
+
+                start += 1;
+            }
+
+            result_string = result_chars.into_iter().collect();
         }
 
         if args.squeeze_repeats {
@@ -517,58 +626,9 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    /*   let mut output = String::new();
-    let mut previous_char: Option<char> = None;
+  
 
-    if let Some(ref mut set2) = set2 {
-        let len1 = set1.len();
-        let len2 = set2.len();
-        if len2 < len1 {
-            if let Some(&last) = set2.last() {
-                set2.extend(std::iter::repeat(last).take(len1 - len2));
-            }
-        }
-
-        for c in input.chars() {
-            if let Some(pos) = set1.iter().position(|&x| x == c) {
-                let replacement = set2[pos];
-                if args.squeeze_repeats {
-                    if previous_char != Some(replacement) {
-                        output.push(replacement);
-                    }
-                } else {
-                    output.push(replacement);
-                }
-            } else {
-                if args.squeeze_repeats {
-                    if previous_char != Some(c) {
-                        output.push(c);
-                    }
-                } else {
-                    output.push(c);
-                }
-            }
-            previous_char = Some(c);
-        }
-    } else {
-        let set1: HashSet<_> = set1.into_iter().collect();
-        for c in input.chars() {
-            if !set1.contains(&c) {
-                if args.squeeze_repeats {
-                    if previous_char != Some(c) {
-                        output.push(c);
-                    }
-                } else {
-                    output.push(c);
-                }
-            }
-            previous_char = Some(c);
-        }
-    }
-
-    println!("{}", output); */
-
-    Ok(())
+   
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
