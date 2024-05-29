@@ -1,5 +1,7 @@
 use clap::Parser;
 use deunicode::deunicode_char;
+use gettextrs::{bind_textdomain_codeset, textdomain};
+use plib::PROJECT_NAME;
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Read};
 
@@ -155,70 +157,72 @@ fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
     while let Some(&ch) = chars.peek() {
         if ch == '[' {
             chars.next(); // Skip '['
-            if let Some(&'=') = chars.peek() {
-                // Processing the format [=equiv=]
-                chars.next(); // Skip '='
-                let mut equiv = String::new();
-                while let Some(&next_ch) = chars.peek() {
-                    if next_ch != '=' {
-                        equiv.push(next_ch);
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                if equiv.is_empty() {
-                    return Err("Error: Missing equiv symbol after '[='".to_string());
-                }
-                if let Some(&'=') = chars.peek() {
-                    chars.next(); // Skip '='
-                    if let Some(&']') = chars.peek() {
-                        chars.next(); // Skip ']'
-                        for equiv_char in equiv.chars() {
-                            operands.push(Operand::Equiv(Equiv { char: equiv_char }));
-                        }
-                    } else {
-                        return Err("Error: Missing closing ']' for '[=equiv=]'".to_string());
-                    }
-                } else {
-                    return Err("Error: Missing '=' before ']' for '[=equiv=]'".to_string());
-                }
-            } else {
+            let Some(&'=') = chars.peek() else {
                 // Processing the format [x*n]
-                if let Some(symbol) = chars.next() {
-                    if let Some(&'*') = chars.peek() {
-                        chars.next(); // Skip '*'
-                        let mut repeat_str = String::new();
-                        while let Some(&digit) = chars.peek() {
-                            if digit.is_ascii_digit() {
-                                repeat_str.push(digit);
-                                chars.next();
-                            } else {
-                                break;
-                            }
-                        }
-                        if let Some(&']') = chars.peek() {
-                            chars.next(); // Skip ']'
-                            let repeated = match repeat_str.parse::<usize>() {
-                                Ok(n) if n > 0 => n,
-                                _ => usize::MAX,
-                            };
-                            operands.push(Operand::Char(Char {
-                                char: symbol,
-                                repeated,
-                            }));
-                        } else {
-                            return Err("Error: Missing closing ']'".to_string());
-                        }
-                    } else {
-                        return Err(format!(
-                            "Error: Missing '*' after '[' for symbol '{}'",
-                            symbol
-                        ));
-                    }
-                } else {
-                    return Err("Error: Missing symbol after '['".to_string());
+                let symbol = chars
+                    .next()
+                    .ok_or("Error: Missing symbol after '['".to_string())?;
+
+                let Some(&'*') = chars.peek() else {
+                    return Err(format!(
+                        "Error: Missing '*' after '[' for symbol '{}'",
+                        symbol
+                    ));
+                };
+                chars.next(); // Skip '*'
+
+                let mut repeat_str = String::new();
+                while let Some(&digit) = chars.peek() {
+                    if !digit.is_ascii_digit() {
+                        break;
+                    } 
+                    repeat_str.push(digit);
+                    chars.next();
                 }
+
+                let Some(&']') = chars.peek() else {
+                    return Err("Error: Missing closing ']'".to_string());
+                };
+                chars.next(); // Skip ']'
+
+                let repeated = match repeat_str.parse::<usize>() {
+                    Ok(n) if n > 0 => n,
+                    _ => usize::MAX,
+                };
+                operands.push(Operand::Char(Char {
+                    char: symbol,
+                    repeated,
+                }));
+
+                continue;
+            };
+
+            // Processing the format [=equiv=]
+            chars.next(); // Skip '='
+            let mut equiv = String::new();
+            while let Some(&next_ch) = chars.peek() {
+                if next_ch == '=' {
+                    break;
+                }
+                equiv.push(next_ch);
+                chars.next();
+            }
+            if equiv.is_empty() {
+                return Err("Error: Missing equiv symbol after '[='".to_string());
+            }
+
+            let Some(&'=') = chars.peek() else {
+                return Err("Error: Missing '=' before ']' for '[=equiv=]'".to_string());
+            };
+            chars.next(); // Skip '='
+
+            let Some(&']') = chars.peek() else {
+                return Err("Error: Missing closing ']' for '[=equiv=]'".to_string());
+            };
+            chars.next(); // Skip ']'
+
+            for equiv_char in equiv.chars() {
+                operands.push(Operand::Equiv(Equiv { char: equiv_char }));
             }
         } else {
             // Add a regular character with a repetition of 1
@@ -656,6 +660,9 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+
     let args = Args::parse();
     args.validate_args()?;
     let mut exit_code = 0;
