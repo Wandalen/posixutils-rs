@@ -150,6 +150,138 @@ fn create_minimal_string(chars: Vec<Char>, size: usize) -> Vec<char> {
     result
 }
 
+/// Parses a sequence in the format `[=equiv=]` from the given character iterator.
+///
+/// The function expects the iterator to be positioned just before the first `=`
+/// character. It reads the equivalent characters between the `=` symbols and
+/// creates a list of `Operand::Equiv` entries, one for each character.
+///
+/// # Arguments
+///
+/// * `chars` - A mutable reference to a peekable character iterator.
+///
+/// # Returns
+///
+/// A `Result` containing a vector of `Operand::Equiv` entries if successful, or a
+/// `String` describing the error if parsing fails.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - The sequence does not contain a closing `=` before `]`.
+/// - The sequence does not contain a closing `]`.
+/// - The sequence contains no characters between the `=` symbols.
+///
+fn parse_equiv(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Vec<Operand>, String> {
+    chars.next(); // Skip '='
+    let mut equiv = String::new();
+
+    while let Some(&next_ch) = chars.peek() {
+        if next_ch == '=' {
+            break;
+        }
+        equiv.push(next_ch);
+        chars.next();
+    }
+
+    if equiv.is_empty() {
+        return Err("Error: Missing equiv symbol after '[='".to_string());
+    }
+
+    let Some(&'=') = chars.peek() else {
+        return Err("Error: Missing '=' before ']' for '[=equiv=]'".to_string());
+    };
+    chars.next(); // Skip '='
+
+    let Some(&']') = chars.peek() else {
+        return Err("Error: Missing closing ']' for '[=equiv=]'".to_string());
+    };
+    chars.next(); // Skip ']'
+
+    let mut operands = Vec::new();
+    for equiv_char in equiv.chars() {
+        operands.push(Operand::Equiv(Equiv { char: equiv_char }));
+    }
+
+    Ok(operands)
+}
+
+/// Parses a sequence in the format `[x*n]` from the given character iterator.
+///
+/// The function expects the iterator to be positioned just before the symbol `x`.
+/// It reads the symbol, the repetition count `n`, and creates an `Operand::Char`
+/// entry with the specified number of repetitions.
+///
+/// # Arguments
+///
+/// * `chars` - A mutable reference to a peekable character iterator.
+/// * `symbol` - The symbol that is being repeated.
+///
+/// # Returns
+///
+/// A `Result` containing an `Operand::Char` entry if successful, or a `String`
+/// describing the error if parsing fails.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - The sequence does not contain a `*` after the symbol.
+/// - The sequence does not contain a closing `]`.
+/// - The repetition count `n` is not a valid positive integer.
+///
+fn parse_repeated_char(chars: &mut std::iter::Peekable<std::str::Chars>, symbol: char) -> Result<Operand, String> {
+    let Some(&'*') = chars.peek() else {
+        return Err(format!("Error: Missing '*' after '[' for symbol '{}'", symbol));
+    };
+    chars.next(); // Skip '*'
+
+    let mut repeat_str = String::new();
+    while let Some(&digit) = chars.peek() {
+        if !digit.is_ascii_digit() {
+            break;
+        }
+        repeat_str.push(digit);
+        chars.next();
+    }
+
+    let Some(&']') = chars.peek() else {
+        return Err("Error: Missing closing ']'".to_string());
+    };
+    chars.next(); // Skip ']'
+
+    let repeated = match repeat_str.parse::<usize>() {
+        Ok(n) if n > 0 => n,
+        _ => usize::MAX,
+    };
+
+    Ok(Operand::Char(Char {
+        char: symbol,
+        repeated,
+    }))
+}
+
+
+/// Parses an input string and converts it into a vector of `Operand` entries.
+///
+/// This function processes the input string, looking for sequences in the formats
+/// `[=equiv=]` and `[x*n]`, as well as regular characters. It delegates the parsing
+/// of the specific formats to helper functions `parse_equiv` and `parse_repeated_char`.
+///
+/// # Arguments
+///
+/// * `input` - A string slice containing the input to be parsed.
+///
+/// # Returns
+///
+/// A `Result` containing a vector of `Operand` entries if successful, or a `String`
+/// describing the error if parsing fails.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - It encounters an invalid format.
+/// - It encounters any specific error from `parse_equiv` or `parse_repeated_char`.
+///
 fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
     let mut operands: Vec<Operand> = Vec::new();
     let mut chars = input.chars().peekable();
@@ -157,72 +289,13 @@ fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
     while let Some(&ch) = chars.peek() {
         if ch == '[' {
             chars.next(); // Skip '['
-            let Some(&'=') = chars.peek() else {
-                // Processing the format [x*n]
+            if let Some(&'=') = chars.peek() {
+                operands.extend(parse_equiv(&mut chars)?);
+            } else {
                 let symbol = chars
                     .next()
                     .ok_or("Error: Missing symbol after '['".to_string())?;
-
-                let Some(&'*') = chars.peek() else {
-                    return Err(format!(
-                        "Error: Missing '*' after '[' for symbol '{}'",
-                        symbol
-                    ));
-                };
-                chars.next(); // Skip '*'
-
-                let mut repeat_str = String::new();
-                while let Some(&digit) = chars.peek() {
-                    if !digit.is_ascii_digit() {
-                        break;
-                    } 
-                    repeat_str.push(digit);
-                    chars.next();
-                }
-
-                let Some(&']') = chars.peek() else {
-                    return Err("Error: Missing closing ']'".to_string());
-                };
-                chars.next(); // Skip ']'
-
-                let repeated = match repeat_str.parse::<usize>() {
-                    Ok(n) if n > 0 => n,
-                    _ => usize::MAX,
-                };
-                operands.push(Operand::Char(Char {
-                    char: symbol,
-                    repeated,
-                }));
-
-                continue;
-            };
-
-            // Processing the format [=equiv=]
-            chars.next(); // Skip '='
-            let mut equiv = String::new();
-            while let Some(&next_ch) = chars.peek() {
-                if next_ch == '=' {
-                    break;
-                }
-                equiv.push(next_ch);
-                chars.next();
-            }
-            if equiv.is_empty() {
-                return Err("Error: Missing equiv symbol after '[='".to_string());
-            }
-
-            let Some(&'=') = chars.peek() else {
-                return Err("Error: Missing '=' before ']' for '[=equiv=]'".to_string());
-            };
-            chars.next(); // Skip '='
-
-            let Some(&']') = chars.peek() else {
-                return Err("Error: Missing closing ']' for '[=equiv=]'".to_string());
-            };
-            chars.next(); // Skip ']'
-
-            for equiv_char in equiv.chars() {
-                operands.push(Operand::Equiv(Equiv { char: equiv_char }));
+                operands.push(parse_repeated_char(&mut chars, symbol)?);
             }
         } else {
             // Add a regular character with a repetition of 1
