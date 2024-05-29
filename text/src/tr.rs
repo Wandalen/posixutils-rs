@@ -229,9 +229,15 @@ fn parse_equiv(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Vec<O
 /// - The sequence does not contain a closing `]`.
 /// - The repetition count `n` is not a valid positive integer.
 ///
-fn parse_repeated_char(chars: &mut std::iter::Peekable<std::str::Chars>, symbol: char) -> Result<Operand, String> {
+fn parse_repeated_char(
+    chars: &mut std::iter::Peekable<std::str::Chars>,
+    symbol: char,
+) -> Result<Operand, String> {
     let Some(&'*') = chars.peek() else {
-        return Err(format!("Error: Missing '*' after '[' for symbol '{}'", symbol));
+        return Err(format!(
+            "Error: Missing '*' after '[' for symbol '{}'",
+            symbol
+        ));
     };
     chars.next(); // Skip '*'
 
@@ -259,7 +265,6 @@ fn parse_repeated_char(chars: &mut std::iter::Peekable<std::str::Chars>, symbol:
         repeated,
     }))
 }
-
 
 /// Parses an input string and converts it into a vector of `Operand` entries.
 ///
@@ -289,14 +294,15 @@ fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
     while let Some(&ch) = chars.peek() {
         if ch == '[' {
             chars.next(); // Skip '['
-            if let Some(&'=') = chars.peek() {
-                operands.extend(parse_equiv(&mut chars)?);
-            } else {
+            let Some(&'=') = chars.peek() else {
                 let symbol = chars
                     .next()
                     .ok_or("Error: Missing symbol after '['".to_string())?;
                 operands.push(parse_repeated_char(&mut chars, symbol)?);
-            }
+                continue;
+            };
+
+            operands.extend(parse_equiv(&mut chars)?);
         } else {
             // Add a regular character with a repetition of 1
             operands.push(Operand::Char(Char {
@@ -375,38 +381,38 @@ fn parse_classes(input: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     while let Some(&ch) = chars.peek() {
         if ch == '[' {
             chars.next(); // Skip '['
-            if let Some(&':') = chars.peek() {
-                // Processing the [:class:] format
-                chars.next(); // Skip ':'
-                let mut class = String::new();
-                while let Some(&next_ch) = chars.peek() {
-                    if next_ch != ':' {
-                        class.push(next_ch);
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                if class.is_empty() {
-                    return Err("Error: Missing class name after '[:'".to_string());
-                }
-                if let Some(&':') = chars.peek() {
-                    chars.next(); // Skip ':'
-                    if let Some(&']') = chars.peek() {
-                        chars.next(); // Skip ']'
-                        let res = expand_character_class(&class)?;
-                        case_sensitive = res.1;
-                        classes.extend(res.0);
-                    } else {
-                        return Err("Error: Missing closing ']' for '[:class:]'".to_string());
-                    }
-                } else {
-                    return Err("Error: Missing ':' before ']' for '[:class:]'".to_string());
-                }
-            } else {
+
+            let Some(&':') = chars.peek() else {
                 // Skip to the next character
                 chars.next();
+                continue;
+            };
+            // Processing the [:class:] format
+            chars.next(); // Skip ':'
+            let mut class = String::new();
+            while let Some(&next_ch) = chars.peek() {
+                if next_ch == ':' {
+                    break;
+                }
+                class.push(next_ch);
+                chars.next();
             }
+            if class.is_empty() {
+                return Err("Error: Missing class name after '[:'".to_string());
+            }
+            let Some(&':') = chars.peek() else {
+                return Err("Error: Missing ':' before ']' for '[:class:]'".to_string());
+            };
+
+            chars.next(); // Skip ':'
+            let Some(&']') = chars.peek() else {
+                return Err("Error: Missing closing ']' for '[:class:]'".to_string());
+            };
+
+            chars.next(); // Skip ']'
+            let res = expand_character_class(&class)?;
+            case_sensitive = res.1;
+            classes.extend(res.0);
         } else {
             // Skip to the next character
             chars.next();
@@ -422,8 +428,8 @@ fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
 
     while let Some(&ch) = chars.peek() {
         if ch == '[' {
-            // Обробляємо формат [a-b]
-            chars.next(); // Пропускаємо '['
+            // Process the [a-b] format
+            chars.next(); // Skip '['
             let start = chars
                 .next()
                 .ok_or("Error: Missing start character in range")?;
@@ -444,7 +450,7 @@ fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
             }
             result.extend(start..=end);
         } else {
-            // Обробляємо формат a-b
+            // Process the a-b format
             let start = chars
                 .next()
                 .ok_or("Error: Missing start character in range")?;
@@ -503,31 +509,31 @@ fn complement_chars(input: &str, chars1: Vec<Operand>, mut chars2: Vec<Operand>)
         if Operand::contains(&chars1, &ch) {
             // If the character is in the chars1 vector, add it to the result without changing it
             result.push(ch);
-        } else {
-            // If the character is not in the chars1 vector, replace it with a character from the chars2 vector
-            // Add the character from the chars2 vector to the result
-            let operand = &mut chars2[chars2_index];
-            match operand {
-                Operand::Char(char) => {
-                    result.push(char.char);
-                    char.repeated -= 1;
+            continue;
+        }
+        // If the character is not in the chars1 vector, replace it with a character from the chars2 vector
+        // Add the character from the chars2 vector to the result
+        let operand = &mut chars2[chars2_index];
+        match operand {
+            Operand::Char(char) => {
+                result.push(char.char);
+                char.repeated -= 1;
 
-                    if char.repeated > 0 {
-                        continue;
-                    }
-                }
-                Operand::Equiv(equiv) => {
-                    result.push(equiv.char);
+                if char.repeated > 0 {
+                    continue;
                 }
             }
-
-            // Increase the index for the chars2 vector
-            chars2_index += 1;
-
-            // If the index has reached the end of the chars2 vector, reset it to zero
-            if chars2_index >= chars2.len() {
-                chars2_index = 0;
+            Operand::Equiv(equiv) => {
+                result.push(equiv.char);
             }
+        }
+
+        // Increase the index for the chars2 vector
+        chars2_index += 1;
+
+        // If the index has reached the end of the chars2 vector, reset it to zero
+        if chars2_index >= chars2.len() {
+            chars2_index = 0;
         }
     }
 
