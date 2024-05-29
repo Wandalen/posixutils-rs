@@ -57,6 +57,10 @@ name = "head"
 path = "src/head.rs"
 
 [[bin]]
+name = "tail"
+path = "src/tail.rs"
+
+[[bin]]
 name = "nl"
 path = "src/nl.rs"
 
