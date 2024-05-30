@@ -52,17 +52,24 @@ impl Args {
 /// * `reader` - A buffered reader to read lines from.
 /// * `n` - The number of lines to print from the end. Negative values indicate counting from the end.
 
-fn print_last_n_lines<R: BufRead>(reader: R, n: isize) {
+fn print_last_n_lines<R: BufRead>(reader: R, n: isize) -> Result<(), String> {
     let lines: Vec<_> = reader.lines().map_while(Result::ok).collect();
+
     let start = if n < 0 {
         (lines.len() as isize + n).max(0) as usize
     } else {
         (n - 1).max(0) as usize
     };
-    for line in &lines[start..lines.len() - 1] {
+
+    if start > lines.len() {
+        print!("");
+        return Ok(());
+    }
+    for line in &lines[start..] {
         println!("{}", line);
     }
-    print!("{}", lines.last().unwrap_or(&"".to_string()));
+
+    Ok(())
 }
 
 /// Prints the last `n` bytes from the given reader.
@@ -71,7 +78,7 @@ fn print_last_n_lines<R: BufRead>(reader: R, n: isize) {
 /// * `buf_reader` - A mutable reference to a reader to read bytes from.
 /// * `n` - The number of bytes to print from the end. Negative values indicate counting from the end.
 
-fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) {
+fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), String> {
     let mut buffer = Vec::new();
 
     buf_reader
@@ -82,7 +89,13 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) {
     } else {
         (n - 1).max(0) as usize
     };
+    if start > buffer.len() {
+        print!("");
+        return Ok(());
+    }
     print!("{}", String::from_utf8_lossy(&buffer[start..]));
+
+    Ok(())
 }
 
 /// The main logic for the tail command.
@@ -105,8 +118,8 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut reader = io::BufReader::new(file);
 
     match args.bytes {
-        Some(bytes) => print_last_n_bytes(&mut reader, bytes),
-        None => print_last_n_lines(reader, args.lines.unwrap()),
+        Some(bytes) => print_last_n_bytes(&mut reader, bytes)?,
+        None => print_last_n_lines(reader, args.lines.unwrap())?,
     }
 
     // If follow option is specified, continue monitoring the file
