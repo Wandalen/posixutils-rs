@@ -1,9 +1,10 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
-use std::fs::{self};
-use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::time::Duration;
+use std::{fs, thread};
 
 /// tail - copy the last part of a file
 #[derive(Parser, Debug)]
@@ -16,6 +17,10 @@ struct Args {
     /// The number of bytes to print from the end of the file
     #[arg(short = 'c')]
     bytes: Option<isize>,
+
+    /// Output appended data as the file grows
+    #[arg(short = 'f')]
+    follow: bool,
 
     /// The file to read
     file: Option<PathBuf>,
@@ -43,9 +48,10 @@ fn print_last_n_lines<R: BufRead>(reader: R, n: isize) {
     } else {
         (n - 1).max(0) as usize
     };
-    for line in &lines[start..] {
+    for line in &lines[start..lines.len() - 1] {
         println!("{}", line);
     }
+    print!("{}", lines.last().unwrap_or(&"".to_string()));
 }
 
 fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) {
@@ -76,6 +82,26 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     match args.bytes {
         Some(bytes) => print_last_n_bytes(&mut reader, bytes),
         None => print_last_n_lines(reader, args.lines.unwrap()),
+    }
+
+    // If follow option is specified, continue monitoring the file
+    if args.follow {
+        let file_path = args.file.as_ref().unwrap();
+        let mut file = fs::File::open(file_path)?;
+
+        // Seek to the end of the file
+        file.seek(SeekFrom::End(0))?;
+        let mut reader = BufReader::new(file);
+
+        loop {
+            let mut buffer = String::new();
+            let bytes_read = reader.read_line(&mut buffer)?;
+            if bytes_read > 0 {
+                print!("{}", buffer);
+                io::stdout().flush()?;
+            }
+            thread::sleep(Duration::from_millis(60));
+        }
     }
 
     Ok(())
