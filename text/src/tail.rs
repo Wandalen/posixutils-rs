@@ -1,62 +1,91 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
+use std::fs::{self};
+use std::io::{self, BufRead, Read};
+use std::path::PathBuf;
 
 /// tail - copy the last part of a file
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The number of lines to print from the end of the file
-    #[arg(short = 'n', long = "lines", default_value_t = 10)]
-    lines: usize,
+    #[arg(short = 'n')]
+    lines: Option<isize>,
 
     /// The number of bytes to print from the end of the file
-    #[arg(short = 'c', long = "bytes")]
-    bytes: Option<usize>,
+    #[arg(short = 'c')]
+    bytes: Option<isize>,
 
     /// The file to read
-    file: Option<String>,
+    file: Option<PathBuf>,
 }
 
-fn print_last_n_lines<R: BufRead>(reader: R, n: usize) {
-    let lines: Vec<_> = reader.lines().filter_map(Result::ok).collect();
-    for line in lines.iter().rev().take(n).rev() {
+impl Args {
+    fn validate_args(&mut self) -> Result<(), String> {
+        // Check if conflicting options are used together
+        if self.bytes.is_some() && self.lines.is_some() {
+            return Err("Options '-c' and '-n' cannot be used together".to_string());
+        }
+
+        if self.bytes.is_none() && self.lines.is_none() {
+            self.lines = Some(10);
+        }
+
+        Ok(())
+    }
+}
+
+fn print_last_n_lines<R: BufRead>(reader: R, n: isize) {
+    let lines: Vec<_> = reader.lines().map_while(Result::ok).collect();
+    for line in lines.iter().rev().take(n as usize).rev() {
         println!("{}", line);
     }
 }
 
-fn print_last_n_bytes<R: Read>(mut reader: R, n: usize) {
+fn print_last_n_bytes<R: Read>(mut reader: R, n: isize) {
     let mut buffer = Vec::new();
     reader
         .read_to_end(&mut buffer)
         .expect("Failed to read file");
-    let start = if n > buffer.len() {
+    let start = if n as usize > buffer.len() {
         0
     } else {
-        buffer.len() - n
+        buffer.len() - n as usize
     };
     print!("{}", String::from_utf8_lossy(&buffer[start..]));
+}
+
+fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
+    // open file, or stdin
+    let file: Box<dyn Read> = {
+        if args.file == Some(PathBuf::from("-")) || args.file.is_none() {
+            Box::new(io::stdin().lock())
+        } else {
+            Box::new(fs::File::open(args.file.as_ref().unwrap())?)
+        }
+    };
+    let reader = io::BufReader::new(file);
+
+    match args.bytes {
+        Some(bytes) => print_last_n_bytes(reader, bytes),
+        None => print_last_n_lines(reader, args.lines.unwrap()),
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
-    let args = Args::parse();
+    let mut args = Args::parse();
+    args.validate_args()?;
+    let mut exit_code = 0;
 
-    let input: Box<dyn BufRead> = match args.file {
-        Some(path) => {
-            let file = File::open(&path).expect("Failed to open file");
-            Box::new(BufReader::new(file))
-        }
-        None => Box::new(BufReader::new(io::stdin())),
-    };
-
-    match args.bytes {
-        Some(bytes) => print_last_n_bytes(input, bytes),
-        None => print_last_n_lines(input, args.lines),
+    if let Err(err) = tail(&args) {
+        exit_code = 1;
+        eprint!("{}", err);
     }
 
-    Ok(())
+    std::process::exit(exit_code)
 }
