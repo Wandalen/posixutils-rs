@@ -27,6 +27,11 @@ struct Args {
 }
 
 impl Args {
+    /// Validates the command-line arguments to ensure they meet the required constraints.
+    ///
+    /// # Returns
+    /// * `Ok(())` if arguments are valid.
+    /// * `Err(String)` if arguments are invalid, with an error message describing the issue.
     fn validate_args(&mut self) -> Result<(), String> {
         // Check if conflicting options are used together
         if self.bytes.is_some() && self.lines.is_some() {
@@ -41,6 +46,12 @@ impl Args {
     }
 }
 
+/// Prints the last `n` lines from the given buffered reader.
+///
+/// # Arguments
+/// * `reader` - A buffered reader to read lines from.
+/// * `n` - The number of lines to print from the end. Negative values indicate counting from the end.
+
 fn print_last_n_lines<R: BufRead>(reader: R, n: isize) {
     let lines: Vec<_> = reader.lines().map_while(Result::ok).collect();
     let start = if n < 0 {
@@ -53,6 +64,12 @@ fn print_last_n_lines<R: BufRead>(reader: R, n: isize) {
     }
     print!("{}", lines.last().unwrap_or(&"".to_string()));
 }
+
+/// Prints the last `n` bytes from the given reader.
+///
+/// # Arguments
+/// * `buf_reader` - A mutable reference to a reader to read bytes from.
+/// * `n` - The number of bytes to print from the end. Negative values indicate counting from the end.
 
 fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) {
     let mut buffer = Vec::new();
@@ -68,6 +85,14 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) {
     print!("{}", String::from_utf8_lossy(&buffer[start..]));
 }
 
+/// The main logic for the tail command.
+///
+/// # Arguments
+/// * `args` - The command-line arguments parsed into an `Args` struct.
+///
+/// # Returns
+/// * `Ok(())` if the operation completes successfully.
+/// * `Err(Box<dyn std::error::Error>)` if an error occurs.
 fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     // open file, or stdin
     let file: Box<dyn Read> = {
