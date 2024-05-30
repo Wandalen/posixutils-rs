@@ -193,15 +193,15 @@ fn parse_equiv(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<Vec<O
         return Err("Error: Missing equiv symbol after '[='".to_string());
     }
 
-    let Some(&'=') = chars.peek() else {
+    // Skip '='
+    let Some('=') = chars.next() else {
         return Err("Error: Missing '=' before ']' for '[=equiv=]'".to_string());
     };
-    chars.next(); // Skip '='
 
-    let Some(&']') = chars.peek() else {
+    // Skip ']'
+    let Some(']') = chars.next() else {
         return Err("Error: Missing closing ']' for '[=equiv=]'".to_string());
     };
-    chars.next(); // Skip ']'
 
     let mut operands = Vec::new();
     for equiv_char in equiv.chars() {
@@ -238,13 +238,13 @@ fn parse_repeated_char(
     chars: &mut std::iter::Peekable<std::str::Chars>,
     symbol: char,
 ) -> Result<Operand, String> {
-    let Some(&'*') = chars.peek() else {
+    // Skip '*'
+    let Some('*') = chars.next() else {
         return Err(format!(
             "Error: Missing '*' after '[' for symbol '{}'",
             symbol
         ));
     };
-    chars.next(); // Skip '*'
 
     let mut repeat_str = String::new();
     while let Some(&digit) = chars.peek() {
@@ -255,10 +255,10 @@ fn parse_repeated_char(
         chars.next();
     }
 
-    let Some(&']') = chars.peek() else {
+    // Skip ']'
+    let Some(']') = chars.next() else {
         return Err("Error: Missing closing ']'".to_string());
     };
-    chars.next(); // Skip ']'
 
     let repeated = match repeat_str.parse::<usize>() {
         Ok(n) if n > 0 => n,
@@ -383,17 +383,13 @@ fn parse_classes(input: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     let mut classes: Vec<Operand> = Vec::new();
     let mut chars = input.chars().peekable();
     let mut case_sensitive = CaseSensitive::None;
-    while let Some(&ch) = chars.peek() {
+    while let Some(ch) = chars.next() {
         if ch == '[' {
-            chars.next(); // Skip '['
-
-            let Some(&':') = chars.peek() else {
-                // Skip to the next character
-                chars.next();
+            let Some(':') = chars.next() else {
                 continue;
             };
             // Processing the [:class:] format
-            chars.next(); // Skip ':'
+
             let mut class = String::new();
             while let Some(&next_ch) = chars.peek() {
                 if next_ch == ':' {
@@ -405,22 +401,18 @@ fn parse_classes(input: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
             if class.is_empty() {
                 return Err("Error: Missing class name after '[:'".to_string());
             }
-            let Some(&':') = chars.peek() else {
+            // Skip ':'
+            let Some(':') = chars.next() else {
                 return Err("Error: Missing ':' before ']' for '[:class:]'".to_string());
             };
-
-            chars.next(); // Skip ':'
-            let Some(&']') = chars.peek() else {
+            // Skip ']'
+            let Some(']') = chars.next() else {
                 return Err("Error: Missing closing ']' for '[:class:]'".to_string());
             };
 
-            chars.next(); // Skip ']'
             let res = expand_character_class(&class)?;
             case_sensitive = res.1;
             classes.extend(res.0);
-        } else {
-            // Skip to the next character
-            chars.next();
         }
     }
 
@@ -545,6 +537,24 @@ fn complement_chars(input: &str, chars1: Vec<Operand>, mut chars2: Vec<Operand>)
     result
 }
 
+fn check_repeatable(
+    c: char,
+    char_counts: &HashMap<char, usize>,
+    seen: &mut HashSet<char>,
+    set2: &Vec<Operand>,
+) -> bool {
+    if char_counts[&c] > 1 && Operand::contains(set2, &c) {
+        if seen.contains(&c) {
+            false
+        } else {
+            seen.insert(c);
+            true
+        }
+    } else {
+        true
+    }
+}
+
 fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut input = String::new();
     io::stdin()
@@ -553,8 +563,8 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 
     let (set1, set_1_collection) = parse_set(&args.string1)?;
     let (mut set2, mut set_2_collection) = (None, CaseSensitive::None);
-    if args.string2.is_some() {
-        let result = parse_set(args.string2.as_ref().unwrap())?;
+    if let Some(string2) = &args.string2 {
+        let result = parse_set(string2)?;
         set2 = Some(result.0);
         set_2_collection = result.1;
     }
@@ -584,18 +594,7 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
             let mut seen = HashSet::new();
             filtered_string = filtered_string
                 .chars()
-                .filter(|&c| {
-                    if char_counts[&c] > 1 && Operand::contains(set2.as_ref().unwrap(), &c) {
-                        if seen.contains(&c) {
-                            false
-                        } else {
-                            seen.insert(c);
-                            true
-                        }
-                    } else {
-                        true
-                    }
-                })
+                .filter(|&c| check_repeatable(c, &char_counts, &mut seen, set2.as_ref().unwrap()))
                 .collect();
         }
 
@@ -722,18 +721,7 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
             let mut seen = HashSet::new();
             result_string = result_string
                 .chars()
-                .filter(|&c| {
-                    if char_counts[&c] > 1 && Operand::contains(set2.as_ref().unwrap(), &c) {
-                        if seen.contains(&c) {
-                            false
-                        } else {
-                            seen.insert(c);
-                            true
-                        }
-                    } else {
-                        true
-                    }
-                })
+                .filter(|&c| check_repeatable(c, &char_counts, &mut seen, set2.as_ref().unwrap()))
                 .collect();
         }
 
