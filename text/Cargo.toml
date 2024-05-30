@@ -13,10 +13,10 @@ gettext-rs.workspace = true
 topological-sort = "0.2"
 diff = "0.1"
 regex.workspace = true
-chrono = "0.4"
+chrono.workspace = true
+libc.workspace = true
 dirs = "5.0.1"
 atty = "0.2.14"
-libc = "0.2.155"
 deunicode = "1.6.0"
 
 
@@ -41,16 +41,12 @@ name = "cut"
 path = "src/cut.rs"
 
 [[bin]]
-name = "nohup"
-path = "src/nohup.rs"
+name = "uniq"
+path = "src/uniq.rs"
 
 [[bin]]
 name = "sort"
 path = "src/sort.rs"
-
-[[bin]]
-name = "tr"
-path = "src/tr.rs"
 
 [[bin]]
 name = "expand"
