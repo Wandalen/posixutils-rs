@@ -19,6 +19,7 @@ atty = "0.2.14"
 libc = "0.2.155"
 deunicode = "1.6.0"
 
+
 [[bin]]
 name = "asa"
 path = "src/asa.rs"

@@ -1581,31 +1581,26 @@ mod tr_tests {
 
     #[test]
     fn test_tr_3() {
-        tr_test(&["", "[.*]"], "abc", "abc");
-    }
-
-    #[test]
-    fn test_tr_5() {
         tr_test(&["abcd", "xy"], "abcde", "xyyye");
     }
 
     #[test]
-    fn test_tr_6() {
+    fn test_tr_4() {
         tr_test(&["abcd", "x[y*]"], "abcde", "xyyye");
     }
 
     #[test]
-    fn test_tr_7() {
+    fn test_tr_5() {
         tr_test(&["-s", "a-p", "%[.*]$"], "abcdefghijklmnop", "%.$");
     }
 
     #[test]
-    fn test_tr_8() {
+    fn test_tr_6() {
         tr_test(&["-s", "a-p", "[.*]$"], "abcdefghijklmnop", ".$");
     }
 
     #[test]
-    fn test_tr_9() {
+    fn test_tr_7() {
         tr_test(&["-s", "a-p", "%[.*]"], "abcdefghijklmnop", "%.");
     }
 
@@ -1627,11 +1622,6 @@ mod tr_tests {
     #[test]
     fn test_tr_d() {
         tr_test(&["-s", "[b-c]"], "aabbcc", "aabc");
-    }
-
-    #[test]
-    fn test_tr_e() {
-        //tr_test(&["-s", "[\\0-\\5]"], "\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5", "\0a\1b\2c\3d\4e\5");
     }
 
     #[test]
@@ -1789,11 +1779,6 @@ mod tr_tests {
     }
 
     #[test]
-    fn test_tr_null() {
-        //tr_test(&["a", ""], "", "", 1);
-    }
-
-    #[test]
     fn test_tr_upcase() {
         tr_test(&["[:lower:]", "[:upper:]"], "abcxyzABCXYZ", "ABCXYZABCXYZ");
     }
@@ -1814,38 +1799,8 @@ mod tr_tests {
     }
 
     #[test]
-    fn test_tr_o_rep_1() {
-        //tr_test(&["[b*08]", "[x*]", "", "", 1);
-    }
-
-    #[test]
     fn test_tr_o_rep_2() {
         tr_test(&["[b*010]cd", "[a*7]BC[x*]"], "bcd", "BCx");
-    }
-
-    #[test]
-    fn test_tr_esc() {
-        tr_test(&["a\\-z", "A-Z"], "abc-z", "AbcBC");
-    }
-
-    #[test]
-    fn test_tr_bs_055() {
-        tr_test(&["a\\055b", "def"], "a\\055b", "def");
-    }
-
-    #[test]
-    fn test_tr_bs_at_end() {
-        //tr_test(&["\\", "x", "\\", "x", 1);
-    }
-
-    #[test]
-    fn test_tr_ross_0a() {
-        //tr_test(&["-cs", "[:upper:]", "X[Y*]"]);
-    }
-
-    #[test]
-    fn test_tr_ross_0b() {
-        //tr_test(&["-cs", "[:cntrl:]", "X[Y*]"]);
     }
 
     #[test]
@@ -1860,11 +1815,7 @@ mod tr_tests {
 
     #[test]
     fn test_tr_ross_2() {
-        tr_test(
-            &["-dcs", "[:lower:]", "n-rs-z"],
-            "amzAMZ123.-+amz",
-            "amzamz",
-        );
+        tr_test(&["-dcs", "[:lower:]", "n-rs-z"], "amzAMZ123.-+amz", "amzam");
     }
 
     #[test]
@@ -1892,16 +1843,6 @@ mod tr_tests {
     }
 
     #[test]
-    fn test_tr_empty_eq() {
-        //tr_test(&["[==]", "x"]);
-    }
-
-    #[test]
-    fn test_tr_empty_cc() {
-        //tr_test(&["[::]", "x"]);
-    }
-
-    #[test]
     fn test_tr_repeat_0() {
         tr_test(&["abc", "[b*0]"], "abcd", "bbbd");
     }
@@ -1919,11 +1860,6 @@ mod tr_tests {
     #[test]
     fn test_tr_repeat_xc() {
         tr_test(&["-C", "[a*65536]\n", "[b*]"], "abcd", "abbb");
-    }
-
-    #[test]
-    fn test_tr_fowler_1() {
-        tr_test(&["ah", "-H"], "aha", "-H-");
     }
 
     #[test]

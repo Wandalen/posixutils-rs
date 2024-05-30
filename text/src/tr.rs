@@ -2,6 +2,7 @@ use clap::Parser;
 use deunicode::deunicode_char;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
+use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Read};
 
@@ -48,6 +49,10 @@ impl Args {
 
         if !self.squeeze_repeats && !self.delete && self.string2.is_none() {
             return Err("Need two strings operand".to_string());
+        }
+
+        if self.string1.is_empty() {
+            return Err("At least 1 string operand is required".to_string());
         }
 
         Ok(())
@@ -422,55 +427,43 @@ fn parse_classes(input: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     Ok((classes, case_sensitive))
 }
 
-fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
-    let mut chars = input.chars().peekable();
-    let mut result = Vec::new();
+fn parse_octal(s: &str) -> Option<char> {
+    u32::from_str_radix(s, 8).ok().and_then(char::from_u32)
+}
 
-    while let Some(&ch) = chars.peek() {
-        if ch == '[' {
-            // Process the [a-b] format
-            chars.next(); // Skip '['
-            let start = chars
-                .next()
-                .ok_or("Error: Missing start character in range")?;
-            if chars.next() != Some('-') {
-                return Err("Error: Missing '-' in range".to_string());
+fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
+    let mut chars = Vec::new();
+    let s = input.trim_matches(|c| c == '[' || c == ']'); // Remove square brackets
+    let parts: Vec<&str> = s.split('-').collect();
+
+    let start = parts[0];
+    let end = parts[1];
+
+    if start.starts_with('\\') && end.starts_with('\\') {
+        // Processing the \octal-\octal range
+        if let (Some(start_char), Some(end_char)) =
+            (parse_octal(&start[1..]), parse_octal(&end[1..]))
+        {
+            let start_u32 = start_char as u32;
+            let end_u32 = end_char as u32;
+
+            for code in start_u32..=end_u32 {
+                if let Some(c) = char::from_u32(code) {
+                    chars.push(c);
+                }
             }
-            let end = chars
-                .next()
-                .ok_or("Error: Missing end character in range")?;
-            if chars.next() != Some(']') {
-                return Err("Error: Missing closing ']' in range".to_string());
-            }
-            if start > end {
-                return Err(
-                    "Error: Invalid range: start character is greater than end character"
-                        .to_string(),
-                );
-            }
-            result.extend(start..=end);
-        } else {
-            // Process the a-b format
-            let start = chars
-                .next()
-                .ok_or("Error: Missing start character in range")?;
-            if chars.next() != Some('-') {
-                return Err("Error: Missing '-' in range".to_string());
-            }
-            let end = chars
-                .next()
-                .ok_or("Error: Missing end character in range")?;
-            if start > end {
-                return Err(
-                    "Error: Invalid range: start character is greater than end character"
-                        .to_string(),
-                );
-            }
-            result.extend(start..=end);
+        }
+    } else if !start.starts_with('\\') && !end.starts_with('\\') {
+        // Processing the c-c range
+        let start_char = start.chars().next().unwrap();
+        let end_char = end.chars().next().unwrap();
+
+        for c in start_char..=end_char {
+            chars.push(c);
         }
     }
 
-    Ok(result
+    Ok(chars
         .into_iter()
         .map(|c| {
             Operand::Char(Char {
@@ -484,13 +477,25 @@ fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
 fn parse_set(set: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     if set.starts_with("[:") && set.ends_with(":]") {
         Ok(parse_classes(set)?)
-    } else if set.contains('-')
-        && (set.len() == 3 || (set.len() == 5 && set.starts_with('[') && set.ends_with(']')))
-    {
+    } else if contains_single_range(set) {
         Ok((parse_ranges(set)?, CaseSensitive::None))
     } else {
         Ok((parse_symbols(set)?, CaseSensitive::None))
     }
+}
+
+fn contains_single_range(s: &str) -> bool {
+    // Regular expression for a range of characters or \octal
+    let re = Regex::new(
+        r"(?x)
+        ^ \[ [a-zA-Z0-9\\]+ - [a-zA-Z0-9\\]+ \] $ |   # Range in square brackets
+        ^ \\ [0-7]{1,3} - \\ [0-7]{1,3} $ |           # Range \octal-\octal
+        ^ [a-zA-Z0-9] - [a-zA-Z0-9] $                 # Character-symbol range
+    ",
+    )
+    .unwrap();
+
+    re.is_match(s)
 }
 
 fn complement_chars(input: &str, chars1: Vec<Operand>, mut chars2: Vec<Operand>) -> String {
@@ -545,7 +550,6 @@ fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     io::stdin()
         .read_to_string(&mut input)
         .expect("Failed to read input");
-    //input = "abcxyzABCXYZ".to_string();
 
     let (set1, set_1_collection) = parse_set(&args.string1)?;
     let (mut set2, mut set_2_collection) = (None, CaseSensitive::None);
@@ -752,22 +756,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_1() {
-        let args = Args {
-            delete: false,
-            squeeze_repeats: false,
-            complement_val: false,
-            complement_char: false,
-            string1: "[:lower:]".to_string(),
-            string2: Some("[:upper:]".to_string()),
-        };
-        args.validate_args().unwrap();
-        tr(&args).unwrap();
-    }
 }
