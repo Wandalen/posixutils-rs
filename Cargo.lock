@@ -797,10 +797,12 @@ dependencies = [
 name = "posixutils-text"
 version = "0.1.10"
 dependencies = [
+ "atty",
  "chrono",
  "clap",
  "deunicode",
  "diff",
+ "dirs 5.0.1",
  "gettext-rs",
  "libc",
  "plib",

@@ -53,6 +53,10 @@ name = "expand"
 path = "src/expand.rs"
 
 [[bin]]
+name = "tr"
+path = "src/tr.rs"
+
+[[bin]]
 name = "fold"
 path = "src/fold.rs"
 
