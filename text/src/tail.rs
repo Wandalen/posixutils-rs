@@ -2,7 +2,7 @@ use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use std::fs::{self};
-use std::io::{self, BufRead, Read};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 /// tail - copy the last part of a file
@@ -38,20 +38,26 @@ impl Args {
 
 fn print_last_n_lines<R: BufRead>(reader: R, n: isize) {
     let lines: Vec<_> = reader.lines().map_while(Result::ok).collect();
-    for line in lines.iter().rev().take(n as usize).rev() {
+    let start = if n < 0 {
+        (lines.len() as isize + n).max(0) as usize
+    } else {
+        (n - 1).max(0) as usize
+    };
+    for line in &lines[start..] {
         println!("{}", line);
     }
 }
 
-fn print_last_n_bytes<R: Read>(mut reader: R, n: isize) {
+fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) {
     let mut buffer = Vec::new();
-    reader
+
+    buf_reader
         .read_to_end(&mut buffer)
         .expect("Failed to read file");
-    let start = if n as usize > buffer.len() {
-        0
+    let start = if n < 0 {
+        (buffer.len() as isize + n).max(0) as usize
     } else {
-        buffer.len() - n as usize
+        (n - 1).max(0) as usize
     };
     print!("{}", String::from_utf8_lossy(&buffer[start..]));
 }
@@ -65,10 +71,10 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
             Box::new(fs::File::open(args.file.as_ref().unwrap())?)
         }
     };
-    let reader = io::BufReader::new(file);
+    let mut reader = io::BufReader::new(file);
 
     match args.bytes {
-        Some(bytes) => print_last_n_bytes(reader, bytes),
+        Some(bytes) => print_last_n_bytes(&mut reader, bytes),
         None => print_last_n_lines(reader, args.lines.unwrap()),
     }
 
