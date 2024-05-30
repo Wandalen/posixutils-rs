@@ -59,17 +59,23 @@ impl Args {
     }
 }
 
+// The Char struct represents a character along with its repetition count.
 #[derive(Debug, Clone)]
 struct Char {
+    // The character.
     char: char,
+    // The number of times the character is repeated
     repeated: usize,
 }
 
+// The Equiv struct represents a character equivalent.
 #[derive(Debug, Clone)]
 struct Equiv {
+    // The character equivalent.
     char: char,
 }
 
+// The Operand enum can be either a Char or an Equiv
 #[derive(Debug, Clone)]
 enum Operand {
     Char(Char),
@@ -77,6 +83,16 @@ enum Operand {
 }
 
 impl Operand {
+    /// Checks if a target character exists in a vector of `Operand` elements.
+    ///
+    /// # Arguments
+    ///
+    /// * `operands` - A reference to a vector of `Operand` elements.
+    /// * `target` - A reference to the target character to search for.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the target character is found, `false` otherwise.
     fn contains(operands: &Vec<Operand>, target: &char) -> bool {
         for operand in operands {
             match operand {
@@ -96,6 +112,15 @@ impl Operand {
     }
 }
 
+/// Filters out `Char` elements from a vector of `Operand` elements.
+///
+/// # Arguments
+///
+/// * `operands` - A vector of `Operand` elements.
+///
+/// # Returns
+///
+/// A vector of `Char` elements.
 fn filter_chars(operands: Vec<Operand>) -> Vec<Char> {
     operands
         .into_iter()
@@ -109,6 +134,16 @@ fn filter_chars(operands: Vec<Operand>) -> Vec<Char> {
         .collect()
 }
 
+/// Creates a minimal string with a given size using a vector of `Char` elements.
+///
+/// # Arguments
+///
+/// * `chars` - A vector of `Char` elements.
+/// * `size` - The desired size of the resulting string.
+///
+/// # Returns
+///
+/// A vector of characters representing the minimal string.
 fn create_minimal_string(chars: Vec<Char>, size: usize) -> Vec<char> {
     let mut result = vec![];
     let mut remaining_space = size;
@@ -321,6 +356,7 @@ fn parse_symbols(input: &str) -> Result<Vec<Operand>, String> {
     Ok(operands)
 }
 
+/// Represents the case sensitivity of character classes.
 #[derive(Debug, PartialEq)]
 enum CaseSensitive {
     UpperCase,
@@ -328,12 +364,36 @@ enum CaseSensitive {
     None,
 }
 
+/// Compares two characters after normalizing them.
+/// This function uses the hypothetical `deunicode_char` function to normalize
+/// the input characters and then compares them for equality.
+/// # Arguments
+///
+/// * `char1` - The first character to compare.
+/// * `char2` - The second character to compare.
+///
+/// # Returns
+///
+/// * `true` if the normalized characters are equal.
+/// * `false` otherwise.
 fn compare_deunicoded_chars(char1: char, char2: char) -> bool {
     let normalized_char1 = deunicode_char(char1);
     let normalized_char2 = deunicode_char(char2);
     normalized_char1 == normalized_char2
 }
 
+/// Expands a character class name into a vector of `Operand` elements and determines the case sensitivity.
+/// This function expands the given character class name into its corresponding characters
+/// and wraps them in `Operand::Char`. It also determines the case sensitivity of the class
+/// based on the class name. If the class name is invalid, it returns an error message.
+/// # Arguments
+///
+/// * `class` - A string slice representing the character class name.
+///
+/// # Returns
+///
+/// * `Result<(Vec<Operand>, CaseSensitive), String>` - On success, returns a tuple containing a vector of `Operand` elements and a `CaseSensitive` value.
+///   On failure, returns an error message.
 fn expand_character_class(class: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     let mut case_sensitive = CaseSensitive::None;
     let result = match class {
@@ -379,6 +439,21 @@ fn expand_character_class(class: &str) -> Result<(Vec<Operand>, CaseSensitive), 
     ))
 }
 
+/// Parses character classes from a string input and expands them into a vector of `Operand` elements.
+///
+/// This function parses the input string for character classes in the `[:class:]` format and expands them
+/// using the `expand_character_class` function. It collects the resulting `Operand` elements and determines
+/// the case sensitivity of the character classes encountered.
+///
+/// If an invalid format is detected, the function returns an error message.
+/// # Arguments
+///
+/// * `input` - A string slice containing the input to parse.
+///
+/// # Returns
+///
+/// * `Result<(Vec<Operand>, CaseSensitive), String>` - On success, returns a tuple containing a vector of `Operand` elements and a `CaseSensitive` value.
+///   On failure, returns an error message.
 fn parse_classes(input: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     let mut classes: Vec<Operand> = Vec::new();
     let mut chars = input.chars().peekable();
@@ -419,10 +494,46 @@ fn parse_classes(input: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     Ok((classes, case_sensitive))
 }
 
+/// Parses an octal string and returns the corresponding character, if valid.
+///
+/// # Arguments
+///
+/// * `s` - A string slice that holds the octal representation of the character.
+///
+/// # Returns
+///
+/// * `Option<char>` - Returns `Some(char)` if the input string is a valid octal
+///   representation of a Unicode character. Returns `None` if the string is
+///   not a valid octal number or if the resulting number does not correspond
+///   to a valid Unicode character.
+///
 fn parse_octal(s: &str) -> Option<char> {
     u32::from_str_radix(s, 8).ok().and_then(char::from_u32)
 }
 
+/// Parses a string representing a range of characters or octal values and returns a vector of `Operand`s.
+///
+/// This function handles ranges specified in square brackets, such as `[a-z]` or `[\\141-\\172]`.
+/// It supports ranges of plain characters and ranges of octal-encoded characters. The function
+/// trims the square brackets from the input string, splits the range into start and end parts,
+/// and then expands the range into a list of `Operand`s.
+///
+/// # Arguments
+///
+/// * `input` - A string slice containing the range to be parsed. The range can be in the form of
+///   `[a-z]`, `[\\141-\\172]`, etc.
+///
+/// # Returns
+///
+/// * `Result<Vec<Operand>, String>` - Returns `Ok(Vec<Operand>)` if the input string represents
+///   a valid range. Returns `Err(String)` with an error message if the input is invalid.
+///
+/// # Errors
+///
+/// This function returns an error if:
+/// - The input string does not contain a valid range.
+/// - The octal values in the range cannot be parsed into valid characters.
+///
 fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
     let mut chars = Vec::new();
     let s = input.trim_matches(|c| c == '[' || c == ']'); // Remove square brackets
@@ -466,6 +577,23 @@ fn parse_ranges(input: &str) -> Result<Vec<Operand>, String> {
         .collect())
 }
 
+/// Parses a set expression and returns a vector of `Operand`s and a `CaseSensitive` flag.
+///
+/// The function determines the type of set based on its format and delegates
+/// the parsing to the appropriate helper function. The supported formats are:
+/// - Character classes in the form of `[:class:]`
+/// - Single ranges such as `[a-z]` or `[\\141-\\172]`
+/// - Symbols and characters not fitting the above categories
+///
+/// # Arguments
+///
+/// * `set` - A string slice representing the set expression to be parsed.
+///
+/// # Returns
+///
+/// * `Result<(Vec<Operand>, CaseSensitive), String>` - Returns `Ok((Vec<Operand>, CaseSensitive))`
+///   on successful parsing. Returns `Err(String)` with an error message if the input is invalid.
+///
 fn parse_set(set: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     if set.starts_with("[:") && set.ends_with(":]") {
         Ok(parse_classes(set)?)
@@ -476,6 +604,23 @@ fn parse_set(set: &str) -> Result<(Vec<Operand>, CaseSensitive), String> {
     }
 }
 
+/// Determines if a string contains a single valid range expression.
+///
+/// This function uses a regular expression to check if the input string matches any
+/// of the following range formats:
+/// - `[a-z]` or `[A-Z]` or `[0-9]`: Character ranges enclosed in square brackets
+/// - `\\octal-\\octal`: Ranges of octal-encoded characters
+/// - `a-z` or `A-Z` or `0-9`: Simple character-symbol ranges
+///
+/// # Arguments
+///
+/// * `s` - A string slice to be checked for containing a single valid range.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if the input string matches any of the valid range formats.
+///   Returns `false` otherwise.
+///
 fn contains_single_range(s: &str) -> bool {
     // Regular expression for a range of characters or \octal
     let re = Regex::new(
@@ -490,6 +635,25 @@ fn contains_single_range(s: &str) -> bool {
     re.is_match(s)
 }
 
+/// Computes the complement of a string with respect to two sets of characters.
+///
+/// This function takes an input string and two sets of characters (`chars1` and `chars2`)
+/// and computes the complement of the input string with respect to the characters in `chars1`.
+/// For each character in the input string:
+/// - If the character is present in `chars1`, it remains unchanged in the result.
+/// - If the character is not present in `chars1`, it is replaced with characters from `chars2`
+///   sequentially until all characters in `chars2` are exhausted, and then the process repeats.
+///
+/// # Arguments
+///
+/// * `input` - A string slice representing the input string.
+/// * `chars1` - A vector of `Operand` representing the first set of characters.
+/// * `chars2` - A vector of `Operand` representing the second set of characters.
+///
+/// # Returns
+///
+/// * `String` - Returns a string representing the complement of the input string.
+///
 fn complement_chars(input: &str, chars1: Vec<Operand>, mut chars2: Vec<Operand>) -> String {
     // Create a variable to store the result
     let mut result = String::new();
@@ -537,6 +701,26 @@ fn complement_chars(input: &str, chars1: Vec<Operand>, mut chars2: Vec<Operand>)
     result
 }
 
+/// Checks if a character is repeatable based on certain conditions.
+///
+/// This function determines if a character `c` is repeatable based on the following conditions:
+/// - The character occurs more than once in the input string.
+/// - The character is present in the set `set2`.
+///
+/// If the conditions are met and the character has not been seen before, it is considered repeatable.
+///
+/// # Arguments
+///
+/// * `c` - A character to be checked for repeatability.
+/// * `char_counts` - A reference to a hashmap containing character counts in the input string.
+/// * `seen` - A mutable reference to a hash set to keep track of characters seen so far.
+/// * `set2` - A reference to a vector of `Operand` representing the second set of characters.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if the character is repeatable based on the conditions specified above.
+///            Returns `false` otherwise.
+///
 fn check_repeatable(
     c: char,
     char_counts: &HashMap<char, usize>,
@@ -555,6 +739,21 @@ fn check_repeatable(
     }
 }
 
+/// Translates or deletes characters from standard input, according to specified arguments.
+///
+/// This function reads from standard input, processes the input string based on the specified arguments,
+/// and prints the result to standard output. It supports translation of characters, deletion of characters,
+/// and squeezing repeated characters.
+///
+/// # Arguments
+///
+/// * `args` - A reference to an `Args` struct containing the command-line arguments.
+///
+/// # Returns
+///
+/// * `Result<(), Box<dyn std::error::Error>>` - Returns `Ok(())` on success. Returns an error wrapped in `Box<dyn std::error::Error>`
+///   if there is an error reading from standard input or processing the input string.
+///
 fn tr(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut input = String::new();
     io::stdin()
