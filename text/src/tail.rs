@@ -2,10 +2,10 @@ use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use inotify::{Inotify, WatchMask};
 use plib::PROJECT_NAME;
+use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
-use std::fs;
 
 /// tail - copy the last part of a file
 #[derive(Parser, Debug)]
@@ -63,10 +63,13 @@ fn print_last_n_lines<R: BufRead>(reader: R, n: isize) -> Result<(), String> {
     };
 
     if start > lines.len() {
-        return Ok(());
-    }
-    for line in &lines[start..] {
-        println!("{}", line);
+        for line in lines {
+            println!("{}", line);
+        }
+    } else {
+        for line in &lines[start..] {
+            println!("{}", line);
+        }
     }
 
     Ok(())
@@ -90,9 +93,10 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), Strin
         (n - 1).max(0) as usize
     };
     if start > buffer.len() {
-        return Ok(());
+        print!("{}", String::from_utf8_lossy(&buffer));
+    } else {
+        print!("{}", String::from_utf8_lossy(&buffer[start..]));
     }
-    print!("{}", String::from_utf8_lossy(&buffer[start..]));
 
     Ok(())
 }
@@ -154,8 +158,6 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-
-      
     }
 
     Ok(())
