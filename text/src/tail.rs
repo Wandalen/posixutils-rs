@@ -1,10 +1,11 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
+use inotify::{Inotify, WatchMask};
 use plib::PROJECT_NAME;
+use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
-use std::time::Duration;
-use std::{fs, thread};
+use std::fs;
 
 /// tail - copy the last part of a file
 #[derive(Parser, Debug)]
@@ -62,7 +63,6 @@ fn print_last_n_lines<R: BufRead>(reader: R, n: isize) -> Result<(), String> {
     };
 
     if start > lines.len() {
-        print!("");
         return Ok(());
     }
     for line in &lines[start..] {
@@ -90,7 +90,6 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), Strin
         (n - 1).max(0) as usize
     };
     if start > buffer.len() {
-        print!("");
         return Ok(());
     }
     print!("{}", String::from_utf8_lossy(&buffer[start..]));
@@ -117,29 +116,46 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut reader = io::BufReader::new(file);
 
-    match args.bytes {
-        Some(bytes) => print_last_n_bytes(&mut reader, bytes)?,
-        None => print_last_n_lines(reader, args.lines.unwrap())?,
+    if let Some(bytes) = args.bytes {
+        print_last_n_bytes(&mut reader, bytes)?;
+    } else {
+        print_last_n_lines(reader, args.lines.unwrap())?;
     }
 
     // If follow option is specified, continue monitoring the file
     if args.follow {
         let file_path = args.file.as_ref().unwrap();
-        let mut file = fs::File::open(file_path)?;
+        // Initialization of inotify
+        let mut inotify = Inotify::init()?;
+        inotify.add_watch(file_path, WatchMask::MODIFY)?;
 
-        // Seek to the end of the file
+        // Opening a file and placing the cursor at the end of the file
+        let mut file = File::open(file_path)?;
         file.seek(SeekFrom::End(0))?;
         let mut reader = BufReader::new(file);
 
+        // Buffer for inotify events
+        let mut buffer = [0u8; 4096];
+
         loop {
-            let mut buffer = String::new();
-            let bytes_read = reader.read_line(&mut buffer)?;
-            if bytes_read > 0 {
-                print!("{}", buffer);
-                io::stdout().flush()?;
+            // Read inotify events
+            let events = inotify.read_events_blocking(&mut buffer)?;
+
+            // Handle each event
+            for event in events {
+                if event.mask.contains(inotify::EventMask::MODIFY) {
+                    // If the file has been modified, read the new lines and output them
+                    let mut new_data = String::new();
+                    let bytes_read = reader.read_to_string(&mut new_data)?;
+                    if bytes_read > 0 {
+                        print!("{}", new_data);
+                        io::stdout().flush()?;
+                    }
+                }
             }
-            thread::sleep(Duration::from_millis(60));
         }
+
+      
     }
 
     Ok(())

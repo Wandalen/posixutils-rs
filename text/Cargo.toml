@@ -15,6 +15,7 @@ diff = "0.1"
 regex.workspace = true
 chrono.workspace = true
 libc.workspace = true
+inotify = "0.9"
 
 [[bin]]
 name = "asa"
