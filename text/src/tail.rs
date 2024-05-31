@@ -170,8 +170,8 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 
                     if current_size < reader.stream_position()? {
                         eprintln!("tail: {}: file truncated", file_path.display());
-                        let mut file = File::open(file_path)?;
-                        file.seek(SeekFrom::Start(0))?;
+
+                        reader.seek(SeekFrom::Start(0))?;
                         reader = BufReader::new(File::open(file_path)?);
                     }
 
