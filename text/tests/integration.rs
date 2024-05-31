@@ -1778,7 +1778,7 @@ mod tail_tests {
 
     #[test]
     fn test_tail_2() {
-        tail_test(&["-c+8"], "abcd", "abcd");
+        tail_test(&["-c+8"], "abcd", "");
     }
 
     #[test]
@@ -1861,7 +1861,7 @@ mod tail_tests {
 
     #[test]
     fn test_tail_15() {
-        tail_test(&["-c2"], "abcd\n", "bcd\n");
+        tail_test(&["-c2"], "abcd\n", "d\n");
     }
 
     #[test]

@@ -6,6 +6,23 @@ use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
+
+/// Wrapper type for isize that defaults to negative values if no sign is provided
+#[derive(Debug, Clone)]
+struct SignedIsize(isize);
+
+impl FromStr for SignedIsize {
+    type Err = <isize as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with('-') || s.starts_with('+') {
+            Ok(SignedIsize(s.parse()?))
+        } else {
+            Ok(SignedIsize(-s.parse::<isize>()?))
+        }
+    }
+}
 
 /// tail - copy the last part of a file
 #[derive(Parser, Debug)]
@@ -17,7 +34,7 @@ struct Args {
 
     /// The number of bytes to print from the end of the file
     #[arg(short = 'c')]
-    bytes: Option<isize>,
+    bytes: Option<SignedIsize>,
 
     /// Output appended data as the file grows
     #[arg(short = 'f')]
@@ -62,9 +79,7 @@ fn print_last_n_lines<R: BufRead>(reader: R, n: isize) -> Result<(), String> {
         (n - 1).max(0) as usize
     };
 
-    if start > lines.len() {
-        start = 0;
-    }
+    start = start.min(lines.len());
 
     for line in &lines[start..] {
         println!("{}", line);
@@ -91,9 +106,7 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), Strin
         (n - 1).max(0) as usize
     };
 
-    if start > buffer.len() {
-        start = 0;
-    }
+    start = start.min(buffer.len());
     print!("{}", String::from_utf8_lossy(&buffer[start..]));
 
     Ok(())
@@ -118,8 +131,8 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     };
     let mut reader = io::BufReader::new(file);
 
-    if let Some(bytes) = args.bytes {
-        print_last_n_bytes(&mut reader, bytes)?;
+    if let Some(bytes) = &args.bytes {
+        print_last_n_bytes(&mut reader, bytes.0)?;
     } else {
         print_last_n_lines(reader, args.lines.unwrap())?;
     }
