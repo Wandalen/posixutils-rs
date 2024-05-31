@@ -56,20 +56,15 @@ impl Args {
 fn print_last_n_lines<R: BufRead>(reader: R, n: isize) -> Result<(), String> {
     let lines: Vec<_> = reader.lines().map_while(Result::ok).collect();
 
-    let start = if n < 0 {
+    let mut start = if n < 0 {
         (lines.len() as isize + n).max(0) as usize
     } else {
         (n - 1).max(0) as usize
     };
 
-    if start > lines.len() {
-        for line in lines {
-            println!("{}", line);
-        }
-    } else {
-        for line in &lines[start..] {
-            println!("{}", line);
-        }
+    start = start.min(lines.len());
+    for line in &lines[start..] {
+        println!("{}", line);
     }
 
     Ok(())
@@ -87,16 +82,14 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), Strin
     buf_reader
         .read_to_end(&mut buffer)
         .expect("Failed to read file");
-    let start = if n < 0 {
+    let mut start = if n < 0 {
         (buffer.len() as isize + n).max(0) as usize
     } else {
         (n - 1).max(0) as usize
     };
-    if start > buffer.len() {
-        print!("{}", String::from_utf8_lossy(&buffer));
-    } else {
-        print!("{}", String::from_utf8_lossy(&buffer[start..]));
-    }
+
+    start = start.min(buffer.len());
+    print!("{}", String::from_utf8_lossy(&buffer[start..]));
 
     Ok(())
 }
@@ -131,7 +124,7 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         let file_path = args.file.as_ref().unwrap();
         // Initialization of inotify
         let mut inotify = Inotify::init()?;
-        inotify.add_watch(file_path, WatchMask::MODIFY)?;
+        inotify.add_watch(file_path, WatchMask::MODIFY | WatchMask::DELETE_SELF)?;
 
         // Opening a file and placing the cursor at the end of the file
         let mut file = File::open(file_path)?;
@@ -147,8 +140,24 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 
             // Handle each event
             for event in events {
+                if event.mask.contains(inotify::EventMask::DELETE_SELF) {
+                    eprintln!("File {} deleted, exiting...", file_path.display());
+                    std::process::exit(1);
+                }
+
                 if event.mask.contains(inotify::EventMask::MODIFY) {
-                    // If the file has been modified, read the new lines and output them
+                    // If the file has been modified, check if the file was truncated
+                    let metadata = fs::metadata(file_path)?;
+                    let current_size = metadata.len();
+
+                    if current_size < reader.stream_position()? {
+                        eprintln!("tail: {}: file truncated", file_path.display());
+                        let mut file = File::open(file_path)?;
+                        file.seek(SeekFrom::Start(0))?;
+                        reader = BufReader::new(File::open(file_path)?);
+                    }
+
+                    // Read the new lines and output them
                     let mut new_data = String::new();
                     let bytes_read = reader.read_to_string(&mut new_data)?;
                     if bytes_read > 0 {
