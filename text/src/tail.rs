@@ -62,7 +62,10 @@ fn print_last_n_lines<R: BufRead>(reader: R, n: isize) -> Result<(), String> {
         (n - 1).max(0) as usize
     };
 
-    start = start.min(lines.len());
+    if start > lines.len() {
+        start = 0;
+    }
+
     for line in &lines[start..] {
         println!("{}", line);
     }
@@ -88,7 +91,9 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), Strin
         (n - 1).max(0) as usize
     };
 
-    start = start.min(buffer.len());
+    if start > buffer.len() {
+        start = 0;
+    }
     print!("{}", String::from_utf8_lossy(&buffer[start..]));
 
     Ok(())
