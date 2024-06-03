@@ -147,11 +147,15 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // If follow option is specified, continue monitoring the file
-    if args.follow {
+    if args.follow && !(args.file == Some(PathBuf::from("-")) || args.file.is_none()) {
         let file_path = args.file.as_ref().unwrap();
         // Initialization of inotify
         let mut inotify = Inotify::init()?;
-        inotify.add_watch(file_path, WatchMask::MODIFY | WatchMask::DELETE_SELF)?;
+
+        inotify
+            .watches()
+            .add(file_path, WatchMask::MODIFY | WatchMask::DELETE_SELF)
+            .expect("Failed to add inotify watch");
 
         // Opening a file and placing the cursor at the end of the file
         let mut file = File::open(file_path)?;
