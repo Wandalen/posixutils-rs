@@ -99,15 +99,24 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), Strin
 
     buf_reader
         .read_to_end(&mut buffer)
-        .expect("Failed to read file");
-    let mut start = if n < 0 {
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let start = if n < 0 {
         (buffer.len() as isize + n).max(0) as usize
     } else {
         (n - 1).max(0) as usize
-    };
+    }
+    .min(buffer.len());
 
-    start = start.min(buffer.len());
-    print!("{}", String::from_utf8_lossy(&buffer[start..]));
+    let slice = &buffer[start..];
+    match std::str::from_utf8(slice) {
+        Ok(valid_str) => print!("{}", valid_str),
+        Err(_) => {
+            for &byte in slice {
+                print!("{}", byte as char);
+            }
+        }
+    }
 
     Ok(())
 }
