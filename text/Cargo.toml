@@ -15,7 +15,7 @@ diff = "0.1"
 regex.workspace = true
 chrono.workspace = true
 libc.workspace = true
-inotify = "0.10.2"
+notify-debouncer-full = "0.3.1"
 ctor = "0.2.8"
 
 [[bin]]
