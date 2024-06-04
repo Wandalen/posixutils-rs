@@ -6,7 +6,6 @@ use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use plib::PROJECT_NAME;
 use std::fs;
 use std::fs::File;
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -61,7 +60,7 @@ impl Args {
         }
 
         if self.bytes.is_none() && self.lines.is_none() {
-            self.lines = Some(10);
+            self.lines = Some(-10);
         }
 
         Ok(())
