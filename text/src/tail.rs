@@ -1,7 +1,7 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use notify_debouncer_full::new_debouncer;
-use notify_debouncer_full::notify::event::RemoveKind;
+use notify_debouncer_full::notify::event::{ModifyKind, RemoveKind};
 use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use plib::PROJECT_NAME;
 use std::fs;
@@ -196,20 +196,22 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 Ok(events) => {
                     let event = events.first().unwrap();
                     match event.kind {
-                        EventKind::Modify(_) => {
+                        EventKind::Modify(ModifyKind::Any)
+                        | EventKind::Modify(ModifyKind::Data(_))
+                        | EventKind::Modify(ModifyKind::Other) => {
                             let new_contents = read_file_to_bytes(file_path)?;
                             let new_hash = calculate_hash(&new_contents);
 
                             if new_hash != last_known_hash {
                                 // If the file content is changed not only by adding new data
-                                if new_contents.starts_with(&last_known_contents) {
-                                    let new_data = &new_contents[last_known_contents.len()..];
-
-                                    print_bytes(new_data);
+                                let bytes = if new_contents.starts_with(&last_known_contents) {
+                                    &new_contents[last_known_contents.len()..]
                                 } else {
                                     eprintln!("\ntail: {}: file truncated", file_path.display());
-                                    print_bytes(&new_contents);
-                                }
+                                    &new_contents
+                                };
+
+                                print_bytes(bytes);
 
                                 io::stdout().flush()?;
 
@@ -218,8 +220,7 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         EventKind::Remove(RemoveKind::File) => {
-                            eprintln!("File {} deleted, exiting...", file_path.display());
-                            std::process::exit(1);
+                            debouncer.watcher().unwatch(Path::new(file_path))?
                         }
                         _ => {}
                     }
