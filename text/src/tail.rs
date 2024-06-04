@@ -7,7 +7,7 @@ use plib::PROJECT_NAME;
 use std::fs;
 use std::fs::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::io::{self, BufRead, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -125,19 +125,6 @@ fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), Strin
     Ok(())
 }
 
-fn calculate_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
-
-fn read_file_to_bytes<P: AsRef<Path>>(file_path: P) -> io::Result<Vec<u8>> {
-    let mut file = File::open(file_path)?;
-    let mut contents = vec![];
-    file.read_to_end(&mut contents)?;
-    Ok(contents)
-}
-
 fn print_bytes(bytes: &[u8]) {
     match std::str::from_utf8(bytes) {
         Ok(valid_str) => print!("{}", valid_str),
@@ -178,8 +165,10 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     if args.follow && !(args.file == Some(PathBuf::from("-")) || args.file.is_none()) {
         let file_path = args.file.as_ref().unwrap();
 
-        let mut last_known_contents = read_file_to_bytes(file_path)?;
-        let mut last_known_hash = calculate_hash(&last_known_contents);
+        // Opening a file and placing the cursor at the end of the file
+        let mut file = File::open(file_path)?;
+        file.seek(SeekFrom::End(0))?;
+        let mut reader = BufReader::new(&file);
 
         let (tx, rx) = std::sync::mpsc::channel();
         // Automatically select the best implementation for your platform.
@@ -199,24 +188,21 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                         EventKind::Modify(ModifyKind::Any)
                         | EventKind::Modify(ModifyKind::Data(_))
                         | EventKind::Modify(ModifyKind::Other) => {
-                            let new_contents = read_file_to_bytes(file_path)?;
-                            let new_hash = calculate_hash(&new_contents);
+                            // If the file has been modified, check if the file was truncated
+                            let metadata = file.metadata()?;
+                            let current_size = metadata.len();
 
-                            if new_hash != last_known_hash {
-                                // If the file content is changed not only by adding new data
-                                let bytes = if new_contents.starts_with(&last_known_contents) {
-                                    &new_contents[last_known_contents.len()..]
-                                } else {
-                                    eprintln!("\ntail: {}: file truncated", file_path.display());
-                                    &new_contents
-                                };
+                            if current_size < reader.stream_position()? {
+                                eprintln!("\ntail: {}: file truncated", file_path.display());
+                                reader.seek(SeekFrom::Start(0))?;
+                            }
 
-                                print_bytes(bytes);
-
+                            // Read the new lines and output them
+                            let mut new_data = vec![];
+                            let bytes_read = reader.read_to_end(&mut new_data)?;
+                            if bytes_read > 0 {
+                                print_bytes(&new_data);
                                 io::stdout().flush()?;
-
-                                last_known_contents = new_contents;
-                                last_known_hash = new_hash;
                             }
                         }
                         EventKind::Remove(RemoveKind::File) => {

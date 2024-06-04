@@ -1842,7 +1842,6 @@ mod uniq_tests {
     }
 }
 
-
 #[cfg(test)]
 mod diff_tests {
     use crate::diff_test;
@@ -2219,7 +2218,6 @@ mod diff_tests {
         );
     }
 }
-
 
 #[cfg(test)]
 mod tail_tests {
