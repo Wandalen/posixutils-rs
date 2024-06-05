@@ -64,6 +64,61 @@ fn parse_count(count: &str) -> usize {
     }
 }
 
+fn print_data(buffer: &[u8], config: &Args) {
+    let named_chars = get_named_chars();
+    let mut offset = 0;
+
+    while offset < buffer.len() {
+        if let Some(base) = config.address_base {
+            match base {
+                'd' => print!("{:07} ", offset),
+                'o' => print!("{:07o} ", offset),
+                'x' => print!("{:07x} ", offset),
+                'n' => (),
+                _ => print!("{:07} ", offset),
+            }
+        } else {
+            print!("{:07o} ", offset);
+        }
+
+        for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+            if let Some(type_string) = &config.type_string {
+                if type_string.contains('a') {
+                    if let Some(name) = named_chars.get(byte) {
+                        print!("{} ", name);
+                    } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
+                        print!("{} ", *byte as char);
+                    } else {
+                        print!("{:03o} ", byte);
+                    }
+                } else if type_string.contains('c') {
+                    match *byte {
+                        b'\\' => print!("\\\\ "),
+                        b'\x07' => print!("\\a "),
+                        b'\x08' => print!("\\b "),
+                        b'\x0C' => print!("\\f "),
+                        b'\x0A' => print!("\\n "),
+                        b'\x0D' => print!("\\r "),
+                        b'\x09' => print!("\\t "),
+                        b'\x0B' => print!("\\v "),
+                        _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
+                            print!("{} ", *byte as char)
+                        }
+                        _ => print!("{:03o} ", byte),
+                    }
+                } else {
+                    print!("{:03o} ", byte);
+                }
+            } else {
+                print!("{:03o} ", byte);
+            }
+        }
+        println!();
+
+        offset += 16;
+    }
+}
+
 fn get_named_chars() -> HashMap<u8, &'static str> {
     let mut map = HashMap::new();
     map.insert(0x00, "nul");
