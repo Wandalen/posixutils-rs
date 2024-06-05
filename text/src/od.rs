@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
@@ -63,6 +64,46 @@ fn parse_count(count: &str) -> usize {
     }
 }
 
+fn get_named_chars() -> HashMap<u8, &'static str> {
+    let mut map = HashMap::new();
+    map.insert(0x00, "nul");
+    map.insert(0x01, "soh");
+    map.insert(0x02, "stx");
+    map.insert(0x03, "etx");
+    map.insert(0x04, "eot");
+    map.insert(0x05, "enq");
+    map.insert(0x06, "ack");
+    map.insert(0x07, "bel");
+    map.insert(0x08, "bs");
+    map.insert(0x09, "ht");
+    map.insert(0x0A, "lf or nl");
+    map.insert(0x0B, "vt");
+    map.insert(0x0C, "ff");
+    map.insert(0x0D, "cr");
+    map.insert(0x0E, "so");
+    map.insert(0x0F, "si");
+    map.insert(0x10, "dle");
+    map.insert(0x11, "dc1");
+    map.insert(0x12, "dc2");
+    map.insert(0x13, "dc3");
+    map.insert(0x14, "dc4");
+    map.insert(0x15, "nak");
+    map.insert(0x16, "syn");
+    map.insert(0x17, "etb");
+    map.insert(0x18, "can");
+    map.insert(0x19, "em");
+    map.insert(0x1A, "sub");
+    map.insert(0x1B, "esc");
+    map.insert(0x1C, "fs");
+    map.insert(0x1D, "gs");
+    map.insert(0x1E, "rs");
+    map.insert(0x1F, "us");
+    map.insert(0x7F, "del");
+    map.insert(0x20, "sp");
+
+    map
+}
+
 fn od(args: &Args) -> io::Result<()> {
     for file in &args.files {
         let path = PathBuf::from(file);
@@ -82,6 +123,8 @@ fn od(args: &Args) -> io::Result<()> {
         } else {
             buffer.truncate(bytes_read);
         }
+
+        print_data(&buffer, &args);
     }
 
     Ok(())
