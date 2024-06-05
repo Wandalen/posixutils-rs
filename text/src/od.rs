@@ -117,6 +117,10 @@ fn print_data(buffer: &[u8], config: &Args) {
 
         offset += 16;
     }
+
+    if config.verbose {
+        println!("Total bytes processed: {}", buffer.len());
+    }
 }
 
 fn get_named_chars() -> HashMap<u8, &'static str> {
@@ -168,6 +172,9 @@ fn od(args: &Args) -> io::Result<()> {
         if let Some(skip) = &args.skip {
             let skip = parse_offset(skip);
             reader.seek(SeekFrom::Start(skip))?;
+            if args.verbose {
+                println!("Skipping first {} bytes.", skip);
+            }
         }
 
         let mut buffer = vec![0; args.count.as_ref().map_or(512, |c| parse_count(c))];
@@ -175,8 +182,14 @@ fn od(args: &Args) -> io::Result<()> {
 
         if let Some(count) = args.count.as_ref() {
             buffer.truncate(parse_count(count));
+            if args.verbose {
+                println!("Reading {} bytes.", count);
+            }
         } else {
             buffer.truncate(bytes_read);
+            if args.verbose {
+                println!("Reading {} bytes.", bytes_read);
+            }
         }
 
         print_data(&buffer, &args);
