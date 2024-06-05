@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, BufReader, Seek, SeekFrom};
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -53,6 +53,16 @@ fn parse_offset(offset: &str) -> u64 {
     }
 }
 
+fn parse_count(count: &str) -> usize {
+    if count.starts_with("0x") || count.starts_with("0X") {
+        usize::from_str_radix(&count[2..], 16).unwrap()
+    } else if count.starts_with('0') && count.len() > 1 {
+        usize::from_str_radix(&count[1..], 8).unwrap()
+    } else {
+        count.parse().unwrap()
+    }
+}
+
 fn od(args: &Args) -> io::Result<()> {
     for file in &args.files {
         let path = PathBuf::from(file);
@@ -62,6 +72,15 @@ fn od(args: &Args) -> io::Result<()> {
         if let Some(skip) = &args.skip {
             let skip = parse_offset(skip);
             reader.seek(SeekFrom::Start(skip))?;
+        }
+
+        let mut buffer = vec![0; args.count.as_ref().map_or(512, |c| parse_count(c))];
+        let bytes_read = reader.read(&mut buffer)?;
+
+        if let Some(count) = args.count.as_ref() {
+            buffer.truncate(parse_count(count));
+        } else {
+            buffer.truncate(bytes_read);
         }
     }
 
