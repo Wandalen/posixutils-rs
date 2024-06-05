@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, BufReader, Read};
+use std::io::{self, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -43,47 +43,25 @@ impl Args {
     }
 }
 
+fn parse_offset(offset: &str) -> u64 {
+    if offset.starts_with("0x") || offset.starts_with("0X") {
+        u64::from_str_radix(&offset[2..], 16).unwrap()
+    } else if offset.starts_with('0') && offset.len() > 1 {
+        u64::from_str_radix(&offset[1..], 8).unwrap()
+    } else {
+        offset.parse().unwrap()
+    }
+}
+
 fn od(args: &Args) -> io::Result<()> {
     for file in &args.files {
         let path = PathBuf::from(file);
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
 
-        let mut buffer = [0; 16];
-        let mut offset = 0;
-
-        while let Ok(n) = reader.read(&mut buffer) {
-            if n == 0 {
-                break;
-            }
-
-            print!("{:08x}  ", offset);
-            for i in 0..16 {
-                if i < n {
-                    print!("{:02x} ", buffer[i]);
-                } else {
-                    print!("   ");
-                }
-
-                if i == 7 {
-                    print!(" ");
-                }
-            }
-
-            print!(" |");
-
-            for i in 0..n {
-                let c = buffer[i];
-                if c.is_ascii_graphic() || c == b' ' {
-                    print!("{}", c as char);
-                } else {
-                    print!(".");
-                }
-            }
-
-            println!("|");
-
-            offset += n;
+        if let Some(skip) = &args.skip {
+            let skip = parse_offset(skip);
+            reader.seek(SeekFrom::Start(skip))?;
         }
     }
 
