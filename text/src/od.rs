@@ -27,6 +27,26 @@ struct Args {
     #[arg(short = 't')]
     type_string: Option<String>,
 
+    /// Interpret bytes in octal
+    #[arg(short = 'b')]
+    octal_bytes: bool,
+
+    /// Interpret words (two-byte units) in unsigned decimal
+    #[arg(short = 'd')]
+    unsigned_decimal_words: bool,
+
+    /// Interpret words (two-byte units) in octal
+    #[arg(short = 'o')]
+    octal_words: bool,
+
+    /// Interpret words (two-byte units) in signed decimal
+    #[arg(short = 's')]
+    signed_decimal_words: bool,
+
+    /// Interpret words (two-byte units) in hexadecimal
+    #[arg(short = 'x')]
+    hex_words: bool,
+
     /// Verbose output
     #[arg(short = 'v')]
     verbose: bool,
@@ -137,6 +157,14 @@ fn print_data(buffer: &[u8], config: &Args) {
                         }
                         _ => print!("{:03o} ", byte),
                     }
+                } else if type_string.contains('u') {
+                    print!("{:05} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
+                } else if type_string.contains('d') {
+                    print!("{:05} ", i16::from_be_bytes([*byte, buffer[offset + 1]]));
+                } else if type_string.contains('x') {
+                    print!("{:04x} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
+                } else if type_string.contains('o') {
+                    print!("{:06o} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
                 } else {
                     print!("{:03o} ", byte); // Default to octal format if no type string is specified.
                 }
