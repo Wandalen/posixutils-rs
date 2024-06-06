@@ -37,6 +37,7 @@ struct Args {
 }
 
 impl Args {
+    /// Validate the arguments for any conflicts or invalid combinations.
     fn validate_args(&mut self) -> Result<(), String> {
         // Check if conflicting options are used together
 
@@ -44,6 +45,8 @@ impl Args {
     }
 }
 
+/// Parse an offset value from a string.
+/// The offset can be in hexadecimal (starting with "0x"), octal (starting with "0"), or decimal.
 fn parse_offset(offset: &str) -> u64 {
     if offset.starts_with("0x") || offset.starts_with("0X") {
         u64::from_str_radix(&offset[2..], 16).unwrap()
@@ -54,6 +57,8 @@ fn parse_offset(offset: &str) -> u64 {
     }
 }
 
+/// Parse a count value from a string.
+/// The count can be in hexadecimal (starting with "0x"), octal (starting with "0"), or decimal.
 fn parse_count(count: &str) -> usize {
     if count.starts_with("0x") || count.starts_with("0X") {
         usize::from_str_radix(&count[2..], 16).unwrap()
@@ -64,11 +69,13 @@ fn parse_count(count: &str) -> usize {
     }
 }
 
+/// Print the data from the buffer according to the configuration.
 fn print_data(buffer: &[u8], config: &Args) {
-    let named_chars = get_named_chars();
-    let mut offset = 0;
+    let named_chars = get_named_chars(); // Get the named characters for special byte values.
+    let mut offset = 0; // Initialize offset for printing addresses.
 
     while offset < buffer.len() {
+        // Print the address in the specified base format.
         if let Some(base) = config.address_base {
             match base {
                 'd' => print!("{:07} ", offset),
@@ -78,11 +85,13 @@ fn print_data(buffer: &[u8], config: &Args) {
                 _ => print!("{:07} ", offset),
             }
         } else {
-            print!("{:07o} ", offset);
+            print!("{:07o} ", offset); // Default to octal if no base is specified.
         }
 
+        // Print each byte in the buffer segment.
         for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
             if let Some(type_string) = &config.type_string {
+                // Handle ASCII format printing.
                 if type_string.contains('a') {
                     if let Some(name) = named_chars.get(byte) {
                         print!("{} ", name);
@@ -91,6 +100,7 @@ fn print_data(buffer: &[u8], config: &Args) {
                     } else {
                         print!("{:03o} ", byte);
                     }
+                // Handle character format printing.
                 } else if type_string.contains('c') {
                     match *byte {
                         b'\\' => print!("\\\\ "),
@@ -107,22 +117,24 @@ fn print_data(buffer: &[u8], config: &Args) {
                         _ => print!("{:03o} ", byte),
                     }
                 } else {
-                    print!("{:03o} ", byte);
+                    print!("{:03o} ", byte); // Default to octal format if no type string is specified.
                 }
             } else {
-                print!("{:03o} ", byte);
+                print!("{:03o} ", byte); // Default to octal format if no type string is specified.
             }
         }
-        println!();
+        println!(); // Print a newline after each line of bytes.
 
-        offset += 16;
+        offset += 16; // Move to the next line of bytes.
     }
 
+    // Print total bytes processed if verbose flag is  set.
     if config.verbose {
         println!("Total bytes processed: {}", buffer.len());
     }
 }
 
+/// Get a mapping of byte values to their named character representations.
 fn get_named_chars() -> HashMap<u8, &'static str> {
     let mut map = HashMap::new();
     map.insert(0x00, "nul");
@@ -163,12 +175,14 @@ fn get_named_chars() -> HashMap<u8, &'static str> {
     map
 }
 
+/// Main function to process the files based on the arguments.
 fn od(args: &Args) -> io::Result<()> {
     for file in &args.files {
         let path = PathBuf::from(file);
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
 
+        // Skip bytes if the -j option is specified.
         if let Some(skip) = &args.skip {
             let skip = parse_offset(skip);
             reader.seek(SeekFrom::Start(skip))?;
@@ -177,9 +191,11 @@ fn od(args: &Args) -> io::Result<()> {
             }
         }
 
+        // Read the specified number of bytes, or 512 bytes by  default.
         let mut buffer = vec![0; args.count.as_ref().map_or(512, |c| parse_count(c))];
         let bytes_read = reader.read(&mut buffer)?;
 
+        // Truncate the buffer to the specified count, if provided.
         if let Some(count) = args.count.as_ref() {
             buffer.truncate(parse_count(count));
             if args.verbose {
@@ -192,6 +208,7 @@ fn od(args: &Args) -> io::Result<()> {
             }
         }
 
+        // Print the data.
         print_data(&buffer, &args);
     }
 
