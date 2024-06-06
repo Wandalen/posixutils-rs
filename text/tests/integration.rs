@@ -128,6 +128,19 @@ fn cut_test(args: &[&str], test_data: &str, expected_output: &str) {
     });
 }
 
+fn od_test(args: &[&str], test_data: &str, expected_output: &str) {
+    let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+
+    run_test(TestPlan {
+        cmd: String::from("od"),
+        args: str_args,
+        stdin_data: String::from(test_data),
+        expected_out: String::from(expected_output),
+        expected_err: String::from(""),
+        expected_exit_code: 0,
+    });
+}
+
 fn unexpand_test(args: &[&str], test_data: &str, expected_output: &str) {
     let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
 
@@ -2519,5 +2532,34 @@ mod diff_tests {
             ],
             data.content(),
         );
+    }
+}
+
+mod od_tests {
+    use crate::od_test;
+
+    #[test]
+    fn test_od_1() {
+        od_test(&["-c", "-j1", "-An"], "a", "");
+    }
+
+    #[test]
+    fn test_od_2() {
+        od_test(&["-c", "-j2", "-An"], "a, b", "");
+    }
+
+    #[test]
+    fn test_od_3() {
+        od_test(&["-c", "-j3", "-An"], "a, b, c", "");
+    }
+
+    #[test]
+    fn test_od_4() {
+        od_test(&["-c", "-j3", "-An"], "a, b, c,d", "d\n");
+    }
+
+    #[test]
+    fn test_od_5() {
+        od_test(&["-c", "-j", "-An"], "e", "   e\n");
     }
 }

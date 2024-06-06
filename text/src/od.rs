@@ -69,7 +69,28 @@ fn parse_count(count: &str) -> usize {
     }
 }
 
-/// Print the data from the buffer according to the configuration.
+/// Prints the data from the buffer according to the provided configuration.
+///
+/// This function takes a buffer of bytes and a configuration structure,
+/// then prints the bytes in the specified format. The format and details
+/// of the output are controlled by the configuration options provided by
+/// the user.
+///
+/// # Arguments
+///
+/// * `buffer` - A slice of bytes containing the data to be printed.
+/// * `config` - A reference to the `Args` struct containing the user's
+///              configuration options.
+///
+/// # Behavior
+///
+/// The function iterates over the buffer and prints each byte in the
+/// specified format. It supports different address bases (decimal, octal,
+/// hexadecimal, or none) and different output formats (octal, ASCII, character).
+///
+/// If the verbose flag is set in the configuration, the function also prints
+/// the total number of bytes processed.
+///
 fn print_data(buffer: &[u8], config: &Args) {
     let named_chars = get_named_chars(); // Get the named characters for special byte values.
     let mut offset = 0; // Initialize offset for printing addresses.
@@ -176,6 +197,30 @@ fn get_named_chars() -> HashMap<u8, &'static str> {
 }
 
 /// Main function to process the files based on the arguments.
+///
+/// This function takes the arguments provided by the user, processes each specified file,
+/// and prints the content in the desired format. The processing includes optional byte-skipping,
+/// reading a specific number of bytes, and displaying the content according to various formatting options.
+///
+/// # Arguments
+///
+/// * `args` - A reference to the `Args` struct containing the user's configuration options.
+///
+/// # Behavior
+///
+/// For each file specified in the `args`:
+/// - The file is opened and read.
+/// - If the `-j` (skip) option is provided, the function skips the specified number of bytes at the beginning of the file.
+/// - The function reads the specified number of bytes (or 512 bytes by default if not specified).
+/// - The read data is then truncated to the specified count if provided.
+/// - The data is printed using the `print_data` function with the provided configuration options.
+///
+/// If the verbose flag is set in the configuration, the function prints additional information such as the number of bytes skipped and read.
+///
+/// # Errors
+///
+/// This function returns an `io::Result<()>`, which will contain an `Err` if any I/O operation (such as opening, reading, or seeking in a file) fails.
+///
 fn od(args: &Args) -> io::Result<()> {
     for file in &args.files {
         let path = PathBuf::from(file);
