@@ -52,15 +52,18 @@ struct Args {
     verbose: bool,
 
     /// Input files
-    #[arg(required = true)]
     files: Vec<PathBuf>,
+
+    /// Offset in the file where dumping is to commence
+    #[arg()]
+    offset: Option<String>,
 }
 
 impl Args {
     /// Validate the arguments for any conflicts or invalid combinations.
     fn validate_args(&mut self) -> Result<(), String> {
         // Check if conflicting options are used together
-
+        // Additional validation logic can be added here
         Ok(())
     }
 }
@@ -68,13 +71,35 @@ impl Args {
 /// Parse an offset value from a string.
 /// The offset can be in hexadecimal (starting with "0x"), octal (starting with "0"), or decimal.
 fn parse_offset(offset: &str) -> u64 {
-    if offset.starts_with("0x") || offset.starts_with("0X") {
-        u64::from_str_radix(&offset[2..], 16).unwrap()
-    } else if offset.starts_with('0') && offset.len() > 1 {
-        u64::from_str_radix(&offset[1..], 8).unwrap()
+    let mut base = 8;
+    let mut multiplier = 1;
+
+    // Handle special suffixes
+    let offset = if offset.ends_with('b') {
+        multiplier = 512;
+        &offset[..offset.len() - 1]
     } else {
-        offset.parse().unwrap()
-    }
+        offset
+    };
+
+    // Handle special suffixes
+    let offset = if offset.ends_with('.') {
+        base = 10;
+        &offset[..offset.len() - 1]
+    } else {
+        offset
+    };
+
+    // Parse the number based on the determined base
+    let parsed_offset = if offset.starts_with("0x") || offset.starts_with("0X") {
+        u64::from_str_radix(&offset[2..], 16).unwrap()
+    } else if offset.starts_with('0') && base == 8 {
+        u64::from_str_radix(&offset[1..], base).unwrap()
+    } else {
+        u64::from_str_radix(offset, base).unwrap()
+    };
+
+    parsed_offset * multiplier
 }
 
 /// Parse a count value from a string.
@@ -250,6 +275,23 @@ fn get_named_chars() -> HashMap<u8, &'static str> {
 /// This function returns an `io::Result<()>`, which will contain an `Err` if any I/O operation (such as opening, reading, or seeking in a file) fails.
 ///
 fn od(args: &Args) -> io::Result<()> {
+    let mut readers: Vec<Vec<u8>> = if (args.files.len() == 1
+        && args.files[0] == PathBuf::from("-"))
+        || args.files.is_empty()
+    {
+        let mut buffer = Vec::new();
+        io::stdin().lock().read_to_end(&mut buffer)?;
+        vec![buffer]
+    } else {
+        let mut bufs: Vec<Vec<u8>> = vec![];
+        for file in &args.files {
+            let mut buffer = Vec::new();
+            let mut file = std::fs::File::open(file)?;
+            file.read_to_end(&mut buffer)?;
+            bufs.push(buffer);
+        }
+        bufs
+    };
     for file in &args.files {
         let path = PathBuf::from(file);
         let file = File::open(path)?;
@@ -264,7 +306,16 @@ fn od(args: &Args) -> io::Result<()> {
             }
         }
 
-        // Read the specified number of bytes, or 512 bytes by  default.
+        // Apply the offset if specified.
+        if let Some(offset) = &args.offset {
+            let offset = parse_offset(offset);
+            reader.seek(SeekFrom::Start(offset))?;
+            if args.verbose {
+                println!("Applying offset of {} bytes.", offset);
+            }
+        }
+
+        // Read the specified number of bytes, or 512 bytes by default.
         let mut buffer = vec![0; args.count.as_ref().map_or(512, |c| parse_count(c))];
         let bytes_read = reader.read(&mut buffer)?;
 
