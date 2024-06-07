@@ -190,6 +190,7 @@ fn print_data(buffer: &[u8], config: &Args) {
     let mut offset = 0; // Initialize offset for printing addresses.
 
     while offset < buffer.len() {
+        let local_buf = &buffer[offset..(offset + 16).min(buffer.len())];
         // Print the address in the specified base format.
         if let Some(base) = config.address_base {
             match base {
@@ -204,79 +205,229 @@ fn print_data(buffer: &[u8], config: &Args) {
         }
 
         if config.bytes_char {
-            for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                match *byte {
-                    b'\0' => print!("NUL"),
-                    b'\x08' => print!("BS"),
-                    b'\x0C' => print!("FF"),
-                    b'\x0A' => print!("NL"),
-                    b'\x0D' => print!("CR"),
-                    b'\x09' => print!("HT"),
+            let mut previously = String::new();
+            for byte in local_buf {
+                let current = match *byte {
+                    b'\0' => "NUL ".to_string(),
+                    b'\x08' => "BS ".to_string(),
+                    b'\x0C' => "FF ".to_string(),
+                    b'\x0A' => "NL ".to_string(),
+                    b'\x0D' => "CR ".to_string(),
+                    b'\x09' => "HT ".to_string(),
                     _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
-                        print!("{}", *byte as char)
+                        format!("{} ", *byte as char)
                     }
-                    _ => print!("{:03o}", byte),
+                    _ => format!("{:03o} ", byte),
+                };
+
+                if previously == current && !config.verbose {
+                    print!("* ");
+                    continue;
                 }
+
+                print!("{} ", current);
+                previously = current;
             }
             println!(); // Print a newline after each line of bytes.
         } else if config.type_strings.is_empty() {
-            for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                print!("{:03o}", byte); // Default to octal format if no type string is specified.
+            for byte in local_buf {
+                print!("{:03o} ", byte); // Default to octal format if no type string is specified.
             }
             println!(); // Print a newline after each line of bytes.
         } else {
             for type_string in &config.type_strings {
-                // Handle ASCII format printing.
-                if type_string.starts_with('a') {
-                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                        if let Some(name) = named_chars.get(byte) {
-                            print!("{}", name);
-                        } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
-                            print!("{}", *byte as char);
-                        } else {
-                            print!("{:03o}", byte);
-                        }
-                    }
+                // Determine the number of bytes to read for this type.
+                let mut chars = type_string.chars();
+                let type_char = chars.next().unwrap();
+                let num_bytes: usize = chars.as_str().parse().unwrap_or(match type_char {
+                    'd' | 'u' | 'o' | 'x' => 2,
+                    'f' => 4,
+                    _ => 1,
+                });
 
-                // Handle character format printing.
-                } else if type_string.starts_with('c') {
-                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                        match *byte {
-                            b'\\' => print!("\\"),
-                            b'\x07' => print!("\\a"),
-                            b'\x08' => print!("\\b"),
-                            b'\x0C' => print!("\\f"),
-                            b'\x0A' => print!("\\n"),
-                            b'\x0D' => print!("\\r"),
-                            b'\x09' => print!("\\t"),
-                            b'\x0B' => print!("\\v"),
-                            _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
-                                print!("{}", *byte as char)
+                let chunks = local_buf.chunks(num_bytes);
+                match type_char {
+                    'a' => {
+                        for byte in local_buf {
+                            if let Some(name) = named_chars.get(byte) {
+                                print!("{} ", name);
+                            } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
+                                print!("{} ", *byte as char);
+                            } else {
+                                print!("{:03o} ", byte);
                             }
-                            _ => print!("{:03o}", byte),
                         }
                     }
-                } else if type_string.starts_with('u') {
-                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                        print!("{:05}", u16::from_be_bytes([*byte, buffer[offset + 1]]));
+                    'c' => {
+                        for byte in local_buf {
+                            match *byte {
+                                b'\\' => print!("\\ "),
+                                b'\x07' => print!("\\a "),
+                                b'\x08' => print!("\\b "),
+                                b'\x0C' => print!("\\f "),
+                                b'\x0A' => print!("\\n "),
+                                b'\x0D' => print!("\\r "),
+                                b'\x09' => print!("\\t "),
+                                b'\x0B' => print!("\\v "),
+                                _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
+                                    print!("{} ", *byte as char)
+                                }
+                                _ => print!("{:03o} ", byte),
+                            }
+                        }
                     }
-                } else if type_string.starts_with('d') {
-                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                        print!("{:05}", i16::from_be_bytes([*byte, buffer[offset + 1]]));
+                    'u' => {
+                        for chunk in chunks {
+                            let value = match chunk.len() {
+                                1 => u8::from_be_bytes([chunk[0]]) as u64,
+                                2 => u16::from_be_bytes([chunk[0], chunk[1]]) as u64,
+                                3 => u32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as u64,
+                                4 => u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                    as u64,
+                                5 => u64::from_be_bytes([
+                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                ]),
+                                6 => u64::from_be_bytes([
+                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                    chunk[5],
+                                ]),
+                                7 => u64::from_be_bytes([
+                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6],
+                                ]),
+                                8 => u64::from_be_bytes([
+                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6], chunk[7],
+                                ]),
+                                //9..=16 => {}
+                                _ => 0,
+                            };
+                            print!("{} ", value);
+                        }
                     }
-                } else if type_string.starts_with('x') {
-                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                        print!("{:04x}", u16::from_be_bytes([*byte, buffer[offset + 1]]));
+                    'd' => {
+                        for chunk in chunks {
+                            let value = match chunk.len() {
+                                1 => i8::from_be_bytes([chunk[0]]) as i64,
+                                2 => i16::from_be_bytes([chunk[0], chunk[1]]) as i64,
+                                3 => i32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as i64,
+                                4 => i32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                    as i64,
+                                5 => i64::from_be_bytes([
+                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                ]),
+                                6 => i64::from_be_bytes([
+                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                    chunk[5],
+                                ]),
+                                7 => i64::from_be_bytes([
+                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6],
+                                ]),
+                                8 => i64::from_be_bytes([
+                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6], chunk[7],
+                                ]),
+                                //9..=16 => {}
+                                _ => 0,
+                            };
+                            print!("{} ", value);
+                        }
                     }
-                } else if type_string.starts_with('o') {
-                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                        print!("{:06o}", u16::from_be_bytes([*byte, buffer[offset + 1]]));
+                    'x' => {
+                        for chunk in chunks {
+                            let value = match chunk.len() {
+                                1 => u8::from_be_bytes([chunk[0]]) as u64,
+                                2 => u16::from_be_bytes([chunk[0], chunk[1]]) as u64,
+                                3 => u32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as u64,
+                                4 => u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                    as u64,
+                                5 => u64::from_be_bytes([
+                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                ]),
+                                6 => u64::from_be_bytes([
+                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                    chunk[5],
+                                ]),
+                                7 => u64::from_be_bytes([
+                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6],
+                                ]),
+                                8 => u64::from_be_bytes([
+                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6], chunk[7],
+                                ]),
+                                //9..=16 => {}
+                                _ => 0,
+                            };
+                            print!("{:04x} ", value);
+                        }
                     }
-                } else {
-                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                        print!("{:03o}", byte); // Default to octal format if no type string is specified.
+                    'o' => {
+                        for chunk in chunks {
+                            let value = match chunk.len() {
+                                1 => u8::from_be_bytes([chunk[0]]) as u64,
+                                2 => u16::from_be_bytes([chunk[0], chunk[1]]) as u64,
+                                3 => u32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as u64,
+                                4 => u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                    as u64,
+                                5 => u64::from_be_bytes([
+                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                ]),
+                                6 => u64::from_be_bytes([
+                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                    chunk[5],
+                                ]),
+                                7 => u64::from_be_bytes([
+                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6],
+                                ]),
+                                8 => u64::from_be_bytes([
+                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6], chunk[7],
+                                ]),
+                                //9..=16 => {}
+                                _ => 0,
+                            };
+                            print!("{:06o} ", value);
+                        }
+                    }
+                    'f' => {
+                        for chunk in chunks {
+                            let value = match chunk.len() {
+                                1 => f32::from_be_bytes([0, 0, 0, chunk[0]]) as f64,
+                                2 => f32::from_be_bytes([0, 0, chunk[0], chunk[1]]) as f64,
+                                3 => f32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as f64,
+                                4 => f32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                    as f64,
+                                5 => f64::from_be_bytes([
+                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                ]),
+                                6 => f64::from_be_bytes([
+                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
+                                    chunk[5],
+                                ]),
+                                7 => f64::from_be_bytes([
+                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6],
+                                ]),
+                                8 => f64::from_be_bytes([
+                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
+                                    chunk[6], chunk[7],
+                                ]),
+                                //9..=16 => {}
+                                _ => 0.0,
+                            };
+                            print!("{} ", value);
+                        }
+                    }
+                    _ => {
+                        for &byte in local_buf {
+                            print!("{:03o} ", byte); // Default to octal format if no type string is specified.
+                        }
                     }
                 }
+
                 println!(); // Print a newline after each line of bytes.
             }
         }
