@@ -25,7 +25,7 @@ struct Args {
 
     /// Select the output format
     #[arg(short = 't')]
-    type_string: Option<String>,
+    type_strings: Vec<String>,
 
     /// Interpret bytes in octal
     #[arg(short = 'b')]
@@ -38,6 +38,10 @@ struct Args {
     /// Interpret words (two-byte units) in octal
     #[arg(short = 'o')]
     octal_words: bool,
+
+    /// Interpret bytes as characters
+    #[arg(short = 'c')]
+    bytes_char: bool,
 
     /// Interpret words (two-byte units) in signed decimal
     #[arg(short = 's')]
@@ -55,51 +59,97 @@ struct Args {
     files: Vec<PathBuf>,
 
     /// Offset in the file where dumping is to commence
-    #[arg()]
     offset: Option<String>,
 }
 
 impl Args {
     /// Validate the arguments for any conflicts or invalid combinations.
-    fn validate_args(&mut self) -> Result<(), String> {
+    fn validate_args(&self) -> Result<(), String> {
         // Check if conflicting options are used together
-        // Additional validation logic can be added here
+
+        // '-A', '-j', '-N', '-t', '-v' should not be used with offset syntax [+]offset[.][b]
+        if (self.address_base.is_some()
+            || self.skip.is_some()
+            || self.count.is_some()
+            || !self.type_strings.is_empty()
+            || self.verbose)
+            && self.offset.is_some()
+        {
+            return Err("Options '-A', '-j', '-N', '-t', '-v' cannot be used together with offset syntax '[+]offset[.][b]'".to_string());
+        }
+
+        // '-b', '-c', '-d', '-o', '-s', '-x' should not be used with '-t' options
+        if !self.type_strings.is_empty()
+            && (self.octal_bytes
+                || self.bytes_char
+                || self.unsigned_decimal_words
+                || self.octal_words
+                || self.signed_decimal_words
+                || self.hex_words)
+        {
+            return Err(
+                "Options '-b', '-c', '-d', '-o', '-s', '-x' cannot be used together with '-t'"
+                    .to_string(),
+            );
+        }
+
+        // Check if multiple mutually exclusive options are used together
+        let mut basic_types = 0;
+        if self.octal_bytes {
+            basic_types += 1;
+        }
+        if self.bytes_char {
+            basic_types += 1;
+        }
+        if self.unsigned_decimal_words {
+            basic_types += 1;
+        }
+        if self.octal_words {
+            basic_types += 1;
+        }
+        if self.signed_decimal_words {
+            basic_types += 1;
+        }
+        if self.hex_words {
+            basic_types += 1;
+        }
+
+        if basic_types > 1 {
+            return Err(
+                "Options '-b', '-c', '-d', '-o', '-s', '-x' cannot be used together".to_string(),
+            );
+        }
+
         Ok(())
     }
 }
 
 /// Parse an offset value from a string.
 /// The offset can be in hexadecimal (starting with "0x"), octal (starting with "0"), or decimal.
-fn parse_offset(offset: &str) -> u64 {
-    let mut base = 8;
-    let mut multiplier = 1;
-
-    // Handle special suffixes
-    let offset = if offset.ends_with('b') {
-        multiplier = 512;
-        &offset[..offset.len() - 1]
+/// It can also include a suffix to indicate multipliers: 'b' for 512, 'k' for 1024, and 'm' for 1048576.
+fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
+    let (number, multiplier) = if offset.starts_with("0x") || offset.starts_with("0X") {
+        // For hexadecimal, 'b' should be part of the number if it is the last character
+        (offset, 1)
+    } else if offset.ends_with('b') {
+        (&offset[..offset.len() - 1], 512)
+    } else if offset.ends_with('k') {
+        (&offset[..offset.len() - 1], 1024)
+    } else if offset.ends_with('m') {
+        (&offset[..offset.len() - 1], 1048576)
     } else {
-        offset
+        (offset, 1)
     };
 
-    // Handle special suffixes
-    let offset = if offset.ends_with('.') {
-        base = 10;
-        &offset[..offset.len() - 1]
+    let base_value = if number.starts_with("0x") || number.starts_with("0X") {
+        u64::from_str_radix(&number[2..], 16)?
+    } else if number.starts_with('0') && number.len() > 1 {
+        u64::from_str_radix(&number[1..], 8)?
     } else {
-        offset
+        number.parse()?
     };
 
-    // Parse the number based on the determined base
-    let parsed_offset = if offset.starts_with("0x") || offset.starts_with("0X") {
-        u64::from_str_radix(&offset[2..], 16).unwrap()
-    } else if offset.starts_with('0') && base == 8 {
-        u64::from_str_radix(&offset[1..], base).unwrap()
-    } else {
-        u64::from_str_radix(offset, base).unwrap()
-    };
-
-    parsed_offset * multiplier
+    Ok(base_value * multiplier)
 }
 
 /// Parse a count value from a string.
@@ -274,7 +324,7 @@ fn get_named_chars() -> HashMap<u8, &'static str> {
 ///
 /// This function returns an `io::Result<()>`, which will contain an `Err` if any I/O operation (such as opening, reading, or seeking in a file) fails.
 ///
-fn od(args: &Args) -> io::Result<()> {
+fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut readers: Vec<Vec<u8>> = if (args.files.len() == 1
         && args.files[0] == PathBuf::from("-"))
         || args.files.is_empty()
@@ -299,19 +349,10 @@ fn od(args: &Args) -> io::Result<()> {
 
         // Skip bytes if the -j option is specified.
         if let Some(skip) = &args.skip {
-            let skip = parse_offset(skip);
+            let skip = parse_offset(skip)?;
             reader.seek(SeekFrom::Start(skip))?;
             if args.verbose {
                 println!("Skipping first {} bytes.", skip);
-            }
-        }
-
-        // Apply the offset if specified.
-        if let Some(offset) = &args.offset {
-            let offset = parse_offset(offset);
-            reader.seek(SeekFrom::Start(offset))?;
-            if args.verbose {
-                println!("Applying offset of {} bytes.", offset);
             }
         }
 
