@@ -57,9 +57,8 @@ struct Args {
 
     /// Input files
     files: Vec<PathBuf>,
-
-    /// Offset in the file where dumping is to commence
-    offset: Option<String>,
+    /* /// Offset in the file where dumping is to commence
+    offset: Option<String>, */
 }
 
 impl Args {
@@ -67,7 +66,7 @@ impl Args {
     fn validate_args(&self) -> Result<(), String> {
         // Check if conflicting options are used together
 
-        // '-A', '-j', '-N', '-t', '-v' should not be used with offset syntax [+]offset[.][b]
+        /* // '-A', '-j', '-N', '-t', '-v' should not be used with offset syntax [+]offset[.][b]
         if (self.address_base.is_some()
             || self.skip.is_some()
             || self.count.is_some()
@@ -76,7 +75,7 @@ impl Args {
             && self.offset.is_some()
         {
             return Err("Options '-A', '-j', '-N', '-t', '-v' cannot be used together with offset syntax '[+]offset[.][b]'".to_string());
-        }
+        } */
 
         // '-b', '-c', '-d', '-o', '-s', '-x' should not be used with '-t' options
         if !self.type_strings.is_empty()
@@ -201,14 +200,22 @@ fn print_data(buffer: &[u8], config: &Args) {
                 _ => print!("{:07} ", offset),
             }
         } else {
-            print!("{:07o} ", offset); // Default to octal if no base is specified.
+            print!("{:07} ", offset); // Default to octal if no base is specified.
         }
 
-        // Print each byte in the buffer segment.
-        for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-            for type_string in &config.type_strings {
-                // Handle ASCII format printing.
-                if type_string.contains('a') {
+        if config.type_strings.is_empty() {
+            for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                print!("{:03o} ", byte); // Default to octal format if no type string is specified.
+            }
+            println!(); // Print a newline after each line of bytes.
+
+            offset += 16; // Move to the next line of bytes.
+            continue;
+        }
+        for type_string in &config.type_strings {
+            // Handle ASCII format printing.
+            if type_string.starts_with('a') {
+                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
                     if let Some(name) = named_chars.get(byte) {
                         print!("{} ", name);
                     } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
@@ -216,10 +223,13 @@ fn print_data(buffer: &[u8], config: &Args) {
                     } else {
                         print!("{:03o} ", byte);
                     }
-                // Handle character format printing.
-                } else if type_string.contains('c') {
+                }
+
+            // Handle character format printing.
+            } else if type_string.starts_with('c') {
+                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
                     match *byte {
-                        b'\\' => print!("\\\\ "),
+                        b'\\' => print!("\\"),
                         b'\x07' => print!("\\a "),
                         b'\x08' => print!("\\b "),
                         b'\x0C' => print!("\\f "),
@@ -232,23 +242,30 @@ fn print_data(buffer: &[u8], config: &Args) {
                         }
                         _ => print!("{:03o} ", byte),
                     }
-                } else if type_string.contains('u') {
+                }
+            } else if type_string.starts_with('u') {
+                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
                     print!("{:05} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
-                } else if type_string.contains('d') {
+                }
+            } else if type_string.starts_with('d') {
+                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
                     print!("{:05} ", i16::from_be_bytes([*byte, buffer[offset + 1]]));
-                } else if type_string.contains('x') {
+                }
+            } else if type_string.starts_with('x') {
+                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
                     print!("{:04x} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
-                } else if type_string.contains('o') {
+                }
+            } else if type_string.starts_with('o') {
+                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
                     print!("{:06o} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
-                } else {
+                }
+            } else {
+                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
                     print!("{:03o} ", byte); // Default to octal format if no type string is specified.
                 }
-
-                continue;
             }
-            print!("{:03o} ", byte); // Default to octal format if no type string is specified.
+            println!(); // Print a newline after each line of bytes.
         }
-        println!(); // Print a newline after each line of bytes.
 
         offset += 16; // Move to the next line of bytes.
     }
@@ -381,4 +398,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
+}
+
+#[test]
+fn test_split_c_file_5() {
+    // Test valid operands
+    let args = Args {
+        address_base: None,
+        skip: None,
+        count: None,
+        type_strings: vec!["a".to_string()],
+        octal_bytes: false,
+        unsigned_decimal_words: false,
+        octal_words: false,
+        bytes_char: false,
+        signed_decimal_words: false,
+        hex_words: false,
+        verbose: false,
+        files: vec![PathBuf::from("tests/assets/od_test.txt")],
+    };
+
+    args.validate_args().unwrap();
+    od(&args).unwrap();
+
+    let c = "\x07";
+    dbg!(c);
+    println!("{c}");
 }

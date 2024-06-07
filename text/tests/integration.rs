@@ -2539,6 +2539,11 @@ mod od_tests {
     use crate::od_test;
 
     #[test]
+    fn test_od_0() {
+        od_test(&["-tc", "-An"], "\x07", "   e\n");
+    }
+
+    #[test]
     fn test_od_1() {
         od_test(&["-c", "-j1", "-An"], "a", "");
     }
