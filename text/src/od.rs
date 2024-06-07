@@ -203,68 +203,82 @@ fn print_data(buffer: &[u8], config: &Args) {
             print!("{:07} ", offset); // Default to octal if no base is specified.
         }
 
-        if config.type_strings.is_empty() {
+        if config.bytes_char {
             for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                print!("{:03o} ", byte); // Default to octal format if no type string is specified.
+                match *byte {
+                    b'\0' => print!("NUL"),
+                    b'\x08' => print!("BS"),
+                    b'\x0C' => print!("FF"),
+                    b'\x0A' => print!("NL"),
+                    b'\x0D' => print!("CR"),
+                    b'\x09' => print!("HT"),
+                    _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
+                        print!("{}", *byte as char)
+                    }
+                    _ => print!("{:03o}", byte),
+                }
             }
             println!(); // Print a newline after each line of bytes.
-
-            offset += 16; // Move to the next line of bytes.
-            continue;
-        }
-        for type_string in &config.type_strings {
-            // Handle ASCII format printing.
-            if type_string.starts_with('a') {
-                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                    if let Some(name) = named_chars.get(byte) {
-                        print!("{} ", name);
-                    } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
-                        print!("{} ", *byte as char);
-                    } else {
-                        print!("{:03o} ", byte);
-                    }
-                }
-
-            // Handle character format printing.
-            } else if type_string.starts_with('c') {
-                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                    match *byte {
-                        b'\\' => print!("\\"),
-                        b'\x07' => print!("\\a "),
-                        b'\x08' => print!("\\b "),
-                        b'\x0C' => print!("\\f "),
-                        b'\x0A' => print!("\\n "),
-                        b'\x0D' => print!("\\r "),
-                        b'\x09' => print!("\\t "),
-                        b'\x0B' => print!("\\v "),
-                        _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
-                            print!("{} ", *byte as char)
+        } else if config.type_strings.is_empty() {
+            for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                print!("{:03o}", byte); // Default to octal format if no type string is specified.
+            }
+            println!(); // Print a newline after each line of bytes.
+        } else {
+            for type_string in &config.type_strings {
+                // Handle ASCII format printing.
+                if type_string.starts_with('a') {
+                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                        if let Some(name) = named_chars.get(byte) {
+                            print!("{}", name);
+                        } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
+                            print!("{}", *byte as char);
+                        } else {
+                            print!("{:03o}", byte);
                         }
-                        _ => print!("{:03o} ", byte),
+                    }
+
+                // Handle character format printing.
+                } else if type_string.starts_with('c') {
+                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                        match *byte {
+                            b'\\' => print!("\\"),
+                            b'\x07' => print!("\\a"),
+                            b'\x08' => print!("\\b"),
+                            b'\x0C' => print!("\\f"),
+                            b'\x0A' => print!("\\n"),
+                            b'\x0D' => print!("\\r"),
+                            b'\x09' => print!("\\t"),
+                            b'\x0B' => print!("\\v"),
+                            _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
+                                print!("{}", *byte as char)
+                            }
+                            _ => print!("{:03o}", byte),
+                        }
+                    }
+                } else if type_string.starts_with('u') {
+                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                        print!("{:05}", u16::from_be_bytes([*byte, buffer[offset + 1]]));
+                    }
+                } else if type_string.starts_with('d') {
+                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                        print!("{:05}", i16::from_be_bytes([*byte, buffer[offset + 1]]));
+                    }
+                } else if type_string.starts_with('x') {
+                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                        print!("{:04x}", u16::from_be_bytes([*byte, buffer[offset + 1]]));
+                    }
+                } else if type_string.starts_with('o') {
+                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                        print!("{:06o}", u16::from_be_bytes([*byte, buffer[offset + 1]]));
+                    }
+                } else {
+                    for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
+                        print!("{:03o}", byte); // Default to octal format if no type string is specified.
                     }
                 }
-            } else if type_string.starts_with('u') {
-                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                    print!("{:05} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
-                }
-            } else if type_string.starts_with('d') {
-                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                    print!("{:05} ", i16::from_be_bytes([*byte, buffer[offset + 1]]));
-                }
-            } else if type_string.starts_with('x') {
-                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                    print!("{:04x} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
-                }
-            } else if type_string.starts_with('o') {
-                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                    print!("{:06o} ", u16::from_be_bytes([*byte, buffer[offset + 1]]));
-                }
-            } else {
-                for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-                    print!("{:03o} ", byte); // Default to octal format if no type string is specified.
-                }
+                println!(); // Print a newline after each line of bytes.
             }
-            println!(); // Print a newline after each line of bytes.
         }
 
         offset += 16; // Move to the next line of bytes.
@@ -373,11 +387,10 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     // Truncate the buffer to the specified count, if provided.
     if let Some(count) = args.count.as_ref() {
         buffer.truncate(parse_count(count));
-        if args.verbose {
-            println!("Reading {} bytes.", count);
-        }
     }
-    println!("Reading {} bytes.", buffer.len());
+    if args.verbose {
+        println!("Reading {} bytes.", buffer.len());
+    }
 
     // Print the data.
     print_data(&buffer, args);
@@ -420,8 +433,4 @@ fn test_split_c_file_5() {
 
     args.validate_args().unwrap();
     od(&args).unwrap();
-
-    let c = "\x07";
-    dbg!(c);
-    println!("{c}");
 }

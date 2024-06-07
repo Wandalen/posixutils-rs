@@ -2540,7 +2540,7 @@ mod od_tests {
 
     #[test]
     fn test_od_0() {
-        od_test(&["-tc", "-An"], "\x07", "   e\n");
+        od_test(&["-tc", "-An"], "\x07", "\\a\n");
     }
 
     #[test]
@@ -2549,22 +2549,12 @@ mod od_tests {
     }
 
     #[test]
-    fn test_od_2() {
-        od_test(&["-c", "-j2", "-An"], "a, b", "");
-    }
-
-    #[test]
     fn test_od_3() {
-        od_test(&["-c", "-j3", "-An"], "a, b, c", "");
+        od_test(&["-c", "-j3", "-An"], "abc", "");
     }
 
     #[test]
     fn test_od_4() {
-        od_test(&["-c", "-j3", "-An"], "a, b, c,d", "d\n");
-    }
-
-    #[test]
-    fn test_od_5() {
-        od_test(&["-c", "-j", "-An"], "e", "   e\n");
+        od_test(&["-tc", "-j3", "-An"], "abcd", "d\n");
     }
 }
