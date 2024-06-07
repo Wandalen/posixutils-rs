@@ -1,5 +1,6 @@
+use crate::io::ErrorKind;
 use std::collections::HashMap;
-use std::io::{self, Read};
+use std::io::{self, Error, Read};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -147,9 +148,20 @@ impl Args {
     }
 }
 
-/// Parse an offset value from a string.
-/// The offset can be in hexadecimal (starting with "0x"), octal (starting with "0"), or decimal.
-/// It can also include a suffix to indicate multipliers: 'b' for 512, 'k' for 1024, and 'm' for 1048576.
+/// Parses an offset string and converts it into a `u64` value.
+///
+/// # Parameters
+///
+/// - `offset: &str`: A string slice representing the offset. This string can be in hexadecimal
+///   format prefixed with "0x" or "0X", octal format prefixed with "0", or decimal format. The
+///   string may also end with 'b', 'k', or 'm' to indicate byte multipliers.
+///
+/// # Returns
+///
+/// - `Result<u64, Box<dyn std::error::Error>>`: This function returns a `Result` which is:
+///   - `Ok(u64)`: On success, the parsed and multiplied offset as a `u64`.
+///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
+///
 fn parse_skip(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
     let (number, multiplier) = if offset.starts_with("0x") || offset.starts_with("0X") {
         // For hexadecimal, 'b' should be part of the number if it is the last character
@@ -175,8 +187,19 @@ fn parse_skip(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
     Ok(base_value * multiplier)
 }
 
-/// Parse a count value from a string.
-/// The count can be in hexadecimal (starting with "0x"), octal (starting with "0"), or decimal.
+/// Parses a count string and converts it into a `usize` value.
+///
+/// # Parameters
+///
+/// - `count: &str`: A string slice representing the count. This string can be in hexadecimal
+///   format prefixed with "0x" or "0X", octal format prefixed with "0", or decimal format.
+///
+/// # Returns
+///
+/// - `Result<usize, Box<dyn std::error::Error>>`: This function returns a `Result` which is:
+///   - `Ok(usize)`: On success, the parsed count as a `usize`.
+///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
+///
 fn parse_count(count: &str) -> Result<usize, Box<dyn std::error::Error>> {
     if count.starts_with("0x") || count.starts_with("0X") {
         Ok(usize::from_str_radix(&count[2..], 16)?)
@@ -187,6 +210,25 @@ fn parse_count(count: &str) -> Result<usize, Box<dyn std::error::Error>> {
     }
 }
 
+/// Parses an offset string and converts it into a `u64` value.
+///
+/// This function handles special suffixes and bases:
+/// - A suffix of 'b' indicates the value is in 512-byte blocks.
+/// - A suffix of '.' indicates the value is in base 10 (decimal).
+/// - Otherwise, the value is assumed to be in base 8 (octal).
+///
+/// # Parameters
+///
+/// - `offset: &str`: A string slice representing the offset. This string can optionally end with
+///   'b' for 512-byte blocks or '.' for decimal format. By default, the string is considered
+///   to be in octal format.
+///
+/// # Returns
+///
+/// - `Result<u64, Box<dyn std::error::Error>>`: This function returns a `Result` which is:
+///   - `Ok(u64)`: On success, the parsed and multiplied offset as a `u64`.
+///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
+///
 fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
     let mut base = 8;
     let mut multiplier = 1;
@@ -207,29 +249,25 @@ fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
     Ok(parsed_offset * multiplier)
 }
 
-/// Prints the data from the buffer according to the provided configuration.
+/// Prints data from a buffer according to the given configuration.
 ///
-/// This function takes a buffer of bytes and a configuration structure,
-/// then prints the bytes in the specified format. The format and details
-/// of the output are controlled by the configuration options provided by
-/// the user.
+/// This function processes a byte buffer and prints its contents in various formats as specified
+/// by the `config` parameter. It handles different address bases, byte representation formats,
+/// and various data types such as characters, integers, and floating-point numbers.
 ///
-/// # Arguments
+/// # Parameters
 ///
-/// * `buffer` - A slice of bytes containing the data to be printed.
-/// * `config` - A reference to the `Args` struct containing the user's
-///              configuration options.
+/// - `buffer: &[u8]`: A slice of bytes representing the data to be printed.
+/// - `config: &Args`: A reference to a configuration object that determines the printing format.
+///   The `Args` struct should include fields like `address_base`, `bytes_char`, `type_strings`, and `verbose`.
 ///
-/// # Behavior
+/// # Returns
 ///
-/// The function iterates over the buffer and prints each byte in the
-/// specified format. It supports different address bases (decimal, octal,
-/// hexadecimal, or none) and different output formats (octal, ASCII, character).
+/// - `Result<(), Box<dyn std::error::Error>>`: This function returns a `Result` which is:
+///   - `Ok(())`: On success.
+///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
 ///
-/// If the verbose flag is set in the configuration, the function also prints
-/// the total number of bytes processed.
-///
-fn print_data(buffer: &[u8], config: &Args) {
+fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let named_chars = get_named_chars(); // Get the named characters for special byte values.
     let mut offset = 0; // Initialize offset for printing addresses.
 
@@ -349,27 +387,20 @@ fn print_data(buffer: &[u8], config: &Args) {
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
-                                2 => u16::from_be_bytes([chunk[0], chunk[1]]) as u64,
-                                3 => u32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as u64,
-                                4 => u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+                                4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
                                     as u64,
-                                5 => u64::from_be_bytes([
-                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                ]),
-                                6 => u64::from_be_bytes([
-                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                    chunk[5],
-                                ]),
-                                7 => u64::from_be_bytes([
-                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6],
-                                ]),
                                 8 => u64::from_be_bytes([
-                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6], chunk[7],
+                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
+                                    chunk[1], chunk[0],
                                 ]),
-                                //9..=16 => {}
-                                _ => 0,
+
+                                _ => {
+                                    return Err(Box::new(Error::new(
+                                        ErrorKind::Other,
+                                        format!("invalid type string `u{}`", num_bytes),
+                                    )))
+                                }
                             };
                             let current = format!("{} ", value);
                             if previously == current && !config.verbose {
@@ -386,27 +417,22 @@ fn print_data(buffer: &[u8], config: &Args) {
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => i8::from_be_bytes([chunk[0]]) as i64,
-                                2 => i16::from_be_bytes([chunk[0], chunk[1]]) as i64,
-                                3 => i32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as i64,
-                                4 => i32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                2 => i16::from_be_bytes([chunk[1], chunk[0]]) as i64,
+
+                                4 => i32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
                                     as i64,
-                                5 => i64::from_be_bytes([
-                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                ]),
-                                6 => i64::from_be_bytes([
-                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                    chunk[5],
-                                ]),
-                                7 => i64::from_be_bytes([
-                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6],
-                                ]),
+
                                 8 => i64::from_be_bytes([
-                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6], chunk[7],
+                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
+                                    chunk[1], chunk[0],
                                 ]),
-                                //9..=16 => {}
-                                _ => 0,
+
+                                _ => {
+                                    return Err(Box::new(Error::new(
+                                        ErrorKind::Other,
+                                        format!("invalid type string `d{}`", num_bytes),
+                                    )))
+                                }
                             };
                             let current = format!("{} ", value);
                             if previously == current && !config.verbose {
@@ -423,27 +449,22 @@ fn print_data(buffer: &[u8], config: &Args) {
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
-                                2 => u16::from_be_bytes([chunk[0], chunk[1]]) as u64,
-                                3 => u32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as u64,
-                                4 => u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+
+                                4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
                                     as u64,
-                                5 => u64::from_be_bytes([
-                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                ]),
-                                6 => u64::from_be_bytes([
-                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                    chunk[5],
-                                ]),
-                                7 => u64::from_be_bytes([
-                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6],
-                                ]),
+
                                 8 => u64::from_be_bytes([
-                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6], chunk[7],
+                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
+                                    chunk[1], chunk[0],
                                 ]),
-                                //9..=16 => {}
-                                _ => 0,
+
+                                _ => {
+                                    return Err(Box::new(Error::new(
+                                        ErrorKind::Other,
+                                        format!("invalid type string `x{}`", num_bytes),
+                                    )))
+                                }
                             };
                             let current = format!("{:04x} ", value);
                             if previously == current && !config.verbose {
@@ -460,29 +481,24 @@ fn print_data(buffer: &[u8], config: &Args) {
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
-                                2 => u16::from_be_bytes([chunk[0], chunk[1]]) as u64,
-                                3 => u32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as u64,
-                                4 => u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+
+                                4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
                                     as u64,
-                                5 => u64::from_be_bytes([
-                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                ]),
-                                6 => u64::from_be_bytes([
-                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                    chunk[5],
-                                ]),
-                                7 => u64::from_be_bytes([
-                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6],
-                                ]),
+
                                 8 => u64::from_be_bytes([
-                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6], chunk[7],
+                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
+                                    chunk[1], chunk[0],
                                 ]),
-                                //9..=16 => {}
-                                _ => 0,
+
+                                _ => {
+                                    return Err(Box::new(Error::new(
+                                        ErrorKind::Other,
+                                        format!("invalid type string `o{}`", num_bytes),
+                                    )))
+                                }
                             };
-                            let current = format!("{:06o} ", value);
+                            let current = format!("{:03o} ", value);
                             if previously == current && !config.verbose {
                                 print!("* ");
                                 continue;
@@ -496,28 +512,20 @@ fn print_data(buffer: &[u8], config: &Args) {
                         let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
-                                1 => f32::from_be_bytes([0, 0, 0, chunk[0]]) as f64,
-                                2 => f32::from_be_bytes([0, 0, chunk[0], chunk[1]]) as f64,
-                                3 => f32::from_be_bytes([0, chunk[0], chunk[1], chunk[2]]) as f64,
-                                4 => f32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]])
+                                4 => f32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
                                     as f64,
-                                5 => f64::from_be_bytes([
-                                    0, 0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                ]),
-                                6 => f64::from_be_bytes([
-                                    0, 0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4],
-                                    chunk[5],
-                                ]),
-                                7 => f64::from_be_bytes([
-                                    0, chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6],
-                                ]),
+
                                 8 => f64::from_be_bytes([
-                                    chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5],
-                                    chunk[6], chunk[7],
+                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
+                                    chunk[1], chunk[0],
                                 ]),
-                                //9..=16 => {}
-                                _ => 0.0,
+
+                                _ => {
+                                    return Err(Box::new(Error::new(
+                                        ErrorKind::Other,
+                                        format!("invalid type string `f{}`", num_bytes),
+                                    )))
+                                }
                             };
                             let current = format!("{} ", value);
                             if previously == current && !config.verbose {
@@ -551,7 +559,8 @@ fn print_data(buffer: &[u8], config: &Args) {
         offset += 16; // Move to the next line of bytes.
     }
 
-    offset -= buffer.len();
+    offset -= 16;
+    offset = buffer.len() - offset;
     if let Some(base) = config.address_base {
         match base {
             'd' => print!("{:07} ", offset),
@@ -563,6 +572,7 @@ fn print_data(buffer: &[u8], config: &Args) {
     } else {
         print!("{:07} ", offset);
     }
+    Ok(())
 }
 
 /// Get a mapping of byte values to their named character representations.
@@ -621,15 +631,12 @@ fn get_named_chars() -> HashMap<u8, &'static str> {
 /// For each file specified in the `args`:
 /// - The file is opened and read.
 /// - If the `-j` (skip) option is provided, the function skips the specified number of bytes at the beginning of the file.
-/// - The function reads the specified number of bytes (or 512 bytes by default if not specified).
+/// - If the `offset` option is provided, the function skips the specified number of bytes according to the parsed offset.
+/// - The function reads the specified number of bytes (or the entire file if not specified).
 /// - The read data is then truncated to the specified count if provided.
 /// - The data is printed using the `print_data` function with the provided configuration options.
 ///
 /// If the verbose flag is set in the configuration, the function prints additional information such as the number of bytes skipped and read.
-///
-/// # Errors
-///
-/// This function returns an `io::Result<()>`, which will contain an `Err` if any I/O operation (such as opening, reading, or seeking in a file) fails.
 ///
 fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer: Vec<u8> = if (args.files.len() == 1 && args.files[0] == PathBuf::from("-"))
@@ -667,7 +674,7 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Print the data.
-    print_data(&buffer, args);
+    print_data(&buffer, args)?;
 
     Ok(())
 }
@@ -694,7 +701,7 @@ fn test_split_c_file_5() {
         address_base: None,
         skip: None,
         count: None,
-        type_strings: vec!["a".to_string()],
+        type_strings: vec![],
         octal_bytes: false,
         unsigned_decimal_words: false,
         octal_words: false,
