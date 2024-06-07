@@ -206,7 +206,7 @@ fn print_data(buffer: &[u8], config: &Args) {
 
         // Print each byte in the buffer segment.
         for byte in &buffer[offset..(offset + 16).min(buffer.len())] {
-            if let Some(type_string) = &config.type_string {
+            for type_string in &config.type_strings {
                 // Handle ASCII format printing.
                 if type_string.contains('a') {
                     if let Some(name) = named_chars.get(byte) {
@@ -243,9 +243,10 @@ fn print_data(buffer: &[u8], config: &Args) {
                 } else {
                     print!("{:03o} ", byte); // Default to octal format if no type string is specified.
                 }
-            } else {
-                print!("{:03o} ", byte); // Default to octal format if no type string is specified.
+
+                continue;
             }
+            print!("{:03o} ", byte); // Default to octal format if no type string is specified.
         }
         println!(); // Print a newline after each line of bytes.
 
@@ -271,7 +272,7 @@ fn get_named_chars() -> HashMap<u8, &'static str> {
     map.insert(0x07, "bel");
     map.insert(0x08, "bs");
     map.insert(0x09, "ht");
-    map.insert(0x0A, "lf or nl");
+    map.insert(0x0A, "nl");
     map.insert(0x0B, "vt");
     map.insert(0x0C, "ff");
     map.insert(0x0D, "cr");
@@ -325,57 +326,44 @@ fn get_named_chars() -> HashMap<u8, &'static str> {
 /// This function returns an `io::Result<()>`, which will contain an `Err` if any I/O operation (such as opening, reading, or seeking in a file) fails.
 ///
 fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
-    let mut readers: Vec<Vec<u8>> = if (args.files.len() == 1
-        && args.files[0] == PathBuf::from("-"))
+    let mut buffer: Vec<u8> = if (args.files.len() == 1 && args.files[0] == PathBuf::from("-"))
         || args.files.is_empty()
     {
         let mut buffer = Vec::new();
         io::stdin().lock().read_to_end(&mut buffer)?;
-        vec![buffer]
+        buffer
     } else {
-        let mut bufs: Vec<Vec<u8>> = vec![];
+        let mut bufs: Vec<u8> = vec![];
         for file in &args.files {
             let mut buffer = Vec::new();
             let mut file = std::fs::File::open(file)?;
             file.read_to_end(&mut buffer)?;
-            bufs.push(buffer);
+
+            bufs.extend(buffer);
         }
         bufs
     };
-    for file in &args.files {
-        let path = PathBuf::from(file);
-        let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
 
-        // Skip bytes if the -j option is specified.
-        if let Some(skip) = &args.skip {
-            let skip = parse_offset(skip)?;
-            reader.seek(SeekFrom::Start(skip))?;
-            if args.verbose {
-                println!("Skipping first {} bytes.", skip);
-            }
+    // Skip bytes if the -j option is specified.
+    if let Some(skip) = &args.skip {
+        let skip = parse_offset(skip)?;
+        buffer = buffer.split_off(skip as usize);
+        if args.verbose {
+            println!("Skipping first {} bytes.", skip);
         }
-
-        // Read the specified number of bytes, or 512 bytes by default.
-        let mut buffer = vec![0; args.count.as_ref().map_or(512, |c| parse_count(c))];
-        let bytes_read = reader.read(&mut buffer)?;
-
-        // Truncate the buffer to the specified count, if provided.
-        if let Some(count) = args.count.as_ref() {
-            buffer.truncate(parse_count(count));
-            if args.verbose {
-                println!("Reading {} bytes.", count);
-            }
-        } else {
-            buffer.truncate(bytes_read);
-            if args.verbose {
-                println!("Reading {} bytes.", bytes_read);
-            }
-        }
-
-        // Print the data.
-        print_data(&buffer, &args);
     }
+
+    // Truncate the buffer to the specified count, if provided.
+    if let Some(count) = args.count.as_ref() {
+        buffer.truncate(parse_count(count));
+        if args.verbose {
+            println!("Reading {} bytes.", count);
+        }
+    }
+    println!("Reading {} bytes.", buffer.len());
+
+    // Print the data.
+    print_data(&buffer, args);
 
     Ok(())
 }
