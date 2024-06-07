@@ -1,6 +1,5 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{self, BufReader, Read, Seek, SeekFrom};
+use std::io::{self, Read};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -57,8 +56,8 @@ struct Args {
 
     /// Input files
     files: Vec<PathBuf>,
-    /* /// Offset in the file where dumping is to commence
-    offset: Option<String>, */
+    /// Offset in the file where dumping is to commence
+    offset: Option<String>,
 }
 
 impl Args {
@@ -66,7 +65,7 @@ impl Args {
     fn validate_args(&self) -> Result<(), String> {
         // Check if conflicting options are used together
 
-        /* // '-A', '-j', '-N', '-t', '-v' should not be used with offset syntax [+]offset[.][b]
+        // '-A', '-j', '-N', '-t', '-v' should not be used with offset syntax [+]offset[.][b]
         if (self.address_base.is_some()
             || self.skip.is_some()
             || self.count.is_some()
@@ -75,7 +74,7 @@ impl Args {
             && self.offset.is_some()
         {
             return Err("Options '-A', '-j', '-N', '-t', '-v' cannot be used together with offset syntax '[+]offset[.][b]'".to_string());
-        } */
+        }
 
         // '-b', '-c', '-d', '-o', '-s', '-x' should not be used with '-t' options
         if !self.type_strings.is_empty()
@@ -126,7 +125,7 @@ impl Args {
 /// Parse an offset value from a string.
 /// The offset can be in hexadecimal (starting with "0x"), octal (starting with "0"), or decimal.
 /// It can also include a suffix to indicate multipliers: 'b' for 512, 'k' for 1024, and 'm' for 1048576.
-fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
+fn parse_skip(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
     let (number, multiplier) = if offset.starts_with("0x") || offset.starts_with("0X") {
         // For hexadecimal, 'b' should be part of the number if it is the last character
         (offset, 1)
@@ -153,14 +152,34 @@ fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
 
 /// Parse a count value from a string.
 /// The count can be in hexadecimal (starting with "0x"), octal (starting with "0"), or decimal.
-fn parse_count(count: &str) -> usize {
+fn parse_count(count: &str) -> Result<usize, Box<dyn std::error::Error>> {
     if count.starts_with("0x") || count.starts_with("0X") {
-        usize::from_str_radix(&count[2..], 16).unwrap()
+        Ok(usize::from_str_radix(&count[2..], 16)?)
     } else if count.starts_with('0') && count.len() > 1 {
-        usize::from_str_radix(&count[1..], 8).unwrap()
+        Ok(usize::from_str_radix(&count[1..], 8)?)
     } else {
-        count.parse().unwrap()
+        Ok(count.parse()?)
     }
+}
+
+fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
+    let mut base = 8;
+    let mut multiplier = 1;
+
+    // Handle special suffixes
+    let offset = if offset.ends_with('b') {
+        multiplier = 512;
+        &offset[..offset.len() - 1]
+    } else if offset.ends_with('.') {
+        base = 10;
+        &offset[..offset.len() - 1]
+    } else {
+        offset
+    };
+
+    let parsed_offset = u64::from_str_radix(offset, base)?;
+
+    Ok(parsed_offset * multiplier)
 }
 
 /// Prints the data from the buffer according to the provided configuration.
@@ -225,13 +244,21 @@ fn print_data(buffer: &[u8], config: &Args) {
                     continue;
                 }
 
-                print!("{} ", current);
+                print!("{}", current);
                 previously = current;
             }
             println!(); // Print a newline after each line of bytes.
         } else if config.type_strings.is_empty() {
+            let mut previously = String::new();
             for byte in local_buf {
-                print!("{:03o} ", byte); // Default to octal format if no type string is specified.
+                let current = format!("{:03o} ", byte);
+                if previously == current && !config.verbose {
+                    print!("* ");
+                    continue;
+                }
+
+                print!("{}", current);
+                previously = current;
             }
             println!(); // Print a newline after each line of bytes.
         } else {
@@ -248,35 +275,52 @@ fn print_data(buffer: &[u8], config: &Args) {
                 let chunks = local_buf.chunks(num_bytes);
                 match type_char {
                     'a' => {
+                        let mut previously = String::new();
                         for byte in local_buf {
-                            if let Some(name) = named_chars.get(byte) {
-                                print!("{} ", name);
+                            let current = if let Some(name) = named_chars.get(byte) {
+                                format!("{} ", name)
                             } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
-                                print!("{} ", *byte as char);
+                                format!("{} ", *byte as char)
                             } else {
-                                print!("{:03o} ", byte);
+                                format!("{:03o} ", byte)
+                            };
+                            if previously == current && !config.verbose {
+                                print!("* ");
+                                continue;
                             }
+
+                            print!("{}", current);
+                            previously = current;
                         }
                     }
                     'c' => {
+                        let mut previously = String::new();
                         for byte in local_buf {
-                            match *byte {
-                                b'\\' => print!("\\ "),
-                                b'\x07' => print!("\\a "),
-                                b'\x08' => print!("\\b "),
-                                b'\x0C' => print!("\\f "),
-                                b'\x0A' => print!("\\n "),
-                                b'\x0D' => print!("\\r "),
-                                b'\x09' => print!("\\t "),
-                                b'\x0B' => print!("\\v "),
+                            let current = match *byte {
+                                b'\\' => "\\ ".to_string(),
+                                b'\x07' => "\\a ".to_string(),
+                                b'\x08' => "\\b ".to_string(),
+                                b'\x0C' => "\\f ".to_string(),
+                                b'\x0A' => "\\n ".to_string(),
+                                b'\x0D' => "\\r ".to_string(),
+                                b'\x09' => "\\t ".to_string(),
+                                b'\x0B' => "\\v ".to_string(),
                                 _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
-                                    print!("{} ", *byte as char)
+                                    format!("{} ", *byte as char)
                                 }
-                                _ => print!("{:03o} ", byte),
+                                _ => format!("{:03o} ", byte),
+                            };
+                            if previously == current && !config.verbose {
+                                print!("* ");
+                                continue;
                             }
+
+                            print!("{}", current);
+                            previously = current;
                         }
                     }
                     'u' => {
+                        let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
@@ -302,10 +346,18 @@ fn print_data(buffer: &[u8], config: &Args) {
                                 //9..=16 => {}
                                 _ => 0,
                             };
-                            print!("{} ", value);
+                            let current = format!("{} ", value);
+                            if previously == current && !config.verbose {
+                                print!("* ");
+                                continue;
+                            }
+
+                            print!("{}", current);
+                            previously = current;
                         }
                     }
                     'd' => {
+                        let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => i8::from_be_bytes([chunk[0]]) as i64,
@@ -331,10 +383,18 @@ fn print_data(buffer: &[u8], config: &Args) {
                                 //9..=16 => {}
                                 _ => 0,
                             };
-                            print!("{} ", value);
+                            let current = format!("{} ", value);
+                            if previously == current && !config.verbose {
+                                print!("* ");
+                                continue;
+                            }
+
+                            print!("{}", current);
+                            previously = current;
                         }
                     }
                     'x' => {
+                        let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
@@ -360,10 +420,18 @@ fn print_data(buffer: &[u8], config: &Args) {
                                 //9..=16 => {}
                                 _ => 0,
                             };
-                            print!("{:04x} ", value);
+                            let current = format!("{:04x} ", value);
+                            if previously == current && !config.verbose {
+                                print!("* ");
+                                continue;
+                            }
+
+                            print!("{}", current);
+                            previously = current;
                         }
                     }
                     'o' => {
+                        let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
@@ -389,10 +457,18 @@ fn print_data(buffer: &[u8], config: &Args) {
                                 //9..=16 => {}
                                 _ => 0,
                             };
-                            print!("{:06o} ", value);
+                            let current = format!("{:06o} ", value);
+                            if previously == current && !config.verbose {
+                                print!("* ");
+                                continue;
+                            }
+
+                            print!("{}", current);
+                            previously = current;
                         }
                     }
                     'f' => {
+                        let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => f32::from_be_bytes([0, 0, 0, chunk[0]]) as f64,
@@ -418,12 +494,27 @@ fn print_data(buffer: &[u8], config: &Args) {
                                 //9..=16 => {}
                                 _ => 0.0,
                             };
-                            print!("{} ", value);
+                            let current = format!("{} ", value);
+                            if previously == current && !config.verbose {
+                                print!("* ");
+                                continue;
+                            }
+
+                            print!("{}", current);
+                            previously = current;
                         }
                     }
                     _ => {
+                        let mut previously = String::new();
                         for &byte in local_buf {
-                            print!("{:03o} ", byte); // Default to octal format if no type string is specified.
+                            let current = format!("{:03o} ", byte);
+                            if previously == current && !config.verbose {
+                                print!("* ");
+                                continue;
+                            }
+
+                            print!("{}", current);
+                            previously = current;
                         }
                     }
                 }
@@ -528,16 +619,21 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 
     // Skip bytes if the -j option is specified.
     if let Some(skip) = &args.skip {
-        let skip = parse_offset(skip)?;
+        let skip = parse_skip(skip)?;
         buffer = buffer.split_off(skip as usize);
         if args.verbose {
             println!("Skipping first {} bytes.", skip);
         }
     }
 
+    if let Some(offset) = &args.offset {
+        let skip = parse_offset(offset)?;
+        buffer = buffer.split_off(skip as usize);
+    }
+
     // Truncate the buffer to the specified count, if provided.
     if let Some(count) = args.count.as_ref() {
-        buffer.truncate(parse_count(count));
+        buffer.truncate(parse_count(count)?);
     }
     if args.verbose {
         println!("Reading {} bytes.", buffer.len());
@@ -552,7 +648,7 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
-    let mut args = Args::parse();
+    let args = Args::parse();
     args.validate_args()?;
     let mut exit_code = 0;
 
@@ -580,6 +676,7 @@ fn test_split_c_file_5() {
         hex_words: false,
         verbose: false,
         files: vec![PathBuf::from("tests/assets/od_test.txt")],
+        offset: None,
     };
 
     args.validate_args().unwrap();
