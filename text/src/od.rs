@@ -56,14 +56,23 @@ struct Args {
 
     /// Input files
     files: Vec<PathBuf>,
-    /// Offset in the file where dumping is to commence
+
+    #[clap(skip)]
+    /// Offset in the file where dumping is to commence, must start with "+"]
     offset: Option<String>,
 }
 
 impl Args {
     /// Validate the arguments for any conflicts or invalid combinations.
-    fn validate_args(&self) -> Result<(), String> {
+    fn validate_args(&mut self) -> Result<(), String> {
         // Check if conflicting options are used together
+
+        for file in &self.files {
+            let string = file.to_str().unwrap();
+            if string.starts_with('+') {
+                self.offset = Some(string.to_string());
+            }
+        }
 
         // '-A', '-j', '-N', '-t', '-v' should not be used with offset syntax [+]offset[.][b]
         if (self.address_base.is_some()
@@ -89,6 +98,22 @@ impl Args {
                 "Options '-b', '-c', '-d', '-o', '-s', '-x' cannot be used together with '-t'"
                     .to_string(),
             );
+        }
+
+        if self.octal_bytes {
+            self.type_strings = vec!["o1".to_string()];
+        }
+        if self.unsigned_decimal_words {
+            self.type_strings = vec!["u2".to_string()];
+        }
+        if self.octal_words {
+            self.type_strings = vec!["o2".to_string()];
+        }
+        if self.signed_decimal_words {
+            self.type_strings = vec!["d2".to_string()];
+        }
+        if self.hex_words {
+            self.type_strings = vec!["x2".to_string()];
         }
 
         // Check if multiple mutually exclusive options are used together
@@ -526,9 +551,17 @@ fn print_data(buffer: &[u8], config: &Args) {
         offset += 16; // Move to the next line of bytes.
     }
 
-    // Print total bytes processed if verbose flag is  set.
-    if config.verbose {
-        println!("Total bytes processed: {}", buffer.len());
+    offset -= buffer.len();
+    if let Some(base) = config.address_base {
+        match base {
+            'd' => print!("{:07} ", offset),
+            'o' => print!("{:07o} ", offset),
+            'x' => print!("{:07x} ", offset),
+            'n' => (),
+            _ => print!("{:07} ", offset),
+        }
+    } else {
+        print!("{:07} ", offset);
     }
 }
 
@@ -621,9 +654,6 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(skip) = &args.skip {
         let skip = parse_skip(skip)?;
         buffer = buffer.split_off(skip as usize);
-        if args.verbose {
-            println!("Skipping first {} bytes.", skip);
-        }
     }
 
     if let Some(offset) = &args.offset {
@@ -635,9 +665,6 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(count) = args.count.as_ref() {
         buffer.truncate(parse_count(count)?);
     }
-    if args.verbose {
-        println!("Reading {} bytes.", buffer.len());
-    }
 
     // Print the data.
     print_data(&buffer, args);
@@ -648,7 +675,7 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
-    let args = Args::parse();
+    let mut args = Args::parse();
     args.validate_args()?;
     let mut exit_code = 0;
 
@@ -663,7 +690,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_split_c_file_5() {
     // Test valid operands
-    let args = Args {
+    let mut args = Args {
         address_base: None,
         skip: None,
         count: None,
