@@ -283,7 +283,6 @@ fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
 ///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
 ///
 fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Error>> {
-    let named_chars = get_named_chars(); // Get the named characters for special byte values.
     let mut offset = 0; // Initialize offset for printing addresses.
 
     while offset < buffer.len() {
@@ -356,7 +355,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
                     'a' => {
                         let mut previously = String::new();
                         for byte in local_buf {
-                            let current = if let Some(name) = named_chars.get(byte) {
+                            let current = if let Some(name) = get_named_char(*byte) {
                                 format!("{} ", name)
                             } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
                                 format!("{} ", *byte as char)
@@ -594,45 +593,44 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-/// Get a mapping of byte values to their named character representations.
-fn get_named_chars() -> HashMap<u8, &'static str> {
-    let mut map = HashMap::new();
-    map.insert(0x00, "nul");
-    map.insert(0x01, "soh");
-    map.insert(0x02, "stx");
-    map.insert(0x03, "etx");
-    map.insert(0x04, "eot");
-    map.insert(0x05, "enq");
-    map.insert(0x06, "ack");
-    map.insert(0x07, "bel");
-    map.insert(0x08, "bs");
-    map.insert(0x09, "ht");
-    map.insert(0x0A, "nl");
-    map.insert(0x0B, "vt");
-    map.insert(0x0C, "ff");
-    map.insert(0x0D, "cr");
-    map.insert(0x0E, "so");
-    map.insert(0x0F, "si");
-    map.insert(0x10, "dle");
-    map.insert(0x11, "dc1");
-    map.insert(0x12, "dc2");
-    map.insert(0x13, "dc3");
-    map.insert(0x14, "dc4");
-    map.insert(0x15, "nak");
-    map.insert(0x16, "syn");
-    map.insert(0x17, "etb");
-    map.insert(0x18, "can");
-    map.insert(0x19, "em");
-    map.insert(0x1A, "sub");
-    map.insert(0x1B, "esc");
-    map.insert(0x1C, "fs");
-    map.insert(0x1D, "gs");
-    map.insert(0x1E, "rs");
-    map.insert(0x1F, "us");
-    map.insert(0x7F, "del");
-    map.insert(0x20, "sp");
-
-    map
+fn get_named_char(byte: u8) -> Option<&'static str> {
+    match byte {
+        0x00 => Some("nul"),
+        0x01 => Some("soh"),
+        0x02 => Some("stx"),
+        0x03 => Some("etx"),
+        0x04 => Some("eot"),
+        0x05 => Some("enq"),
+        0x06 => Some("ack"),
+        0x07 => Some("bel"),
+        0x08 => Some("bs"),
+        0x09 => Some("ht"),
+        0x0A => Some("nl"),
+        0x0B => Some("vt"),
+        0x0C => Some("ff"),
+        0x0D => Some("cr"),
+        0x0E => Some("so"),
+        0x0F => Some("si"),
+        0x10 => Some("dle"),
+        0x11 => Some("dc1"),
+        0x12 => Some("dc2"),
+        0x13 => Some("dc3"),
+        0x14 => Some("dc4"),
+        0x15 => Some("nak"),
+        0x16 => Some("syn"),
+        0x17 => Some("etb"),
+        0x18 => Some("can"),
+        0x19 => Some("em"),
+        0x1A => Some("sub"),
+        0x1B => Some("esc"),
+        0x1C => Some("fs"),
+        0x1D => Some("gs"),
+        0x1E => Some("rs"),
+        0x1F => Some("us"),
+        0x7F => Some("del"),
+        0x20 => Some("sp"),
+        _ => None,
+    }
 }
 
 /// Main function to process the files based on the arguments.
