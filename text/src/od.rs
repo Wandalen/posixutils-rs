@@ -1,7 +1,9 @@
 use crate::io::ErrorKind;
 use std::collections::HashMap;
 use std::io::{self, Error, Read};
+use std::num::ParseIntError;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
@@ -176,18 +178,11 @@ fn parse_skip(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
         (offset, 1)
     };
 
-    let base_value = if number.starts_with("0x") || number.starts_with("0X") {
-        u64::from_str_radix(&number[2..], 16)?
-    } else if number.starts_with('0') && number.len() > 1 {
-        u64::from_str_radix(&number[1..], 8)?
-    } else {
-        number.parse()?
-    };
+    let base_value = parse_count::<u64>(number)?;
 
     Ok(base_value * multiplier)
 }
-
-/// Parses a count string and converts it into a `usize` value.
+/// Parses a count string and converts it into a specified numeric type.
 ///
 /// # Parameters
 ///
@@ -196,17 +191,37 @@ fn parse_skip(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
 ///
 /// # Returns
 ///
-/// - `Result<usize, Box<dyn std::error::Error>>`: This function returns a `Result` which is:
-///   - `Ok(usize)`: On success, the parsed count as a `usize`.
+/// - `Result<T, Box<dyn std::error::Error>>`: This function returns a `Result` which is:
+///   - `Ok(T)`: On success, the parsed count as the specified type.
 ///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
 ///
-fn parse_count(count: &str) -> Result<usize, Box<dyn std::error::Error>> {
+fn parse_count<T: FromStr<Err = ParseIntError> + FromStrRadix>(
+    count: &str,
+) -> Result<T, Box<dyn std::error::Error>> {
     if count.starts_with("0x") || count.starts_with("0X") {
-        Ok(usize::from_str_radix(&count[2..], 16)?)
+        T::from_str_radix(&count[2..], 16).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     } else if count.starts_with('0') && count.len() > 1 {
-        Ok(usize::from_str_radix(&count[1..], 8)?)
+        T::from_str_radix(&count[1..], 8).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     } else {
-        Ok(count.parse()?)
+        count
+            .parse::<T>()
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    }
+}
+
+trait FromStrRadix: Sized {
+    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError>;
+}
+
+impl FromStrRadix for usize {
+    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
+        usize::from_str_radix(src, radix)
+    }
+}
+
+impl FromStrRadix for u64 {
+    fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
+        u64::from_str_radix(src, radix)
     }
 }
 
@@ -328,6 +343,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
             for type_string in &config.type_strings {
                 // Determine the number of bytes to read for this type.
                 let mut chars = type_string.chars();
+
                 let type_char = chars.next().unwrap();
                 let num_bytes: usize = chars.as_str().parse().unwrap_or(match type_char {
                     'd' | 'u' | 'o' | 'x' => 2,
@@ -559,19 +575,22 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
         offset += 16; // Move to the next line of bytes.
     }
 
-    offset -= 16;
-    offset = buffer.len() - offset;
-    if let Some(base) = config.address_base {
-        match base {
-            'd' => print!("{:07} ", offset),
-            'o' => print!("{:07o} ", offset),
-            'x' => print!("{:07x} ", offset),
-            'n' => (),
-            _ => print!("{:07} ", offset),
+    if !buffer.is_empty() {
+        offset -= 16;
+        offset = buffer.len() - offset;
+        if let Some(base) = config.address_base {
+            match base {
+                'd' => print!("{:07} ", offset),
+                'o' => print!("{:07o} ", offset),
+                'x' => print!("{:07x} ", offset),
+                'n' => (),
+                _ => print!("{:07} ", offset),
+            }
+        } else {
+            print!("{:07} ", offset);
         }
-    } else {
-        print!("{:07} ", offset);
     }
+
     Ok(())
 }
 
@@ -698,14 +717,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn test_split_c_file_5() {
     // Test valid operands
     let mut args = Args {
-        address_base: None,
-        skip: None,
+        address_base: Some('n'),
+        skip: Some("1".to_string()),
         count: None,
         type_strings: vec![],
         octal_bytes: false,
         unsigned_decimal_words: false,
         octal_words: false,
-        bytes_char: false,
+        bytes_char: true,
         signed_decimal_words: false,
         hex_words: false,
         verbose: false,

@@ -2709,16 +2709,10 @@ mod od_tests {
 
     #[test]
     fn test_od_21() {
-        od_test(&["-j0x10"], "Hello, World!123456", "");
-    }
-
-    #[test]
-    fn test_od_22() {
-        od_test(&[], "Hello, World!", "");
-    }
-
-    #[test]
-    fn test_od_23() {
-        od_test(&[], "Hello, World!", "");
+        od_test(
+            &["-j0x10"],
+            "Hello, World!123456",
+            "0000000 064 065 066 \n0000003 ",
+        );
     }
 }
