@@ -1,5 +1,5 @@
 use crate::io::ErrorKind;
-use std::collections::HashMap;
+use std::fs::File;
 use std::io::{self, Error, Read};
 use std::num::ParseIntError;
 use std::path::PathBuf;
@@ -164,7 +164,7 @@ impl Args {
 ///   - `Ok(u64)`: On success, the parsed and multiplied offset as a `u64`.
 ///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
 ///
-fn parse_skip(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
+fn parse_skip(offset: &str) -> Result<usize, Box<dyn std::error::Error>> {
     let (number, multiplier) = if offset.starts_with("0x") || offset.starts_with("0X") {
         // For hexadecimal, 'b' should be part of the number if it is the last character
         (offset, 1)
@@ -178,7 +178,7 @@ fn parse_skip(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
         (offset, 1)
     };
 
-    let base_value = parse_count::<u64>(number)?;
+    let base_value = parse_count::<usize>(number)?;
 
     Ok(base_value * multiplier)
 }
@@ -244,7 +244,7 @@ impl FromStrRadix for u64 {
 ///   - `Ok(u64)`: On success, the parsed and multiplied offset as a `u64`.
 ///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
 ///
-fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
+fn parse_offset(offset: &str) -> Result<usize, Box<dyn std::error::Error>> {
     let mut base = 8;
     let mut multiplier = 1;
 
@@ -259,7 +259,7 @@ fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
         offset
     };
 
-    let parsed_offset = u64::from_str_radix(offset, base)?;
+    let parsed_offset = usize::from_str_radix(offset, base)?;
 
     Ok(parsed_offset * multiplier)
 }
@@ -633,6 +633,19 @@ fn get_named_char(byte: u8) -> Option<&'static str> {
     }
 }
 
+fn skip_bytes<R: Read>(reader: &mut R, bytes_to_skip: &mut usize) -> io::Result<()> {
+    let mut buffer = [0; 4096];
+    while *bytes_to_skip > 0 {
+        let to_read = (*bytes_to_skip).min(buffer.len());
+        let bytes_read = reader.read(&mut buffer[..to_read])?;
+        if bytes_read == 0 {
+            break;
+        }
+        *bytes_to_skip -= bytes_read;
+    }
+    Ok(())
+}
+
 /// Main function to process the files based on the arguments.
 ///
 /// This function takes the arguments provided by the user, processes each specified file,
@@ -656,34 +669,33 @@ fn get_named_char(byte: u8) -> Option<&'static str> {
 /// If the verbose flag is set in the configuration, the function prints additional information such as the number of bytes skipped and read.
 ///
 fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
-    let mut buffer: Vec<u8> = if (args.files.len() == 1 && args.files[0] == PathBuf::from("-"))
-        || args.files.is_empty()
-    {
-        let mut buffer = Vec::new();
-        io::stdin().lock().read_to_end(&mut buffer)?;
-        buffer
-    } else {
-        let mut bufs: Vec<u8> = vec![];
-        for file in &args.files {
-            let mut buffer = Vec::new();
-            let mut file = std::fs::File::open(file)?;
-            file.read_to_end(&mut buffer)?;
-
-            bufs.extend(buffer);
-        }
-        bufs
-    };
+    let mut buffer: Vec<u8> = Vec::new();
+    let mut bytes_to_skip = 0;
 
     // Skip bytes if the -j option is specified.
     if let Some(skip) = &args.skip {
-        let skip = parse_skip(skip)?;
-        buffer = buffer.split_off(skip as usize);
+        bytes_to_skip = parse_skip(skip)?;
     }
 
     if let Some(offset) = &args.offset {
-        let skip = parse_offset(offset)?;
-        buffer = buffer.split_off(skip as usize);
+        bytes_to_skip = parse_offset(offset)?;
     }
+
+    if (args.files.len() == 1 && args.files[0] == PathBuf::from("-")) || args.files.is_empty() {
+        let mut stdin = io::stdin().lock();
+        skip_bytes(&mut stdin, &mut bytes_to_skip)?;
+        if bytes_to_skip == 0 {
+            stdin.read_to_end(&mut buffer)?;
+        }
+    } else {
+        for file in &args.files {
+            let mut file = File::open(file)?;
+            skip_bytes(&mut file, &mut bytes_to_skip)?;
+            if bytes_to_skip == 0 {
+                file.read_to_end(&mut buffer)?;
+            }
+        }
+    };
 
     // Truncate the buffer to the specified count, if provided.
     if let Some(count) = args.count.as_ref() {
