@@ -5,7 +5,6 @@ use notify_debouncer_full::notify::event::{ModifyKind, RemoveKind};
 use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use plib::PROJECT_NAME;
 use std::collections::VecDeque;
-use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -74,13 +73,9 @@ impl Args {
 /// * `file_path` - Path to the file.
 /// * `n` - The number of lines to print from the end. Negative values indicate counting from the end.
 fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Result<(), String> {
-    if n == 0 {
-        return Ok(());
-    }
-
     if n < 0 {
         // Print last `n` lines
-        let n = n.abs() as usize;
+        let n = n.unsigned_abs();
         let mut file_size = reader.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
         let mut buffer: VecDeque<String> = VecDeque::with_capacity(n);
 
@@ -112,7 +107,7 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Res
                 line.insert(0, byte as char);
             }
 
-            file_size = file_size.saturating_sub(chunk_size as u64);
+            file_size = file_size.saturating_sub(chunk_size);
             reader
                 .seek(SeekFrom::Current(-(chunk_size as i64)))
                 .map_err(|e| e.to_string())?;
@@ -131,6 +126,10 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Res
             println!("{}", line.trim_end());
         }
     } else {
+        let mut n = n;
+        if n == 0 {
+            n = 1;
+        }
         // Print lines starting from the `n`-th line to the end
         let mut line_count = 0;
         let mut buffer = Vec::new();
