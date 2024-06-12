@@ -330,19 +330,49 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
                         process_formatter(&CFormatter, local_buf, config.verbose);
                     }
                     'u' => {
-                        process_chunks_formatter(&UFormatter, chunks, config.verbose)?;
+                        if !(num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
+                            return Err(Box::new(Error::new(
+                                ErrorKind::Other,
+                                format!("invalid type string `u{}`", num_bytes),
+                            )));
+                        }
+                        process_chunks_formatter(&UFormatter, chunks, config.verbose);
                     }
                     'd' => {
-                        process_chunks_formatter(&DFormatter, chunks, config.verbose)?;
+                        if !(num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
+                            return Err(Box::new(Error::new(
+                                ErrorKind::Other,
+                                format!("invalid type string `d{}`", num_bytes),
+                            )));
+                        }
+                        process_chunks_formatter(&DFormatter, chunks, config.verbose);
                     }
                     'x' => {
-                        process_chunks_formatter(&XFormatter, chunks, config.verbose)?;
+                        if !(num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
+                            return Err(Box::new(Error::new(
+                                ErrorKind::Other,
+                                format!("invalid type string `x{}`", num_bytes),
+                            )));
+                        }
+                        process_chunks_formatter(&XFormatter, chunks, config.verbose);
                     }
                     'o' => {
-                        process_chunks_formatter(&OFormatter, chunks, config.verbose)?;
+                        if !(num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
+                            return Err(Box::new(Error::new(
+                                ErrorKind::Other,
+                                format!("invalid type string `o{}`", num_bytes),
+                            )));
+                        }
+                        process_chunks_formatter(&OFormatter, chunks, config.verbose);
                     }
                     'f' => {
-                        process_chunks_formatter(&FFormatter, chunks, config.verbose)?;
+                        if !(num_bytes == 4 || num_bytes == 8) {
+                            return Err(Box::new(Error::new(
+                                ErrorKind::Other,
+                                format!("invalid type string `f{}`", num_bytes),
+                            )));
+                        }
+                        process_chunks_formatter(&FFormatter, chunks, config.verbose);
                     }
                     _ => {
                         process_formatter(&DefaultFormatter, local_buf, config.verbose);
@@ -377,7 +407,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
 }
 
 trait FormatterChunks {
-    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>>;
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> String;
 }
 
 struct UFormatter;
@@ -387,111 +417,121 @@ struct OFormatter;
 struct FFormatter;
 
 impl FormatterChunks for UFormatter {
-    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
             1 => u8::from_be_bytes([chunk[0]]) as u64,
             2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+            3 => u32::from_be_bytes([0, chunk[2], chunk[1], chunk[0]]) as u64,
             4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
+            5 => u64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
+            6 => u64::from_be_bytes([
+                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            7 => u64::from_be_bytes([
+                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
             8 => u64::from_be_bytes([
                 chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
             ]),
-            _ => {
-                return Err(Box::new(Error::new(
-                    ErrorKind::Other,
-                    format!("invalid type string `u{}`", chunk.len()),
-                )))
-            }
+            _ => 0,
         };
-        Ok(format!("{} ", value))
+        format!("{} ", value)
     }
 }
 
 impl FormatterChunks for DFormatter {
-    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
             1 => i8::from_be_bytes([chunk[0]]) as i64,
             2 => i16::from_be_bytes([chunk[1], chunk[0]]) as i64,
+            3 => i32::from_be_bytes([0, chunk[2], chunk[1], chunk[0]]) as i64,
             4 => i32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as i64,
+            5 => i64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
+            6 => i64::from_be_bytes([
+                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            7 => i64::from_be_bytes([
+                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
             8 => i64::from_be_bytes([
                 chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
             ]),
-            _ => {
-                return Err(Box::new(Error::new(
-                    ErrorKind::Other,
-                    format!("invalid type string `d{}`", chunk.len()),
-                )))
-            }
+            _ => 0,
         };
-        Ok(format!("{} ", value))
+        format!("{} ", value)
     }
 }
 
 impl FormatterChunks for XFormatter {
-    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
             1 => u8::from_be_bytes([chunk[0]]) as u64,
             2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+            3 => u32::from_be_bytes([0, chunk[2], chunk[1], chunk[0]]) as u64,
             4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
+            5 => u64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
+            6 => u64::from_be_bytes([
+                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            7 => u64::from_be_bytes([
+                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
             8 => u64::from_be_bytes([
                 chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
             ]),
-            _ => {
-                return Err(Box::new(Error::new(
-                    ErrorKind::Other,
-                    format!("invalid type string `x{}`", chunk.len()),
-                )))
-            }
+            _ => 0,
         };
-        Ok(format!("{:04x} ", value))
+        format!("{:04x} ", value)
     }
 }
 
 impl FormatterChunks for OFormatter {
-    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
             1 => u8::from_be_bytes([chunk[0]]) as u64,
             2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+            3 => u32::from_be_bytes([0, chunk[2], chunk[1], chunk[0]]) as u64,
             4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
+            5 => u64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
+            6 => u64::from_be_bytes([
+                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            7 => u64::from_be_bytes([
+                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
             8 => u64::from_be_bytes([
                 chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
             ]),
-            _ => {
-                return Err(Box::new(Error::new(
-                    ErrorKind::Other,
-                    format!("invalid type string `o{}`", chunk.len()),
-                )))
-            }
+            _ => 0,
         };
-        Ok(format!("{:03o} ", value))
+        format!("{:03o} ", value)
     }
 }
 
 impl FormatterChunks for FFormatter {
-    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
             4 => f32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as f64,
+            5 => f64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
+            6 => f64::from_be_bytes([
+                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            7 => f64::from_be_bytes([
+                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
             8 => f64::from_be_bytes([
                 chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
             ]),
-            _ => {
-                return Err(Box::new(Error::new(
-                    ErrorKind::Other,
-                    format!("invalid type string `f{}`", chunk.len()),
-                )))
-            }
+            _ => 0.0,
         };
-        Ok(format!("{} ", value))
+        format!("{:e} ", value)
     }
 }
 
-fn process_chunks_formatter(
-    formatter: &dyn FormatterChunks,
-    chunks: Chunks<u8>,
-    verbose: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn process_chunks_formatter(formatter: &dyn FormatterChunks, chunks: Chunks<u8>, verbose: bool) {
     let mut previously = String::new();
     for chunk in chunks {
-        let current = formatter.format_value_from_chunk(chunk)?;
+        let current = formatter.format_value_from_chunk(chunk);
         if previously == current && !verbose {
             print!("* ");
             continue;
@@ -499,8 +539,6 @@ fn process_chunks_formatter(
         print!("{}", current);
         previously = current;
     }
-
-    Ok(())
 }
 
 trait Formatter {
