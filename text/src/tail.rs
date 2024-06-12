@@ -6,7 +6,7 @@ use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use plib::PROJECT_NAME;
 use std::fs;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -96,26 +96,34 @@ fn print_last_n_lines<R: BufRead>(reader: R, n: isize) -> Result<(), String> {
 /// # Arguments
 /// * `buf_reader` - A mutable reference to a reader to read bytes from.
 /// * `n` - The number of bytes to print from the end. Negative values indicate counting from the end.
-
-fn print_last_n_bytes<R: Read>(buf_reader: &mut R, n: isize) -> Result<(), String> {
-    let mut buffer = Vec::new();
+fn print_last_n_bytes<R: Read + Seek>(buf_reader: &mut R, n: isize) -> Result<(), String> {
+    // Move the cursor to the end of the file minus n bytes
+    let len = buf_reader
+        .seek(SeekFrom::End(0))
+        .map_err(|e| format!("Failed to seek: {}", e))?;
+    let start = if n < 0 {
+        (len as isize + n).max(0) as u64
+    } else {
+        (n - 1).max(0) as u64
+    }
+    .min(len);
 
     buf_reader
+        .seek(SeekFrom::Start(start))
+        .map_err(|e| format!("Failed to seek: {}", e))?;
+
+    // Read the rest of the file or n remaining bytes
+    let mut buffer = Vec::new();
+    buf_reader
+        .take(len - start)
         .read_to_end(&mut buffer)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+        .map_err(|e| format!("Failed to read: {}", e))?;
 
-    let start = if n < 0 {
-        (buffer.len() as isize + n).max(0) as usize
-    } else {
-        (n - 1).max(0) as usize
-    }
-    .min(buffer.len());
-
-    let slice = &buffer[start..];
-    match std::str::from_utf8(slice) {
+    // Print bytes or characters
+    match std::str::from_utf8(&buffer) {
         Ok(valid_str) => print!("{}", valid_str),
         Err(_) => {
-            for &byte in slice {
+            for &byte in &buffer {
                 print!("{}", byte as char);
             }
         }
@@ -135,6 +143,29 @@ fn print_bytes(bytes: &[u8]) {
     }
 }
 
+enum ReadSeek {
+    File(File),
+    Cursor(Cursor<Vec<u8>>),
+}
+
+impl Read for ReadSeek {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            ReadSeek::File(f) => f.read(buf),
+            ReadSeek::Cursor(c) => c.read(buf),
+        }
+    }
+}
+
+impl Seek for ReadSeek {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        match self {
+            ReadSeek::File(f) => f.seek(pos),
+            ReadSeek::Cursor(c) => c.seek(pos),
+        }
+    }
+}
+
 /// The main logic for the tail command.
 ///
 /// # Arguments
@@ -145,11 +176,18 @@ fn print_bytes(bytes: &[u8]) {
 /// * `Err(Box<dyn std::error::Error>)` if an error occurs.
 fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     // open file, or stdin
-    let file: Box<dyn Read> = {
+    let file: ReadSeek = {
         if args.file == Some(PathBuf::from("-")) || args.file.is_none() {
-            Box::new(io::stdin().lock())
+            let mut stdin = io::stdin().lock();
+            let mut buffer = vec![];
+            stdin.read_to_end(&mut buffer)?;
+            let cursor = Cursor::new(buffer);
+            ReadSeek::Cursor(cursor)
         } else {
-            Box::new(fs::File::open(args.file.as_ref().unwrap())?)
+            ReadSeek::File(
+                File::open(args.file.as_ref().unwrap())
+                    .map_err(|e| format!("Failed to open file: {}", e))?,
+            )
         }
     };
     let mut reader = io::BufReader::new(file);
