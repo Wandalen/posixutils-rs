@@ -302,42 +302,12 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
         }
 
         if config.bytes_char {
-            let mut previously = String::new();
-            for byte in local_buf {
-                let current = match *byte {
-                    b'\0' => "NUL ".to_string(),
-                    b'\x08' => "BS ".to_string(),
-                    b'\x0C' => "FF ".to_string(),
-                    b'\x0A' => "NL ".to_string(),
-                    b'\x0D' => "CR ".to_string(),
-                    b'\x09' => "HT ".to_string(),
-                    _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
-                        format!("{} ", *byte as char)
-                    }
-                    _ => format!("{:03o} ", byte),
-                };
+            process_formatter(&BCFormatter, local_buf, config.verbose);
 
-                if previously == current && !config.verbose {
-                    print!("* ");
-                    continue;
-                }
-
-                print!("{}", current);
-                previously = current;
-            }
             println!(); // Print a newline after each line of bytes.
         } else if config.type_strings.is_empty() {
-            let mut previously = String::new();
-            for byte in local_buf {
-                let current = format!("{:03o} ", byte);
-                if previously == current && !config.verbose {
-                    print!("* ");
-                    continue;
-                }
+            process_formatter(&DefaultFormatter, local_buf, config.verbose);
 
-                print!("{}", current);
-                previously = current;
-            }
             println!(); // Print a newline after each line of bytes.
         } else {
             for type_string in &config.type_strings {
@@ -354,222 +324,28 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
                 let chunks = local_buf.chunks(num_bytes);
                 match type_char {
                     'a' => {
-                        let mut previously = String::new();
-                        for byte in local_buf {
-                            let current = if let Some(name) = get_named_char(*byte) {
-                                format!("{} ", name)
-                            } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
-                                format!("{} ", *byte as char)
-                            } else {
-                                format!("{:03o} ", byte)
-                            };
-                            if previously == current && !config.verbose {
-                                print!("* ");
-                                continue;
-                            }
-
-                            print!("{}", current);
-                            previously = current;
-                        }
+                        process_formatter(&AFormatter, local_buf, config.verbose);
                     }
                     'c' => {
-                        let mut previously = String::new();
-                        for byte in local_buf {
-                            let current = match *byte {
-                                b'\\' => "\\ ".to_string(),
-                                b'\x07' => "\\a ".to_string(),
-                                b'\x08' => "\\b ".to_string(),
-                                b'\x0C' => "\\f ".to_string(),
-                                b'\x0A' => "\\n ".to_string(),
-                                b'\x0D' => "\\r ".to_string(),
-                                b'\x09' => "\\t ".to_string(),
-                                b'\x0B' => "\\v ".to_string(),
-                                _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
-                                    format!("{} ", *byte as char)
-                                }
-                                _ => format!("{:03o} ", byte),
-                            };
-                            if previously == current && !config.verbose {
-                                print!("* ");
-                                continue;
-                            }
-
-                            print!("{}", current);
-                            previously = current;
-                        }
+                        process_formatter(&CFormatter, local_buf, config.verbose);
                     }
                     'u' => {
-                        process_formatter(&UFormatter, chunks, config.verbose)?;
-                        /*  let mut previously = String::new();
-                        for chunk in chunks {
-                            let value = match chunk.len() {
-                                1 => u8::from_be_bytes([chunk[0]]) as u64,
-                                2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
-                                4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
-                                    as u64,
-                                8 => u64::from_be_bytes([
-                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
-                                    chunk[1], chunk[0],
-                                ]),
-
-                                _ => {
-                                    return Err(Box::new(Error::new(
-                                        ErrorKind::Other,
-                                        format!("invalid type string `u{}`", num_bytes),
-                                    )))
-                                }
-                            };
-                            let current = format!("{} ", value);
-                            if previously == current && !config.verbose {
-                                print!("* ");
-                                continue;
-                            }
-
-                            print!("{}", current);
-                            previously = current;
-                        } */
+                        process_chunks_formatter(&UFormatter, chunks, config.verbose)?;
                     }
                     'd' => {
-                        process_formatter(&DFormatter, chunks, config.verbose)?;
-                        /*  let mut previously = String::new();
-                        for chunk in chunks {
-                            let value = match chunk.len() {
-                                1 => i8::from_be_bytes([chunk[0]]) as i64,
-                                2 => i16::from_be_bytes([chunk[1], chunk[0]]) as i64,
-
-                                4 => i32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
-                                    as i64,
-
-                                8 => i64::from_be_bytes([
-                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
-                                    chunk[1], chunk[0],
-                                ]),
-
-                                _ => {
-                                    return Err(Box::new(Error::new(
-                                        ErrorKind::Other,
-                                        format!("invalid type string `d{}`", num_bytes),
-                                    )))
-                                }
-                            };
-                            let current = format!("{} ", value);
-                            if previously == current && !config.verbose {
-                                print!("* ");
-                                continue;
-                            }
-
-                            print!("{}", current);
-                            previously = current;
-                        } */
+                        process_chunks_formatter(&DFormatter, chunks, config.verbose)?;
                     }
                     'x' => {
-                        process_formatter(&XFormatter, chunks, config.verbose)?;
-                        /* let mut previously = String::new();
-                        for chunk in chunks {
-                            let value = match chunk.len() {
-                                1 => u8::from_be_bytes([chunk[0]]) as u64,
-                                2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
-
-                                4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
-                                    as u64,
-
-                                8 => u64::from_be_bytes([
-                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
-                                    chunk[1], chunk[0],
-                                ]),
-
-                                _ => {
-                                    return Err(Box::new(Error::new(
-                                        ErrorKind::Other,
-                                        format!("invalid type string `x{}`", num_bytes),
-                                    )))
-                                }
-                            };
-                            let current = format!("{:04x} ", value);
-                            if previously == current && !config.verbose {
-                                print!("* ");
-                                continue;
-                            }
-
-                            print!("{}", current);
-                            previously = current;
-                        } */
+                        process_chunks_formatter(&XFormatter, chunks, config.verbose)?;
                     }
                     'o' => {
-                        process_formatter(&OFormatter, chunks, config.verbose)?;
-                        /* let mut previously = String::new();
-                        for chunk in chunks {
-                            let value = match chunk.len() {
-                                1 => u8::from_be_bytes([chunk[0]]) as u64,
-                                2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
-
-                                4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
-                                    as u64,
-
-                                8 => u64::from_be_bytes([
-                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
-                                    chunk[1], chunk[0],
-                                ]),
-
-                                _ => {
-                                    return Err(Box::new(Error::new(
-                                        ErrorKind::Other,
-                                        format!("invalid type string `o{}`", num_bytes),
-                                    )))
-                                }
-                            };
-                            let current = format!("{:03o} ", value);
-                            if previously == current && !config.verbose {
-                                print!("* ");
-                                continue;
-                            }
-
-                            print!("{}", current);
-                            previously = current;
-                        } */
+                        process_chunks_formatter(&OFormatter, chunks, config.verbose)?;
                     }
                     'f' => {
-                        process_formatter(&FFormatter, chunks, config.verbose)?;
-                        /* let mut previously = String::new();
-                        for chunk in chunks {
-                            let value = match chunk.len() {
-                                4 => f32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
-                                    as f64,
-
-                                8 => f64::from_be_bytes([
-                                    chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2],
-                                    chunk[1], chunk[0],
-                                ]),
-
-                                _ => {
-                                    return Err(Box::new(Error::new(
-                                        ErrorKind::Other,
-                                        format!("invalid type string `f{}`", num_bytes),
-                                    )))
-                                }
-                            };
-                            let current = format!("{} ", value);
-                            if previously == current && !config.verbose {
-                                print!("* ");
-                                continue;
-                            }
-
-                            print!("{}", current);
-                            previously = current;
-                        } */
+                        process_chunks_formatter(&FFormatter, chunks, config.verbose)?;
                     }
                     _ => {
-                        let mut previously = String::new();
-                        for &byte in local_buf {
-                            let current = format!("{:03o} ", byte);
-                            if previously == current && !config.verbose {
-                                print!("* ");
-                                continue;
-                            }
-
-                            print!("{}", current);
-                            previously = current;
-                        }
+                        process_formatter(&DefaultFormatter, local_buf, config.verbose);
                     }
                 }
 
@@ -600,8 +376,8 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-trait Formatter {
-    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>>;
+trait FormatterChunks {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>>;
 }
 
 struct UFormatter;
@@ -610,8 +386,8 @@ struct XFormatter;
 struct OFormatter;
 struct FFormatter;
 
-impl Formatter for UFormatter {
-    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+impl FormatterChunks for UFormatter {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
         let value = match chunk.len() {
             1 => u8::from_be_bytes([chunk[0]]) as u64,
             2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
@@ -630,8 +406,8 @@ impl Formatter for UFormatter {
     }
 }
 
-impl Formatter for DFormatter {
-    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+impl FormatterChunks for DFormatter {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
         let value = match chunk.len() {
             1 => i8::from_be_bytes([chunk[0]]) as i64,
             2 => i16::from_be_bytes([chunk[1], chunk[0]]) as i64,
@@ -650,8 +426,8 @@ impl Formatter for DFormatter {
     }
 }
 
-impl Formatter for XFormatter {
-    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+impl FormatterChunks for XFormatter {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
         let value = match chunk.len() {
             1 => u8::from_be_bytes([chunk[0]]) as u64,
             2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
@@ -670,8 +446,8 @@ impl Formatter for XFormatter {
     }
 }
 
-impl Formatter for OFormatter {
-    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+impl FormatterChunks for OFormatter {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
         let value = match chunk.len() {
             1 => u8::from_be_bytes([chunk[0]]) as u64,
             2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
@@ -690,8 +466,8 @@ impl Formatter for OFormatter {
     }
 }
 
-impl Formatter for FFormatter {
-    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+impl FormatterChunks for FFormatter {
+    fn format_value_from_chunk(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
         let value = match chunk.len() {
             4 => f32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as f64,
             8 => f64::from_be_bytes([
@@ -708,14 +484,14 @@ impl Formatter for FFormatter {
     }
 }
 
-fn process_formatter(
-    formatter: &dyn Formatter,
+fn process_chunks_formatter(
+    formatter: &dyn FormatterChunks,
     chunks: Chunks<u8>,
     verbose: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut previously = String::new();
     for chunk in chunks {
-        let current = formatter.format_value(chunk)?;
+        let current = formatter.format_value_from_chunk(chunk)?;
         if previously == current && !verbose {
             print!("* ");
             continue;
@@ -725,6 +501,82 @@ fn process_formatter(
     }
 
     Ok(())
+}
+
+trait Formatter {
+    fn format_value(&self, byte: u8) -> String;
+}
+
+struct AFormatter;
+struct CFormatter;
+struct BCFormatter;
+struct DefaultFormatter;
+
+impl Formatter for AFormatter {
+    fn format_value(&self, byte: u8) -> String {
+        if let Some(name) = get_named_char(byte) {
+            format!("{} ", name)
+        } else if byte.is_ascii_graphic() || byte.is_ascii_whitespace() {
+            format!("{} ", byte as char)
+        } else {
+            format!("{:03o} ", byte)
+        }
+    }
+}
+
+impl Formatter for CFormatter {
+    fn format_value(&self, byte: u8) -> String {
+        match byte {
+            b'\\' => "\\ ".to_string(),
+            b'\x07' => "\\a ".to_string(),
+            b'\x08' => "\\b ".to_string(),
+            b'\x0C' => "\\f ".to_string(),
+            b'\x0A' => "\\n ".to_string(),
+            b'\x0D' => "\\r ".to_string(),
+            b'\x09' => "\\t ".to_string(),
+            b'\x0B' => "\\v ".to_string(),
+            _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
+                format!("{} ", byte as char)
+            }
+            _ => format!("{:03o} ", byte),
+        }
+    }
+}
+
+impl Formatter for BCFormatter {
+    fn format_value(&self, byte: u8) -> String {
+        match byte {
+            b'\0' => "NUL ".to_string(),
+            b'\x08' => "BS ".to_string(),
+            b'\x0C' => "FF ".to_string(),
+            b'\x0A' => "NL ".to_string(),
+            b'\x0D' => "CR ".to_string(),
+            b'\x09' => "HT ".to_string(),
+            _ if byte.is_ascii_graphic() || byte.is_ascii_whitespace() => {
+                format!("{} ", byte as char)
+            }
+            _ => format!("{:03o} ", byte),
+        }
+    }
+}
+
+impl Formatter for DefaultFormatter {
+    fn format_value(&self, byte: u8) -> String {
+        format!("{:03o} ", byte)
+    }
+}
+
+fn process_formatter(formatter: &dyn Formatter, local_buf: &[u8], verbose: bool) {
+    let mut previously = String::new();
+    for byte in local_buf {
+        let current = formatter.format_value(*byte);
+        if previously == current && !verbose {
+            print!("* ");
+            continue;
+        }
+        print!("{}", current);
+        previously = current;
+    }
 }
 
 fn get_named_char(byte: u8) -> Option<&'static str> {
