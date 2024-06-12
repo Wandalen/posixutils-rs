@@ -4,6 +4,7 @@ use notify_debouncer_full::new_debouncer;
 use notify_debouncer_full::notify::event::{ModifyKind, RemoveKind};
 use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use plib::PROJECT_NAME;
+use std::collections::VecDeque;
 use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Write};
@@ -67,25 +68,80 @@ impl Args {
     }
 }
 
-/// Prints the last `n` lines from the given buffered reader.
+/// Prints the last `n` lines from the given file.
 ///
 /// # Arguments
-/// * `reader` - A buffered reader to read lines from.
+/// * `file_path` - Path to the file.
 /// * `n` - The number of lines to print from the end. Negative values indicate counting from the end.
+fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Result<(), String> {
+    if n == 0 {
+        return Ok(());
+    }
 
-fn print_last_n_lines<R: BufRead>(reader: R, n: isize) -> Result<(), String> {
-    let lines: Vec<_> = reader.lines().map_while(Result::ok).collect();
+    if n < 0 {
+        // Print last `n` lines
+        let n = n.abs() as usize;
+        let mut file_size = reader.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
+        let mut buffer: VecDeque<String> = VecDeque::with_capacity(n);
 
-    let mut start = if n < 0 {
-        (lines.len() as isize + n).max(0) as usize
+        let mut line = String::new();
+        let mut chunk_size = 1024;
+        let mut line_count = 0;
+
+        while file_size > 0 {
+            if file_size < chunk_size {
+                chunk_size = file_size;
+            }
+            reader
+                .seek(SeekFrom::Current(-(chunk_size as i64)))
+                .map_err(|e| e.to_string())?;
+            let mut buf = vec![0; chunk_size as usize];
+            reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
+
+            for &byte in buf.iter().rev() {
+                if byte == b'\n' {
+                    if !line.is_empty() {
+                        buffer.push_front(line.clone());
+                        line.clear();
+                        if buffer.len() == n {
+                            break;
+                        }
+                    }
+                    line_count += 1;
+                }
+                line.insert(0, byte as char);
+            }
+
+            file_size = file_size.saturating_sub(chunk_size as u64);
+            reader
+                .seek(SeekFrom::Current(-(chunk_size as i64)))
+                .map_err(|e| e.to_string())?;
+
+            if buffer.len() == n {
+                break;
+            }
+        }
+
+        // Handle case where the beginning of the file is reached but not all lines are counted
+        if !line.is_empty() && buffer.len() < n {
+            buffer.push_front(line);
+        }
+
+        for line in buffer {
+            println!("{}", line.trim_end());
+        }
     } else {
-        (n - 1).max(0) as usize
-    };
+        // Print lines starting from the `n`-th line to the end
+        let mut line = String::new();
+        let mut current_line = 0;
 
-    start = start.min(lines.len());
-
-    for line in &lines[start..] {
-        println!("{}", line);
+        while reader.read_line(&mut line).map_err(|e| e.to_string())? != 0 {
+            current_line += 1;
+            if current_line >= n as usize {
+                println!("{}", line.trim_end());
+            }
+            line.clear();
+        }
     }
 
     Ok(())
@@ -195,7 +251,7 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(bytes) = &args.bytes {
         print_last_n_bytes(&mut reader, bytes.0)?;
     } else {
-        print_last_n_lines(reader, args.lines.unwrap())?;
+        print_last_n_lines(&mut reader, args.lines.unwrap())?;
     }
 
     // If follow option is specified, continue monitoring the file
