@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{self, Error, Read};
 use std::num::ParseIntError;
 use std::path::PathBuf;
+use std::slice::Chunks;
 use std::str::FromStr;
 
 use clap::Parser;
@@ -398,7 +399,8 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
                         }
                     }
                     'u' => {
-                        let mut previously = String::new();
+                        process_formatter(&UFormatter, chunks, config.verbose)?;
+                        /*  let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
@@ -425,10 +427,11 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
 
                             print!("{}", current);
                             previously = current;
-                        }
+                        } */
                     }
                     'd' => {
-                        let mut previously = String::new();
+                        process_formatter(&DFormatter, chunks, config.verbose)?;
+                        /*  let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => i8::from_be_bytes([chunk[0]]) as i64,
@@ -457,10 +460,11 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
 
                             print!("{}", current);
                             previously = current;
-                        }
+                        } */
                     }
                     'x' => {
-                        let mut previously = String::new();
+                        process_formatter(&XFormatter, chunks, config.verbose)?;
+                        /* let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
@@ -489,10 +493,11 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
 
                             print!("{}", current);
                             previously = current;
-                        }
+                        } */
                     }
                     'o' => {
-                        let mut previously = String::new();
+                        process_formatter(&OFormatter, chunks, config.verbose)?;
+                        /* let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 1 => u8::from_be_bytes([chunk[0]]) as u64,
@@ -521,10 +526,11 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
 
                             print!("{}", current);
                             previously = current;
-                        }
+                        } */
                     }
                     'f' => {
-                        let mut previously = String::new();
+                        process_formatter(&FFormatter, chunks, config.verbose)?;
+                        /* let mut previously = String::new();
                         for chunk in chunks {
                             let value = match chunk.len() {
                                 4 => f32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]])
@@ -550,7 +556,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
 
                             print!("{}", current);
                             previously = current;
-                        }
+                        } */
                     }
                     _ => {
                         let mut previously = String::new();
@@ -577,6 +583,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
     if !buffer.is_empty() {
         offset -= 16;
         offset = buffer.len() - offset;
+
         if let Some(base) = config.address_base {
             match base {
                 'd' => print!("{:07} ", offset),
@@ -588,6 +595,133 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
         } else {
             print!("{:07} ", offset);
         }
+    }
+
+    Ok(())
+}
+
+trait Formatter {
+    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>>;
+}
+
+struct UFormatter;
+struct DFormatter;
+struct XFormatter;
+struct OFormatter;
+struct FFormatter;
+
+impl Formatter for UFormatter {
+    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+        let value = match chunk.len() {
+            1 => u8::from_be_bytes([chunk[0]]) as u64,
+            2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+            4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
+            8 => u64::from_be_bytes([
+                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            _ => {
+                return Err(Box::new(Error::new(
+                    ErrorKind::Other,
+                    format!("invalid type string `u{}`", chunk.len()),
+                )))
+            }
+        };
+        Ok(format!("{} ", value))
+    }
+}
+
+impl Formatter for DFormatter {
+    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+        let value = match chunk.len() {
+            1 => i8::from_be_bytes([chunk[0]]) as i64,
+            2 => i16::from_be_bytes([chunk[1], chunk[0]]) as i64,
+            4 => i32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as i64,
+            8 => i64::from_be_bytes([
+                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            _ => {
+                return Err(Box::new(Error::new(
+                    ErrorKind::Other,
+                    format!("invalid type string `d{}`", chunk.len()),
+                )))
+            }
+        };
+        Ok(format!("{} ", value))
+    }
+}
+
+impl Formatter for XFormatter {
+    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+        let value = match chunk.len() {
+            1 => u8::from_be_bytes([chunk[0]]) as u64,
+            2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+            4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
+            8 => u64::from_be_bytes([
+                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            _ => {
+                return Err(Box::new(Error::new(
+                    ErrorKind::Other,
+                    format!("invalid type string `x{}`", chunk.len()),
+                )))
+            }
+        };
+        Ok(format!("{:04x} ", value))
+    }
+}
+
+impl Formatter for OFormatter {
+    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+        let value = match chunk.len() {
+            1 => u8::from_be_bytes([chunk[0]]) as u64,
+            2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
+            4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
+            8 => u64::from_be_bytes([
+                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            _ => {
+                return Err(Box::new(Error::new(
+                    ErrorKind::Other,
+                    format!("invalid type string `o{}`", chunk.len()),
+                )))
+            }
+        };
+        Ok(format!("{:03o} ", value))
+    }
+}
+
+impl Formatter for FFormatter {
+    fn format_value(&self, chunk: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+        let value = match chunk.len() {
+            4 => f32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as f64,
+            8 => f64::from_be_bytes([
+                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
+            ]),
+            _ => {
+                return Err(Box::new(Error::new(
+                    ErrorKind::Other,
+                    format!("invalid type string `f{}`", chunk.len()),
+                )))
+            }
+        };
+        Ok(format!("{} ", value))
+    }
+}
+
+fn process_formatter(
+    formatter: &dyn Formatter,
+    chunks: Chunks<u8>,
+    verbose: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut previously = String::new();
+    for chunk in chunks {
+        let current = formatter.format_value(chunk)?;
+        if previously == current && !verbose {
+            print!("* ");
+            continue;
+        }
+        print!("{}", current);
+        previously = current;
     }
 
     Ok(())
