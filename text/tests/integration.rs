@@ -2668,7 +2668,11 @@ mod od_tests {
 
     #[test]
     fn test_od_16() {
-        od_test(&["-tf4"], "Hello, World!", "");
+        od_test(
+            &["-tf4"],
+            "Hello, World!",
+            "0000000 1.1431391224375825e27 1.7611270127616e14 1.7446709643352771e22 0e0 \n0000013 ",
+        );
     }
 
     #[test]

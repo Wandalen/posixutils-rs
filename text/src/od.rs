@@ -330,7 +330,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
                         process_formatter(&CFormatter, local_buf, config.verbose);
                     }
                     'u' => {
-                        if !(num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
+                        if !(num_bytes == 1 || num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
                             return Err(Box::new(Error::new(
                                 ErrorKind::Other,
                                 format!("invalid type string `u{}`", num_bytes),
@@ -339,7 +339,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
                         process_chunks_formatter(&UFormatter, chunks, config.verbose);
                     }
                     'd' => {
-                        if !(num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
+                        if !(num_bytes == 1 || num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
                             return Err(Box::new(Error::new(
                                 ErrorKind::Other,
                                 format!("invalid type string `d{}`", num_bytes),
@@ -348,7 +348,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
                         process_chunks_formatter(&DFormatter, chunks, config.verbose);
                     }
                     'x' => {
-                        if !(num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
+                        if !(num_bytes == 1 || num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
                             return Err(Box::new(Error::new(
                                 ErrorKind::Other,
                                 format!("invalid type string `x{}`", num_bytes),
@@ -357,7 +357,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
                         process_chunks_formatter(&XFormatter, chunks, config.verbose);
                     }
                     'o' => {
-                        if !(num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
+                        if !(num_bytes == 1 || num_bytes == 2 || num_bytes == 4 || num_bytes == 8) {
                             return Err(Box::new(Error::new(
                                 ErrorKind::Other,
                                 format!("invalid type string `o{}`", num_bytes),
