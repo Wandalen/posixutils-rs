@@ -306,7 +306,8 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
 
             println!(); // Print a newline after each line of bytes.
         } else if config.type_strings.is_empty() {
-            process_formatter(&DefaultFormatter, local_buf, config.verbose);
+            let chunks = local_buf.chunks(2);
+            process_chunks_formatter(&OFormatter, chunks, config.verbose);
 
             println!(); // Print a newline after each line of bytes.
         } else {
