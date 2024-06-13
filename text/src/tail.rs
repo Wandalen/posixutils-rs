@@ -74,40 +74,47 @@ impl Args {
 /// * `n` - The number of lines to print from the end. Negative values indicate counting from the end.
 fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Result<(), String> {
     if n < 0 {
-        // Print last `n` lines
         let n = n.unsigned_abs();
         let mut file_size = reader.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
         let mut buffer: VecDeque<String> = VecDeque::with_capacity(n);
 
-        let mut line = String::new();
         let mut chunk_size = 1024;
-        let mut line_count = 0;
+        let mut line: Vec<u8> = vec![];
+        let mut buf = vec![0; chunk_size];
 
         while file_size > 0 {
-            if file_size < chunk_size {
-                chunk_size = file_size;
+            if file_size < chunk_size as u64 {
+                chunk_size = file_size as usize;
             }
             reader
                 .seek(SeekFrom::Current(-(chunk_size as i64)))
                 .map_err(|e| e.to_string())?;
-            let mut buf = vec![0; chunk_size as usize];
-            reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
+            reader
+                .read_exact(&mut buf[..chunk_size])
+                .map_err(|e| e.to_string())?;
 
-            for &byte in buf.iter().rev() {
-                if byte == b'\n' {
-                    if !line.is_empty() {
-                        buffer.push_front(line.clone());
-                        line.clear();
-                        if buffer.len() == n {
-                            break;
+            for &byte in buf[..chunk_size].iter().rev() {
+                if byte == b'\n' && !line.is_empty() {
+                    let str_line = if let Ok(utf8_char) = std::str::from_utf8(&line) {
+                        utf8_char.to_string()
+                    } else {
+                        let mut str_line = String::new();
+                        for byte in &line {
+                            str_line.push(*byte as char);
                         }
+                        str_line
+                    };
+                    buffer.push_front(str_line);
+                    line.clear();
+                    if buffer.len() == n {
+                        break;
                     }
-                    line_count += 1;
                 }
-                line.insert(0, byte as char);
+
+                line.insert(0, byte);
             }
 
-            file_size = file_size.saturating_sub(chunk_size);
+            file_size = file_size.saturating_sub(chunk_size as u64);
             reader
                 .seek(SeekFrom::Current(-(chunk_size as i64)))
                 .map_err(|e| e.to_string())?;
@@ -117,9 +124,17 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Res
             }
         }
 
-        // Handle case where the beginning of the file is reached but not all lines are counted
         if !line.is_empty() && buffer.len() < n {
-            buffer.push_front(line);
+            let str_line = if let Ok(utf8_char) = std::str::from_utf8(&line) {
+                utf8_char.to_string()
+            } else {
+                let mut str_line = String::new();
+                for byte in &line {
+                    str_line.push(*byte as char);
+                }
+                str_line
+            };
+            buffer.push_front(str_line);
         }
 
         for line in buffer {
@@ -130,36 +145,26 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Res
         if n == 0 {
             n = 1;
         }
-        // Print lines starting from the `n`-th line to the end
         let mut line_count = 0;
-        let mut buffer = Vec::new();
+        let mut buffer = String::new();
 
-        // Count total lines in the file
-        while reader
-            .read_until(b'\n', &mut buffer)
-            .map_err(|e| e.to_string())?
-            != 0
-        {
+        while reader.read_line(&mut buffer).map_err(|e| e.to_string())? != 0 {
             line_count += 1;
             buffer.clear();
         }
 
         if line_count < n as usize {
-            // If total lines are less than n, do not print anything
             return Ok(());
         }
 
-        // Seek back to the start and find the start position of the `n`-th line
         reader.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
         let mut current_line = 0;
         let mut start_pos = 0;
 
         while current_line < n - 1 {
-            let bytes_read = reader
-                .read_until(b'\n', &mut buffer)
-                .map_err(|e| e.to_string())?;
+            let bytes_read = reader.read_line(&mut buffer).map_err(|e| e.to_string())?;
             if bytes_read == 0 {
-                break; // End of file
+                break;
             }
             current_line += 1;
             if current_line == n - 1 {
@@ -168,14 +173,12 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Res
             buffer.clear();
         }
 
-        // Seek to the start position of the `n`-th line and read to the end
         reader
             .seek(SeekFrom::Start(start_pos))
             .map_err(|e| e.to_string())?;
-        let mut line = String::new();
-        while reader.read_line(&mut line).map_err(|e| e.to_string())? != 0 {
-            println!("{}", line.trim_end());
-            line.clear();
+        while reader.read_line(&mut buffer).map_err(|e| e.to_string())? != 0 {
+            println!("{}", buffer.trim_end());
+            buffer.clear();
         }
     }
 
