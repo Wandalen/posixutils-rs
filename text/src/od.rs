@@ -1,6 +1,6 @@
 use crate::io::ErrorKind;
 use std::fs::File;
-use std::io::{self, Error, Read};
+use std::io::{self, Error, Read, Seek, SeekFrom};
 use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::slice::Chunks;
@@ -165,7 +165,7 @@ impl Args {
 ///   - `Ok(u64)`: On success, the parsed and multiplied offset as a `u64`.
 ///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
 ///
-fn parse_skip(offset: &str) -> Result<usize, Box<dyn std::error::Error>> {
+fn parse_skip(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
     let (number, multiplier) = if offset.starts_with("0x") || offset.starts_with("0X") {
         // For hexadecimal, 'b' should be part of the number if it is the last character
         (offset, 1)
@@ -179,7 +179,7 @@ fn parse_skip(offset: &str) -> Result<usize, Box<dyn std::error::Error>> {
         (offset, 1)
     };
 
-    let base_value = parse_count::<usize>(number)?;
+    let base_value = parse_count::<u64>(number)?;
 
     Ok(base_value * multiplier)
 }
@@ -245,7 +245,7 @@ impl FromStrRadix for u64 {
 ///   - `Ok(u64)`: On success, the parsed and multiplied offset as a `u64`.
 ///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
 ///
-fn parse_offset(offset: &str) -> Result<usize, Box<dyn std::error::Error>> {
+fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
     let mut base = 8;
     let mut multiplier = 1;
 
@@ -260,7 +260,7 @@ fn parse_offset(offset: &str) -> Result<usize, Box<dyn std::error::Error>> {
         offset
     };
 
-    let parsed_offset = usize::from_str_radix(offset, base)?;
+    let parsed_offset = u64::from_str_radix(offset, base)?;
 
     Ok(parsed_offset * multiplier)
 }
@@ -779,19 +779,6 @@ fn get_named_char(byte: u8) -> Option<&'static str> {
     }
 }
 
-fn skip_bytes<R: Read>(reader: &mut R, bytes_to_skip: &mut usize) -> io::Result<()> {
-    let mut buffer = [0; 4096];
-    while *bytes_to_skip > 0 {
-        let to_read = (*bytes_to_skip).min(buffer.len());
-        let bytes_read = reader.read(&mut buffer[..to_read])?;
-        if bytes_read == 0 {
-            break;
-        }
-        *bytes_to_skip -= bytes_read;
-    }
-    Ok(())
-}
-
 /// Main function to process the files based on the arguments.
 ///
 /// This function takes the arguments provided by the user, processes each specified file,
@@ -817,6 +804,7 @@ fn skip_bytes<R: Read>(reader: &mut R, bytes_to_skip: &mut usize) -> io::Result<
 fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer: Vec<u8> = Vec::new();
     let mut bytes_to_skip = 0;
+    let mut bytes_skipped = 0;
 
     // Skip bytes if the -j option is specified.
     if let Some(skip) = &args.skip {
@@ -828,18 +816,33 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if (args.files.len() == 1 && args.files[0] == PathBuf::from("-")) || args.files.is_empty() {
-        let mut stdin = io::stdin().lock();
-        skip_bytes(&mut stdin, &mut bytes_to_skip)?;
-        if bytes_to_skip == 0 {
-            stdin.read_to_end(&mut buffer)?;
-        }
+        let mut loc_buffer = Vec::new();
+        io::stdin().lock().read_to_end(&mut loc_buffer)?;
+        buffer = loc_buffer.split_off(bytes_to_skip as usize);
     } else {
         for file in &args.files {
             let mut file = File::open(file)?;
-            skip_bytes(&mut file, &mut bytes_to_skip)?;
-            if bytes_to_skip == 0 {
-                file.read_to_end(&mut buffer)?;
+
+            if bytes_skipped < bytes_to_skip {
+                let metadata = file.metadata()?;
+                let file_size = metadata.len();
+
+                if bytes_skipped + file_size <= bytes_to_skip {
+                    // Skip the entire file
+                    bytes_skipped += file_size;
+                    continue;
+                } else {
+                    // Skip part of the file
+                    let remaining_skip = bytes_to_skip - bytes_skipped;
+                    file.seek(SeekFrom::Start(remaining_skip))?;
+                    bytes_skipped = bytes_to_skip;
+                }
             }
+
+            // Read the rest of the file
+            let mut loc_buffer = Vec::new();
+            file.read_to_end(&mut loc_buffer)?;
+            buffer.extend(loc_buffer);
         }
     };
 
