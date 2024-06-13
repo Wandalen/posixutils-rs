@@ -419,20 +419,46 @@ struct FFormatter;
 impl FormatterChunks for UFormatter {
     fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
-            1 => u8::from_be_bytes([chunk[0]]) as u64,
-            2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
-            3 => u32::from_be_bytes([0, chunk[2], chunk[1], chunk[0]]) as u64,
-            4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
-            5 => u64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
-            6 => u64::from_be_bytes([
-                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            7 => u64::from_be_bytes([
-                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            8 => u64::from_be_bytes([
-                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
+            1 => u8::from_be_bytes(chunk.try_into().unwrap()) as u64,
+            2 => {
+                let mut arr: [u8; 2] = chunk.try_into().unwrap();
+                arr.reverse();
+                u16::from_be_bytes(arr) as u64
+            }
+            3 => {
+                let mut arr = [0u8; 4];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                u32::from_be_bytes(arr) as u64
+            }
+            4 => {
+                let mut arr: [u8; 4] = chunk.try_into().unwrap();
+                arr.reverse();
+                u32::from_be_bytes(arr) as u64
+            }
+            5 => {
+                let mut arr = [0u8; 8];
+                arr[3..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            6 => {
+                let mut arr = [0u8; 8];
+                arr[2..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            7 => {
+                let mut arr = [0u8; 8];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            8 => {
+                let mut arr: [u8; 8] = chunk.try_into().unwrap();
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
             _ => 0,
         };
         format!("{} ", value)
@@ -442,20 +468,46 @@ impl FormatterChunks for UFormatter {
 impl FormatterChunks for DFormatter {
     fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
-            1 => i8::from_be_bytes([chunk[0]]) as i64,
-            2 => i16::from_be_bytes([chunk[1], chunk[0]]) as i64,
-            3 => i32::from_be_bytes([0, chunk[2], chunk[1], chunk[0]]) as i64,
-            4 => i32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as i64,
-            5 => i64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
-            6 => i64::from_be_bytes([
-                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            7 => i64::from_be_bytes([
-                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            8 => i64::from_be_bytes([
-                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
+            1 => i8::from_be_bytes(chunk.try_into().unwrap()) as i64,
+            2 => {
+                let mut arr: [u8; 2] = chunk.try_into().unwrap();
+                arr.reverse();
+                i16::from_be_bytes(arr) as i64
+            }
+            3 => {
+                let mut arr = [0u8; 4];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                i32::from_be_bytes(arr) as i64
+            }
+            4 => {
+                let mut arr: [u8; 4] = chunk.try_into().unwrap();
+                arr.reverse();
+                i32::from_be_bytes(arr) as i64
+            }
+            5 => {
+                let mut arr = [0u8; 8];
+                arr[3..].copy_from_slice(chunk);
+                arr.reverse();
+                i64::from_be_bytes(arr)
+            }
+            6 => {
+                let mut arr = [0u8; 8];
+                arr[2..].copy_from_slice(chunk);
+                arr.reverse();
+                i64::from_be_bytes(arr)
+            }
+            7 => {
+                let mut arr = [0u8; 8];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                i64::from_be_bytes(arr)
+            }
+            8 => {
+                let mut arr: [u8; 8] = chunk.try_into().unwrap();
+                arr.reverse();
+                i64::from_be_bytes(arr)
+            }
             _ => 0,
         };
         format!("{} ", value)
@@ -465,20 +517,46 @@ impl FormatterChunks for DFormatter {
 impl FormatterChunks for XFormatter {
     fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
-            1 => u8::from_be_bytes([chunk[0]]) as u64,
-            2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
-            3 => u32::from_be_bytes([0, chunk[2], chunk[1], chunk[0]]) as u64,
-            4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
-            5 => u64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
-            6 => u64::from_be_bytes([
-                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            7 => u64::from_be_bytes([
-                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            8 => u64::from_be_bytes([
-                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
+            1 => u8::from_be_bytes(chunk.try_into().unwrap()) as u64,
+            2 => {
+                let mut arr: [u8; 2] = chunk.try_into().unwrap();
+                arr.reverse();
+                u16::from_be_bytes(arr) as u64
+            }
+            3 => {
+                let mut arr = [0u8; 4];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                u32::from_be_bytes(arr) as u64
+            }
+            4 => {
+                let mut arr: [u8; 4] = chunk.try_into().unwrap();
+                arr.reverse();
+                u32::from_be_bytes(arr) as u64
+            }
+            5 => {
+                let mut arr = [0u8; 8];
+                arr[3..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            6 => {
+                let mut arr = [0u8; 8];
+                arr[2..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            7 => {
+                let mut arr = [0u8; 8];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            8 => {
+                let mut arr: [u8; 8] = chunk.try_into().unwrap();
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
             _ => 0,
         };
         format!("{:04x} ", value)
@@ -488,20 +566,46 @@ impl FormatterChunks for XFormatter {
 impl FormatterChunks for OFormatter {
     fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
-            1 => u8::from_be_bytes([chunk[0]]) as u64,
-            2 => u16::from_be_bytes([chunk[1], chunk[0]]) as u64,
-            3 => u32::from_be_bytes([0, chunk[2], chunk[1], chunk[0]]) as u64,
-            4 => u32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as u64,
-            5 => u64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
-            6 => u64::from_be_bytes([
-                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            7 => u64::from_be_bytes([
-                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            8 => u64::from_be_bytes([
-                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
+            1 => u8::from_be_bytes(chunk.try_into().unwrap()) as u64,
+            2 => {
+                let mut arr: [u8; 2] = chunk.try_into().unwrap();
+                arr.reverse();
+                u16::from_be_bytes(arr) as u64
+            }
+            3 => {
+                let mut arr = [0u8; 4];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                u32::from_be_bytes(arr) as u64
+            }
+            4 => {
+                let mut arr: [u8; 4] = chunk.try_into().unwrap();
+                arr.reverse();
+                u32::from_be_bytes(arr) as u64
+            }
+            5 => {
+                let mut arr = [0u8; 8];
+                arr[3..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            6 => {
+                let mut arr = [0u8; 8];
+                arr[2..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            7 => {
+                let mut arr = [0u8; 8];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
+            8 => {
+                let mut arr: [u8; 8] = chunk.try_into().unwrap();
+                arr.reverse();
+                u64::from_be_bytes(arr)
+            }
             _ => 0,
         };
         format!("{:03o} ", value)
@@ -511,17 +615,34 @@ impl FormatterChunks for OFormatter {
 impl FormatterChunks for FFormatter {
     fn format_value_from_chunk(&self, chunk: &[u8]) -> String {
         let value = match chunk.len() {
-            4 => f32::from_be_bytes([chunk[3], chunk[2], chunk[1], chunk[0]]) as f64,
-            5 => f64::from_be_bytes([0, 0, 0, chunk[4], chunk[3], chunk[2], chunk[1], chunk[0]]),
-            6 => f64::from_be_bytes([
-                0, 0, chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            7 => f64::from_be_bytes([
-                0, chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
-            8 => f64::from_be_bytes([
-                chunk[7], chunk[6], chunk[5], chunk[4], chunk[3], chunk[2], chunk[1], chunk[0],
-            ]),
+            4 => {
+                let mut arr: [u8; 4] = chunk.try_into().unwrap();
+                arr.reverse();
+                f32::from_be_bytes(arr) as f64
+            }
+            5 => {
+                let mut arr = [0u8; 8];
+                arr[3..].copy_from_slice(chunk);
+                arr.reverse();
+                f64::from_be_bytes(arr)
+            }
+            6 => {
+                let mut arr = [0u8; 8];
+                arr[2..].copy_from_slice(chunk);
+                arr.reverse();
+                f64::from_be_bytes(arr)
+            }
+            7 => {
+                let mut arr = [0u8; 8];
+                arr[1..].copy_from_slice(chunk);
+                arr.reverse();
+                f64::from_be_bytes(arr)
+            }
+            8 => {
+                let mut arr: [u8; 8] = chunk.try_into().unwrap();
+                arr.reverse();
+                f64::from_be_bytes(arr)
+            }
             _ => 0.0,
         };
         format!("{:e} ", value)
