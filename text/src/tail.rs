@@ -118,9 +118,6 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(
             }
 
             file_size = file_size.saturating_sub(chunk_size as u64);
-            reader
-                .seek(SeekFrom::Current(-(chunk_size as i64)))
-                .map_err(|e| e.to_string())?;
 
             if buffer.len() == n {
                 break;
