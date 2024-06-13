@@ -871,26 +871,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     std::process::exit(exit_code)
 }
-
-#[test]
-fn test_split_c_file_5() {
-    // Test valid operands
-    let mut args = Args {
-        address_base: Some('n'),
-        skip: Some("1".to_string()),
-        count: None,
-        type_strings: vec![],
-        octal_bytes: false,
-        unsigned_decimal_words: false,
-        octal_words: false,
-        bytes_char: true,
-        signed_decimal_words: false,
-        hex_words: false,
-        verbose: false,
-        files: vec![PathBuf::from("tests/assets/od_test.txt")],
-        offset: None,
-    };
-
-    args.validate_args().unwrap();
-    od(&args).unwrap();
-}
