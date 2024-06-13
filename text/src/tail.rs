@@ -33,7 +33,7 @@ impl FromStr for SignedIsize {
 struct Args {
     /// The number of lines to print from the end of the file
     #[arg(short = 'n')]
-    lines: Option<isize>,
+    lines: Option<SignedIsize>,
 
     /// The number of bytes to print from the end of the file
     #[arg(short = 'c')]
@@ -60,7 +60,7 @@ impl Args {
         }
 
         if self.bytes.is_none() && self.lines.is_none() {
-            self.lines = Some(-10);
+            self.lines = Some(SignedIsize(-10));
         }
 
         Ok(())
@@ -148,33 +148,37 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(
         let mut buffer = [0; 1024];
         let mut line_count = 0;
         let mut byte_count = 0;
-        let mut start_pos = 0;
+        let mut start_pos = None;
 
-        'a: loop {
-            let bytes_read = reader.read(&mut buffer)?;
-            if bytes_read == 0 {
-                break;
-            }
+        if n != 1 {
+            'a: loop {
+                let bytes_read = reader.read(&mut buffer)?;
+                if bytes_read == 0 {
+                    break;
+                }
 
-            for &byte in &buffer[..bytes_read] {
-                byte_count += 1;
-                if byte == b'\n' {
-                    line_count += 1;
-                    if line_count == n - 1 {
-                        start_pos = byte_count;
-                        break 'a;
+                for &byte in &buffer[..bytes_read] {
+                    byte_count += 1;
+                    if byte == b'\n' {
+                        line_count += 1;
+                        if line_count == n - 1 {
+                            start_pos = Some(byte_count);
+                            break 'a;
+                        }
                     }
                 }
             }
-        }
 
-        if line_count < n {
-            return Ok(());
+            if start_pos.is_none() {
+                return Ok(());
+            }
+        } else {
+            start_pos = Some(0);
         }
 
         // Seek to the start position of the `n`-th line and read to the end
         reader
-            .seek(SeekFrom::Start(start_pos))
+            .seek(SeekFrom::Start(start_pos.unwrap()))
             .map_err(|e| e.to_string())?;
         let mut line = String::new();
         while reader.read_line(&mut line).map_err(|e| e.to_string())? != 0 {
@@ -290,7 +294,7 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(bytes) = &args.bytes {
         print_last_n_bytes(&mut reader, bytes.0)?;
     } else {
-        print_last_n_lines(&mut reader, args.lines.unwrap())?;
+        print_last_n_lines(&mut reader, args.lines.as_ref().unwrap().0)?;
     }
 
     // If follow option is specified, continue monitoring the file
