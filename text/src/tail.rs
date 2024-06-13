@@ -168,6 +168,10 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(
             }
         }
 
+        if line_count < n {
+            return Ok(());
+        }
+
         // Seek to the start position of the `n`-th line and read to the end
         reader
             .seek(SeekFrom::Start(start_pos))
