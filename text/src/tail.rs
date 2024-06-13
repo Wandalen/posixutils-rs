@@ -72,7 +72,10 @@ impl Args {
 /// # Arguments
 /// * `file_path` - Path to the file.
 /// * `n` - The number of lines to print from the end. Negative values indicate counting from the end.
-fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Result<(), String> {
+fn print_last_n_lines<R: Read + Seek + BufRead>(
+    reader: &mut R,
+    n: isize,
+) -> Result<(), Box<dyn std::error::Error>> {
     if n < 0 {
         let n = n.unsigned_abs();
         let mut file_size = reader.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
@@ -141,46 +144,31 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(reader: &mut R, n: isize) -> Res
             println!("{}", line.trim_end());
         }
     } else {
-        let mut n = n;
+        let mut n = n as usize;
         if n == 0 {
             n = 1;
         }
-        // Print lines starting from the `n`-th line to the end
+        let mut buffer = [0; 1024];
         let mut line_count = 0;
-        let mut buffer = Vec::new();
-
-        // Count total lines in the file
-        while reader
-            .read_until(b'\n', &mut buffer)
-            .map_err(|e| e.to_string())?
-            != 0
-        {
-            line_count += 1;
-            buffer.clear();
-        }
-
-        if line_count < n as usize {
-            // If total lines are less than n, do not print anything
-            return Ok(());
-        }
-
-        // Seek back to the start and find the start position of the `n`-th line
-        reader.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-        let mut current_line = 0;
+        let mut byte_count = 0;
         let mut start_pos = 0;
 
-        while current_line < n - 1 {
-            let bytes_read = reader
-                .read_until(b'\n', &mut buffer)
-                .map_err(|e| e.to_string())?;
+        'a: loop {
+            let bytes_read = reader.read(&mut buffer)?;
             if bytes_read == 0 {
-                break; // End of file
+                break;
             }
-            current_line += 1;
-            if current_line == n - 1 {
-                start_pos = reader.stream_position().map_err(|e| e.to_string())?;
+
+            for &byte in &buffer[..bytes_read] {
+                byte_count += 1;
+                if byte == b'\n' {
+                    line_count += 1;
+                    if line_count == n - 1 {
+                        start_pos = byte_count;
+                        break 'a;
+                    }
+                }
             }
-            buffer.clear();
         }
 
         // Seek to the start position of the `n`-th line and read to the end
