@@ -219,14 +219,7 @@ fn print_last_n_bytes<R: Read + Seek>(buf_reader: &mut R, n: isize) -> Result<()
         .map_err(|e| format!("Failed to read: {}", e))?;
 
     // Print bytes or characters
-    match std::str::from_utf8(&buffer) {
-        Ok(valid_str) => print!("{}", valid_str),
-        Err(_) => {
-            for &byte in &buffer {
-                print!("{}", byte as char);
-            }
-        }
-    }
+    print_bytes(&buffer);
 
     Ok(())
 }
@@ -278,6 +271,7 @@ fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let file: ReadSeek = {
         if args.file == Some(PathBuf::from("-")) || args.file.is_none() {
             let mut stdin = io::stdin().lock();
+
             let mut buffer = vec![];
             stdin.read_to_end(&mut buffer)?;
             let cursor = Cursor::new(buffer);
