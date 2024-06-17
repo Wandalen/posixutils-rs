@@ -4,7 +4,6 @@ use notify_debouncer_full::new_debouncer;
 use notify_debouncer_full::notify::event::{ModifyKind, RemoveKind};
 use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use plib::PROJECT_NAME;
-use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -79,7 +78,7 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(
     if n < 0 {
         let n = n.unsigned_abs();
         let mut file_size = reader.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
-        let mut buffer: VecDeque<String> = VecDeque::with_capacity(n);
+        let mut buffer_len = 0;
 
         let mut chunk_size = 1024;
         let mut line: Vec<u8> = vec![];
@@ -107,9 +106,10 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(
                         }
                         str_line
                     };
-                    buffer.push_front(str_line);
+                    println!("{}", str_line.trim_end());
+                    buffer_len += 1;
                     line.clear();
-                    if buffer.len() == n {
+                    if buffer_len == n {
                         break;
                     }
                 }
@@ -119,12 +119,12 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(
 
             file_size = file_size.saturating_sub(chunk_size as u64);
 
-            if buffer.len() == n {
+            if buffer_len == n {
                 break;
             }
         }
 
-        if !line.is_empty() && buffer.len() < n {
+        if !line.is_empty() && buffer_len < n {
             let str_line = if let Ok(utf8_char) = std::str::from_utf8(&line) {
                 utf8_char.to_string()
             } else {
@@ -134,11 +134,7 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(
                 }
                 str_line
             };
-            buffer.push_front(str_line);
-        }
-
-        for line in buffer {
-            println!("{}", line.trim_end());
+            println!("{}", str_line.trim_end());
         }
     } else {
         let mut n = n as usize;
