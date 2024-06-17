@@ -5,7 +5,7 @@ use notify_debouncer_full::notify::event::{ModifyKind, RemoveKind};
 use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use plib::PROJECT_NAME;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -66,123 +66,68 @@ impl Args {
     }
 }
 
-/// Prints the last `n` lines from the given file.
+/// Prints the last `n` lines from the given reader.
 ///
 /// # Arguments
-/// * `file_path` - Path to the file.
+/// * `reader` - A mutable reference to a reader to read bytes from.
 /// * `n` - The number of lines to print from the end. Negative values indicate counting from the end.
-fn print_last_n_lines<R: Read + Seek + BufRead>(
-    reader: &mut R,
-    n: isize,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn print_last_n_lines<R: Read>(reader: &mut R, n: isize) -> Result<(), Box<dyn std::error::Error>> {
     if n < 0 {
         let n = n.unsigned_abs();
-        let mut file_size = reader.seek(SeekFrom::End(0)).map_err(|e| e.to_string())?;
-        let mut buffer_len = 0;
+        let mut buffer = [0; 1000000];
 
-        let mut chunk_size = 1024;
-        let mut line: Vec<u8> = vec![];
-        let mut buf = vec![0; chunk_size];
+        loop {
+            let bytes_read = reader
+                .read(&mut buffer)
+                .map_err(|e| format!("Failed to read: {}", e))?;
 
-        while file_size > 0 {
-            if file_size < chunk_size as u64 {
-                chunk_size = file_size as usize;
-            }
-            reader
-                .seek(SeekFrom::Current(-(chunk_size as i64)))
-                .map_err(|e| e.to_string())?;
-            reader
-                .read_exact(&mut buf[..chunk_size])
-                .map_err(|e| e.to_string())?;
-
-            for &byte in buf[..chunk_size].iter().rev() {
-                if byte == b'\n' && !line.is_empty() {
-                    let str_line = if let Ok(utf8_char) = std::str::from_utf8(&line) {
-                        utf8_char.to_string()
-                    } else {
-                        let mut str_line = String::new();
-                        for byte in &line {
-                            str_line.push(*byte as char);
-                        }
-                        str_line
-                    };
-                    println!("{}", str_line.trim_end());
-                    buffer_len += 1;
-                    line.clear();
-                    if buffer_len == n {
-                        break;
-                    }
+            if bytes_read < buffer.len() {
+                let read = String::from_utf8_lossy(&buffer[..bytes_read]);
+                let all_lines: Vec<&str> = read.lines().collect();
+                // Print the last `last_n` lines
+                for line in &all_lines[all_lines.len() - n..] {
+                    println!("{}", line);
                 }
 
-                line.insert(0, byte);
-            }
-
-            file_size = file_size.saturating_sub(chunk_size as u64);
-
-            if buffer_len == n {
                 break;
             }
-        }
-
-        if !line.is_empty() && buffer_len < n {
-            let str_line = if let Ok(utf8_char) = std::str::from_utf8(&line) {
-                utf8_char.to_string()
-            } else {
-                let mut str_line = String::new();
-                for byte in &line {
-                    str_line.push(*byte as char);
-                }
-                str_line
-            };
-            println!("{}", str_line.trim_end());
         }
     } else {
         let mut n = n as usize;
         if n == 0 {
             n = 1;
         }
-        let mut buffer = [0; 1024];
+        let mut empty_buffer = [0; 1];
         let mut line_count = 0;
-        let mut byte_count = 0;
-        let mut start_pos = None;
 
         if n != 1 {
             'a: loop {
-                let bytes_read = reader.read(&mut buffer)?;
+                let bytes_read = reader.read(&mut empty_buffer)?;
                 if bytes_read == 0 {
                     break;
                 }
 
-                for &byte in &buffer[..bytes_read] {
-                    byte_count += 1;
-                    if byte == b'\n' {
-                        line_count += 1;
-                        if line_count == n - 1 {
-                            start_pos = Some(byte_count);
-                            break 'a;
-                        }
+                if empty_buffer[0] == b'\n' {
+                    line_count += 1;
+                    if line_count == n - 1 {
+                        break 'a;
                     }
                 }
             }
-
-            if start_pos.is_none() {
-                return Ok(());
-            }
-        } else {
-            start_pos = Some(0);
         }
+        let mut buffer = [0; 1024];
+        loop {
+            let bytes_read = reader
+                .read(&mut buffer)
+                .map_err(|e| format!("Failed to read: {}", e))?;
 
-        // Seek to the start position of the `n`-th line and read to the end
-        reader
-            .seek(SeekFrom::Start(start_pos.unwrap()))
-            .map_err(|e| e.to_string())?;
-        let mut line = String::new();
-        while reader.read_line(&mut line).map_err(|e| e.to_string())? != 0 {
-            println!("{}", line.trim_end());
-            line.clear();
+            if bytes_read == 0 {
+                break;
+            }
+
+            print_bytes(&buffer[..bytes_read]);
         }
     }
-
     Ok(())
 }
 
@@ -191,39 +136,57 @@ fn print_last_n_lines<R: Read + Seek + BufRead>(
 /// # Arguments
 /// * `buf_reader` - A mutable reference to a reader to read bytes from.
 /// * `n` - The number of bytes to print from the end. Negative values indicate counting from the end.
-fn print_last_n_bytes<R: Read + Seek>(buf_reader: &mut R, n: isize) -> Result<(), String> {
-    // Move the cursor to the end of the file minus n bytes
-    let len = buf_reader
-        .seek(SeekFrom::End(0))
-        .map_err(|e| format!("Failed to seek: {}", e))?;
-    let start = if n < 0 {
-        (len as isize + n).max(0) as u64
+fn print_last_n_bytes<R: Read>(
+    buf_reader: &mut R,
+    n: isize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if n < 0 {
+        let n = n.unsigned_abs();
+        let mut buffer_1 = vec![0; n];
+        let mut buffer_2 = vec![];
+        loop {
+            let bytes_read = buf_reader
+                .read(&mut buffer_1)
+                .map_err(|e| format!("Failed to read: {}", e))?;
+
+            if bytes_read < buffer_1.len() {
+                buffer_2.extend(&buffer_1[..bytes_read]);
+                if buffer_2.len() < n {
+                    print_bytes(&buffer_2);
+                } else {
+                    let start = buffer_2.len() - n;
+                    print_bytes(&buffer_2[start..]);
+                }
+
+                break;
+            }
+            buffer_2.clone_from(&buffer_1);
+        }
     } else {
-        (n - 1).max(0) as u64
-    }
-    .min(len);
+        let mut skip = n as usize;
 
-    buf_reader
-        .seek(SeekFrom::Start(start))
-        .map_err(|e| format!("Failed to seek: {}", e))?;
+        let mut empty_buffer = [0; 1];
 
-    // Read the rest of the file or n remaining bytes in chunks of 1024 bytes
-    let mut buffer = [0; 1024];
-    let mut bytes_left = len - start;
-
-    while bytes_left > 0 {
-        let to_read = bytes_left.min(1024) as usize;
-        let bytes_read = buf_reader
-            .read(&mut buffer[..to_read])
-            .map_err(|e| format!("Failed to read: {}", e))?;
-
-        if bytes_read == 0 {
-            break;
+        while skip > 1 {
+            let bytes_read = buf_reader.read(&mut empty_buffer)?;
+            if bytes_read == 0 {
+                break;
+            }
+            skip -= 1;
         }
 
-        print_bytes(&buffer[..bytes_read]);
+        let mut buffer = [0; 1024];
+        loop {
+            let bytes_read = buf_reader
+                .read(&mut buffer)
+                .map_err(|e| format!("Failed to read: {}", e))?;
 
-        bytes_left -= bytes_read as u64;
+            if bytes_read == 0 {
+                break;
+            }
+
+            print_bytes(&buffer[..bytes_read]);
+        }
     }
 
     Ok(())
@@ -240,29 +203,6 @@ fn print_bytes(bytes: &[u8]) {
     }
 }
 
-enum ReadSeek {
-    File(File),
-    Cursor(Cursor<Vec<u8>>),
-}
-
-impl Read for ReadSeek {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            ReadSeek::File(f) => f.read(buf),
-            ReadSeek::Cursor(c) => c.read(buf),
-        }
-    }
-}
-
-impl Seek for ReadSeek {
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        match self {
-            ReadSeek::File(f) => f.seek(pos),
-            ReadSeek::Cursor(c) => c.seek(pos),
-        }
-    }
-}
-
 /// The main logic for the tail command.
 ///
 /// # Arguments
@@ -273,21 +213,14 @@ impl Seek for ReadSeek {
 /// * `Err(Box<dyn std::error::Error>)` if an error occurs.
 fn tail(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     // open file, or stdin
-    let file: ReadSeek = {
+    let file: Box<dyn Read> = {
         if args.file == Some(PathBuf::from("-")) || args.file.is_none() {
-            let mut stdin = io::stdin().lock();
-
-            let mut buffer = vec![];
-            stdin.read_to_end(&mut buffer)?;
-            let cursor = Cursor::new(buffer);
-            ReadSeek::Cursor(cursor)
+            Box::new(io::stdin().lock())
         } else {
-            ReadSeek::File(
-                File::open(args.file.as_ref().unwrap())
-                    .map_err(|e| format!("Failed to open file: {}", e))?,
-            )
+            Box::new(File::open(args.file.as_ref().unwrap())?)
         }
     };
+
     let mut reader = io::BufReader::new(file);
 
     if let Some(bytes) = &args.bytes {
