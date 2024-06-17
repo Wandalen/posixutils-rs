@@ -211,15 +211,24 @@ fn print_last_n_bytes<R: Read + Seek>(buf_reader: &mut R, n: isize) -> Result<()
         .seek(SeekFrom::Start(start))
         .map_err(|e| format!("Failed to seek: {}", e))?;
 
-    // Read the rest of the file or n remaining bytes
-    let mut buffer = Vec::new();
-    buf_reader
-        .take(len - start)
-        .read_to_end(&mut buffer)
-        .map_err(|e| format!("Failed to read: {}", e))?;
+    // Read the rest of the file or n remaining bytes in chunks of 1024 bytes
+    let mut buffer = [0; 1024];
+    let mut bytes_left = len - start;
 
-    // Print bytes or characters
-    print_bytes(&buffer);
+    while bytes_left > 0 {
+        let to_read = bytes_left.min(1024) as usize;
+        let bytes_read = buf_reader
+            .read(&mut buffer[..to_read])
+            .map_err(|e| format!("Failed to read: {}", e))?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        print_bytes(&buffer[..bytes_read]);
+
+        bytes_left -= bytes_read as u64;
+    }
 
     Ok(())
 }
