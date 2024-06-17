@@ -388,8 +388,7 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
     }
 
     if !buffer.is_empty() {
-        offset -= 16;
-        offset = buffer.len() - offset;
+        offset = buffer.len();
 
         if let Some(base) = config.address_base {
             match base {
