@@ -1,14 +1,13 @@
 use crate::io::ErrorKind;
+use clap::Parser;
+use gettextrs::{bind_textdomain_codeset, textdomain};
+use plib::PROJECT_NAME;
 use std::fs::File;
-use std::io::{self, Error, Read, Seek, SeekFrom};
+use std::io::{self, BufReader, Error, Read, Seek, SeekFrom};
 use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::slice::Chunks;
 use std::str::FromStr;
-
-use clap::Parser;
-use gettextrs::{bind_textdomain_codeset, textdomain};
-use plib::PROJECT_NAME;
 
 /// Hex, octal, ASCII, and other types of dumps
 #[derive(Parser, Debug)]
@@ -283,11 +282,40 @@ fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
 ///   - `Ok(())`: On success.
 ///   - `Err(Box<dyn std::error::Error>)`: On failure, an error boxed as a `dyn std::error::Error`.
 ///
-fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Error>> {
+fn print_data<R: Read>(reader: &mut R, config: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut offset = 0; // Initialize offset for printing addresses.
+                        //let mut buffer = Vec::with_capacity(16); // Buffer to read chunks of 16 bytes.
+    let mut buffer = [0; 16];
+    let count = if let Some(count) = config.count.as_ref() {
+        Some(parse_count::<usize>(count)?)
+    } else {
+        None
+    };
 
-    while offset < buffer.len() {
-        let local_buf = &buffer[offset..(offset + 16).min(buffer.len())];
+    let mut run = true; // Flag to indicate if the reader should be closed.
+
+    while run {
+        let mut bytes_read = reader.read(&mut buffer)?;
+
+        if bytes_read != 16 {
+            //let mut new_buffer = Vec::with_capacity(16 - bytes_read);
+            let bytes_read_2 = reader.read(&mut buffer[bytes_read..])?;
+            bytes_read += bytes_read_2;
+        }
+        if bytes_read == 0 {
+            break; // Exit loop when reader is exhausted.
+        }
+
+        let mut local_buf = &buffer[..bytes_read];
+        // Truncate the buffer to the specified count, if provided.
+        if let Some(count) = count {
+            let all_bytes = offset + bytes_read;
+            if count < all_bytes {
+                local_buf = &buffer[..all_bytes - (all_bytes - count)];
+                bytes_read = local_buf.len();
+                run = false;
+            }
+        }
         // Print the address in the specified base format.
         if let Some(base) = config.address_base {
             match base {
@@ -384,23 +412,19 @@ fn print_data(buffer: &[u8], config: &Args) -> Result<(), Box<dyn std::error::Er
             }
         }
 
-        offset += 16; // Move to the next line of bytes.
+        offset += bytes_read; // Move to the next line of bytes.
     }
 
-    if !buffer.is_empty() {
-        offset = buffer.len();
-
-        if let Some(base) = config.address_base {
-            match base {
-                'd' => print!("{:07} ", offset),
-                'o' => print!("{:07o} ", offset),
-                'x' => print!("{:07x} ", offset),
-                'n' => (),
-                _ => print!("{:07} ", offset),
-            }
-        } else {
-            print!("{:07} ", offset);
+    if let Some(base) = config.address_base {
+        match base {
+            'd' => print!("{:07} ", offset),
+            'o' => print!("{:07o} ", offset),
+            'x' => print!("{:07x} ", offset),
+            'n' => (),
+            _ => print!("{:07} ", offset),
         }
+    } else {
+        print!("{:07} ", offset); // Default to octal if no base is specified.
     }
 
     Ok(())
@@ -801,9 +825,12 @@ fn get_named_char(byte: u8) -> Option<&'static str> {
 /// If the verbose flag is set in the configuration, the function prints additional information such as the number of bytes skipped and read.
 ///
 fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
-    let mut buffer: Vec<u8> = Vec::new();
     let mut bytes_to_skip = 0;
     let mut bytes_skipped = 0;
+
+    let mut all_files: Vec<Box<dyn Read>> = Vec::new();
+
+    //let mut stdin_reader: Option<Box<dyn Read>> = None;
 
     // Skip bytes if the -j option is specified.
     if let Some(skip) = &args.skip {
@@ -814,10 +841,21 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         bytes_to_skip = parse_offset(offset)?;
     }
 
-    if (args.files.len() == 1 && args.files[0] == PathBuf::from("-")) || args.files.is_empty() {
-        let mut loc_buffer = Vec::new();
-        io::stdin().lock().read_to_end(&mut loc_buffer)?;
-        buffer = loc_buffer.split_off(bytes_to_skip as usize);
+    let mut reader: Box<dyn Read> = if (args.files.len() == 1
+        && args.files[0] == PathBuf::from("-"))
+        || args.files.is_empty()
+    {
+        let mut stdin: Box<dyn Read> = Box::new(io::stdin().lock());
+
+        //let mut bufreader = io::BufReader::new(stdin);
+        // Buffer of size 1 byte for reading char by char
+        let mut empty_buffer = [0; 1];
+
+        while bytes_to_skip > 0 {
+            stdin.read_exact(&mut empty_buffer)?;
+            bytes_to_skip -= 1;
+        }
+        stdin
     } else {
         for file in &args.files {
             let mut file = File::open(file)?;
@@ -838,20 +876,26 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            // Read the rest of the file
-            let mut loc_buffer = Vec::new();
-            file.read_to_end(&mut loc_buffer)?;
-            buffer.extend(loc_buffer);
+            all_files.push(Box::new(BufReader::new(file)));
+        }
+
+        if all_files.len() > 1 {
+            // Combine all files into one stream
+
+            all_files
+                .into_iter()
+                .reduce(|acc, file| Box::new(acc.chain(file)) as Box<dyn Read>)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "No files to chain"))?
+        } else {
+            match all_files.pop() {
+                None => return Ok(()),
+                Some(f) => f,
+            }
         }
     };
 
-    // Truncate the buffer to the specified count, if provided.
-    if let Some(count) = args.count.as_ref() {
-        buffer.truncate(parse_count(count)?);
-    }
-
     // Print the data.
-    print_data(&buffer, args)?;
+    print_data(&mut reader, args)?;
 
     Ok(())
 }
