@@ -284,7 +284,7 @@ fn parse_offset(offset: &str) -> Result<u64, Box<dyn std::error::Error>> {
 ///
 fn print_data<R: Read>(reader: &mut R, config: &Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut offset = 0; // Initialize offset for printing addresses.
-                        //let mut buffer = Vec::with_capacity(16); // Buffer to read chunks of 16 bytes.
+
     let mut buffer = [0; 16];
     let count = if let Some(count) = config.count.as_ref() {
         Some(parse_count::<usize>(count)?)
@@ -298,7 +298,6 @@ fn print_data<R: Read>(reader: &mut R, config: &Args) -> Result<(), Box<dyn std:
         let mut bytes_read = reader.read(&mut buffer)?;
 
         if bytes_read != 16 {
-            //let mut new_buffer = Vec::with_capacity(16 - bytes_read);
             let bytes_read_2 = reader.read(&mut buffer[bytes_read..])?;
             bytes_read += bytes_read_2;
         }
@@ -830,8 +829,6 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut all_files: Vec<Box<dyn Read>> = Vec::new();
 
-    //let mut stdin_reader: Option<Box<dyn Read>> = None;
-
     // Skip bytes if the -j option is specified.
     if let Some(skip) = &args.skip {
         bytes_to_skip = parse_skip(skip)?;
@@ -847,7 +844,6 @@ fn od(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     {
         let mut stdin: Box<dyn Read> = Box::new(io::stdin().lock());
 
-        //let mut bufreader = io::BufReader::new(stdin);
         // Buffer of size 1 byte for reading char by char
         let mut empty_buffer = [0; 1];
 
