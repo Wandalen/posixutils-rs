@@ -5,7 +5,7 @@ use notify_debouncer_full::notify::event::{ModifyKind, RemoveKind};
 use notify_debouncer_full::notify::{EventKind, RecursiveMode, Watcher};
 use plib::PROJECT_NAME;
 use std::fs::File;
-use std::io::{self, BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -71,26 +71,23 @@ impl Args {
 /// # Arguments
 /// * `reader` - A mutable reference to a reader to read bytes from.
 /// * `n` - The number of lines to print from the end. Negative values indicate counting from the end.
-fn print_last_n_lines<R: Read>(reader: &mut R, n: isize) -> Result<(), Box<dyn std::error::Error>> {
+fn print_last_n_lines<R: Read + BufRead>(
+    reader: &mut R,
+    n: isize,
+) -> Result<(), Box<dyn std::error::Error>> {
     if n < 0 {
         let n = n.unsigned_abs();
-        let mut buffer = [0; 1000000];
-
-        loop {
-            let bytes_read = reader
-                .read(&mut buffer)
-                .map_err(|e| format!("Failed to read: {}", e))?;
-
-            if bytes_read < buffer.len() {
-                let read = String::from_utf8_lossy(&buffer[..bytes_read]);
-                let all_lines: Vec<&str> = read.lines().collect();
-                // Print the last `last_n` lines
-                for line in &all_lines[all_lines.len() - n..] {
-                    println!("{}", line);
-                }
-
-                break;
+        let mut lines = Vec::with_capacity(n);
+        let mut line = String::new();
+        while reader.read_line(&mut line).map_err(|e| e.to_string())? != 0 {
+            if lines.len() == n {
+                lines.remove(0);
             }
+            lines.push(line.clone());
+            line.clear();
+        }
+        for line in lines {
+            println!("{}", line.trim_end());
         }
     } else {
         let mut n = n as usize;
