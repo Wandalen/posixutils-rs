@@ -65,6 +65,10 @@ name = "fold"
 path = "src/fold.rs"
 
 [[bin]]
+name = "grep"
+path = "src/grep.rs"
+
+[[bin]]
 name = "head"
 path = "src/head.rs"
 
