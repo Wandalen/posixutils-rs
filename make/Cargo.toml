@@ -1,0 +1,18 @@
+[package]
+name = "posixutils-make"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/rustcoreutils/posixutils-rs.git"
+
+[dependencies]
+plib = { path = "../plib" }
+clap.workspace = true
+gettext-rs.workspace = true
+
+const_format = "0.2.32"
+makefile-lossless = { git = "https://github.com/YBoy-git/makefile-lossless.git" }
+
+[[bin]]
+name = "make"
+path = "src/main.rs"
