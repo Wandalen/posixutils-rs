@@ -78,11 +78,47 @@ struct Args {
     files: Vec<PathBuf>,
 }
 
+impl Args {
+    fn validate_args(&self) -> Result<(), String> {
+        // Check if conflicting options are used together
+        if self.use_regex && self.use_string {
+            return Err("Options '-E' and '-F' cannot be used together".to_string());
+        }
+
+        // Check if conflicting options are used together
+        if self.count && self.files_with_matches {
+            return Err("Options '-c' and '-l' cannot be used together".to_string());
+        }
+
+        // Check if conflicting options are used together
+        if self.count && self.quiet {
+            return Err("Options '-c' and '-q' cannot be used together".to_string());
+        }
+
+        // Check if conflicting options are used together
+        if self.files_with_matches && self.quiet {
+            return Err("Options '-l' and '-q' cannot be used together".to_string());
+        }
+
+        // Check if conflicting options are used together
+        if self.pattern_list.is_empty()
+            && self.pattern_file.is_empty()
+            && self.single_pattern_list.is_none()
+        {
+            return Err("Required at least one pattern list or file".to_string());
+        }
+
+        Ok(())
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // parse command line arguments
-    let _args = Args::parse();
+    let args = Args::parse();
 
-    println!("{_args:?}");
+    args.validate_args()?;
+
+    println!("{args:?}");
 
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
