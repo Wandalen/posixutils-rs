@@ -13,7 +13,12 @@ extern crate plib;
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
-use std::path::PathBuf;
+use std::str::FromStr;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::{Path, PathBuf},
+};
 
 /// grep - search a file for a pattern
 #[derive(Parser, Debug)]
@@ -110,16 +115,57 @@ impl Args {
 
         Ok(())
     }
+
+    fn resolve_patterns(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        for pf in &self.pattern_file {
+            let patterns = Self::get_file_patterns(pf)?;
+            self.pattern_list.extend(patterns);
+        }
+
+        self.pattern_list = self
+            .pattern_list
+            .iter()
+            .flat_map(|pattern| pattern.split('\n').map(String::from))
+            .collect();
+
+        match &self.single_pattern_list {
+            // if single_pattern_list is none, then pattern_list is not empty
+            None => {}
+            // single_pattern_list might get files value
+            Some(pattern) => {
+                if !self.pattern_list.is_empty() {
+                    // pattern_list is not empty, then single_pattern_list took files value
+                    let path_buf = PathBuf::from_str(pattern.as_str())?;
+                    self.files.push(path_buf);
+                } else {
+                    // pattern_list is empty, then single_pattern_list is only pattern
+                    self.pattern_list = vec![pattern.to_string()]
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn get_file_patterns<P: AsRef<Path>>(path: P) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        BufReader::new(File::open(&path)?)
+            .lines()
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // parse command line arguments
-    let args = Args::parse();
+    let mut args = Args::parse();
 
     args.validate_args()?;
 
-    println!("{args:?}");
+    println!("After validation:\n{args:?}");
 
+    args.resolve_patterns()?;
+
+    println!("After patterns resolving:\n{args:?}");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
