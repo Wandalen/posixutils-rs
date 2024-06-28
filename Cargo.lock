@@ -1019,6 +1019,7 @@ dependencies = [
  "libc",
  "plib",
  "regex",
+ "walkdir",
 ]
 
 [[package]]
