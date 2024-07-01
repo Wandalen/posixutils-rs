@@ -59,13 +59,15 @@ fn determine_rules_to_run(parsed: &Makefile, targets: &[OsString]) -> Vec<Rule> 
 }
 
 fn run_rule(rule: Rule) {
+    let mut command = Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()));
+    command.arg("-c");
+    let mut to_run = String::new();
     for recipe in rule.recipes() {
         println!("{}", recipe);
-        let mut command = Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()));
-        command.arg("-c").arg(recipe);
-        let status = command.status().expect("failed to execute process");
-        if !status.success() {
-            panic!("command failed: {}", status);
-        }
+        to_run.push_str(&recipe);
+    }
+    let status = command.status().expect("failed to execute process");
+    if !status.success() {
+        panic!("command failed: {}", status);
     }
 }
