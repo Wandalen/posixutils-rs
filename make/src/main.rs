@@ -1,17 +1,16 @@
 use core::str::FromStr;
 use std::{
-    env,
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use clap::Parser;
 use const_format::formatcp;
 use gettextrs::{bind_textdomain_codeset, textdomain};
-use makefile_lossless::{Makefile, Rule};
+use makefile_lossless::Makefile;
 use plib::PROJECT_NAME;
+use posixutils_make::Make;
 
 const MAKEFILE: &str = "Makefile";
 const MAKEFILE_PATH: &str = formatcp!("./{}", MAKEFILE);
@@ -30,10 +29,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
     let parsed = parse_makefile(args.makefile_path.as_ref())?;
-    let rules_to_run = determine_rules_to_run(&parsed, &args.targets);
+    let make = Make::from(parsed);
 
-    for rule in rules_to_run {
-        run_rule(rule);
+    if args.targets.is_empty() {
+        make.build_first_target();
+    } else {
+        for target in args.targets {
+            let target = target.into_string().unwrap();
+            make.build_target(target);
+        }
     }
 
     Ok(())
@@ -45,29 +49,4 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn st
     let path = path.unwrap_or(Path::new(MAKEFILE_PATH));
     let contents = fs::read_to_string(path)?;
     Ok(Makefile::from_str(&contents)?)
-}
-
-fn determine_rules_to_run(parsed: &Makefile, targets: &[OsString]) -> Vec<Rule> {
-    if targets.is_empty() {
-        vec![parsed.rules().next().unwrap()]
-    } else {
-        parsed
-            .rules()
-            .filter(|r| targets.contains(&OsString::from(r.targets().next().unwrap())))
-            .collect()
-    }
-}
-
-fn run_rule(rule: Rule) {
-    let mut command = Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()));
-    command.arg("-c");
-    let mut to_run = String::new();
-    for recipe in rule.recipes() {
-        println!("{}", recipe);
-        to_run.push_str(&recipe);
-    }
-    let status = command.status().expect("failed to execute process");
-    if !status.success() {
-        panic!("command failed: {}", status);
-    }
 }
