@@ -13,8 +13,10 @@ extern crate plib;
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
+use regex::Regex;
 use std::str::FromStr;
 use std::{
+    error::Error,
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -81,6 +83,9 @@ struct Args {
     /// A pathname of a file to be searched for the patterns. If no file operands are specified, the
     /// standard input shall be used.
     files: Vec<PathBuf>,
+
+    #[arg(skip)]
+    regex_patterns: Vec<Regex>,
 }
 
 impl Args {
@@ -116,10 +121,9 @@ impl Args {
         Ok(())
     }
 
-    fn resolve_patterns(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn resolve_patterns(&mut self) -> Result<(), Box<dyn Error>> {
         for pf in &self.pattern_file {
-            let patterns = Self::get_file_patterns(pf)?;
-            self.pattern_list.extend(patterns);
+            self.pattern_list.extend(Self::get_file_patterns(pf)?);
         }
 
         self.pattern_list = self
@@ -135,8 +139,7 @@ impl Args {
             Some(pattern) => {
                 if !self.pattern_list.is_empty() {
                     // pattern_list is not empty, then single_pattern_list took files value
-                    let path_buf = PathBuf::from_str(pattern.as_str())?;
-                    self.files.push(path_buf);
+                    self.files.insert(0, PathBuf::from_str(pattern.as_str())?);
                 } else {
                     // pattern_list is empty, then single_pattern_list is only pattern
                     self.pattern_list = vec![pattern.to_string()]
@@ -144,18 +147,27 @@ impl Args {
             }
         }
 
+        self.regex_patterns = if !self.use_string {
+            self.pattern_list
+                .iter()
+                .map(|p| Regex::new(p).unwrap())
+                .collect()
+        } else {
+            vec![]
+        };
+
         Ok(())
     }
 
-    fn get_file_patterns<P: AsRef<Path>>(path: P) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    fn get_file_patterns<P: AsRef<Path>>(path: P) -> Result<Vec<String>, Box<dyn Error>> {
         BufReader::new(File::open(&path)?)
             .lines()
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+            .map_err(|e| Box::new(e) as Box<dyn Error>)
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     // parse command line arguments
     let mut args = Args::parse();
 
