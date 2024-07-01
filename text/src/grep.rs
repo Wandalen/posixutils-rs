@@ -14,12 +14,14 @@ use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use regex::Regex;
-use std::str::FromStr;
+use std::fmt::Display;
 use std::{
     error::Error,
     fs::File,
+    io,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 /// grep - search a file for a pattern
@@ -165,6 +167,44 @@ impl Args {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| Box::new(e) as Box<dyn Error>)
     }
+
+    fn match_patters(&self, input: &str) -> bool {
+        if self.use_string {
+            self.pattern_list.iter().any(|p| input.contains(p))
+        } else {
+            self.regex_patterns.iter().any(|r| r.is_match(input))
+        }
+    }
+}
+
+fn grep(args: &Args) -> Result<(), Box<dyn Error>> {
+    if args.files.is_empty() {
+        let reader: Box<dyn BufRead> = Box::new(BufReader::new(io::stdin()));
+        process_input(args, "(standard input)", reader)?;
+    } else {
+        for file in &args.files {
+            let reader: Box<dyn BufRead> = Box::new(BufReader::new(File::open(file)?));
+            process_input(args, file.display().to_string(), reader)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn process_input(
+    args: &Args,
+    source_name: impl Display,
+    reader: Box<dyn BufRead>,
+) -> Result<(), Box<dyn Error>> {
+    let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+
+    for (line_number, line) in lines.iter().enumerate() {
+        if args.match_patters(line) {
+            println!("{source_name}:{line_number}: {line}");
+        }
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -173,11 +213,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     args.validate_args()?;
 
-    println!("After validation:\n{args:?}");
+    println!("After validation:\n{args:?}\n");
 
     args.resolve_patterns()?;
 
-    println!("After patterns resolving:\n{args:?}");
+    println!("After patterns resolving:\n{args:?}\n");
+
+    grep(&args)?;
+
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
