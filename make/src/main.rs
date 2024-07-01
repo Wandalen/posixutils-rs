@@ -1,6 +1,8 @@
 use core::str::FromStr;
 use std::{
-    env, fs,
+    env,
+    ffi::OsString,
+    fs,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -19,10 +21,10 @@ struct Args {
     #[arg(short = 'f', help = "Path to the makefile to parse")]
     makefile_path: Option<PathBuf>,
 
-    targets: Vec<String>,
+    targets: Vec<OsString>,
 }
 
-fn main() -> Result<(), Box<dyn core::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
@@ -37,7 +39,7 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
     Ok(())
 }
 
-fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn core::error::Error>> {
+fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn std::error::Error>> {
     let path = path.as_ref().map(|p| p.as_ref());
 
     let path = path.unwrap_or(Path::new(MAKEFILE_PATH));
@@ -45,13 +47,13 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn co
     Ok(Makefile::from_str(&contents)?)
 }
 
-fn determine_rules_to_run(parsed: &Makefile, targets: &[String]) -> Vec<Rule> {
+fn determine_rules_to_run(parsed: &Makefile, targets: &[OsString]) -> Vec<Rule> {
     if targets.is_empty() {
         vec![parsed.rules().next().unwrap()]
     } else {
         parsed
             .rules()
-            .filter(|r| targets.contains(&r.targets().next().unwrap()))
+            .filter(|r| targets.contains(&OsString::from(r.targets().next().unwrap())))
             .collect()
     }
 }
