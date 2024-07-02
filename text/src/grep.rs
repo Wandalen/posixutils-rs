@@ -195,6 +195,7 @@ impl Args {
         };
 
         GrepModel {
+            any_matches: false,
             output_mode,
             line_number: self.line_number,
             patterns,
@@ -242,6 +243,7 @@ enum OutputMode {
 /// Structure that contains all necessary information for `grep` utility processing
 #[derive(Debug)]
 struct GrepModel {
+    any_matches: bool,
     output_mode: OutputMode,
     line_number: bool,
     patterns: Patterns,
@@ -260,6 +262,7 @@ impl GrepModel {
     /// Returns [i32](i32) that represents *exit status code*.
     fn grep(&mut self) -> Result<i32, Box<dyn Error>> {
         if self.files.is_empty() {
+            // If there is no input files, input will be taken from STDIN
             let reader: Box<dyn BufRead> = Box::new(BufReader::new(io::stdin()));
             self.process_input("(standard input)".to_string(), reader)?;
         } else {
@@ -267,6 +270,10 @@ impl GrepModel {
             for file in files {
                 let reader: Box<dyn BufRead> = Box::new(BufReader::new(File::open(file.clone())?));
                 self.process_input(file.display().to_string(), reader)?;
+                // If process in is quiet more and any line matches are present, stop processing
+                if self.any_matches && self.output_mode == OutputMode::Quiet {
+                    break;
+                }
             }
         }
 
@@ -280,7 +287,11 @@ impl GrepModel {
             _ => {}
         }
 
-        Ok(0)
+        if self.any_matches {
+            Ok(0)
+        } else {
+            Ok(1)
+        }
     }
 
     /// Reads lines from buffer and precesses them.
@@ -307,6 +318,7 @@ impl GrepModel {
             }
             line_number += 1;
             if self.patterns.matches(line.clone()) {
+                self.any_matches = true;
                 match &mut self.output_mode {
                     OutputMode::Count(count) => {
                         *count += 1;
