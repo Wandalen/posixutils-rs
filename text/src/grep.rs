@@ -13,7 +13,7 @@ extern crate plib;
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use std::{
     error::Error,
     fs::File,
@@ -153,7 +153,7 @@ impl Args {
     ///
     /// # Arguments
     ///
-    /// * `path` - object that implements [AsRef](AsRef) for [Path](Path) and describes file that contains patters.
+    /// * `path` - object that implements [AsRef](AsRef) for [Path](Path) and describes file that contains patterns.
     ///
     /// # Errors
     ///
@@ -170,7 +170,7 @@ impl Args {
     /// # Returns
     ///
     /// Returns [GrepModel](GrepModel) object.
-    fn to_grep_model(self) -> GrepModel {
+    fn to_grep_model(&self) -> GrepModel {
         // Resolve output mode
         let output_mode = if self.count {
             OutputMode::Count(0)
@@ -182,38 +182,55 @@ impl Args {
             OutputMode::Default
         };
 
-        // Resolve patterns type
-        let patterns = if !self.use_string {
-            Patterns::Regex(
-                self.pattern_list
-                    .iter()
-                    .map(|p| Regex::new(p).unwrap())
-                    .collect(),
-            )
-        } else {
-            Patterns::FixedStrings(self.pattern_list.clone())
-        };
-
         GrepModel {
             any_matches: false,
             line_number: self.line_number,
             invert_match: self.invert_match,
             output_mode,
-            patterns,
-            files: self.files,
+            patterns: Patterns::new(&self.pattern_list, self.use_string, self.ignore_case),
+            files: self.files.clone(),
         }
     }
 }
 
-/// Contains either array of [Regex](Regex) or array of fixed [String](String).
+/// Newtype over `Vec[Regex]`. Provides functionality for matching input data.
 #[derive(Debug)]
-enum Patterns {
-    Regex(Vec<Regex>),
-    FixedStrings(Vec<String>),
-}
+struct Patterns(Vec<Regex>);
 
 impl Patterns {
-    /// Checks if input string matches to present patters.
+    /// Creates a new `Patterns` object with regex patterns.
+    ///
+    /// # Arguments
+    ///
+    /// * `patterns` - `Vec<String>` containing the patterns.
+    /// * `fixed_string` - `bool` indicating whether patter is fixed string or regex
+    /// * `ignore_case` - `bool` indicating whether to ignore case.
+    ///
+    /// # Returns
+    ///
+    /// Returns [Patterns](Patterns).
+    fn new(patterns: &[String], fixed_string: bool, ignore_case: bool) -> Self {
+        Self(
+            patterns
+                .iter()
+                .map(|p| {
+                    if fixed_string {
+                        regex::escape(p)
+                    } else {
+                        p.to_string()
+                    }
+                })
+                .map(|p| {
+                    RegexBuilder::new(&p)
+                        .case_insensitive(ignore_case)
+                        .build()
+                        .unwrap()
+                })
+                .collect(),
+        )
+    }
+
+    /// Checks if input string matches to present patterns.
     ///
     /// # Arguments
     ///
@@ -223,12 +240,7 @@ impl Patterns {
     ///
     /// Returns [bool](bool) - `true` if input matches present patterns, else `false`.
     fn matches(&self, input: impl AsRef<str>) -> bool {
-        match self {
-            Patterns::Regex(regexes) => regexes.iter().any(|r| r.is_match(input.as_ref())),
-            Patterns::FixedStrings(fixed_strings) => {
-                fixed_strings.iter().any(|fs| input.as_ref().contains(fs))
-            }
-        }
+        self.0.iter().any(|r| r.is_match(input.as_ref()))
     }
 }
 
