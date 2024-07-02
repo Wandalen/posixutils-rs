@@ -39,22 +39,18 @@ impl Make {
     }
 
     fn run_rule(&self, rule: &Rule) {
-        let mut command = Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()));
-        self.init_env(&mut command);
-
-        command.arg("-c");
-
-        let mut to_run = String::new();
         for recipe in rule.recipes() {
             println!("{}", recipe);
-            to_run.push_str(&recipe);
-            to_run.push(';');
-        }
-        command.arg(to_run);
 
-        let status = command.status().expect("failed to execute process");
-        if !status.success() {
-            panic!("command failed: {}", status);
+            let mut command =
+                Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()));
+            self.init_env(&mut command);
+            command.args(["-c", &recipe]);
+
+            let status = command.status().expect("failed to execute process");
+            if !status.success() {
+                panic!("command failed: {}", status);
+            }
         }
     }
 
