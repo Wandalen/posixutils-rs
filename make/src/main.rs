@@ -59,7 +59,7 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn st
             Ok(contents) => contents,
             Err(e) => {
                 eprintln!("make: {}: {}", path.display(), e); // format!("{e}") is not consistent
-                std::process::exit(1);
+                std::process::exit(2);
             }
         };
         Ok(Makefile::from_str(&contents)?)
