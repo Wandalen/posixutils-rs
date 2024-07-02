@@ -196,8 +196,9 @@ impl Args {
 
         GrepModel {
             any_matches: false,
-            output_mode,
             line_number: self.line_number,
+            invert_match: self.invert_match,
+            output_mode,
             patterns,
             files: self.files,
         }
@@ -244,8 +245,9 @@ enum OutputMode {
 #[derive(Debug)]
 struct GrepModel {
     any_matches: bool,
-    output_mode: OutputMode,
     line_number: bool,
+    invert_match: bool,
+    output_mode: OutputMode,
     patterns: Patterns,
     files: Vec<PathBuf>,
 }
@@ -317,7 +319,14 @@ impl GrepModel {
                 break;
             }
             line_number += 1;
-            if self.patterns.matches(line.clone()) {
+
+            let init_matches = self.patterns.matches(line.clone());
+            let matches = if self.invert_match {
+                !init_matches
+            } else {
+                init_matches
+            };
+            if matches {
                 self.any_matches = true;
                 match &mut self.output_mode {
                     OutputMode::Count(count) => {
