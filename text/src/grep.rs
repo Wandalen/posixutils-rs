@@ -14,7 +14,6 @@ use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use regex::Regex;
-use std::fmt::Display;
 use std::{
     error::Error,
     fs::File,
@@ -85,44 +84,42 @@ struct Args {
     /// A pathname of a file to be searched for the patterns. If no file operands are specified, the
     /// standard input shall be used.
     files: Vec<PathBuf>,
-
-    #[arg(skip)]
-    regex_patterns: Vec<Regex>,
 }
 
 impl Args {
+    /// Validates the arguments to ensure no conflicting options are used together.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if conflicting options are found.
     fn validate_args(&self) -> Result<(), String> {
         // Check if conflicting options are used together
         if self.use_regex && self.use_string {
             return Err("Options '-E' and '-F' cannot be used together".to_string());
         }
-
-        // Check if conflicting options are used together
         if self.count && self.files_with_matches {
             return Err("Options '-c' and '-l' cannot be used together".to_string());
         }
-
-        // Check if conflicting options are used together
         if self.count && self.quiet {
             return Err("Options '-c' and '-q' cannot be used together".to_string());
         }
-
-        // Check if conflicting options are used together
         if self.files_with_matches && self.quiet {
             return Err("Options '-l' and '-q' cannot be used together".to_string());
         }
-
-        // Check if conflicting options are used together
         if self.pattern_list.is_empty()
             && self.pattern_file.is_empty()
             && self.single_pattern_list.is_none()
         {
             return Err("Required at least one pattern list or file".to_string());
         }
-
         Ok(())
     }
 
+    /// Resolves input patterns and files. Reads patters from files and merges them with specified as argument.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is an issue reading files.
     fn resolve_patterns(&mut self) -> Result<(), Box<dyn Error>> {
         for pf in &self.pattern_file {
             self.pattern_list.extend(Self::get_file_patterns(pf)?);
@@ -149,18 +146,18 @@ impl Args {
             }
         }
 
-        self.regex_patterns = if !self.use_string {
-            self.pattern_list
-                .iter()
-                .map(|p| Regex::new(p).unwrap())
-                .collect()
-        } else {
-            vec![]
-        };
-
         Ok(())
     }
 
+    /// Reads patterns from file.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - object that implements [AsRef](AsRef) for [Path](Path) and describes file that contains patters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is an issue reading the file.
     fn get_file_patterns<P: AsRef<Path>>(path: P) -> Result<Vec<String>, Box<dyn Error>> {
         BufReader::new(File::open(&path)?)
             .lines()
@@ -168,69 +165,186 @@ impl Args {
             .map_err(|e| Box::new(e) as Box<dyn Error>)
     }
 
-    fn match_patters(&self, input: &str) -> bool {
-        if self.use_string {
-            self.pattern_list.iter().any(|p| input.contains(p))
+    /// Maps [Args](Args) object into [GrepModel](GrepModel)
+    ///
+    /// # Returns
+    ///
+    /// Returns [GrepModel](GrepModel) object.
+    fn to_grep_model(self) -> GrepModel {
+        // Resolve output mode
+        let output_mode = if self.count {
+            OutputMode::Count(0)
+        } else if self.files_with_matches {
+            OutputMode::FilesWithMatches(vec![])
+        } else if self.quiet {
+            OutputMode::Quiet
         } else {
-            self.regex_patterns.iter().any(|r| r.is_match(input))
+            OutputMode::Default
+        };
+
+        // Resolve patterns type
+        let patterns = if !self.use_string {
+            Patterns::Regex(
+                self.pattern_list
+                    .iter()
+                    .map(|p| Regex::new(p).unwrap())
+                    .collect(),
+            )
+        } else {
+            Patterns::FixedStrings(self.pattern_list.clone())
+        };
+
+        GrepModel {
+            output_mode,
+            line_number: self.line_number,
+            patterns,
+            files: self.files,
         }
     }
 }
 
-fn grep(args: &Args) -> Result<(), Box<dyn Error>> {
-    let mut matches_counter = 0;
-    if args.files.is_empty() {
-        let reader: Box<dyn BufRead> = Box::new(BufReader::new(io::stdin()));
-        process_input(args, "(standard input)", &mut matches_counter, reader)?;
-    } else {
-        for file in &args.files {
-            let reader: Box<dyn BufRead> = Box::new(BufReader::new(File::open(file)?));
-            process_input(
-                args,
-                file.display().to_string(),
-                &mut matches_counter,
-                reader,
-            )?;
-        }
-    }
-
-    if args.count {
-        println!("{matches_counter}");
-    }
-
-    Ok(())
+/// Contains either array of [Regex](Regex) or array of fixed [String](String).
+#[derive(Debug)]
+enum Patterns {
+    Regex(Vec<Regex>),
+    FixedStrings(Vec<String>),
 }
 
-fn process_input(
-    args: &Args,
-    source_name: impl Display,
-    matches_counter: &mut i32,
-    reader: Box<dyn BufRead>,
-) -> Result<(), Box<dyn Error>> {
-    let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
-
-    for (line_number, line) in lines.iter().enumerate() {
-        if args.match_patters(line) {
-            *matches_counter += 1;
-            if args.count {
-                continue;
-            } else if args.files_with_matches {
-                println!("{source_name}");
-                break;
-            } else if !args.quiet {
-                if args.line_number {
-                    println!("{source_name}:{}: {line}", line_number + 1)
-                } else {
-                    println!("{source_name}:{line}")
-                }
+impl Patterns {
+    /// Checks if input string matches to present patters.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - object that implements [AsRef](AsRef) for [str](str) and describes line.
+    ///
+    /// # Returns
+    ///
+    /// Returns [bool](bool) - `true` if input matches present patterns, else `false`.
+    fn matches(&self, input: impl AsRef<str>) -> bool {
+        match self {
+            Patterns::Regex(regexes) => regexes.iter().any(|r| r.is_match(input.as_ref())),
+            Patterns::FixedStrings(fixed_strings) => {
+                fixed_strings.iter().any(|fs| input.as_ref().contains(fs))
             }
         }
     }
+}
 
-    Ok(())
+/// Represents possible `grep` output modes.
+#[derive(Debug, Eq, PartialEq)]
+enum OutputMode {
+    Count(u64),
+    FilesWithMatches(Vec<String>),
+    Quiet,
+    Default,
+}
+
+/// Structure that contains all necessary information for `grep` utility processing
+#[derive(Debug)]
+struct GrepModel {
+    output_mode: OutputMode,
+    line_number: bool,
+    patterns: Patterns,
+    files: Vec<PathBuf>,
+}
+
+impl GrepModel {
+    /// Processes files or STDIN content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is an issue reading files.
+    ///
+    /// # Returns
+    ///
+    /// Returns [i32](i32) that represents *exit status code*.
+    fn grep(&mut self) -> Result<i32, Box<dyn Error>> {
+        if self.files.is_empty() {
+            let reader: Box<dyn BufRead> = Box::new(BufReader::new(io::stdin()));
+            self.process_input("(standard input)".to_string(), reader)?;
+        } else {
+            let files = self.files.clone();
+            for file in files {
+                let reader: Box<dyn BufRead> = Box::new(BufReader::new(File::open(file.clone())?));
+                self.process_input(file.display().to_string(), reader)?;
+            }
+        }
+
+        match &self.output_mode {
+            OutputMode::Count(count) => {
+                println!("{count}");
+            }
+            OutputMode::FilesWithMatches(files_with_matches) => {
+                files_with_matches.iter().for_each(|fwm| println!("{fwm}"));
+            }
+            _ => {}
+        }
+
+        Ok(0)
+    }
+
+    /// Reads lines from buffer and precesses them.
+    ///
+    /// # Arguments
+    ///
+    /// * `source_name` - [String](String) that represents content source name.
+    /// * `reader` - [Box](Box) that contains object that implements [BufRead] and reads lines.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is an issue reading lines.
+    fn process_input(
+        &mut self,
+        source_name: String,
+        mut reader: Box<dyn BufRead>,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut line_number: u64 = 0;
+        loop {
+            let mut line = String::new();
+            let n_read = reader.read_line(&mut line)?;
+            if n_read == 0 {
+                break;
+            }
+            line_number += 1;
+            if self.patterns.matches(line.clone()) {
+                match &mut self.output_mode {
+                    OutputMode::Count(count) => {
+                        *count += 1;
+                    }
+                    OutputMode::FilesWithMatches(files_with_matches) => {
+                        files_with_matches.push(source_name.clone());
+                        break;
+                    }
+                    OutputMode::Quiet => {
+                        break;
+                    }
+                    OutputMode::Default => {
+                        // If we read from multiple files
+                        let s = if self.files.len() > 1 {
+                            format!("{source_name}:")
+                        } else {
+                            "".to_string()
+                        };
+                        let ln = if self.line_number {
+                            format!("{line_number}:")
+                        } else {
+                            "".to_string()
+                        };
+                        print!("{s}{ln}{line}");
+                    }
+                }
+            }
+
+            line.clear();
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
     // parse command line arguments
     let mut args = Args::parse();
 
@@ -242,12 +356,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("After patterns resolving:\n{args:?}\n");
 
-    grep(&args)?;
+    let mut grep_model = args.to_grep_model();
 
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+    println!("{grep_model:?}\n");
 
-    let exit_code = 0;
+    // Exit code:
+    //     0 - One or more lines were selected.
+    //     1 - No lines were selected.
+    //     >1 - An error occurred.
+    let exit_code = grep_model.grep().unwrap_or_else(|err| {
+        eprintln!("{}", err);
+        2
+    });
 
     std::process::exit(exit_code)
 }
