@@ -178,14 +178,24 @@ impl Args {
 }
 
 fn grep(args: &Args) -> Result<(), Box<dyn Error>> {
+    let mut matches_counter = 0;
     if args.files.is_empty() {
         let reader: Box<dyn BufRead> = Box::new(BufReader::new(io::stdin()));
-        process_input(args, "(standard input)", reader)?;
+        process_input(args, "(standard input)", &mut matches_counter, reader)?;
     } else {
         for file in &args.files {
             let reader: Box<dyn BufRead> = Box::new(BufReader::new(File::open(file)?));
-            process_input(args, file.display().to_string(), reader)?;
+            process_input(
+                args,
+                file.display().to_string(),
+                &mut matches_counter,
+                reader,
+            )?;
         }
+    }
+
+    if args.count {
+        println!("{matches_counter}");
     }
 
     Ok(())
@@ -194,13 +204,26 @@ fn grep(args: &Args) -> Result<(), Box<dyn Error>> {
 fn process_input(
     args: &Args,
     source_name: impl Display,
+    matches_counter: &mut i32,
     reader: Box<dyn BufRead>,
 ) -> Result<(), Box<dyn Error>> {
     let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
 
     for (line_number, line) in lines.iter().enumerate() {
         if args.match_patters(line) {
-            println!("{source_name}:{line_number}: {line}");
+            *matches_counter += 1;
+            if args.count {
+                continue;
+            } else if args.files_with_matches {
+                println!("{source_name}");
+                break;
+            } else if !args.quiet {
+                if args.line_number {
+                    println!("{source_name}:{}: {line}", line_number + 1)
+                } else {
+                    println!("{source_name}:{line}")
+                }
+            }
         }
     }
 
