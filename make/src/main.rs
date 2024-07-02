@@ -53,9 +53,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn std::error::Error>> {
-    let path = path.as_ref().map(|p| p.as_ref());
-
-    let path = path.unwrap_or(Path::new(MAKEFILE_PATH));
-    let contents = fs::read_to_string(path)?;
-    Ok(Makefile::from_str(&contents)?)
+    fn inner(path: Option<&Path>) -> Result<Makefile, Box<dyn std::error::Error>> {
+        let path = path.unwrap_or(Path::new(MAKEFILE_PATH));
+        let contents = match fs::read_to_string(path) {
+            Ok(contents) => contents,
+            Err(e) => {
+                eprintln!("make: {}: {}", path.display(), e); // format!("{e}") is not consistent
+                std::process::exit(1);
+            }
+        };
+        Ok(Makefile::from_str(&contents)?)
+    }
+    inner(path.as_ref().map(|p| p.as_ref()))
 }
