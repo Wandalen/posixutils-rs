@@ -187,7 +187,12 @@ impl Args {
             line_number: self.line_number,
             invert_match: self.invert_match,
             output_mode,
-            patterns: Patterns::new(&self.pattern_list, self.use_string, self.ignore_case),
+            patterns: Patterns::new(
+                &self.pattern_list,
+                self.use_string,
+                self.line_regexp,
+                self.ignore_case,
+            ),
             files: self.files.clone(),
         }
     }
@@ -204,18 +209,24 @@ impl Patterns {
     ///
     /// * `patterns` - `Vec<String>` containing the patterns.
     /// * `fixed_string` - `bool` indicating whether patter is fixed string or regex
+    /// * `line_regexp` - `bool` indicating whether to match the entire input.
     /// * `ignore_case` - `bool` indicating whether to ignore case.
     ///
     /// # Returns
     ///
     /// Returns [Patterns](Patterns).
-    fn new(patterns: &[String], fixed_string: bool, ignore_case: bool) -> Self {
+    fn new(patterns: &[String], fixed_string: bool, line_regexp: bool, ignore_case: bool) -> Self {
         Self(
             patterns
                 .iter()
                 .map(|p| {
                     if fixed_string {
-                        regex::escape(p)
+                        let escaped = regex::escape(p);
+                        if line_regexp {
+                            format!(r"^{escaped}$")
+                        } else {
+                            escaped
+                        }
                     } else {
                         p.to_string()
                     }
@@ -331,8 +342,9 @@ impl GrepModel {
                 break;
             }
             line_number += 1;
+            let trimmed = line.trim_end();
 
-            let init_matches = self.patterns.matches(line.clone());
+            let init_matches = self.patterns.matches(trimmed);
             let matches = if self.invert_match {
                 !init_matches
             } else {
@@ -363,7 +375,7 @@ impl GrepModel {
                         } else {
                             "".to_string()
                         };
-                        print!("{s}{ln}{line}");
+                        println!("{s}{ln}{trimmed}");
                     }
                 }
             }
