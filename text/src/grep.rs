@@ -15,10 +15,8 @@ use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use regex::{Regex, RegexBuilder};
 use std::{
-    error::Error,
     fs::File,
-    io,
-    io::{BufRead, BufReader},
+    io::{self, BufRead, BufReader},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -84,6 +82,9 @@ struct Args {
     /// A pathname of a file to be searched for the patterns. If no file operands are specified, the
     /// standard input shall be used.
     files: Vec<PathBuf>,
+
+    #[arg(skip)]
+    any_errors: bool,
 }
 
 impl Args {
@@ -120,9 +121,17 @@ impl Args {
     /// # Errors
     ///
     /// Returns an error if there is an issue reading files.
-    fn resolve_patterns(&mut self) -> Result<(), Box<dyn Error>> {
+    fn resolve_patterns(&mut self) {
         for pf in &self.pattern_file {
-            self.pattern_list.extend(Self::get_file_patterns(pf)?);
+            match Self::get_file_patterns(pf) {
+                Ok(patterns) => self.pattern_list.extend(patterns),
+                Err(err) => {
+                    self.any_errors = true;
+                    if !self.no_messages {
+                        eprintln!("{}", err);
+                    }
+                }
+            }
         }
 
         self.pattern_list = self
@@ -138,15 +147,23 @@ impl Args {
             Some(pattern) => {
                 if !self.pattern_list.is_empty() {
                     // pattern_list is not empty, then single_pattern_list took files value
-                    self.files.insert(0, PathBuf::from_str(pattern.as_str())?);
+                    match PathBuf::from_str(pattern.as_str()) {
+                        Ok(path_buf) => {
+                            self.files.insert(0, path_buf);
+                        }
+                        Err(err) => {
+                            self.any_errors = true;
+                            if !self.no_messages {
+                                eprintln!("{}", err);
+                            }
+                        }
+                    }
                 } else {
                     // pattern_list is empty, then single_pattern_list is only pattern
                     self.pattern_list = vec![pattern.to_string()]
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Reads patterns from file.
@@ -158,11 +175,10 @@ impl Args {
     /// # Errors
     ///
     /// Returns an error if there is an issue reading the file.
-    fn get_file_patterns<P: AsRef<Path>>(path: P) -> Result<Vec<String>, Box<dyn Error>> {
+    fn get_file_patterns<P: AsRef<Path>>(path: P) -> Result<Vec<String>, io::Error> {
         BufReader::new(File::open(&path)?)
             .lines()
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| Box::new(e) as Box<dyn Error>)
     }
 
     /// Maps [Args](Args) object into [GrepModel](GrepModel)
@@ -184,7 +200,9 @@ impl Args {
 
         GrepModel {
             any_matches: false,
+            any_errors: self.any_errors,
             line_number: self.line_number,
+            no_messages: self.no_messages,
             invert_match: self.invert_match,
             output_mode,
             patterns: Patterns::new(
@@ -268,7 +286,9 @@ enum OutputMode {
 #[derive(Debug)]
 struct GrepModel {
     any_matches: bool,
+    any_errors: bool,
     line_number: bool,
+    no_messages: bool,
     invert_match: bool,
     output_mode: OutputMode,
     patterns: Patterns,
@@ -285,16 +305,25 @@ impl GrepModel {
     /// # Returns
     ///
     /// Returns [i32](i32) that represents *exit status code*.
-    fn grep(&mut self) -> Result<i32, Box<dyn Error>> {
+    fn grep(&mut self) -> i32 {
         if self.files.is_empty() {
             // If there is no input files, input will be taken from STDIN
             let reader: Box<dyn BufRead> = Box::new(BufReader::new(io::stdin()));
-            self.process_input("(standard input)".to_string(), reader)?;
+            self.process_input("(standard input)".to_string(), reader);
         } else {
-            let files = self.files.clone();
-            for file in files {
-                let reader: Box<dyn BufRead> = Box::new(BufReader::new(File::open(file.clone())?));
-                self.process_input(file.display().to_string(), reader)?;
+            for file in self.files.clone() {
+                match File::open(file.clone()) {
+                    Ok(f) => {
+                        let reader: Box<dyn BufRead> = Box::new(BufReader::new(f));
+                        self.process_input(file.display().to_string(), reader);
+                    }
+                    Err(err) => {
+                        self.any_errors = true;
+                        if !self.no_messages {
+                            eprintln!("{}", err);
+                        }
+                    }
+                }
                 // If process in is quiet more and any line matches are present, stop processing
                 if self.any_matches && self.output_mode == OutputMode::Quiet {
                     break;
@@ -312,10 +341,12 @@ impl GrepModel {
             _ => {}
         }
 
-        if self.any_matches {
-            Ok(0)
+        if self.any_errors {
+            2
+        } else if !self.any_matches {
+            1
         } else {
-            Ok(1)
+            0
         }
     }
 
@@ -329,77 +360,76 @@ impl GrepModel {
     /// # Errors
     ///
     /// Returns an error if there is an issue reading lines.
-    fn process_input(
-        &mut self,
-        source_name: String,
-        mut reader: Box<dyn BufRead>,
-    ) -> Result<(), Box<dyn Error>> {
+    fn process_input(&mut self, source_name: String, mut reader: Box<dyn BufRead>) {
         let mut line_number: u64 = 0;
         loop {
             let mut line = String::new();
-            let n_read = reader.read_line(&mut line)?;
-            if n_read == 0 {
-                break;
-            }
-            line_number += 1;
-            let trimmed = line.trim_end();
+            match reader.read_line(&mut line) {
+                Ok(n_read) => {
+                    if n_read == 0 {
+                        break;
+                    }
+                    line_number += 1;
+                    let trimmed = line.trim_end();
 
-            let init_matches = self.patterns.matches(trimmed);
-            let matches = if self.invert_match {
-                !init_matches
-            } else {
-                init_matches
-            };
-            if matches {
-                self.any_matches = true;
-                match &mut self.output_mode {
-                    OutputMode::Count(count) => {
-                        *count += 1;
+                    let init_matches = self.patterns.matches(trimmed);
+                    let matches = if self.invert_match {
+                        !init_matches
+                    } else {
+                        init_matches
+                    };
+                    if matches {
+                        self.any_matches = true;
+                        match &mut self.output_mode {
+                            OutputMode::Count(count) => {
+                                *count += 1;
+                            }
+                            OutputMode::FilesWithMatches(files_with_matches) => {
+                                files_with_matches.push(source_name.clone());
+                                break;
+                            }
+                            OutputMode::Quiet => {
+                                break;
+                            }
+                            OutputMode::Default => {
+                                // If we read from multiple files
+                                let s = if self.files.len() > 1 {
+                                    format!("{source_name}:")
+                                } else {
+                                    "".to_string()
+                                };
+                                let ln = if self.line_number {
+                                    format!("{line_number}:")
+                                } else {
+                                    "".to_string()
+                                };
+                                println!("{s}{ln}{trimmed}");
+                            }
+                        }
                     }
-                    OutputMode::FilesWithMatches(files_with_matches) => {
-                        files_with_matches.push(source_name.clone());
-                        break;
-                    }
-                    OutputMode::Quiet => {
-                        break;
-                    }
-                    OutputMode::Default => {
-                        // If we read from multiple files
-                        let s = if self.files.len() > 1 {
-                            format!("{source_name}:")
-                        } else {
-                            "".to_string()
-                        };
-                        let ln = if self.line_number {
-                            format!("{line_number}:")
-                        } else {
-                            "".to_string()
-                        };
-                        println!("{s}{ln}{trimmed}");
+            line.clear();
+            line.clear();
+                    line.clear();
+                }
+                Err(err) => {
+                    self.any_errors = true;
+                    if !self.no_messages {
+                        eprintln!("{}", err);
                     }
                 }
             }
-
-            line.clear();
         }
-
-        Ok(())
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
     // parse command line arguments
     let mut args = Args::parse();
 
     args.validate_args()?;
-
-    println!("After validation:\n{args:?}\n");
-
-    args.resolve_patterns()?;
-
-    println!("After patterns resolving:\n{args:?}\n");
+    args.resolve_patterns();
 
     let mut grep_model = args.to_grep_model();
 
@@ -409,10 +439,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //     0 - One or more lines were selected.
     //     1 - No lines were selected.
     //     >1 - An error occurred.
-    let exit_code = grep_model.grep().unwrap_or_else(|err| {
-        eprintln!("{}", err);
-        2
-    });
+    let exit_code = grep_model.grep();
 
     std::process::exit(exit_code)
 }
