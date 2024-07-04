@@ -55,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         targets,
     } = Args::parse();
 
+    // -C flag
     if let Some(dir) = change_directory {
         env::set_current_dir(dir)?;
     }
@@ -84,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    Ok(())
+    process::exit(0);
 }
 
 fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn std::error::Error>> {
