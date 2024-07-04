@@ -244,19 +244,15 @@ impl Patterns {
         let regexes: Result<Vec<Regex>, String> = patterns
             .iter()
             .map(|p| {
-                if fixed_string {
-                    let pattern = if fixed_string {
-                        regex::escape(p)
-                    } else {
-                        p.clone()
-                    };
-                    if line_regexp {
-                        format!(r"^{pattern}$")
-                    } else {
-                        pattern
-                    }
+                let pattern = if fixed_string {
+                    regex::escape(p)
                 } else {
                     p.clone()
+                };
+                if line_regexp {
+                    format!(r"^{pattern}$")
+                } else {
+                    pattern
                 }
             })
             .map(|p| {
