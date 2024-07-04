@@ -12,4 +12,5 @@ pub enum ErrorCode {
     ParseError,
     NoTargets,
     NoRule,
+    RecursivePrerequisite,
 }

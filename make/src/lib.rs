@@ -12,17 +12,21 @@ pub use config::Config;
 mod error_code;
 pub use error_code::ErrorCode;
 
-use std::{env, process::{self, Command}};
+use std::{
+    env, fs,
+    process::{self, Command},
+    time::SystemTime,
+};
 
 use makefile_lossless::{Makefile, Rule, VariableDefinition};
 use ErrorCode::*;
 
-/// The only way to create an `Make` is from a `Makefile`.
+/// The only way to create an `Make` is from a `Makefile` and a `Config`.
 pub struct Make {
     variables: Vec<VariableDefinition>,
     rules: Vec<Rule>,
 
-    config: Config,
+    pub config: Config,
 }
 
 impl Make {
@@ -34,19 +38,28 @@ impl Make {
 }
 
 impl Make {
-    pub fn build_first_target(&self) -> Option<()> {
+    pub fn build_first_target(&self) -> Option<bool> {
         let rule = self.rules.first()?;
-        self.run_rule(rule);
-        Some(())
+        Some(self.run_rule(rule))
     }
 
-    pub fn build_target(&self, target: impl AsRef<str>) -> Option<()> {
+    pub fn build_target(&self, target: impl AsRef<str>) -> Option<bool> {
         let rule = self.target_rule(target)?;
-        self.run_rule(rule);
-        Some(())
+        Some(self.run_rule(rule))
     }
 
-    fn run_rule(&self, rule: &Rule) {
+    fn run_rule(&self, rule: &Rule) -> bool {
+        let target = rule.targets().next().unwrap();
+        let newer_prerequisites = self.get_newer_prerequisites(&target);
+        if newer_prerequisites.is_empty() && get_modified_time(&target).is_some() {
+            return false;
+        }
+
+        // DANGER: will not work for recursive prerequisites
+        for prerequisite in &newer_prerequisites {
+            self.build_target(prerequisite);
+        }
+
         for recipe in rule.recipes() {
             if !self.config.silent {
                 println!("{}", recipe);
@@ -59,16 +72,44 @@ impl Make {
 
             let status = command.status().expect("failed to execute process");
             if !status.success() {
-                eprintln!(
-                    "make: [{}]: Error {}",
-                    rule.targets().next().unwrap(),
-                    status.code().unwrap_or(1)
-                );
-                process::exit(status.code().unwrap_or(ExecutionError as i32));
+                let code = status.code().unwrap_or(ExecutionError as i32);
+                eprintln!("make: [{}]: Error {}", target, code);
+                process::exit(code);
             }
         }
+
+        true
     }
 
+    fn get_newer_prerequisites(&self, target: impl AsRef<str>) -> Vec<String> {
+        let Some(target_rule) = self.target_rule(&target) else {
+            return vec![];
+        };
+        let target_modified = get_modified_time(target);
+
+        let prerequisites = target_rule.prerequisites();
+
+        if let Some(target_modified) = target_modified {
+            prerequisites
+                .filter(|prerequisite| {
+                    let Some(pre_modified) = get_modified_time(prerequisite) else {
+                        return true;
+                    };
+
+                    if !self.get_newer_prerequisites(prerequisite).is_empty() {
+                        return true;
+                    }
+
+                    pre_modified > target_modified
+                })
+                .collect()
+        } else {
+            prerequisites.collect()
+        }
+    }
+}
+
+impl Make {
     fn init_env(&self, command: &mut Command) {
         command.envs(self.variables.iter().map(|v| {
             (
@@ -87,4 +128,10 @@ impl From<(Makefile, Config)> for Make {
             config,
         }
     }
+}
+
+fn get_modified_time(path: impl AsRef<str>) -> Option<SystemTime> {
+    fs::metadata(path.as_ref())
+        .ok()
+        .and_then(|meta| meta.modified().ok())
 }
