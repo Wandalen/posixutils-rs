@@ -21,7 +21,7 @@ use std::{
     str::FromStr,
 };
 
-/// grep - search a file for a pattern
+/// grep - search a file for a pattern.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
 struct Args {
@@ -117,18 +117,14 @@ impl Args {
     }
 
     /// Resolves input patterns and files. Reads patters from files and merges them with specified as argument.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is an issue reading files.
     fn resolve_patterns(&mut self) {
-        for pf in &self.pattern_file {
-            match Self::get_file_patterns(pf) {
+        for path_buf in &self.pattern_file {
+            match Self::get_file_patterns(path_buf) {
                 Ok(patterns) => self.pattern_list.extend(patterns),
                 Err(err) => {
                     self.any_errors = true;
                     if !self.no_messages {
-                        eprintln!("{}", err);
+                        eprintln!("{}: {}", path_buf.display(), err);
                     }
                 }
             }
@@ -141,12 +137,12 @@ impl Args {
             .collect();
 
         match &self.single_pattern_list {
-            // if single_pattern_list is none, then pattern_list is not empty
+            // If `single_pattern_list`` is none, then `pattern_list` is not empty
             None => {}
-            // single_pattern_list might get files value
+            // `single_pattern_list` might get files value
             Some(pattern) => {
                 if !self.pattern_list.is_empty() {
-                    // pattern_list is not empty, then single_pattern_list took files value
+                    // `pattern_list`` is not empty, then `single_pattern_list` took `files` value
                     match PathBuf::from_str(pattern.as_str()) {
                         Ok(path_buf) => {
                             self.files.insert(0, path_buf);
@@ -159,7 +155,7 @@ impl Args {
                         }
                     }
                 } else {
-                    // pattern_list is empty, then single_pattern_list is only pattern
+                    // `pattern_list` is empty, then `single_pattern_list` is the only  pattern
                     self.pattern_list = vec![pattern.to_string()]
                 }
             }
@@ -181,12 +177,12 @@ impl Args {
             .collect::<Result<Vec<_>, _>>()
     }
 
-    /// Maps [Args](Args) object into [GrepModel](GrepModel)
+    /// Maps [Args](Args) object into [GrepModel](GrepModel).
     ///
     /// # Returns
     ///
     /// Returns [GrepModel](GrepModel) object.
-    fn to_grep_model(&self) -> GrepModel {
+    fn to_grep_model(&self) -> Result<GrepModel, String> {
         // Resolve output mode
         let output_mode = if self.count {
             OutputMode::Count(0)
@@ -198,21 +194,23 @@ impl Args {
             OutputMode::Default
         };
 
-        GrepModel {
+        let patterns = Patterns::new(
+            &self.pattern_list,
+            self.use_string,
+            self.line_regexp,
+            self.ignore_case,
+        )?;
+
+        Ok(GrepModel {
             any_matches: false,
             any_errors: self.any_errors,
             line_number: self.line_number,
             no_messages: self.no_messages,
             invert_match: self.invert_match,
             output_mode,
-            patterns: Patterns::new(
-                &self.pattern_list,
-                self.use_string,
-                self.line_regexp,
-                self.ignore_case,
-            ),
+            patterns,
             files: self.files.clone(),
-        }
+        })
     }
 }
 
@@ -226,37 +224,41 @@ impl Patterns {
     /// # Arguments
     ///
     /// * `patterns` - `Vec<String>` containing the patterns.
-    /// * `fixed_string` - `bool` indicating whether patter is fixed string or regex
+    /// * `fixed_string` - `bool` indicating whether patter is fixed string or regex.
     /// * `line_regexp` - `bool` indicating whether to match the entire input.
     /// * `ignore_case` - `bool` indicating whether to ignore case.
     ///
     /// # Returns
     ///
     /// Returns [Patterns](Patterns).
-    fn new(patterns: &[String], fixed_string: bool, line_regexp: bool, ignore_case: bool) -> Self {
-        Self(
-            patterns
-                .iter()
-                .map(|p| {
-                    if fixed_string {
-                        let escaped = regex::escape(p);
-                        if line_regexp {
-                            format!(r"^{escaped}$")
-                        } else {
-                            escaped
-                        }
+    fn new(
+        patterns: &[String],
+        fixed_string: bool,
+        line_regexp: bool,
+        ignore_case: bool,
+    ) -> Result<Self, String> {
+        let regexes: Result<Vec<Regex>, String> = patterns
+            .iter()
+            .map(|p| {
+                if fixed_string {
+                    let escaped = regex::escape(p);
+                    if line_regexp {
+                        format!(r"^{escaped}$")
                     } else {
-                        p.to_string()
+                        escaped
                     }
-                })
-                .map(|p| {
-                    RegexBuilder::new(&p)
-                        .case_insensitive(ignore_case)
-                        .build()
-                        .unwrap()
-                })
-                .collect(),
-        )
+                } else {
+                    p.clone()
+                }
+            })
+            .map(|p| {
+                RegexBuilder::new(&p)
+                    .case_insensitive(ignore_case)
+                    .build()
+                    .map_err(|err| format!("Error compiling regex '{}': {}", p, err))
+            })
+            .collect();
+        regexes.map(Self)
     }
 
     /// Checks if input string matches to present patterns.
@@ -282,7 +284,7 @@ enum OutputMode {
     Default,
 }
 
-/// Structure that contains all necessary information for `grep` utility processing
+/// Structure that contains all necessary information for `grep` utility processing.
 #[derive(Debug)]
 struct GrepModel {
     any_matches: bool,
@@ -298,10 +300,6 @@ struct GrepModel {
 impl GrepModel {
     /// Processes files or STDIN content.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if there is an issue reading files.
-    ///
     /// # Returns
     ///
     /// Returns [i32](i32) that represents *exit status code*.
@@ -312,15 +310,16 @@ impl GrepModel {
             self.process_input("(standard input)".to_string(), reader);
         } else {
             for file in self.files.clone() {
-                match File::open(file.clone()) {
+                let file_name = file.display().to_string();
+                match File::open(file) {
                     Ok(f) => {
                         let reader: Box<dyn BufRead> = Box::new(BufReader::new(f));
-                        self.process_input(file.display().to_string(), reader);
+                        self.process_input(file_name, reader);
                     }
                     Err(err) => {
                         self.any_errors = true;
                         if !self.no_messages {
-                            eprintln!("{}", err);
+                            eprintln!("{}: {}", file_name, err);
                         }
                     }
                 }
@@ -357,9 +356,6 @@ impl GrepModel {
     /// * `source_name` - [String](String) that represents content source name.
     /// * `reader` - [Box](Box) that contains object that implements [BufRead] and reads lines.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if there is an issue reading lines.
     fn process_input(&mut self, source_name: String, mut reader: Box<dyn BufRead>) {
         let mut line_number: u64 = 0;
         loop {
@@ -370,7 +366,7 @@ impl GrepModel {
                         break;
                     }
                     line_number += 1;
-                    let trimmed = line.trim_end();
+                    let trimmed = &line[..line.len() - 1];
 
                     let init_matches = self.patterns.matches(trimmed);
                     let matches = if self.invert_match {
@@ -392,23 +388,24 @@ impl GrepModel {
                                 break;
                             }
                             OutputMode::Default => {
-                                // If we read from multiple files
-                                let s = if self.files.len() > 1 {
-                                    format!("{source_name}:")
-                                } else {
-                                    "".to_string()
-                                };
-                                let ln = if self.line_number {
-                                    format!("{line_number}:")
-                                } else {
-                                    "".to_string()
-                                };
-                                println!("{s}{ln}{trimmed}");
+                                let result = format!(
+                                    "{}{}{}",
+                                    if self.files.len() > 1 {
+                                        format!("{source_name}:")
+                                    } else {
+                                        String::new()
+                                    },
+                                    if self.line_number {
+                                        format!("{line_number}:")
+                                    } else {
+                                        String::new()
+                                    },
+                                    trimmed
+                                );
+                                println!("{result}");
                             }
                         }
                     }
-            line.clear();
-            line.clear();
                     line.clear();
                 }
                 Err(err) => {
@@ -422,24 +419,27 @@ impl GrepModel {
     }
 }
 
+// Exit code:
+//     0 - One or more lines were selected.
+//     1 - No lines were selected.
+//     >1 - An error occurred.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
     // parse command line arguments
     let mut args = Args::parse();
 
-    args.validate_args()?;
-    args.resolve_patterns();
+    let exit_code = args
+        .validate_args()
+        .and_then(|_| {
+            args.resolve_patterns();
+            args.to_grep_model()
+        })
+        .map(|mut grep_model| grep_model.grep())
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            2
+        });
 
-    let mut grep_model = args.to_grep_model();
-
-    println!("{grep_model:?}\n");
-
-    // Exit code:
-    //     0 - One or more lines were selected.
-    //     1 - No lines were selected.
-    //     >1 - An error occurred.
-    let exit_code = grep_model.grep();
-
-    std::process::exit(exit_code)
+    std::process::exit(exit_code);
 }
