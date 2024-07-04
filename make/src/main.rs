@@ -32,13 +32,13 @@ const MAKEFILE_PATH: [&str; 2] = [
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(short = 'f', help = "Path to the makefile to parse")]
-    makefile_path: Option<PathBuf>,
+    makefile: Option<PathBuf>,
 
     #[arg(short = 's', help = "Do not print recipe lines")]
     silent: bool,
 
     #[arg(short = 'C', help = "Change to DIRECTORY before doing anything")]
-    change_directory: Option<PathBuf>,
+    directory: Option<PathBuf>,
 
     #[arg(help = "Targets to build")]
     targets: Vec<OsString>,
@@ -49,9 +49,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
     let Args {
-        makefile_path,
+        makefile: makefile_path,
         silent,
-        change_directory,
+        directory: change_directory,
         targets,
     } = Args::parse();
 
