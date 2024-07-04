@@ -100,7 +100,7 @@ mod io {
             &["-f", "tests/makefiles/does_not_exist.mk"],
             "",
             "No such file or directory",
-            2, // os error
+            ErrorCode::ParseError as i32, // os error
         );
     }
 }

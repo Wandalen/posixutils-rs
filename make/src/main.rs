@@ -34,7 +34,7 @@ struct Args {
     #[arg(short = 'f', help = "Path to the makefile to parse")]
     makefile_path: Option<PathBuf>,
 
-    #[arg(short, help = "Do not print recipe lines")]
+    #[arg(short = 's', help = "Do not print recipe lines")]
     silent: bool,
 
     #[arg(short = 'C', help = "Change to DIRECTORY before doing anything")]
@@ -86,36 +86,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     process::exit(0);
 }
 
+/// Parse the makefile at the given path, or the first default makefile found.
+/// If no makefile is found, print an error message and exit.
 fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn std::error::Error>> {
-    fn inner(path: Option<&Path>) -> Result<Makefile, Box<dyn std::error::Error>> {
-        let path = match path {
-            Some(path) => path,
-            None => {
-                let mut makefile = None;
-                for m in MAKEFILE_PATH.iter() {
-                    let path = Path::new(m);
-                    if path.exists() {
-                        makefile = Some(path);
-                        break;
-                    }
-                }
-                if let Some(makefile) = makefile {
-                    makefile
-                } else {
-                    eprintln!("make: No targets.");
-                    process::exit(NoTargets as i32);
-                }
-            }
-        };
+    let path = path.as_ref().map(|p| p.as_ref());
 
-        let contents = match fs::read_to_string(path) {
-            Ok(contents) => contents,
-            Err(e) => {
-                eprintln!("make: {}: {}", path.display(), e); // format!("{e}") is not consistent
-                process::exit(ParseError as i32);
+    let path = match path {
+        Some(path) => path,
+        None => {
+            let mut makefile = None;
+            for m in MAKEFILE_PATH.iter() {
+                let path = Path::new(m);
+                if path.exists() {
+                    makefile = Some(path);
+                    break;
+                }
             }
-        };
-        Ok(Makefile::from_str(&contents)?)
-    }
-    inner(path.as_ref().map(|p| p.as_ref()))
+            if let Some(makefile) = makefile {
+                makefile
+            } else {
+                eprintln!("make: No makefile.");
+                process::exit(NoMakefile as i32);
+            }
+        }
+    };
+
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(e) => {
+            eprintln!("make: {}: {}", path.display(), e); // format!("{e}") is not consistent
+            process::exit(ParseError as i32);
+        }
+    };
+
+    Ok(Makefile::from_str(&contents)?)
 }

@@ -21,7 +21,9 @@ use std::{
 use makefile_lossless::{Makefile, Rule, VariableDefinition};
 use ErrorCode::*;
 
-/// The only way to create an `Make` is from a `Makefile` and a `Config`.
+/// Represents the make utility with its data and configuration. 
+///
+/// The only way to create a `Make` is from a `Makefile` and a `Config`.
 pub struct Make {
     variables: Vec<VariableDefinition>,
     rules: Vec<Rule>,
@@ -30,6 +32,12 @@ pub struct Make {
 }
 
 impl Make {
+    /// Retrieves the rule that has the given target.
+    ///
+    /// # Returns
+    ///
+    /// - `Some(rule)` if a rule with the target exists.
+    /// - `None` if no rule with the target exists.
     pub fn target_rule(&self, target: impl AsRef<str>) -> Option<&Rule> {
         self.rules
             .iter()
@@ -38,16 +46,33 @@ impl Make {
 }
 
 impl Make {
+    /// Builds the first target in the makefile.
+    ///
+    /// # Returns
+    /// - `Some(true)` if the target was built.
+    /// - `Some(false)` if the target was already up to date.
+    /// - `None` if there are no rules in the makefile.
     pub fn build_first_target(&self) -> Option<bool> {
         let rule = self.rules.first()?;
         Some(self.run_rule(rule))
     }
 
+    /// Builds the target with the given name.
+    ///
+    /// # Returns
+    /// - `Some(true)` if the target was built.
+    /// - `Some(false)` if the target was already up to date.
+    /// - `None` if the target does not exist.
     pub fn build_target(&self, target: impl AsRef<str>) -> Option<bool> {
         let rule = self.target_rule(target)?;
         Some(self.run_rule(rule))
     }
 
+    /// Runs the given rule.
+    ///
+    /// # Returns
+    /// - `true` if the rule was run.
+    /// - `false` if the rule was already up to date.
     fn run_rule(&self, rule: &Rule) -> bool {
         let target = rule.targets().next().unwrap();
         let newer_prerequisites = self.get_newer_prerequisites(&target);
@@ -81,6 +106,9 @@ impl Make {
         true
     }
 
+    /// Retrieves the prerequisites of the target that are newer than the target.
+    /// Recursively checks the prerequisites of the prerequisites.
+    /// Returns an empty vector if the target does not exist (or it's a file).
     fn get_newer_prerequisites(&self, target: impl AsRef<str>) -> Vec<String> {
         let Some(target_rule) = self.target_rule(&target) else {
             return vec![];
@@ -110,6 +138,7 @@ impl Make {
 }
 
 impl Make {
+    /// A helper function to initialize env vars for shell commands.
     fn init_env(&self, command: &mut Command) {
         command.envs(self.variables.iter().map(|v| {
             (
@@ -130,6 +159,7 @@ impl From<(Makefile, Config)> for Make {
     }
 }
 
+/// Retrieves the modified time of the file at the given path.
 fn get_modified_time(path: impl AsRef<str>) -> Option<SystemTime> {
     fs::metadata(path.as_ref())
         .ok()

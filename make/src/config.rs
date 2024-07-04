@@ -7,8 +7,10 @@
 // SPDX-License-Identifier: MIT
 //
 
+/// Represents the configuration of the make utility
 #[derive(Debug)]
 pub struct Config {
+    /// Whether to print recipe lines
     pub silent: bool,
 }
 

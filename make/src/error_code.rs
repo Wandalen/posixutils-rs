@@ -7,8 +7,10 @@
 // SPDX-License-Identifier: MIT
 //
 
+/// Represents the error codes that can be returned by the make utility
 pub enum ErrorCode {
     ExecutionError = 1,
+    NoMakefile,
     ParseError,
     NoTargets,
     NoRule,
