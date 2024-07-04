@@ -9,7 +9,11 @@
 
 use core::str::FromStr;
 use std::{
-    env, ffi::OsString, fs, path::{Path, PathBuf}, process
+    env,
+    ffi::OsString,
+    fs,
+    path::{Path, PathBuf},
+    process,
 };
 
 use clap::Parser;
@@ -27,17 +31,13 @@ const MAKEFILE_PATH: [&str; 2] = [
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[arg(short = 'f', long = "file", help = "Path to the makefile to parse")]
+    #[arg(short = 'f', help = "Path to the makefile to parse")]
     makefile_path: Option<PathBuf>,
 
-    #[arg(short, long, help = "Do not print recipe lines")]
+    #[arg(short, help = "Do not print recipe lines")]
     silent: bool,
 
-    #[arg(
-        short = 'C',
-        long = "directory",
-        help = "Change to DIRECTORY before doing anything"
-    )]
+    #[arg(short = 'C', help = "Change to DIRECTORY before doing anything")]
     change_directory: Option<PathBuf>,
 
     #[arg(help = "Targets to build")]
@@ -64,9 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("make: parse error: {}", err);
         process::exit(ParseError as i32);
     });
-    let config = Config {
-        silent,
-    };
+    let config = Config { silent };
 
     let make = Make::from((parsed, config));
 
