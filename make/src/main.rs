@@ -9,7 +9,7 @@
 
 use core::str::FromStr;
 use std::{
-    ffi::OsString, fs, path::{Path, PathBuf}, process
+    env, ffi::OsString, fs, path::{Path, PathBuf}, process
 };
 
 use clap::Parser;
@@ -33,6 +33,13 @@ struct Args {
     #[arg(short, long, help = "Do not print recipe lines")]
     silent: bool,
 
+    #[arg(
+        short = 'C',
+        long = "directory",
+        help = "Change to DIRECTORY before doing anything"
+    )]
+    change_directory: Option<PathBuf>,
+
     #[arg(help = "Targets to build")]
     targets: Vec<OsString>,
 }
@@ -41,21 +48,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    let args = Args::parse();
-    let config = Config { silent: args.silent };
-    let parsed = parse_makefile(args.makefile_path.as_ref()).unwrap_or_else(|err| {
+    let Args {
+        makefile_path,
+        silent,
+        change_directory,
+        targets,
+    } = Args::parse();
+
+    if let Some(dir) = change_directory {
+        env::set_current_dir(dir)?;
+    }
+
+    let parsed = parse_makefile(makefile_path.as_ref()).unwrap_or_else(|err| {
         eprintln!("make: parse error: {}", err);
         process::exit(ParseError as i32);
     });
+    let config = Config {
+        silent,
+    };
+
     let make = Make::from((parsed, config));
 
-    if args.targets.is_empty() {
+    if targets.is_empty() {
         if make.build_first_target().is_none() {
             eprintln!("make: No targets.");
             process::exit(NoTargets as i32);
         }
     } else {
-        for target in args.targets {
+        for target in targets {
             let target = target.into_string().unwrap();
             if make.build_target(&target).is_none() {
                 eprintln!("make: No rule to make target '{}'.", target);
