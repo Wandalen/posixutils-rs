@@ -11,8 +11,8 @@ plib = { path = "../plib" }
 clap.workspace = true
 gettext-rs.workspace = true
 
-const_format = "0.2.32"
-makefile-lossless = { git = "https://github.com/YBoy-git/makefile-lossless.git" }
+const_format = "0.2"
+makefile-lossless = "0.1"
 
 [[bin]]
 name = "make"
