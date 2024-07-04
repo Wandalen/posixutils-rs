@@ -9,9 +9,7 @@
 
 use core::str::FromStr;
 use std::{
-    ffi::OsString,
-    fs,
-    path::{Path, PathBuf},
+    ffi::OsString, fs, path::{Path, PathBuf}, process
 };
 
 use clap::Parser;
@@ -19,7 +17,7 @@ use const_format::formatcp;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use makefile_lossless::Makefile;
 use plib::PROJECT_NAME;
-use posixutils_make::{Config, Make};
+use posixutils_make::{Config, ErrorCode::*, Make};
 
 const MAKEFILE_NAME: [&str; 2] = ["makefile", "Makefile"];
 const MAKEFILE_PATH: [&str; 2] = [
@@ -29,12 +27,13 @@ const MAKEFILE_PATH: [&str; 2] = [
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[arg(short = 'f', help = "Path to the makefile to parse")]
+    #[arg(short = 'f', long = "file", help = "Path to the makefile to parse")]
     makefile_path: Option<PathBuf>,
 
-    #[arg(short = 's', long = "silent", long = "quiet", help = "Do not print recipe lines")]
+    #[arg(short, long, help = "Do not print recipe lines")]
     silent: bool,
 
+    #[arg(help = "Targets to build")]
     targets: Vec<OsString>,
 }
 
@@ -43,21 +42,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
     let args = Args::parse();
-    let parsed = parse_makefile(args.makefile_path.as_ref())?;
     let config = Config { silent: args.silent };
+    let parsed = parse_makefile(args.makefile_path.as_ref()).unwrap_or_else(|err| {
+        eprintln!("make: parse error: {}", err);
+        process::exit(ParseError as i32);
+    });
     let make = Make::from((parsed, config));
 
     if args.targets.is_empty() {
         if make.build_first_target().is_none() {
             eprintln!("make: No targets.");
-            std::process::exit(2);
+            process::exit(NoTargets as i32);
         }
     } else {
         for target in args.targets {
             let target = target.into_string().unwrap();
             if make.build_target(&target).is_none() {
                 eprintln!("make: No rule to make target '{}'.", target);
-                std::process::exit(2);
+                process::exit(NoRule as i32);
             }
         }
     }
@@ -82,7 +84,7 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn st
                     makefile
                 } else {
                     eprintln!("make: No targets.");
-                    std::process::exit(2);
+                    process::exit(NoTargets as i32);
                 }
             }
         };
@@ -91,7 +93,7 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn st
             Ok(contents) => contents,
             Err(e) => {
                 eprintln!("make: {}: {}", path.display(), e); // format!("{e}") is not consistent
-                std::process::exit(2);
+                process::exit(ParseError as i32);
             }
         };
         Ok(Makefile::from_str(&contents)?)

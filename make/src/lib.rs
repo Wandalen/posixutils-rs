@@ -9,10 +9,13 @@
 
 mod config;
 pub use config::Config;
+mod error_code;
+pub use error_code::ErrorCode;
 
-use std::{env, process::Command};
+use std::{env, process::{self, Command}};
 
 use makefile_lossless::{Makefile, Rule, VariableDefinition};
+use ErrorCode::*;
 
 /// The only way to create an `Make` is from a `Makefile`.
 pub struct Make {
@@ -56,7 +59,12 @@ impl Make {
 
             let status = command.status().expect("failed to execute process");
             if !status.success() {
-                std::process::exit(status.code().unwrap_or(1));
+                eprintln!(
+                    "make: [{}]: Error {}",
+                    rule.targets().next().unwrap(),
+                    status.code().unwrap_or(1)
+                );
+                process::exit(status.code().unwrap_or(ExecutionError as i32));
             }
         }
     }

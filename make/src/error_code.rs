@@ -7,14 +7,9 @@
 // SPDX-License-Identifier: MIT
 //
 
-#[derive(Debug)]
-pub struct Config {
-    pub silent: bool,
-}
-
-#[allow(clippy::derivable_impls)]
-impl Default for Config {
-    fn default() -> Self {
-        Self { silent: false }
-    }
+pub enum ErrorCode {
+    ExecutionError = 1,
+    ParseError,
+    NoTargets,
+    NoRule,
 }
