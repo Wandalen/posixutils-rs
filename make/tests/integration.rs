@@ -33,6 +33,17 @@ fn run_test_helper(
     );
 }
 
+fn run_test_helper_with_setup(
+    args: &[&str],
+    expected_output: &str,
+    expected_error: &str,
+    expected_exit_code: i32,
+    setup: impl FnOnce(),
+) {
+    setup();
+    run_test_helper(args, expected_output, expected_error, expected_exit_code);
+}
+
 fn test_checker(plan: &TestPlan, output: &Output) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout, plan.expected_out);
@@ -62,7 +73,7 @@ mod parsing {
     #[test]
     fn empty() {
         run_test_helper(
-            &["-f", "tests/makefiles/empty.mk"],
+            &["-f", "tests/makefiles/parsing/empty.mk"],
             "",
             "parse error",
             ErrorCode::ParseError as i32,
@@ -72,7 +83,7 @@ mod parsing {
     #[test]
     fn comments() {
         run_test_helper(
-            &["-sf", "tests/makefiles/comments.mk"],
+            &["-sf", "tests/makefiles/parsing/comments.mk"],
             "This program should not produce any errors.\n",
             "",
             0,
@@ -94,29 +105,95 @@ mod io {
     }
 }
 
-#[test]
-fn no_targets() {
-    run_test_helper(
-        &["-f", "tests/makefiles/no_targets.mk"],
-        "",
-        "No targets",
-        ErrorCode::NoTargets as i32,
-    );
+mod variables {
+    use super::*;
+
+    #[test]
+    fn substitutes() {
+        run_test_helper(
+            &["-sf", "tests/makefiles/variables/substitutes.mk"],
+            "Variable substitution works.\n",
+            "",
+            0,
+        );
+    }
 }
 
-#[test]
-fn makefile_priority() {
-    run_test_helper(
-        &["-sC", "tests/makefiles/makefile_priority/makefile"],
-        "makefile\n",
-        "",
-        0,
-    );
+mod target_behavior {
+    use std::fs;
 
-    run_test_helper(
-        &["-sC", "tests/makefiles/makefile_priority/Makefile"],
-        "Makefile\n",
-        "",
-        0,
-    );
+    use super::*;
+
+    #[test]
+    fn no_targets() {
+        run_test_helper(
+            &["-f", "tests/makefiles/target_behavior/no_targets.mk"],
+            "",
+            "No targets",
+            ErrorCode::NoTargets as i32,
+        );
+    }
+
+    #[test]
+    fn makefile_priority() {
+        run_test_helper(
+            &[
+                "-sC",
+                "tests/makefiles/target_behavior/makefile_priority/makefile",
+            ],
+            "makefile\n",
+            "",
+            0,
+        );
+
+        run_test_helper(
+            &[
+                "-sC",
+                "tests/makefiles/target_behavior/makefile_priority/Makefile",
+            ],
+            "Makefile\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn basic_chaining() {
+        run_test_helper(
+            &["-sf", "tests/makefiles/target_behavior/basic_chaining.mk"],
+            "rule2\nrule1\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn diamond_chaining_with_touches() {
+        run_test_helper_with_setup(
+            &[
+                "-sC",
+                "tests/makefiles/target_behavior/diamond_chaining_with_touches",
+            ],
+            "rule4\nrule2\nrule3\nrule1\n",
+            "",
+            0,
+            || {
+                let dir = "tests/makefiles/target_behavior/diamond_chaining_with_touches";
+                for i in 1..=4 {
+                    let _ = fs::remove_file(format!("{}/rule{}", dir, i));
+                }
+            },
+        );
+    }
+
+    #[test]
+    #[ignore = "to be implemented"]
+    fn recursive_chaining() {
+        run_test_helper(
+            &["-sf", "tests/makefiles/target_behavior/recursive_chaining.mk"],
+            "rule2\nrule1\n",
+            "make: Recursive prerequisite found",
+            0,
+        );
+    }
 }
