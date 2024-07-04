@@ -228,6 +228,10 @@ impl Patterns {
     /// * `line_regexp` - `bool` indicating whether to match the entire input.
     /// * `ignore_case` - `bool` indicating whether to ignore case.
     ///
+    /// # Errors
+    ///
+    /// Returns an error if passed invalid regex.
+    ///
     /// # Returns
     ///
     /// Returns [Patterns](Patterns).
@@ -355,7 +359,6 @@ impl GrepModel {
     ///
     /// * `source_name` - [String](String) that represents content source name.
     /// * `reader` - [Box](Box) that contains object that implements [BufRead] and reads lines.
-    ///
     fn process_input(&mut self, source_name: String, mut reader: Box<dyn BufRead>) {
         let mut line_number: u64 = 0;
         loop {
