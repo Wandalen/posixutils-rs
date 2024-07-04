@@ -245,11 +245,15 @@ impl Patterns {
             .iter()
             .map(|p| {
                 if fixed_string {
-                    let escaped = regex::escape(p);
-                    if line_regexp {
-                        format!(r"^{escaped}$")
+                    let pattern = if fixed_string {
+                        regex::escape(p)
                     } else {
-                        escaped
+                        p.clone()
+                    };
+                    if line_regexp {
+                        format!(r"^{pattern}$")
+                    } else {
+                        pattern
                     }
                 } else {
                     p.clone()
