@@ -19,15 +19,21 @@ use const_format::formatcp;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use makefile_lossless::Makefile;
 use plib::PROJECT_NAME;
-use posixutils_make::Make;
+use posixutils_make::{Config, Make};
 
-const MAKEFILE: &str = "Makefile";
-const MAKEFILE_PATH: &str = formatcp!("./{}", MAKEFILE);
+const MAKEFILE_NAME: [&str; 2] = ["makefile", "Makefile"];
+const MAKEFILE_PATH: [&str; 2] = [
+    formatcp!("./{}", MAKEFILE_NAME[0]),
+    formatcp!("./{}", MAKEFILE_NAME[1]),
+];
 
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(short = 'f', help = "Path to the makefile to parse")]
     makefile_path: Option<PathBuf>,
+
+    #[arg(short = 's', long = "silent", long = "quiet", help = "Do not print recipe lines")]
+    silent: bool,
 
     targets: Vec<OsString>,
 }
@@ -38,14 +44,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
     let parsed = parse_makefile(args.makefile_path.as_ref())?;
-    let make = Make::from(parsed);
+    let config = Config { silent: args.silent };
+    let make = Make::from((parsed, config));
 
     if args.targets.is_empty() {
-        make.build_first_target();
+        if make.build_first_target().is_none() {
+            eprintln!("make: No targets.");
+            std::process::exit(2);
+        }
     } else {
         for target in args.targets {
             let target = target.into_string().unwrap();
-            make.build_target(target);
+            if make.build_target(&target).is_none() {
+                eprintln!("make: No rule to make target '{}'.", target);
+                std::process::exit(2);
+            }
         }
     }
 
@@ -54,7 +67,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn std::error::Error>> {
     fn inner(path: Option<&Path>) -> Result<Makefile, Box<dyn std::error::Error>> {
-        let path = path.unwrap_or(Path::new(MAKEFILE_PATH));
+        let path = match path {
+            Some(path) => path,
+            None => {
+                let mut makefile = None;
+                for m in MAKEFILE_PATH.iter() {
+                    let path = Path::new(m);
+                    if path.exists() {
+                        makefile = Some(path);
+                        break;
+                    }
+                }
+                if let Some(makefile) = makefile {
+                    makefile
+                } else {
+                    eprintln!("make: No targets.");
+                    std::process::exit(2);
+                }
+            }
+        };
+
         let contents = match fs::read_to_string(path) {
             Ok(contents) => contents,
             Err(e) => {

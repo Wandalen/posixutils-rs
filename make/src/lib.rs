@@ -7,6 +7,9 @@
 // SPDX-License-Identifier: MIT
 //
 
+mod config;
+pub use config::Config;
+
 use std::{env, process::Command};
 
 use makefile_lossless::{Makefile, Rule, VariableDefinition};
@@ -15,6 +18,8 @@ use makefile_lossless::{Makefile, Rule, VariableDefinition};
 pub struct Make {
     variables: Vec<VariableDefinition>,
     rules: Vec<Rule>,
+
+    config: Config,
 }
 
 impl Make {
@@ -40,7 +45,9 @@ impl Make {
 
     fn run_rule(&self, rule: &Rule) {
         for recipe in rule.recipes() {
-            println!("{}", recipe);
+            if !self.config.silent {
+                println!("{}", recipe);
+            }
 
             let mut command =
                 Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()));
@@ -49,7 +56,7 @@ impl Make {
 
             let status = command.status().expect("failed to execute process");
             if !status.success() {
-                panic!("command failed: {}", status);
+                std::process::exit(status.code().unwrap_or(1));
             }
         }
     }
@@ -64,11 +71,12 @@ impl Make {
     }
 }
 
-impl From<Makefile> for Make {
-    fn from(makefile: Makefile) -> Self {
+impl From<(Makefile, Config)> for Make {
+    fn from((makefile, config): (Makefile, Config)) -> Self {
         Make {
             rules: makefile.rules().collect(),
             variables: makefile.variable_definitions().collect(),
+            config,
         }
     }
 }
