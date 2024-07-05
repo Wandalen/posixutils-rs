@@ -21,7 +21,7 @@ use std::{
 use makefile_lossless::{Makefile, Rule, VariableDefinition};
 use ErrorCode::*;
 
-/// Represents the make utility with its data and configuration. 
+/// Represents the make utility with its data and configuration.
 ///
 /// The only way to create a `Make` is from a `Makefile` and a `Config`.
 pub struct Make {
@@ -39,9 +39,10 @@ impl Make {
     /// - `Some(rule)` if a rule with the target exists.
     /// - `None` if no rule with the target exists.
     pub fn target_rule(&self, target: impl AsRef<str>) -> Option<&Rule> {
-        self.rules
-            .iter()
-            .find(|rule| rule.targets().next().unwrap() == target.as_ref())
+        self.rules.iter().find(|rule| match rule.targets().next() {
+            Some(t) => t == target.as_ref(),
+            None => false,
+        })
     }
 }
 
