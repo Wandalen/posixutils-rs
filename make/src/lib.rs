@@ -124,11 +124,8 @@ impl Make {
                         return true;
                     };
 
-                    if !self.get_newer_prerequisites(prerequisite).is_empty() {
-                        return true;
-                    }
-
-                    pre_modified > target_modified
+                    !self.get_newer_prerequisites(prerequisite).is_empty() ||
+                        pre_modified > target_modified
                 })
                 .collect()
         } else {
