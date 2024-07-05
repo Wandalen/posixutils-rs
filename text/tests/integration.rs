@@ -217,6 +217,25 @@ fn pr_read_test_file(
     s.to_string()
 }
 
+fn grep_test(
+    args: &[&str],
+    test_data: &str,
+    expected_output: &str,
+    expected_err: &str,
+    expected_exit_code: i32,
+) {
+    let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+
+    run_test(TestPlan {
+        cmd: String::from("grep"),
+        args: str_args,
+        stdin_data: String::from(test_data),
+        expected_out: String::from(expected_output),
+        expected_err: String::from(expected_err),
+        expected_exit_code,
+    });
+}
+
 #[test]
 fn test_expand_basic() {
     expand_test_noargs("", "");
@@ -2668,5 +2687,190 @@ mod tail_tests {
     #[test]
     fn test_tail_20() {
         tail_test(&["-n-1"], &("y\n".repeat(5)), "y\n");
+    }
+}
+
+#[cfg(test)]
+mod grep_tests {
+    use crate::grep_test;
+
+    #[test]
+    fn test_incompatible_options() {
+        grep_test(
+            &["-cl"],
+            "",
+            "",
+            "Options \'-c\' and \'-l\' cannot be used together\n",
+            2,
+        );
+        grep_test(
+            &["-cq"],
+            "",
+            "",
+            "Options \'-c\' and \'-q\' cannot be used together\n",
+            2,
+        );
+        grep_test(
+            &["-lq"],
+            "",
+            "",
+            "Options \'-l\' and \'-q\' cannot be used together\n",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_absent_pattern() {
+        grep_test(
+            &[],
+            "",
+            "",
+            "Required at least one pattern list or file\n",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_inexisting_file_pattern() {
+        grep_test(
+            &["-f", "tests/assets/grep/inexisting_file.txt"],
+            "",
+            "",
+            "tests/assets/grep/inexisting_file.txt: No such file or directory (os error 2)\n",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_stdin_default_pattern() {
+        grep_test(
+            &["l_\\d"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "l_1\n    l_3    \n",
+            "",
+            0,
+        );
+        grep_test(&["l_\\d"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_stdin_extended_regexp_pattern() {
+        grep_test(
+            &["-E", "l_\\d"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "l_1\n    l_3    \n",
+            "",
+            0,
+        );
+        grep_test(&["l_\\d"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_stdin_fixed_string_pattern() {
+        grep_test(
+            &["-F", "l_1"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "l_1\n",
+            "",
+            0,
+        );
+        grep_test(&["l_1"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_stdin_count() {
+        grep_test(
+            &["-c", "l_\\d"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "2\n",
+            "",
+            0,
+        );
+        grep_test(&["-c", "l_\\d"], "", "0\n", "", 1);
+    }
+
+    #[test]
+    fn test_stdin_files_with_matches() {
+        grep_test(
+            &["-l", "l_\\d"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "(standard input)\n",
+            "",
+            0,
+        );
+        grep_test(&["-l", "l_\\d"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_stdin_quiet() {
+        grep_test(
+            &["-q", "l_\\d"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "",
+            "",
+            0,
+        );
+        grep_test(&["-q", "l_\\d"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_stdin_ignore_case() {
+        grep_test(
+            &["-i", "l_\\d"],
+            "L_1\nln_2\n    l_3    \nln_4\n",
+            "L_1\n    l_3    \n",
+            "",
+            0,
+        );
+        grep_test(&["-i", "l_\\d"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_stdin_line_number() {
+        grep_test(
+            &["-n", "l_\\d"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "1:l_1\n3:    l_3    \n",
+            "",
+            0,
+        );
+        grep_test(&["-n", "l_\\d"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_no_messages() {
+        grep_test(
+            &["-f", "tests/assets/grep/inexisting_file.txt", "-s", "l_\\d"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "l_1\n    l_3    \n",
+            "",
+            2,
+        );
+        grep_test(
+            &["-s", "l_\\d"],
+            "l_1\nln_2\n    l_3    \nln_4\n",
+            "l_1\n    l_3    \n",
+            "",
+            0,
+        );
+        grep_test(&["-s", "l_\\d"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_line_regexp() {
+        grep_test(
+            &["-x", "l_\\d"],
+            "l_1\nln_2\n    l_3    \naaa_l_4\nl_5_aaa\n",
+            "l_1\n",
+            "",
+            0,
+        );
+        grep_test(
+            &["-F", "-x", "l_1"],
+            "l_1\nln_1\n    l_1    \naaa_l_1\nl_1_aaa",
+            "l_1\n",
+            "",
+            0,
+        )
     }
 }
