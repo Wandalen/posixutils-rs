@@ -1,6 +1,6 @@
 [package]
 name = "posixutils-file"
-version = "0.1.11"
+version = "0.1.12"
 edition = "2021"
 authors = ["Jeff Garzik"]
 license = "MIT"
@@ -17,6 +17,10 @@ regex.workspace = true
 [[bin]]
 name = "cat"
 path = "src/cat.rs"
+
+[[bin]]
+name = "od"
+path = "src/od.rs"
 
 [[bin]]
 name = "cmp"
