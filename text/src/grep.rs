@@ -244,11 +244,7 @@ impl Patterns {
         patterns
             .into_iter()
             .map(|p| {
-                let pattern = if fixed_string {
-                    regex::escape(&p)
-                } else {
-                    p
-                };
+                let pattern = if fixed_string { regex::escape(&p) } else { p };
                 if line_regexp {
                     format!(r"^{pattern}$")
                 } else {
@@ -445,5 +441,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
     std::process::exit(exit_code);
-    
 }
