@@ -50,9 +50,7 @@ impl Make {
             None => false,
         })
     }
-}
 
-impl Make {
     /// Builds the first target in the makefile.
     ///
     /// # Returns
@@ -147,9 +145,7 @@ impl Make {
             prerequisites.collect()
         }
     }
-}
 
-impl Make {
     /// A helper function to initialize env vars for shell commands.
     fn init_env(&self, command: &mut Command) {
         command.envs(self.variables.iter().map(|v| {
