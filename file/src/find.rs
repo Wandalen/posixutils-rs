@@ -12,6 +12,8 @@ use std::{env, fs};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use gettextrs::{bind_textdomain_codeset, textdomain};
+use plib::PROJECT_NAME;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug)]
@@ -36,6 +38,15 @@ enum Expr {
     Newer(PathBuf),
 }
 
+/// Parses a list of tokens representing search criteria, the result is stored in enum Expr
+/// 
+/// # Arguments
+///
+/// * `tokens` - A vector of string slices representing the tokens to parse.
+///
+/// # Returns
+///
+/// * A vector of `Expr` expressions parsed from the tokens.
 fn parse_expression(tokens: &mut Vec<&str>) -> Vec<Expr> {
     let mut stack: Vec<Expr> = Vec::new();
 
@@ -162,6 +173,18 @@ fn parse_expression(tokens: &mut Vec<&str>) -> Vec<Expr> {
     stack
 }
 
+/// Executes a command based on the list of expressions and returns the matching file paths.
+///
+/// # Arguments
+///
+/// * `expr` - A slice of `Expr` expressions to execute.
+/// * `files` - A vector of `DirEntry` objects representing the files to be evaluated.
+/// * `root_dev` - A u64 value representing the root device number for `-xdev` expression.
+///
+/// # Returns
+///
+/// * A `Result` containing a vector of `PathBuf` objects representing the paths of the files that match the expressions,
+///   or an error message as a `String`.
 fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Result<Vec<PathBuf>, String> {
     let mut c_files = files.clone().into_iter().map(|f| f.path().to_path_buf()).collect::<HashSet<PathBuf>>();
     let mut result = Vec::new();
@@ -305,6 +328,15 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
     Ok(result)
 }
 
+/// Retrieves the root path from a list of expressions.
+///
+/// # Arguments
+///
+/// * `expr` - A slice of `Expr` expressions.
+///
+/// # Returns
+///
+/// * A `String` representing the root path extracted from the expressions.
 fn get_root(expr: &[Expr]) -> String {
     let mut path = String::new();
     for i in expr {
@@ -316,10 +348,17 @@ fn get_root(expr: &[Expr]) -> String {
     path
 }
 
-fn main() -> ExitCode {
-    let args: Vec<String> = env::args().collect();
+/// Executes the find command with the provided arguments.
+///
+/// # Arguments
+///
+/// * `args` - A vector of `String` representing the command-line arguments.
+///
+/// # Returns
+///
+/// * A `Result` indicating success or containing an error message as a `String`.
+fn find(args: Vec<String>) -> Result<(), String> {
     let mut tokens: Vec<&str> = args.iter().skip(1).rev().map(|s| s.as_str()).collect();
-
     let binding = parse_expression(&mut tokens);
     let expr = binding.as_slice();
     let path = get_root(expr);
@@ -327,8 +366,7 @@ fn main() -> ExitCode {
     let root_dev = if let Ok(metadata) = fs::metadata(path.clone()) {
         metadata.dev()
     } else {
-        eprintln!("Error: Could not retrieve root device metadata");
-        return ExitCode::FAILURE;
+        return Err("Error: Could not retrieve root device metadata".to_string());
     };
 
     let files = WalkDir::new(path).into_iter().map(|f|f.unwrap()).collect::<Vec<DirEntry>>();
@@ -338,9 +376,25 @@ fn main() -> ExitCode {
         for res in result.unwrap() {
             println!("{}", res.display())
         }
-        ExitCode::SUCCESS
+        Ok(())
     }
     else {
-        ExitCode::FAILURE
+        Err(result.err().unwrap())
     }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+    
+    let args: Vec<String> = env::args().collect();
+    
+    let mut exit_code = 0;
+
+    if let Err(err) = find(args) {
+        exit_code = 1;
+        eprint!("{}", err);
+    }
+
+    std::process::exit(exit_code)
 }

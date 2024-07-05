@@ -14,7 +14,7 @@ libc.workspace = true
 atty.workspace = true
 regex.workspace = true
 walkdir = "2"
-users = "0.11.0"
+users = "0.11"
 
 [[bin]]
 name = "cat"
