@@ -29,6 +29,24 @@ fn run_test_helper(
     });
 }
 
+fn run_test_find(
+    args: &[&str],
+    expected_output: &str,
+    expected_error: &str,
+    expected_exit_code: i32,
+) {
+    let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+
+    run_test(TestPlan {
+        cmd: String::from("find"),
+        args: str_args,
+        stdin_data: String::new(),
+        expected_out: String::from(expected_output),
+        expected_err: String::from(expected_error),
+        expected_exit_code,
+    });
+}
+
 fn file_test(args: &[&str], expected_output: &str, expected_error: &str) {
     let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
 
@@ -361,3 +379,16 @@ fn test_file_magic_file_priority_with_M_and_m_option_as_they_appear_using_cpio_a
         "",
     );
 }
+
+#[test]
+fn find_size_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let test_dir = format!("{}/tests/find", project_root);
+    let args = [&test_dir, "-size", "+4"];
+
+    let expected_output = format!("{}\n{}/file1.txt\n", test_dir, test_dir);
+
+    run_test_find(&args, &expected_output, "", 0)
+}
+
+
