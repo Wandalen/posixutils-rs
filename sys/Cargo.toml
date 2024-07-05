@@ -1,6 +1,6 @@
 [package]
 name = "posixutils-sys"
-version = "0.1.11"
+version = "0.1.12"
 edition = "2021"
 authors = ["Jeff Garzik"]
 license = "MIT"
@@ -17,6 +17,10 @@ chrono.workspace = true
 [[bin]]
 name = "ipcrm"
 path = "src/ipcrm.rs"
+
+[[bin]]
+name = "ipcs"
+path = "src/ipcs.rs"
 
 [[bin]]
 name = "uname"
