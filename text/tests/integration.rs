@@ -2742,7 +2742,7 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_default_pattern_0() {
+    fn test_default_pattern_0() {
         grep_test(
             &["l_\\d"],
             "l_1\nln_2\n    l_3    \nln_4\n",
@@ -2753,12 +2753,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_default_pattern_1() {
+    fn test_default_pattern_1() {
         grep_test(&["l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_stdin_extended_regexp_pattern_0() {
+    fn test_extended_regexp_pattern_0() {
         grep_test(
             &["-E", "l_\\d"],
             "l_1\nln_2\n    l_3    \nln_4\n",
@@ -2769,12 +2769,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_extended_regexp_pattern_1() {
+    fn test_extended_regexp_pattern_1() {
         grep_test(&["l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_stdin_fixed_string_pattern_0() {
+    fn test_fixed_string_pattern_0() {
         grep_test(
             &["-F", "l_1"],
             "l_1\nln_2\n    l_3    \nln_4\n",
@@ -2785,12 +2785,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_fixed_string_pattern_1() {
+    fn test_fixed_string_pattern_1() {
         grep_test(&["l_1"], "", "", "", 1);
     }
 
     #[test]
-    fn test_stdin_count_0() {
+    fn test_count_0() {
         grep_test(
             &["-c", "l_\\d"],
             "l_1\nln_2\n    l_3    \nln_4\n",
@@ -2801,12 +2801,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_count_1() {
+    fn test_count_1() {
         grep_test(&["-c", "l_\\d"], "", "0\n", "", 1);
     }
 
     #[test]
-    fn test_stdin_files_with_matches_0() {
+    fn test_files_with_matches_0() {
         grep_test(
             &["-l", "l_\\d"],
             "l_1\nln_2\n    l_3    \nln_4\n",
@@ -2817,12 +2817,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_files_with_matches_1() {
+    fn test_files_with_matches_1() {
         grep_test(&["-l", "l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_stdin_quiet_0() {
+    fn test_quiet_0() {
         grep_test(
             &["-q", "l_\\d"],
             "l_1\nln_2\n    l_3    \nln_4\n",
@@ -2834,12 +2834,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_quiet_1() {
+    fn test_quiet_1() {
         grep_test(&["-q", "l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_stdin_ignore_case_0() {
+    fn test_ignore_case_0() {
         grep_test(
             &["-i", "l_\\d"],
             "L_1\nln_2\n    l_3    \nln_4\n",
@@ -2850,12 +2850,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_ignore_case_1() {
+    fn test_ignore_case_1() {
         grep_test(&["-i", "l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_stdin_line_number_0() {
+    fn test_line_number_0() {
         grep_test(
             &["-n", "l_\\d"],
             "l_1\nln_2\n    l_3    \nln_4\n",
@@ -2866,7 +2866,7 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_line_number_1() {
+    fn test_line_number_1() {
         grep_test(&["-n", "l_\\d"], "", "", "", 1);
     }
 
