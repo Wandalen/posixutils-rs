@@ -2898,6 +2898,28 @@ mod grep_tests {
     }
 
     #[test]
+    fn test_line_invert_match_0() {
+        grep_test(
+            &["-v", "l_\\d"],
+            "l_1\nln_2\n    l_3    \naaa_l_4\nl_5_aaa\n",
+            "ln_2\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_invert_match_1() {
+        grep_test(
+            &["-v", "."],
+            "  l_1  \nln_2\n    l_3    \naaa_l_4\nl_5_aaa\n",
+            "",
+            "",
+            1,
+        );
+    }
+
+    #[test]
     fn test_line_regexp_to_regexp_0() {
         grep_test(
             &["-x", "l_\\d"],
