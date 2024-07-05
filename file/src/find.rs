@@ -11,7 +11,6 @@ use std::collections::HashSet;
 use std::{env, fs};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::PathBuf;
-use std::process::ExitCode;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
 use walkdir::{DirEntry, WalkDir};

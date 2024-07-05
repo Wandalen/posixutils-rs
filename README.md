@@ -73,6 +73,7 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [x] mv
  - [x] nl
  - [x] nm (Development)
+ - [x] od
  - [x] paste
  - [x] pr
  - [x] rm
@@ -120,7 +121,9 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [x] tee
  - [x] touch
  - [x] tty
+ - [x] uname
  - [x] unlink
+ - [x] write
 
 ## Stage 1 - Rough draft
 
@@ -132,6 +135,7 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [x] echo
  - [x] dd
  - [x] id
+ - [x] ipcs (IPC)
  - [x] kill
  - [x] logger
  - [x] printf
@@ -140,7 +144,6 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [x] test
  - [x] tput
  - [x] tsort
- - [x] uname
  - [x] who
  - [x] xargs
 
@@ -197,7 +200,6 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [ ] fuser
  - [ ] getconf
  - [ ] grep
- - [ ] ipcs (IPC)
  - [ ] join
  - [ ] lp
  - [ ] m4
@@ -206,7 +208,6 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [ ] man
  - [ ] more
  - [ ] newgrp
- - [ ] od
  - [ ] patch
  - [ ] pax
  - [ ] ps
@@ -216,7 +217,6 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [ ] talk
  - [ ] time
  - [ ] timeout
- - [ ] write
 
 ## Testing
 
