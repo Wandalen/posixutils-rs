@@ -21,6 +21,12 @@ use std::{
 use makefile_lossless::{Makefile, Rule, VariableDefinition};
 use ErrorCode::*;
 
+/// The default shell variable name.
+const DEFAULT_SHELL_VAR: &str = "SHELL";
+
+/// The default shell to use for running recipes. Linux and MacOS
+const DEFAULT_SHELL: &str = "/bin/sh";
+
 /// Represents the make utility with its data and configuration.
 ///
 /// The only way to create a `Make` is from a `Makefile` and a `Config`.
@@ -91,8 +97,12 @@ impl Make {
                 println!("{}", recipe);
             }
 
-            let mut command =
-                Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()));
+            let mut command = Command::new(
+                env::var(DEFAULT_SHELL_VAR)
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or(DEFAULT_SHELL),
+            );
             self.init_env(&mut command);
             command.args(["-c", &recipe]);
 
