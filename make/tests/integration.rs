@@ -192,13 +192,12 @@ mod target_behavior {
     }
 
     #[test]
-    #[ignore = "to be implemented"]
     fn recursive_chaining() {
         run_test_helper(
             &["-sf", "tests/makefiles/target_behavior/recursive_chaining.mk"],
-            "rule2\nrule1\n",
-            "make: Recursive prerequisite found",
-            0,
+            "",
+            "make: Circular dependency detected while building 'rule1'.",
+            ErrorCode::RecursivePrerequisite as i32,
         );
     }
 }

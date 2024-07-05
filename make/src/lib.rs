@@ -13,6 +13,7 @@ mod error_code;
 pub use error_code::ErrorCode;
 
 use std::{
+    collections::HashSet,
     env, fs,
     process::{self, Command},
     time::SystemTime,
@@ -80,6 +81,15 @@ impl Make {
     /// - `false` if the rule was already up to date.
     fn run_rule(&self, rule: &Rule) -> bool {
         let target = rule.targets().next().unwrap();
+
+        if self.are_prerequisites_recursive(&target) {
+            eprintln!(
+                "make: Circular dependency detected while building '{}'.",
+                target
+            );
+            process::exit(RecursivePrerequisite as i32);
+        }
+
         let newer_prerequisites = self.get_newer_prerequisites(&target);
         if newer_prerequisites.is_empty() && get_modified_time(&target).is_some() {
             return false;
@@ -137,13 +147,45 @@ impl Make {
                         return true;
                     };
 
-                    !self.get_newer_prerequisites(prerequisite).is_empty() ||
-                        pre_modified > target_modified
+                    !self.get_newer_prerequisites(prerequisite).is_empty()
+                        || pre_modified > target_modified
                 })
                 .collect()
         } else {
             prerequisites.collect()
         }
+    }
+
+    fn are_prerequisites_recursive(&self, target: impl AsRef<str>) -> bool {
+        let mut visited = HashSet::from([target.as_ref()]);
+        let mut stack = HashSet::from([target.as_ref()]);
+
+        self._are_prerequisites_recursive(target.as_ref(), &mut visited, &mut stack)
+    }
+
+    fn _are_prerequisites_recursive(
+        &self,
+        target: impl AsRef<str>,
+        visited: &mut HashSet<&str>,
+        stack: &mut HashSet<&str>,
+    ) -> bool {
+        let Some(rule) = self.target_rule(&target) else {
+            return false;
+        };
+
+        let prerequisites = rule.prerequisites();
+
+        for prerequisite in prerequisites {
+            if (!visited.contains(prerequisite.as_str())
+                && self._are_prerequisites_recursive(&prerequisite, visited, stack))
+                || stack.contains(prerequisite.as_str())
+            {
+                return true;
+            }
+        }
+
+        stack.remove(target.as_ref());
+        false
     }
 
     /// A helper function to initialize env vars for shell commands.
