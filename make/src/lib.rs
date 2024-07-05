@@ -106,7 +106,11 @@ impl Make {
             self.init_env(&mut command);
             command.args(["-c", &recipe]);
 
-            let status = command.status().expect("failed to execute process");
+            let status = command.status().unwrap_or_else(|err| {
+                eprintln!("{err}");
+                process::exit(ExecutionError as i32);
+            });
+
             if !status.success() {
                 let code = status.code().unwrap_or(ExecutionError as i32);
                 eprintln!("make: [{}]: Error {}", target, code);
