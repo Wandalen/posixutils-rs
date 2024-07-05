@@ -13,6 +13,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::PathBuf;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use plib::PROJECT_NAME;
+use regex::Regex;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug)]
@@ -23,7 +24,7 @@ enum Expr {
     Name(String),
     MTime(i64),
     Path(String),
-    Type(char),
+    Type(FileType),
     NoUser,
     NoGroup,
     XDev,
@@ -35,6 +36,18 @@ enum Expr {
     Size(u64, bool),
     Print,
     Newer(PathBuf),
+}
+
+#[derive(Debug)]
+enum FileType {
+    BlockDevice,
+    CharDevice,
+    Dir,
+    Symlink,
+    Fifo,
+    File,
+    Socket,
+    Unknown,
 }
 
 /// Parses a list of tokens representing search criteria, the result is stored in enum Expr
@@ -75,7 +88,17 @@ fn parse_expression(tokens: &mut Vec<&str>) -> Vec<Expr> {
                 tokens.pop();
                 if let Some(t) = tokens.pop() {
                     if t.len() == 1 {
-                        stack.push(Expr::Type(t.chars().next().unwrap()));
+                        let filetype = match t {
+                            "b" => FileType::BlockDevice,
+                            "c" => FileType::CharDevice,
+                            "d" => FileType::Dir,
+                            "l" => FileType::Symlink,
+                            "p" => FileType::Fifo,
+                            "f" => FileType::File,
+                            "s" => FileType::Socket,
+                            _ => FileType::Unknown,
+                        };
+                        stack.push(Expr::Type(filetype));
                     }
                 }
             }
@@ -172,6 +195,28 @@ fn parse_expression(tokens: &mut Vec<&str>) -> Vec<Expr> {
     stack
 }
 
+/// Converts a shell pattern to a regular expression.
+///
+/// # Arguments
+///
+/// * `pattern` - A string slice representing the pattern to convert.
+///
+/// # Returns
+///
+/// * A `Regex` object representing the converted pattern.
+fn pattern_to_regex(pattern: &str) -> Regex {
+    let mut regex_pattern = pattern.replace('?', ".");
+    regex_pattern = regex_pattern.replace('*', ".*");
+
+    let bracket_regex = Regex::new(r"\[(?:[^\]]+)\]").unwrap();
+    regex_pattern = bracket_regex.replace_all(&regex_pattern, |caps: &regex::Captures| {
+        let bracket_content = &caps[0][1..caps[0].len()-1];
+        format!("[{}]", bracket_content)
+    }).to_string();
+
+    Regex::new(&format!("^{}$", regex_pattern)).unwrap()
+}
+
 /// Executes a command based on the list of expressions and returns the matching file paths.
 ///
 /// # Arguments
@@ -187,6 +232,7 @@ fn parse_expression(tokens: &mut Vec<&str>) -> Vec<Expr> {
 fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Result<Vec<PathBuf>, String> {
     let mut c_files = files.clone().into_iter().map(|f| f.path().to_path_buf()).collect::<HashSet<PathBuf>>();
     let mut result = Vec::new();
+    let mut first = true;
     for expression in expr {
         for file in &files {
             match expression {
@@ -194,12 +240,15 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
                 // Expr::Or(lhs, rhs) => evaluate_expression(lhs, entry, root_dev) || evaluate_expression(rhs, entry, root_dev),
                 // Expr::Not(inner) => !evaluate_expression(inner, entry, root_dev),
                 Expr::Name(name) => {
-                    if !file.file_name().to_string_lossy().contains(name) {
+                    let regex = pattern_to_regex(name);
+                    if !regex.is_match(&file.file_name().to_string_lossy()) {
                         c_files.remove(file.path());
                     }
                 },
                 Expr::Path(path) => {
-                    if !file.path().to_string_lossy().contains(path) {
+                    let regex = pattern_to_regex(path);
+
+                    if !regex.is_match(&file.path().to_string_lossy()) && !first {
                         c_files.remove(file.path());
                     }
                 },
@@ -215,14 +264,14 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
                 Expr::Type(t) => {
                     let file_type = file.file_type();
                     let r = match *t {
-                        'b' => file_type.is_block_device(),
-                        'c' => file_type.is_char_device(),
-                        'd' => file_type.is_dir(),
-                        'l' => file_type.is_symlink(),
-                        'p' => file_type.is_fifo(),
-                        'f' => file_type.is_file(),
-                        's' => file_type.is_socket(),
-                        _ => false,
+                        FileType::BlockDevice => file_type.is_block_device(),
+                        FileType::CharDevice => file_type.is_char_device(),
+                        FileType::Dir => file_type.is_dir(),
+                        FileType::Symlink => file_type.is_symlink(),
+                        FileType::Fifo => file_type.is_fifo(),
+                        FileType::File => file_type.is_file(),
+                        FileType::Socket => file_type.is_socket(),
+                        FileType::Unknown => return Err(format!("Unknown argument to -type")),
                     };
                     if !r {
                         c_files.remove(file.path());
@@ -318,6 +367,7 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
                 _ => return Err("Error: Invalid expression".to_string()),
             }
         }
+        first = false;
     }
 
     if result.is_empty() {
@@ -337,13 +387,18 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
 ///
 /// * A `String` representing the root path extracted from the expressions.
 fn get_root(expr: &[Expr]) -> String {
-    let mut path = String::new();
-    for i in expr {
-        match i {
-            Expr::Path(p) => path = p.to_string(),
-            _ => continue
-        } 
-    }
+    let mut first = true;
+
+    let path = expr.iter()
+    .find_map(|i| match i {
+        Expr::Path(p) if first => {
+            first = false;
+            Some(p.to_string())
+        },
+        _ => None,
+    })
+    .unwrap_or_else(String::new);
+
     path
 }
 
@@ -371,15 +426,10 @@ fn find(args: Vec<String>) -> Result<(), String> {
     let files = WalkDir::new(path).into_iter().map(|f|f.unwrap()).collect::<Vec<DirEntry>>();
     let result = evaluate_expression(expr, files, root_dev);
 
-    if result.is_ok() {
-        for res in result.unwrap() {
-            println!("{}", res.display())
-        }
-        Ok(())
+    for res in result? {
+        println!("{}", res.display())
     }
-    else {
-        Err(result.err().unwrap())
-    }
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

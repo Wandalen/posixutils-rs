@@ -408,7 +408,7 @@ fn find_size_test() {
 fn find_name_test() {
     let project_root = env!("CARGO_MANIFEST_DIR");
     let test_dir = format!("{}/tests/find", project_root);
-    let args = [&test_dir, "-name", "empty_file"];
+    let args = [&test_dir, "-name", "empty_file.txt"];
 
     let expected_output = format!("{}/empty_file.txt\n", test_dir);
 
