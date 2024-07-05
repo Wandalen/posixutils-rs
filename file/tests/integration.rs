@@ -391,4 +391,44 @@ fn find_size_test() {
     run_test_find(&args, &expected_output, "", 0)
 }
 
+#[test]
+fn find_name_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let test_dir = format!("{}/tests/find", project_root);
+    let args = [&test_dir, "-name", "empty_file"];
 
+    let expected_output = format!("{}/empty_file.txt\n", test_dir);
+
+    run_test_find(&args, &expected_output, "", 0)
+}
+
+#[test]
+fn find_type_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let test_dir = format!("{}/tests/find", project_root);
+    let args = [&test_dir, "-type", "f"];
+
+    let expected_output = format!("{}/empty_file.txt\n{}/file1.txt\n", test_dir, test_dir);
+
+    run_test_find(&args, &expected_output, "", 0)
+}
+
+#[test]
+fn find_mtime_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let test_dir = format!("{}/tests/find", project_root);
+    let args = [&test_dir, "-mtime", "7"];
+
+    run_test_find(&args, "", "", 0)
+}
+
+#[test]
+fn find_combination_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let test_dir = format!("{}/tests/find", project_root);
+    let args = [&test_dir, "-size", "+4", "-print", "-size", "+2", "-print"];
+
+    let expected_output = format!("{}\n{}\n{}/file1.txt\n{}/file1.txt\n", test_dir, test_dir, test_dir, test_dir);
+
+    run_test_find(&args, &expected_output, "", 0)
+}

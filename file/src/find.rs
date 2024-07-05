@@ -208,7 +208,7 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
                     if let Ok(metadata) = file.metadata() {
                         let modified = metadata.modified().unwrap();
                         let duration = std::time::SystemTime::now().duration_since(modified).unwrap();
-                        if duration.as_secs() / 86400 > (*days as u64) {
+                        if ((duration.as_secs() / 86400) as i64) < (*days) {
                             c_files.remove(file.path());
                         }
                     }
