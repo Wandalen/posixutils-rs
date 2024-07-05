@@ -33,15 +33,17 @@ fn run_test_helper(
     );
 }
 
-fn run_test_helper_with_setup(
+fn run_test_helper_with_setup_and_destruct(
     args: &[&str],
     expected_output: &str,
     expected_error: &str,
     expected_exit_code: i32,
     setup: impl FnOnce(),
+    destruct: impl FnOnce(),
 ) {
     setup();
     run_test_helper(args, expected_output, expected_error, expected_exit_code);
+    destruct();
 }
 
 fn test_checker(plan: &TestPlan, output: &Output) {
@@ -169,7 +171,14 @@ mod target_behavior {
 
     #[test]
     fn diamond_chaining_with_touches() {
-        run_test_helper_with_setup(
+        let remove_touches = || {
+            let dir = "tests/makefiles/target_behavior/diamond_chaining_with_touches";
+            for i in 1..=4 {
+                let _ = fs::remove_file(format!("{}/rule{}", dir, i));
+            }
+        };
+        
+        run_test_helper_with_setup_and_destruct(
             &[
                 "-sC",
                 "tests/makefiles/target_behavior/diamond_chaining_with_touches",
@@ -177,12 +186,8 @@ mod target_behavior {
             "rule4\nrule2\nrule3\nrule1\n",
             "",
             0,
-            || {
-                let dir = "tests/makefiles/target_behavior/diamond_chaining_with_touches";
-                for i in 1..=4 {
-                    let _ = fs::remove_file(format!("{}/rule{}", dir, i));
-                }
-            },
+            remove_touches,
+            remove_touches,
         );
     }
 
