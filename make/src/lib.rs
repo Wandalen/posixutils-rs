@@ -12,12 +12,7 @@ pub use config::Config;
 mod error_code;
 pub use error_code::ErrorCode;
 
-use std::{
-    collections::HashSet,
-    env, fs,
-    process::{self, Command},
-    time::SystemTime,
-};
+use std::{collections::HashSet, env, fs, process::Command, time::SystemTime};
 
 use makefile_lossless::{Makefile, Rule, VariableDefinition};
 use ErrorCode::*;
@@ -58,9 +53,9 @@ impl Make {
     /// - `Some(true)` if the target was built.
     /// - `Some(false)` if the target was already up to date.
     /// - `None` if there are no rules in the makefile.
-    pub fn build_first_target(&self) -> Option<bool> {
-        let rule = self.rules.first()?;
-        Some(self.run_rule(rule))
+    pub fn build_first_target(&self) -> Result<bool, ErrorCode> {
+        let rule = self.rules.first().ok_or(NoTarget)?;
+        self.run_rule(rule)
     }
 
     /// Builds the target with the given name.
@@ -69,9 +64,9 @@ impl Make {
     /// - `Some(true)` if the target was built.
     /// - `Some(false)` if the target was already up to date.
     /// - `None` if the target does not exist.
-    pub fn build_target(&self, target: impl AsRef<str>) -> Option<bool> {
-        let rule = self.target_rule(target)?;
-        Some(self.run_rule(rule))
+    pub fn build_target(&self, target: impl AsRef<str>) -> Result<bool, ErrorCode> {
+        let rule = self.target_rule(target).ok_or(NoTarget)?;
+        self.run_rule(rule)
     }
 
     /// Runs the given rule.
@@ -79,25 +74,20 @@ impl Make {
     /// # Returns
     /// - `true` if the rule was run.
     /// - `false` if the rule was already up to date.
-    fn run_rule(&self, rule: &Rule) -> bool {
+    fn run_rule(&self, rule: &Rule) -> Result<bool, ErrorCode> {
         let target = rule.targets().next().unwrap();
 
         if self.are_prerequisites_recursive(&target) {
-            eprintln!(
-                "make: Circular dependency detected while building '{}'.",
-                target
-            );
-            process::exit(RecursivePrerequisite as i32);
+            return Err(RecursivePrerequisite);
         }
 
         let newer_prerequisites = self.get_newer_prerequisites(&target);
         if newer_prerequisites.is_empty() && get_modified_time(&target).is_some() {
-            return false;
+            return Ok(false);
         }
 
-        // DANGER: will not work for recursive prerequisites
         for prerequisite in &newer_prerequisites {
-            self.build_target(prerequisite);
+            self.build_target(prerequisite)?;
         }
 
         for recipe in rule.recipes() {
@@ -114,19 +104,16 @@ impl Make {
             self.init_env(&mut command);
             command.args(["-c", &recipe]);
 
-            let status = command.status().unwrap_or_else(|err| {
-                eprintln!("{err}");
-                process::exit(ExecutionError as i32);
-            });
+            let Ok(status) = command.status() else {
+                return Err(ExecutionError);
+            };
 
             if !status.success() {
-                let code = status.code().unwrap_or(ExecutionError as i32);
-                eprintln!("make: [{}]: Error {}", target, code);
-                process::exit(code);
+                return Err(ExecutionError);
             }
         }
 
-        true
+        Ok(true)
     }
 
     /// Retrieves the prerequisites of the target that are newer than the target.

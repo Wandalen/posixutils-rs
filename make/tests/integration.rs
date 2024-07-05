@@ -131,8 +131,8 @@ mod target_behavior {
         run_test_helper(
             &["-f", "tests/makefiles/target_behavior/no_targets.mk"],
             "",
-            "No targets",
-            ErrorCode::NoTargets as i32,
+            "no target",
+            ErrorCode::NoTarget as i32,
         );
     }
 
@@ -177,7 +177,7 @@ mod target_behavior {
                 let _ = fs::remove_file(format!("{}/rule{}", dir, i));
             }
         };
-        
+
         run_test_helper_with_setup_and_destruct(
             &[
                 "-sC",
@@ -194,9 +194,12 @@ mod target_behavior {
     #[test]
     fn recursive_chaining() {
         run_test_helper(
-            &["-sf", "tests/makefiles/target_behavior/recursive_chaining.mk"],
+            &[
+                "-sf",
+                "tests/makefiles/target_behavior/recursive_chaining.mk",
+            ],
             "",
-            "make: Circular dependency detected while building 'rule1'.",
+            "recursive prerequisite",
             ErrorCode::RecursivePrerequisite as i32,
         );
     }

@@ -21,7 +21,11 @@ use const_format::formatcp;
 use gettextrs::{bind_textdomain_codeset, textdomain};
 use makefile_lossless::Makefile;
 use plib::PROJECT_NAME;
-use posixutils_make::{Config, ErrorCode::*, Make};
+use posixutils_make::{
+    Config,
+    ErrorCode::{self, *},
+    Make,
+};
 
 const MAKEFILE_NAME: [&str; 2] = ["makefile", "Makefile"];
 const MAKEFILE_PATH: [&str; 2] = [
@@ -55,6 +59,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         targets,
     } = Args::parse();
 
+    let mut status_code = 0;
+
     // -C flag
     if let Some(dir) = change_directory {
         env::set_current_dir(dir)?;
@@ -69,26 +75,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let make = Make::from((parsed, config));
 
     if targets.is_empty() {
-        if make.build_first_target().is_none() {
-            eprintln!("make: No targets.");
-            process::exit(NoTargets as i32);
-        }
+        let _ = make.build_first_target().inspect_err(|err| {
+            eprintln!("make: {}", err);
+            status_code = *err as i32;
+        });
     } else {
         for target in targets {
             let target = target.into_string().unwrap();
-            if make.build_target(&target).is_none() {
-                eprintln!("make: No rule to make target '{}'.", target);
-                process::exit(NoRule as i32);
+            let _ = make.build_target(&target).inspect_err(|err| {
+                eprintln!("make: {}", err);
+                status_code = *err as i32;
+            });
+
+            if status_code != 0 {
+                break;
             }
         }
     }
 
-    process::exit(0);
+    process::exit(status_code);
 }
 
 /// Parse the makefile at the given path, or the first default makefile found.
 /// If no makefile is found, print an error message and exit.
-fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn std::error::Error>> {
+fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, ErrorCode> {
     let path = path.as_ref().map(|p| p.as_ref());
 
     let path = match path {
@@ -105,19 +115,20 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, Box<dyn st
             if let Some(makefile) = makefile {
                 makefile
             } else {
-                eprintln!("make: No makefile.");
-                process::exit(NoMakefile as i32);
+                return Err(NoMakefile);
             }
         }
     };
 
     let contents = match fs::read_to_string(path) {
         Ok(contents) => contents,
-        Err(e) => {
-            eprintln!("make: {}: {}", path.display(), e); // format!("{e}") is not consistent
-            process::exit(ParseError as i32);
+        Err(_) => {
+            return Err(IoError);
         }
     };
 
-    Ok(Makefile::from_str(&contents)?)
+    match Makefile::from_str(&contents) {
+        Ok(makefile) => Ok(makefile),
+        Err(_) => Err(ParseError),
+    }
 }
