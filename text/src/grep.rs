@@ -137,12 +137,12 @@ impl Args {
             .collect();
 
         match &self.single_pattern_list {
-            // If `single_pattern_list`` is none, then `pattern_list` is not empty
+            // If `single_pattern_list` is none, then `pattern_list` is not empty
             None => {}
             // `single_pattern_list` might get files value
             Some(pattern) => {
                 if !self.pattern_list.is_empty() {
-                    // `pattern_list`` is not empty, then `single_pattern_list` took `files` value
+                    // `pattern_list` is not empty, then `single_pattern_list` took `files` value
                     match PathBuf::from_str(pattern.as_str()) {
                         Ok(path_buf) => {
                             self.files.insert(0, path_buf);
@@ -182,7 +182,7 @@ impl Args {
     /// # Returns
     ///
     /// Returns [GrepModel](GrepModel) object.
-    fn to_grep_model(&self) -> Result<GrepModel, String> {
+    fn to_grep_model(self) -> Result<GrepModel, String> {
         // Resolve output mode
         let output_mode = if self.count {
             OutputMode::Count(0)
@@ -195,7 +195,7 @@ impl Args {
         };
 
         let patterns = Patterns::new(
-            &self.pattern_list,
+            self.pattern_list,
             self.use_string,
             self.line_regexp,
             self.ignore_case,
@@ -209,7 +209,7 @@ impl Args {
             invert_match: self.invert_match,
             output_mode,
             patterns,
-            files: self.files.clone(),
+            files: self.files,
         })
     }
 }
@@ -236,18 +236,18 @@ impl Patterns {
     ///
     /// Returns [Patterns](Patterns).
     fn new(
-        patterns: &[String],
+        patterns: Vec<String>,
         fixed_string: bool,
         line_regexp: bool,
         ignore_case: bool,
     ) -> Result<Self, String> {
-        let regexes: Result<Vec<Regex>, String> = patterns
-            .iter()
+        patterns
+            .into_iter()
             .map(|p| {
                 let pattern = if fixed_string {
-                    regex::escape(p)
+                    regex::escape(&p)
                 } else {
-                    p.clone()
+                    p
                 };
                 if line_regexp {
                     format!(r"^{pattern}$")
@@ -261,8 +261,8 @@ impl Patterns {
                     .build()
                     .map_err(|err| format!("Error compiling regex '{}': {}", p, err))
             })
-            .collect();
-        regexes.map(Self)
+            .collect::<Result<Vec<_>, _>>()
+            .map(Self)
     }
 
     /// Checks if input string matches to present patterns.
