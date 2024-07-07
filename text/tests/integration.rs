@@ -2911,23 +2911,140 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_line_regexp_to_regexp_0() {
+    fn test_line_regexp_0() {
         grep_test(&["-x", REGEX_PATTERN], LINES_INPUT, "line_1\n", "", 0);
     }
 
     #[test]
-    fn test_line_regexp_to_regexp_1() {
+    fn test_line_regexp_1() {
         grep_test(&["-x", REGEX_PATTERN], BAD_INPUT, "", "", 1);
     }
 
     #[test]
-    fn test_line_regexp_to_fixed_string_0() {
-        grep_test(&["-F", "-x", "line_1"], LINES_INPUT, "line_1\n", "", 0)
+    fn test_extended_count_0() {
+        grep_test(&["-E", "-c", REGEX_PATTERN], LINES_INPUT, "3\n", "", 0);
     }
 
     #[test]
-    fn test_line_regexp_to_fixed_string_1() {
-        grep_test(&["-F", "-x", FIXED_PATTERN], BAD_INPUT, "", "", 1)
+    fn test_extended_count_1() {
+        grep_test(&["-E", "-c", REGEX_PATTERN], BAD_INPUT, "0\n", "", 1);
+    }
+
+    #[test]
+    fn test_extended_files_with_matches_0() {
+        grep_test(
+            &["-E", "-l", REGEX_PATTERN],
+            LINES_INPUT,
+            "(standard input)\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_files_with_matches_1() {
+        grep_test(&["-E", "-l", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_quiet_0() {
+        grep_test(&["-E", "-q", REGEX_PATTERN], LINES_INPUT, "", "", 0);
+    }
+
+    #[test]
+    fn test_extended_quiet_1() {
+        grep_test(&["-E", "-q", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_ignore_case_0() {
+        grep_test(
+            &["-E", "-i", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nLINE_4\np_LINE_5_s\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_ignore_case_1() {
+        grep_test(&["-E", "-i", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_line_number_0() {
+        grep_test(
+            &["-E", "-n", REGEX_PATTERN],
+            LINES_INPUT,
+            "1:line_1\n2:p_line_2_s\n3:  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_line_number_1() {
+        grep_test(&["-E", "-n", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_no_messages_0() {
+        grep_test(
+            &["-E", "-s", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_no_messages_1() {
+        grep_test(&["-E", "-s", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_no_messages_2() {
+        grep_test(
+            &[
+                "-E",
+                "-f",
+                "tests/assets/grep/inexisting_file.txt",
+                "-s",
+                REGEX_PATTERN,
+            ],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_extended_line_invert_match_0() {
+        grep_test(
+            &["-E", "-v", REGEX_PATTERN],
+            LINES_INPUT,
+            "LINE_4\np_LINE_5_s\nl_6\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_invert_match_1() {
+        grep_test(&["-E", "-v", "."], LINES_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_line_regexp_0() {
+        grep_test(&["-E", "-x", REGEX_PATTERN], LINES_INPUT, "line_1\n", "", 0);
+    }
+
+    #[test]
+    fn test_extended_line_regexp_1() {
+        grep_test(&["-E", "-x", REGEX_PATTERN], BAD_INPUT, "", "", 1);
     }
 
     #[test]
@@ -2972,10 +3089,10 @@ mod grep_tests {
 
     #[test]
     fn test_empty_fixed_string_0() {
-        grep_test(&["-F", ""], LINES_INPUT, LINES_INPUT, "", 0);
-        grep_test(&["-F", "-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
+        grep_test(&["-E", ""], LINES_INPUT, LINES_INPUT, "", 0);
+        grep_test(&["-E", "-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
         grep_test(
-            &["-F", "-f", "tests/assets/empty_file.txt"],
+            &["-E", "-f", "tests/assets/empty_file.txt"],
             LINES_INPUT,
             LINES_INPUT,
             "",
