@@ -365,7 +365,11 @@ impl GrepModel {
                         break;
                     }
                     line_number += 1;
-                    let trimmed = &line[..line.len() - 1];
+                    let trimmed = if line.ends_with('\n') {
+                        &line[..line.len() - 1]
+                    } else {
+                        &line
+                    };
 
                     let init_matches = self.patterns.matches(trimmed);
                     let matches = if self.invert_match {
