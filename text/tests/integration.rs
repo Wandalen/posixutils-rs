@@ -3176,7 +3176,13 @@ mod grep_tests {
 
     #[test]
     fn test_multiple_regexes_0() {
-        grep_test(&["line_\\d\nl_\\d"], LINES_INPUT, "line_1\np_line_2_s\n  line_3  \nl_6\n", "", 0);
+        grep_test(
+            &["line_\\d\nl_\\d"],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nl_6\n",
+            "",
+            0,
+        );
     }
 
     #[test]
@@ -3186,7 +3192,13 @@ mod grep_tests {
 
     #[test]
     fn test_multiple_extended_regexes_0() {
-        grep_test(&["-E", "line_\\d\nl_\\d"], LINES_INPUT, "line_1\np_line_2_s\n  line_3  \nl_6\n", "", 0);
+        grep_test(
+            &["-E", "line_\\d\nl_\\d"],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nl_6\n",
+            "",
+            0,
+        );
     }
 
     #[test]
@@ -3196,12 +3208,78 @@ mod grep_tests {
 
     #[test]
     fn test_multiple_fixed_strings_0() {
-        grep_test(&["-F", "line_\nl_"], LINES_INPUT, "line_1\np_line_2_s\n  line_3  \nl_6\n", "", 0);
+        grep_test(
+            &["-F", "line_\nl_"],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nl_6\n",
+            "",
+            0,
+        );
     }
 
     #[test]
     fn test_multiple_fixed_strings_1() {
         grep_test(&["-F", "line_\nl_"], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_multiple_input_files() {
+        grep_test(&["2", "tests/assets/test_file_c", "tests/assets/test_file.txt"], "", 
+        "tests/assets/test_file_c:void func2() {\r\ntests/assets/test_file_c:    printf(\"This is function 2\\n\");\r\ntests/assets/test_file.txt:2sadsgdhjmf\r\ntests/assets/test_file.txt:12\r\n", "", 0);
+    }
+
+    #[test]
+    fn test_multiple_input_files_count() {
+        grep_test(
+            &[
+                "-c",
+                "2",
+                "tests/assets/test_file_c",
+                "tests/assets/test_file.txt",
+            ],
+            "",
+            "4\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_input_files_files_with_matches() {
+        grep_test(
+            &[
+                "-l",
+                "2",
+                "tests/assets/test_file_c",
+                "tests/assets/test_file.txt",
+            ],
+            "",
+            "tests/assets/test_file_c\ntests/assets/test_file.txt\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_input_files_quiet() {
+        grep_test(
+            &[
+                "-q",
+                "2",
+                "tests/assets/test_file_c",
+                "tests/assets/test_file.txt",
+            ],
+            "",
+            "",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_input_files_line_number() {
+        grep_test(&["-n", "2", "tests/assets/test_file_c", "tests/assets/test_file.txt"], "", 
+        "tests/assets/test_file_c:12:void func2() {\r\ntests/assets/test_file_c:13:    printf(\"This is function 2\\n\");\r\ntests/assets/test_file.txt:2:2sadsgdhjmf\r\ntests/assets/test_file.txt:12:12\r\n", "", 0);
     }
 
     #[test]
@@ -3262,5 +3340,16 @@ mod grep_tests {
         grep_test(&["-F", ""], "", "", "", 1);
         grep_test(&["-F", "-e", ""], "", "", "", 1);
         grep_test(&["-F", "-f", "tests/assets/empty_file.txt"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_all_options_0() {
+        grep_test(
+            &["-insvx", REGEX_PATTERN],
+            LINES_INPUT,
+            "2:p_line_2_s\n3:  line_3  \n5:p_LINE_5_s\n6:l_6\n",
+            "",
+            0,
+        );
     }
 }
