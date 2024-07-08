@@ -16,11 +16,11 @@ use plib::PROJECT_NAME;
 use regex::Regex;
 use walkdir::{DirEntry, WalkDir};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Expr {
-    And(Vec<Expr>, Vec<Expr>),
-    Or(Vec<Expr>, Vec<Expr>),
-    Not(Vec<Expr>),
+    And(Box<Expr>),
+    Or(Box<Expr>),
+    Not(Box<Expr>),
     Name(String),
     MTime(i64),
     Path(String),
@@ -38,7 +38,7 @@ enum Expr {
     Newer(PathBuf),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum FileType {
     BlockDevice,
     CharDevice,
@@ -169,21 +169,18 @@ fn parse_expression(tokens: &mut Vec<&str>) -> Vec<Expr> {
             }
             "-a" => {
                 tokens.pop();
-                if let (Some(rhs), Some(lhs)) = (stack.pop(), stack.pop()) {
-                    stack.push(Expr::And(vec![lhs], vec![rhs]));
-                }
+                let expr = parse_expression(tokens);
+                stack.push(Expr::And(Box::new(expr[0].clone())));
             }
             "-o" => {
                 tokens.pop();
-                if let (Some(rhs), Some(lhs)) = (stack.pop(), stack.pop()) {
-                    stack.push(Expr::Or(vec![lhs], vec![rhs]));
-                }
+                let expr = parse_expression(tokens);
+                stack.push(Expr::Or(Box::new(expr[0].clone())));
             }
             "!" => {
                 tokens.pop();
-                if let Some(expr) = stack.pop() {
-                    stack.push(Expr::Not(vec![expr]));
-                }
+                let expr = parse_expression(tokens);
+                stack.push(Expr::Not(Box::new(expr[0].clone())));
             }
             _ => {
                 tokens.pop();
@@ -230,15 +227,40 @@ fn pattern_to_regex(pattern: &str) -> Regex {
 /// * A `Result` containing a vector of `PathBuf` objects representing the paths of the files that match the expressions,
 ///   or an error message as a `String`.
 fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Result<Vec<PathBuf>, String> {
+    let f_path = &expr[0];
+    let mut not_res: Vec<PathBuf> = Vec::new();
+    let mut or_res: Vec<PathBuf> = Vec::new();
+    let mut and_res: Vec<PathBuf> = Vec::new();
     let mut c_files = files.clone().into_iter().map(|f| f.path().to_path_buf()).collect::<HashSet<PathBuf>>();
     let mut result = Vec::new();
     let mut first = true;
     for expression in expr {
+        match expression {
+            Expr::Not(inner) => {
+                let i: Vec<Expr> = vec![f_path.clone(), *inner.clone()];
+                not_res = evaluate_expression(&i.as_slice(), files.clone(), root_dev)?;
+            },
+            Expr::Or(inner) => {
+                let i: Vec<Expr> = vec![f_path.clone(), *inner.clone()];
+                or_res = evaluate_expression(&i.as_slice(), files.clone(), root_dev)?;
+            },
+            Expr::And(inner) => {
+                let i: Vec<Expr> = vec![f_path.clone(), *inner.clone()];
+                and_res = evaluate_expression(&i.as_slice(), files.clone(), root_dev)?;
+            },
+            _ => {}
+        }
         for file in &files {
             match expression {
-                // Expr::And(lhs, rhs) => evaluate_expression(lhs, entry, root_dev) && evaluate_expression(rhs, entry, root_dev),
-                // Expr::Or(lhs, rhs) => evaluate_expression(lhs, entry, root_dev) || evaluate_expression(rhs, entry, root_dev),
-                // Expr::Not(inner) => !evaluate_expression(inner, entry, root_dev),
+                Expr::And(_) => {
+                    continue;
+                },
+                Expr::Or(_) => {
+                    continue;
+                },
+                Expr::Not(_) => {
+                    continue;
+                },
                 Expr::Name(name) => {
                     let regex = pattern_to_regex(name);
                     if !regex.is_match(&file.file_name().to_string_lossy()) {
@@ -373,6 +395,17 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
     if result.is_empty() {
         result.extend(c_files.clone());
     }
+
+    let set: std::collections::HashSet<_> = not_res.iter().cloned().collect();
+    result.retain(|x| !set.contains(x));
+
+    result.extend(or_res);
+
+    let and_set: std::collections::HashSet<_> = and_res.iter().cloned().collect();
+    if !and_set.is_empty() {
+        result.retain(|x| and_set.contains(x));
+    }
+
     result.sort();
     Ok(result)
 }

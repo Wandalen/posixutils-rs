@@ -421,7 +421,7 @@ fn find_type_test() {
     let test_dir = format!("{}/tests/find", project_root);
     let args = [&test_dir, "-type", "f"];
 
-    let expected_output = format!("{}/empty_file.txt\n{}/file1.txt\n", test_dir, test_dir);
+    let expected_output = format!("{}/empty_file.txt\n{}/file1.txt\n{}/rust_file.rs\n", test_dir, test_dir, test_dir);
 
     run_test_find(&args, &expected_output, "", 0)
 }
@@ -442,6 +442,39 @@ fn find_combination_test() {
     let args = [&test_dir, "-size", "+4", "-print", "-size", "+2", "-print"];
 
     let expected_output = format!("{}\n{}\n{}/file1.txt\n{}/file1.txt\n", test_dir, test_dir, test_dir, test_dir);
+
+    run_test_find(&args, &expected_output, "", 0)
+}
+
+#[test]
+fn find_not_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let test_dir = format!("{}/tests/find", project_root);
+    let args = [&test_dir, "!", "-path", "*.txt"];
+
+    let expected_output = format!("{}\n{}/rust_file.rs\n", test_dir, test_dir);
+
+    run_test_find(&args, &expected_output, "", 0)
+}
+
+#[test]
+fn find_or_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let test_dir = format!("{}/tests/find", project_root);
+    let args = [&test_dir, "-path", "*.rs", "-o", "-path", "*.txt"];
+
+    let expected_output = format!("{}/empty_file.txt\n{}/file1.txt\n{}/rust_file.rs\n", test_dir, test_dir, test_dir);
+
+    run_test_find(&args, &expected_output, "", 0)
+}
+
+#[test]
+fn find_and_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let test_dir = format!("{}/tests/find", project_root);
+    let args = [&test_dir, "-path", "*.txt", "-a", "-size", "+2"];
+
+    let expected_output = format!("{}/file1.txt\n", test_dir);
 
     run_test_find(&args, &expected_output, "", 0)
 }
