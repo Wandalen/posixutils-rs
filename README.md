@@ -56,27 +56,35 @@ Because it is a FAQ, the major differences between this project and uutils are:
 ## Stage 3 - Test coverage
 
  - [x] ar (Development)
+ - [x] basename
  - [x] bc
  - [x] cksum
  - [x] cmp
+ - [x] comm
  - [x] compress (compress cat.)
  - [x] cp
  - [x] csplit
  - [x] cut
  - [x] diff
+ - [x] dirname
  - [x] expand
  - [x] expr
- - [x] file
  - [x] false
+ - [x] file
+ - [x] fold
  - [x] head
+ - [x] link
  - [x] ls
+ - [x] mkdir
  - [x] mv
  - [x] nl
  - [x] nm (Development)
  - [x] od
  - [x] paste
  - [x] pr
+ - [x] readlink
  - [x] rm
+ - [x] rmdir
  - [x] sort
  - [x] split
  - [x] strings
@@ -89,51 +97,44 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [x] uuencode (uue)
  - [x] unexpand
  - [x] uniq
+ - [x] unlink
  - [x] wc
  - [x] zcat (compress cat.)
 
 ## Stage 2 - Feature-complete and POSIX compliant
 
- - [x] basename
  - [x] cat
  - [x] chgrp
  - [x] chmod
  - [x] chown
  - [x] date
- - [x] dirname
  - [x] env
- - [x] fold
  - [x] ipcrm (IPC)
- - [x] link
  - [x] ln
  - [x] logname
  - [x] mesg
- - [x] mkdir
  - [x] mkfifo
  - [x] nice
  - [x] nohup
  - [x] pathchk
  - [x] pwd
- - [x] readlink
  - [x] renice
- - [x] rmdir
  - [x] sleep
  - [x] tee
  - [x] touch
  - [x] tty
  - [x] uname
- - [x] unlink
  - [x] write
 
 ## Stage 1 - Rough draft
 
  - [x] asa
  - [x] cal
- - [x] comm
  - [x] df
  - [x] du
  - [x] echo
  - [x] dd
+ - [x] getconf
  - [x] id
  - [x] ipcs (IPC)
  - [x] kill
@@ -198,7 +199,6 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [ ] awk
  - [ ] find
  - [ ] fuser
- - [ ] getconf
  - [ ] grep
  - [ ] join
  - [ ] lp
