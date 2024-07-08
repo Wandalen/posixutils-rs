@@ -3175,6 +3175,36 @@ mod grep_tests {
     }
 
     #[test]
+    fn test_multiple_regexes_0() {
+        grep_test(&["line_\\d\nl_\\d"], LINES_INPUT, "line_1\np_line_2_s\n  line_3  \nl_6\n", "", 0);
+    }
+
+    #[test]
+    fn test_multiple_regexes_1() {
+        grep_test(&["line_\\d\nl_\\d"], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_multiple_extended_regexes_0() {
+        grep_test(&["-E", "line_\\d\nl_\\d"], LINES_INPUT, "line_1\np_line_2_s\n  line_3  \nl_6\n", "", 0);
+    }
+
+    #[test]
+    fn test_multiple_extended_regexes_1() {
+        grep_test(&["-E", "line_\\d\nl_\\d"], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_multiple_fixed_strings_0() {
+        grep_test(&["-F", "line_\nl_"], LINES_INPUT, "line_1\np_line_2_s\n  line_3  \nl_6\n", "", 0);
+    }
+
+    #[test]
+    fn test_multiple_fixed_strings_1() {
+        grep_test(&["-F", "line_\nl_"], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
     fn test_empty_regex_0() {
         grep_test(&[""], LINES_INPUT, LINES_INPUT, "", 0);
         grep_test(&["-e", ""], LINES_INPUT, LINES_INPUT, "", 0);

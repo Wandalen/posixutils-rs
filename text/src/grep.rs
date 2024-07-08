@@ -130,12 +130,6 @@ impl Args {
             }
         }
 
-        self.pattern_list = self
-            .pattern_list
-            .iter()
-            .flat_map(|pattern| pattern.split('\n').map(String::from))
-            .collect();
-
         match &self.single_pattern_list {
             // If `single_pattern_list` is none, then `pattern_list` is not empty
             None => {}
@@ -156,10 +150,16 @@ impl Args {
                     }
                 } else {
                     // `pattern_list` is empty, then `single_pattern_list` is the only  pattern
-                    self.pattern_list = vec![pattern.to_string()]
+                    self.pattern_list = vec![pattern.to_string()];
                 }
             }
         }
+
+        self.pattern_list = self
+            .pattern_list
+            .iter()
+            .flat_map(|pattern| pattern.split('\n').map(String::from))
+            .collect();
     }
 
     /// Reads patterns from file.
