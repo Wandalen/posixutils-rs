@@ -2768,38 +2768,6 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_extended_regexp_0() {
-        grep_test(
-            &["-E", REGEX_PATTERN],
-            LINES_INPUT,
-            "line_1\np_line_2_s\n  line_3  \n",
-            "",
-            0,
-        );
-    }
-
-    #[test]
-    fn test_extended_regexp_1() {
-        grep_test(&["-E", REGEX_PATTERN], BAD_INPUT, "", "", 1);
-    }
-
-    #[test]
-    fn test_fixed_string_0() {
-        grep_test(
-            &["-F", FIXED_PATTERN],
-            LINES_INPUT,
-            "line_1\np_line_2_s\n  line_3  \n",
-            "",
-            0,
-        );
-    }
-
-    #[test]
-    fn test_fixed_string_1() {
-        grep_test(&[REGEX_PATTERN], BAD_INPUT, "", "", 1);
-    }
-
-    #[test]
     fn test_count_0() {
         grep_test(&["-c", REGEX_PATTERN], LINES_INPUT, "3\n", "", 0);
     }
@@ -2937,6 +2905,22 @@ mod grep_tests {
     #[test]
     fn test_line_regexp_1() {
         grep_test(&["-x", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_regexp_0() {
+        grep_test(
+            &["-E", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_regexp_1() {
+        grep_test(&["-E", REGEX_PATTERN], BAD_INPUT, "", "", 1);
     }
 
     #[test]
@@ -3082,6 +3066,22 @@ mod grep_tests {
     }
 
     #[test]
+    fn test_fixed_string_0() {
+        grep_test(
+            &["-F", FIXED_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fixed_string_1() {
+        grep_test(&[FIXED_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
     fn test_fixed_count_0() {
         grep_test(&["-F", "-c", FIXED_PATTERN], LINES_INPUT, "3\n", "", 0);
     }
@@ -3185,12 +3185,7 @@ mod grep_tests {
     #[test]
     fn test_fixed_no_messages_throw_2() {
         grep_test(
-            &[
-                "-F",
-                "-cl",
-                "-s",
-                FIXED_PATTERN,
-            ],
+            &["-F", "-cl", "-s", FIXED_PATTERN],
             LINES_INPUT,
             "",
             "Options '-c' and '-l' cannot be used together\n",
@@ -3374,10 +3369,10 @@ mod grep_tests {
 
     #[test]
     fn test_empty_fixed_string_0() {
-        grep_test(&["-E", ""], LINES_INPUT, LINES_INPUT, "", 0);
-        grep_test(&["-E", "-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
+        grep_test(&["-F", ""], LINES_INPUT, LINES_INPUT, "", 0);
+        grep_test(&["-F", "-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
         grep_test(
-            &["-E", "-f", "tests/assets/empty_file.txt"],
+            &["-F", "-f", "tests/assets/empty_file.txt"],
             LINES_INPUT,
             LINES_INPUT,
             "",
