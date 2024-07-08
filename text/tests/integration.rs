@@ -2747,7 +2747,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_default_pattern_0() {
+    fn test_regex_compiling_error() {
+        grep_test(&["(\\d+"], "", "", "Error compiling regex '(\\d+': regex parse error:\n    (\\d+\n    ^\nerror: unclosed group\n", 2);
+    }
+
+    #[test]
+    fn test_basic_regex_0() {
         grep_test(
             &[REGEX_PATTERN],
             LINES_INPUT,
@@ -2758,12 +2763,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_default_pattern_1() {
+    fn test_basic_regex_1() {
         grep_test(&[REGEX_PATTERN], BAD_INPUT, "", "", 1);
     }
 
     #[test]
-    fn test_extended_regexp_pattern_0() {
+    fn test_extended_regexp_0() {
         grep_test(
             &["-E", REGEX_PATTERN],
             LINES_INPUT,
@@ -2774,12 +2779,12 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_extended_regexp_pattern_1() {
+    fn test_extended_regexp_1() {
         grep_test(&["-E", REGEX_PATTERN], BAD_INPUT, "", "", 1);
     }
 
     #[test]
-    fn test_fixed_string_pattern_0() {
+    fn test_fixed_string_0() {
         grep_test(
             &["-F", FIXED_PATTERN],
             LINES_INPUT,
@@ -2790,7 +2795,7 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_fixed_string_pattern_1() {
+    fn test_fixed_string_1() {
         grep_test(&[REGEX_PATTERN], BAD_INPUT, "", "", 1);
     }
 
@@ -2879,7 +2884,7 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_no_messages_2() {
+    fn test_no_messages_skip_2() {
         grep_test(
             &[
                 "-f",
@@ -2890,6 +2895,20 @@ mod grep_tests {
             LINES_INPUT,
             "line_1\np_line_2_s\n  line_3  \n",
             "",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_no_messages_throw_2() {
+        grep_test(
+            &[
+                "-s",
+                "-e", "(\\d+", "-e", REGEX_PATTERN
+            ],
+            LINES_INPUT,
+            "",
+            "Error compiling regex '(\\d+': regex parse error:\n    (\\d+\n    ^\nerror: unclosed group\n",
             2,
         );
     }
@@ -3005,7 +3024,7 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_extended_no_messages_2() {
+    fn test_extended_no_messages_skip_2() {
         grep_test(
             &[
                 "-E",
@@ -3017,6 +3036,21 @@ mod grep_tests {
             LINES_INPUT,
             "line_1\np_line_2_s\n  line_3  \n",
             "",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_extended_no_messages_throw_2() {
+        grep_test(
+            &[
+                "-E",
+                "-s",
+                "-e", "(\\d+", "-e", REGEX_PATTERN
+            ],
+            LINES_INPUT,
+            "",
+            "Error compiling regex '(\\d+': regex parse error:\n    (\\d+\n    ^\nerror: unclosed group\n",
             2,
         );
     }
@@ -3132,7 +3166,7 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_fixed_no_messages_2() {
+    fn test_fixed_no_messages_skip_2() {
         grep_test(
             &[
                 "-F",
@@ -3144,6 +3178,22 @@ mod grep_tests {
             LINES_INPUT,
             "line_1\np_line_2_s\n  line_3  \n",
             "",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_fixed_no_messages_throw_2() {
+        grep_test(
+            &[
+                "-F",
+                "-cl",
+                "-s",
+                FIXED_PATTERN,
+            ],
+            LINES_INPUT,
+            "",
+            "Options '-c' and '-l' cannot be used together\n",
             2,
         );
     }
