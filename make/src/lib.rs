@@ -143,6 +143,8 @@ impl Make {
         }
     }
 
+    /// Checks if the target has recursive prerequisites.
+    /// Returns `true` if the target has recursive prerequisites.
     fn are_prerequisites_recursive(&self, target: impl AsRef<str>) -> bool {
         let mut visited = HashSet::from([target.as_ref()]);
         let mut stack = HashSet::from([target.as_ref()]);
@@ -150,6 +152,8 @@ impl Make {
         self._are_prerequisites_recursive(target.as_ref(), &mut visited, &mut stack)
     }
 
+    /// A helper function to check if the target has recursive prerequisites.
+    /// Uses DFS to check for recursive prerequisites.
     fn _are_prerequisites_recursive(
         &self,
         target: impl AsRef<str>,
