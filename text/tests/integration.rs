@@ -2694,6 +2694,17 @@ mod tail_tests {
 mod grep_tests {
     use crate::grep_test;
 
+    const REGEX_PATTERN: &str = "line_\\d";
+    const FIXED_PATTERN: &str = "line_";
+    const LINES_INPUT: &str = "line_1\np_line_2_s\n  line_3  \nLINE_4\np_LINE_5_s\nl_6\n";
+    const BAD_INPUT: &str = "(some text)\n";
+    const PATTERN_FILE_1: &str = "tests/assets/pattern_file_1";
+    const PATTERN_FILE_2: &str = "tests/assets/pattern_file_2";
+    const INPUT_FILE_1: &str = "tests/assets/test_file_c";
+    const INPUT_FILE_2: &str = "tests/assets/test_file.txt";
+    const INPUT_FILE_3: &str = "tests/assets/empty_line.txt";
+    const BAD_INPUT_FILE: &str = "tests/assets/grep/inexisting_file.txt";
+
     #[test]
     fn test_incompatible_options() {
         grep_test(
@@ -2733,7 +2744,7 @@ mod grep_tests {
     #[test]
     fn test_inexisting_file_pattern() {
         grep_test(
-            &["-f", "tests/assets/grep/inexisting_file.txt"],
+            &["-f", BAD_INPUT_FILE],
             "",
             "",
             "tests/assets/grep/inexisting_file.txt: No such file or directory (os error 2)\n",
@@ -2742,135 +2753,965 @@ mod grep_tests {
     }
 
     #[test]
-    fn test_stdin_default_pattern() {
-        grep_test(
-            &["l_\\d"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
-            "l_1\n    l_3    \n",
-            "",
-            0,
-        );
-        grep_test(&["l_\\d"], "", "", "", 1);
+    fn test_regex_compiling_error() {
+        grep_test(&["(\\d+"], "", "", "Error compiling regex '(\\d+': regex parse error:\n    (\\d+\n    ^\nerror: unclosed group\n", 2);
     }
 
     #[test]
-    fn test_stdin_extended_regexp_pattern() {
+    fn test_basic_regex_0() {
         grep_test(
-            &["-E", "l_\\d"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
-            "l_1\n    l_3    \n",
+            &[REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
             "",
             0,
         );
-        grep_test(&["l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_stdin_fixed_string_pattern() {
-        grep_test(
-            &["-F", "l_1"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
-            "l_1\n",
-            "",
-            0,
-        );
-        grep_test(&["l_1"], "", "", "", 1);
+    fn test_basic_regex_1() {
+        grep_test(&[REGEX_PATTERN], BAD_INPUT, "", "", 1);
     }
 
     #[test]
-    fn test_stdin_count() {
-        grep_test(
-            &["-c", "l_\\d"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
-            "2\n",
-            "",
-            0,
-        );
-        grep_test(&["-c", "l_\\d"], "", "0\n", "", 1);
+    fn test_count_0() {
+        grep_test(&["-c", REGEX_PATTERN], LINES_INPUT, "3\n", "", 0);
     }
 
     #[test]
-    fn test_stdin_files_with_matches() {
+    fn test_count_1() {
+        grep_test(&["-c", REGEX_PATTERN], BAD_INPUT, "0\n", "", 1);
+    }
+
+    #[test]
+    fn test_files_with_matches_0() {
         grep_test(
-            &["-l", "l_\\d"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
+            &["-l", REGEX_PATTERN],
+            LINES_INPUT,
             "(standard input)\n",
             "",
             0,
         );
-        grep_test(&["-l", "l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_stdin_quiet() {
-        grep_test(
-            &["-q", "l_\\d"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
-            "",
-            "",
-            0,
-        );
-        grep_test(&["-q", "l_\\d"], "", "", "", 1);
+    fn test_files_with_matches_1() {
+        grep_test(&["-l", REGEX_PATTERN], BAD_INPUT, "", "", 1);
     }
 
     #[test]
-    fn test_stdin_ignore_case() {
-        grep_test(
-            &["-i", "l_\\d"],
-            "L_1\nln_2\n    l_3    \nln_4\n",
-            "L_1\n    l_3    \n",
-            "",
-            0,
-        );
-        grep_test(&["-i", "l_\\d"], "", "", "", 1);
+    fn test_quiet_0() {
+        grep_test(&["-q", REGEX_PATTERN], LINES_INPUT, "", "", 0);
     }
 
     #[test]
-    fn test_stdin_line_number() {
+    fn test_quiet_1() {
+        grep_test(&["-q", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_ignore_case_0() {
         grep_test(
-            &["-n", "l_\\d"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
-            "1:l_1\n3:    l_3    \n",
+            &["-i", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nLINE_4\np_LINE_5_s\n",
             "",
             0,
         );
-        grep_test(&["-n", "l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_no_messages() {
+    fn test_ignore_case_1() {
+        grep_test(&["-i", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_line_number_0() {
         grep_test(
-            &["-f", "tests/assets/grep/inexisting_file.txt", "-s", "l_\\d"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
-            "l_1\n    l_3    \n",
+            &["-n", REGEX_PATTERN],
+            LINES_INPUT,
+            "1:line_1\n2:p_line_2_s\n3:  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_line_number_1() {
+        grep_test(&["-n", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_no_messages_0() {
+        grep_test(
+            &["-s", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_no_messages_1() {
+        grep_test(&["-s", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_no_messages_skip_2() {
+        grep_test(
+            &["-f", BAD_INPUT_FILE, "-s", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
             "",
             2,
         );
-        grep_test(
-            &["-s", "l_\\d"],
-            "l_1\nln_2\n    l_3    \nln_4\n",
-            "l_1\n    l_3    \n",
-            "",
-            0,
-        );
-        grep_test(&["-s", "l_\\d"], "", "", "", 1);
     }
 
     #[test]
-    fn test_line_regexp() {
+    fn test_no_messages_throw_2() {
         grep_test(
-            &["-x", "l_\\d"],
-            "l_1\nln_2\n    l_3    \naaa_l_4\nl_5_aaa\n",
-            "l_1\n",
+            &[
+                "-s",
+                "-e", "(\\d+", "-e", REGEX_PATTERN
+            ],
+            LINES_INPUT,
+            "",
+            "Error compiling regex '(\\d+': regex parse error:\n    (\\d+\n    ^\nerror: unclosed group\n",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_line_invert_match_0() {
+        grep_test(
+            &["-v", REGEX_PATTERN],
+            LINES_INPUT,
+            "LINE_4\np_LINE_5_s\nl_6\n",
             "",
             0,
         );
+    }
+
+    #[test]
+    fn test_invert_match_1() {
+        grep_test(&["-v", "."], LINES_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_line_regexp_0() {
+        grep_test(&["-x", REGEX_PATTERN], LINES_INPUT, "line_1\n", "", 0);
+    }
+
+    #[test]
+    fn test_line_regexp_1() {
+        grep_test(&["-x", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_regexp_0() {
         grep_test(
-            &["-F", "-x", "l_1"],
-            "l_1\nln_1\n    l_1    \naaa_l_1\nl_1_aaa",
-            "l_1\n",
+            &["-E", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
             "",
             0,
-        )
+        );
+    }
+
+    #[test]
+    fn test_extended_regexp_1() {
+        grep_test(&["-E", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_count_0() {
+        grep_test(&["-E", "-c", REGEX_PATTERN], LINES_INPUT, "3\n", "", 0);
+    }
+
+    #[test]
+    fn test_extended_count_1() {
+        grep_test(&["-E", "-c", REGEX_PATTERN], BAD_INPUT, "0\n", "", 1);
+    }
+
+    #[test]
+    fn test_extended_files_with_matches_0() {
+        grep_test(
+            &["-E", "-l", REGEX_PATTERN],
+            LINES_INPUT,
+            "(standard input)\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_files_with_matches_1() {
+        grep_test(&["-E", "-l", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_quiet_0() {
+        grep_test(&["-E", "-q", REGEX_PATTERN], LINES_INPUT, "", "", 0);
+    }
+
+    #[test]
+    fn test_extended_quiet_1() {
+        grep_test(&["-E", "-q", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_ignore_case_0() {
+        grep_test(
+            &["-E", "-i", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nLINE_4\np_LINE_5_s\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_ignore_case_1() {
+        grep_test(&["-E", "-i", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_line_number_0() {
+        grep_test(
+            &["-E", "-n", REGEX_PATTERN],
+            LINES_INPUT,
+            "1:line_1\n2:p_line_2_s\n3:  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_line_number_1() {
+        grep_test(&["-E", "-n", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_no_messages_0() {
+        grep_test(
+            &["-E", "-s", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_no_messages_1() {
+        grep_test(&["-E", "-s", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_no_messages_skip_2() {
+        grep_test(
+            &["-E", "-f", BAD_INPUT_FILE, "-s", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_extended_no_messages_throw_2() {
+        grep_test(
+            &[
+                "-E",
+                "-s",
+                "-e", "(\\d+", "-e", REGEX_PATTERN
+            ],
+            LINES_INPUT,
+            "",
+            "Error compiling regex '(\\d+': regex parse error:\n    (\\d+\n    ^\nerror: unclosed group\n",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_extended_line_invert_match_0() {
+        grep_test(
+            &["-E", "-v", REGEX_PATTERN],
+            LINES_INPUT,
+            "LINE_4\np_LINE_5_s\nl_6\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_extended_invert_match_1() {
+        grep_test(&["-E", "-v", "."], LINES_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_extended_line_regexp_0() {
+        grep_test(&["-E", "-x", REGEX_PATTERN], LINES_INPUT, "line_1\n", "", 0);
+    }
+
+    #[test]
+    fn test_extended_line_regexp_1() {
+        grep_test(&["-E", "-x", REGEX_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_string_0() {
+        grep_test(
+            &["-F", FIXED_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fixed_string_1() {
+        grep_test(&[FIXED_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_count_0() {
+        grep_test(&["-F", "-c", FIXED_PATTERN], LINES_INPUT, "3\n", "", 0);
+    }
+
+    #[test]
+    fn test_fixed_count_1() {
+        grep_test(&["-F", "-c", FIXED_PATTERN], BAD_INPUT, "0\n", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_files_with_matches_0() {
+        grep_test(
+            &["-F", "-l", FIXED_PATTERN],
+            LINES_INPUT,
+            "(standard input)\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fixed_files_with_matches_1() {
+        grep_test(&["-F", "-l", FIXED_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_quiet_0() {
+        grep_test(&["-F", "-q", FIXED_PATTERN], LINES_INPUT, "", "", 0);
+    }
+
+    #[test]
+    fn test_fixed_quiet_1() {
+        grep_test(&["-F", "-q", FIXED_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_ignore_case_0() {
+        grep_test(
+            &["-F", "-i", FIXED_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nLINE_4\np_LINE_5_s\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fixed_ignore_case_1() {
+        grep_test(&["-F", "-i", FIXED_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_line_number_0() {
+        grep_test(
+            &["-F", "-n", FIXED_PATTERN],
+            LINES_INPUT,
+            "1:line_1\n2:p_line_2_s\n3:  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fixed_line_number_1() {
+        grep_test(&["-F", "-n", FIXED_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_no_messages_0() {
+        grep_test(
+            &["-F", "-s", FIXED_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fixed_no_messages_1() {
+        grep_test(&["-F", "-s", FIXED_PATTERN], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_no_messages_skip_2() {
+        grep_test(
+            &["-F", "-f", BAD_INPUT_FILE, "-s", FIXED_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_fixed_no_messages_throw_2() {
+        grep_test(
+            &["-F", "-cl", "-s", FIXED_PATTERN],
+            LINES_INPUT,
+            "",
+            "Options '-c' and '-l' cannot be used together\n",
+            2,
+        );
+    }
+
+    #[test]
+    fn test_fixed_line_invert_match_0() {
+        grep_test(
+            &["-F", "-v", FIXED_PATTERN],
+            LINES_INPUT,
+            "LINE_4\np_LINE_5_s\nl_6\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fixed_invert_match_1() {
+        grep_test(&["-F", "-v", ""], LINES_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_fixed_line_regexp_0() {
+        grep_test(&["-F", "-x", "line_1"], LINES_INPUT, "line_1\n", "", 0);
+    }
+
+    #[test]
+    fn test_fixed_line_regexp_1() {
+        grep_test(&["-F", "-x", "line_1"], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_multiple_regexes_0() {
+        grep_test(
+            &["line_\\d\nl_\\d"],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nl_6\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_regexes_1() {
+        grep_test(&["line_\\d\nl_\\d"], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_multiple_extended_regexes_0() {
+        grep_test(
+            &["-E", "line_\\d\nl_\\d"],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nl_6\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_extended_regexes_1() {
+        grep_test(&["-E", "line_\\d\nl_\\d"], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_multiple_fixed_strings_0() {
+        grep_test(
+            &["-F", "line_\nl_"],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \nl_6\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_fixed_strings_1() {
+        grep_test(&["-F", "line_\nl_"], BAD_INPUT, "", "", 1);
+    }
+
+    #[test]
+    fn test_multiple_input_files() {
+        grep_test(&["2", INPUT_FILE_1, INPUT_FILE_2, INPUT_FILE_3], LINES_INPUT, 
+        "tests/assets/test_file_c:void func2() {\r\ntests/assets/test_file_c:    printf(\"This is function 2\\n\");\r\ntests/assets/test_file.txt:2sadsgdhjmf\r\ntests/assets/test_file.txt:12\r\n", "", 0);
+    }
+
+    #[test]
+    fn test_multiple_input_files_count() {
+        grep_test(
+            &["-c", "2", INPUT_FILE_1, INPUT_FILE_2, INPUT_FILE_3],
+            LINES_INPUT,
+            "tests/assets/test_file_c:2\ntests/assets/test_file.txt:2\ntests/assets/empty_line.txt:0\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_input_files_files_with_matches() {
+        grep_test(
+            &["-l", "2", INPUT_FILE_1, INPUT_FILE_2, INPUT_FILE_3],
+            LINES_INPUT,
+            "tests/assets/test_file_c\ntests/assets/test_file.txt\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_input_files_quiet() {
+        grep_test(
+            &["-q", "2", INPUT_FILE_1, INPUT_FILE_2, INPUT_FILE_3],
+            LINES_INPUT,
+            "",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_multiple_input_files_line_number() {
+        grep_test(&["-n", "2", INPUT_FILE_1, INPUT_FILE_2, INPUT_FILE_3], LINES_INPUT, 
+        "tests/assets/test_file_c:12:void func2() {\r\ntests/assets/test_file_c:13:    printf(\"This is function 2\\n\");\r\ntests/assets/test_file.txt:2:2sadsgdhjmf\r\ntests/assets/test_file.txt:12:12\r\n", "", 0);
+    }
+
+    #[test]
+    fn test_muptiple_patter_files_multiple_input_files() {
+        grep_test(&["-f", PATTERN_FILE_1, "-f", PATTERN_FILE_2, INPUT_FILE_1, INPUT_FILE_2, INPUT_FILE_3], LINES_INPUT, "tests/assets/test_file_c:#include <stdio.h>\r\ntests/assets/test_file_c:void func1() {\r\ntests/assets/test_file_c:void func2() {\r\ntests/assets/test_file_c:void func3() {\r\ntests/assets/test_file.txt:10dvsd\r\n", "", 0);
+    }
+
+    #[test]
+    fn test_muptiple_patter_files_multiple_input_files_count() {
+        grep_test(
+            &[
+                "-c",
+                "-f",
+                PATTERN_FILE_1,
+                "-f",
+                PATTERN_FILE_2,
+                INPUT_FILE_1,
+                INPUT_FILE_2,
+                INPUT_FILE_3,
+            ],
+            LINES_INPUT,
+            "tests/assets/test_file_c:4\ntests/assets/test_file.txt:1\ntests/assets/empty_line.txt:0\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_muptiple_patter_files_multiple_input_files_files_with_matches() {
+        grep_test(
+            &[
+                "-l",
+                "-f",
+                PATTERN_FILE_1,
+                "-f",
+                PATTERN_FILE_2,
+                INPUT_FILE_1,
+                INPUT_FILE_2,
+                INPUT_FILE_3,
+            ],
+            LINES_INPUT,
+            "tests/assets/test_file_c\ntests/assets/test_file.txt\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_muptiple_patter_files_multiple_input_files_quiet() {
+        grep_test(
+            &[
+                "-q",
+                "-f",
+                PATTERN_FILE_1,
+                "-f",
+                PATTERN_FILE_2,
+                INPUT_FILE_1,
+                INPUT_FILE_2,
+                INPUT_FILE_3,
+            ],
+            LINES_INPUT,
+            "",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_duplicate_input_file() {
+        grep_test(
+            &["-n", "-f", PATTERN_FILE_2, INPUT_FILE_2, INPUT_FILE_2],
+            LINES_INPUT,
+            "tests/assets/test_file.txt:10:10dvsd\r\ntests/assets/test_file.txt:10:10dvsd\r\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_duplicate_input_file_count() {
+        grep_test(
+            &["-c", "-f", PATTERN_FILE_2, INPUT_FILE_2, INPUT_FILE_2],
+            LINES_INPUT,
+            "tests/assets/test_file.txt:1\ntests/assets/test_file.txt:1\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_duplicate_input_file_files_with_matches() {
+        grep_test(
+            &["-l", "-f", PATTERN_FILE_2, INPUT_FILE_2, INPUT_FILE_2],
+            LINES_INPUT,
+            "tests/assets/test_file.txt\ntests/assets/test_file.txt\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_duplicate_input_file_quiet() {
+        grep_test(
+            &["-q", "-f", PATTERN_FILE_2, INPUT_FILE_2, INPUT_FILE_2],
+            LINES_INPUT,
+            "",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_duplicate_stdin() {
+        grep_test(
+            &[REGEX_PATTERN, "-", "-", "-"],
+            LINES_INPUT,
+            "(standard input):line_1\n(standard input):p_line_2_s\n(standard input):  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_duplicate_stdin_count() {
+        grep_test(
+            &["-c", REGEX_PATTERN, "-", "-"],
+            LINES_INPUT,
+            "(standard input):3\n(standard input):0\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_duplicate_stdin_files_with_matches() {
+        grep_test(
+            &["-l", REGEX_PATTERN, "-", "-"],
+            LINES_INPUT,
+            "(standard input)\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_duplicate_quiet() {
+        grep_test(&["-q", REGEX_PATTERN, "-", "-"], LINES_INPUT, "", "", 0);
+    }
+
+    #[test]
+    fn test_muptiple_patter_files_multiple_input_files_line_number() {
+        grep_test(&["-n", "-f", PATTERN_FILE_1, "-f", PATTERN_FILE_2, INPUT_FILE_1, INPUT_FILE_2, INPUT_FILE_3], LINES_INPUT, "tests/assets/test_file_c:1:#include <stdio.h>\r\ntests/assets/test_file_c:8:void func1() {\r\ntests/assets/test_file_c:12:void func2() {\r\ntests/assets/test_file_c:16:void func3() {\r\ntests/assets/test_file.txt:10:10dvsd\r\n", "", 0);
+    }
+
+    #[test]
+    fn test_stdin_and_file_input_count() {
+        grep_test(
+            &["-c", "line", "-", INPUT_FILE_3],
+            LINES_INPUT,
+            "(standard input):3\ntests/assets/empty_line.txt:2\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_stdin_and_file_input_files_with_files_with_matches() {
+        grep_test(
+            &["-l", "line", "-", INPUT_FILE_3],
+            LINES_INPUT,
+            "(standard input)\ntests/assets/empty_line.txt\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_stdin_and_file_input_files_with_quiet() {
+        grep_test(&["-q", "line", "-", INPUT_FILE_3], LINES_INPUT, "", "", 0);
+    }
+
+    #[test]
+    fn test_stdin_and_file_input() {
+        grep_test(&["-ins", "line", "-", INPUT_FILE_3, BAD_INPUT_FILE], LINES_INPUT, "(standard input):1:line_1\n(standard input):2:p_line_2_s\n(standard input):3:  line_3  \n(standard input):4:LINE_4\n(standard input):5:p_LINE_5_s\ntests/assets/empty_line.txt:1:line 1\r\ntests/assets/empty_line.txt:3:line 3\n", "", 2);
+    }
+
+    #[test]
+    fn test_empty_regex_0_1() {
+        grep_test(&[""], LINES_INPUT, LINES_INPUT, "", 0);
+        grep_test(&["-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
+        grep_test(
+            &["-f", "tests/assets/empty_file.txt"],
+            LINES_INPUT,
+            LINES_INPUT,
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_empty_regex_0_2() {
+        grep_test(&["-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
+    }
+
+    #[test]
+    fn test_empty_regex_0_3() {
+        grep_test(
+            &["-f", "tests/assets/empty_file.txt"],
+            LINES_INPUT,
+            LINES_INPUT,
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_empty_regex_1_1() {
+        grep_test(&[""], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_empty_regex_1_2() {
+        grep_test(&["-e", ""], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_empty_regex_1_3() {
+        grep_test(&["-f", "tests/assets/empty_file.txt"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_empty_extended_regex_0_1() {
+        grep_test(&["-E", ""], LINES_INPUT, LINES_INPUT, "", 0);
+    }
+
+    #[test]
+    fn test_empty_extended_regex_0_2() {
+        grep_test(&["-E", "-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
+    }
+
+    #[test]
+    fn test_empty_extended_regex_0_3() {
+        grep_test(
+            &["-E", "-f", "tests/assets/empty_file.txt"],
+            LINES_INPUT,
+            LINES_INPUT,
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_empty_extended_regex_1_1() {
+        grep_test(&["-E", ""], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_empty_extended_regex_1_2() {
+        grep_test(&["-E", "-e", ""], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_empty_extended_regex_1_3() {
+        grep_test(&["-E", "-f", "tests/assets/empty_file.txt"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_empty_fixed_string_0() {
+        grep_test(&["-F", ""], LINES_INPUT, LINES_INPUT, "", 0);
+        grep_test(&["-F", "-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
+        grep_test(
+            &["-F", "-f", "tests/assets/empty_file.txt"],
+            LINES_INPUT,
+            LINES_INPUT,
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_empty_fixed_string_0_1() {
+        grep_test(&["-F", ""], LINES_INPUT, LINES_INPUT, "", 0);
+    }
+
+    #[test]
+    fn test_empty_fixed_string_0_2() {
+        grep_test(&["-F", "-e", ""], LINES_INPUT, LINES_INPUT, "", 0);
+    }
+
+    #[test]
+    fn test_empty_fixed_string_0_3() {
+        grep_test(
+            &["-F", "-f", "tests/assets/empty_file.txt"],
+            LINES_INPUT,
+            LINES_INPUT,
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_empty_fixed_string_1_1() {
+        grep_test(&["-F", ""], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_empty_fixed_string_1_2() {
+        grep_test(&["-F", "-e", ""], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_empty_fixed_string_1_3() {
+        grep_test(&["-F", "-f", "tests/assets/empty_file.txt"], "", "", "", 1);
+    }
+
+    #[test]
+    fn test_all_options_0() {
+        grep_test(
+            &["-insvx", REGEX_PATTERN],
+            LINES_INPUT,
+            "2:p_line_2_s\n3:  line_3  \n5:p_LINE_5_s\n6:l_6\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_regexp_long_names() {
+        grep_test(
+            &["--regexp", REGEX_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_fixed_strings_long_names() {
+        grep_test(
+            &["--fixed-strings", FIXED_PATTERN],
+            LINES_INPUT,
+            "line_1\np_line_2_s\n  line_3  \n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_count_long_names() {
+        grep_test(&["--count", REGEX_PATTERN], LINES_INPUT, "3\n", "", 0);
+    }
+
+    #[test]
+    fn test_files_with_matches_long_names() {
+        grep_test(
+            &["--files-with-matches", REGEX_PATTERN],
+            LINES_INPUT,
+            "(standard input)\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_quiet_long_names() {
+        grep_test(&["--quiet", REGEX_PATTERN], LINES_INPUT, "", "", 0);
+    }
+
+    #[test]
+    fn test_long_names_1() {
+        grep_test(
+            &[
+                "--ignore-case",
+                "--line-number",
+                "--no-messages",
+                REGEX_PATTERN,
+            ],
+            LINES_INPUT,
+            "1:line_1\n2:p_line_2_s\n3:  line_3  \n4:LINE_4\n5:p_LINE_5_s\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_long_names_2() {
+        grep_test(
+            &["--invert-match", "--line-regexp", REGEX_PATTERN],
+            LINES_INPUT,
+            "p_line_2_s\n  line_3  \nLINE_4\np_LINE_5_s\nl_6\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn test_long_names_3() {
+        grep_test(
+            &[
+                "--files-with-matches",
+                "--file",
+                PATTERN_FILE_1,
+                "--file",
+                PATTERN_FILE_2,
+                INPUT_FILE_1,
+                INPUT_FILE_2,
+                INPUT_FILE_3,
+            ],
+            LINES_INPUT,
+            "tests/assets/test_file_c\ntests/assets/test_file.txt\n",
+            "",
+            0,
+        );
     }
 }
