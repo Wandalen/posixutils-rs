@@ -8,20 +8,23 @@
 //
 
 extern crate clap;
+extern crate libc;
 extern crate plib;
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, textdomain};
+use libc::{regcomp, regex_t, regexec, regfree, REG_EXTENDED, REG_ICASE, REG_NOMATCH};
 use plib::PROJECT_NAME;
-use regex::{Regex, RegexBuilder};
 use std::{
+    ffi::CString,
     fs::File,
     io::{self, BufRead, BufReader},
     path::{Path, PathBuf},
+    ptr,
 };
 
 /// grep - search a file for a pattern.
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Args {
     /// Match using extended regular expressions.
@@ -188,9 +191,10 @@ impl Args {
 
         let patterns = Patterns::new(
             self.regexp,
+            self.extended_regexp,
             self.fixed_strings,
-            self.line_regexp,
             self.ignore_case,
+            self.line_regexp,
         )?;
 
         Ok(GrepModel {
@@ -206,9 +210,11 @@ impl Args {
     }
 }
 
-/// Newtype over `Vec[Regex]`. Provides functionality for matching input data.
-#[derive(Debug)]
-struct Patterns(Vec<Regex>);
+/// Newtype over `Vec[libc::regex_t]`. Provides functionality for matching input data.
+enum Patterns {
+    Fixed(Vec<String>, bool, bool),
+    Regex(Vec<regex_t>),
+}
 
 impl Patterns {
     /// Creates a new `Patterns` object with regex patterns.
@@ -216,9 +222,10 @@ impl Patterns {
     /// # Arguments
     ///
     /// * `patterns` - `Vec<String>` containing the patterns.
+    /// * `extended_regexp` - `bool` indicating whether to use extended regular expressions.
     /// * `fixed_string` - `bool` indicating whether patter is fixed string or regex.
-    /// * `line_regexp` - `bool` indicating whether to match the entire input.
     /// * `ignore_case` - `bool` indicating whether to ignore case.
+    /// * `line_regexp` - `bool` indicating whether to match the entire input.
     ///
     /// # Errors
     ///
@@ -229,28 +236,47 @@ impl Patterns {
     /// Returns [Patterns](Patterns).
     fn new(
         patterns: Vec<String>,
+        extended_regexp: bool,
         fixed_string: bool,
-        line_regexp: bool,
         ignore_case: bool,
+        line_regexp: bool,
     ) -> Result<Self, String> {
-        patterns
-            .into_iter()
-            .map(|p| {
-                let pattern = if fixed_string { regex::escape(&p) } else { p };
-                if line_regexp {
-                    format!(r"^{pattern}$")
-                } else {
-                    pattern
+        if fixed_string {
+            Ok(Self::Fixed(
+                patterns
+                    .into_iter()
+                    .map(|p| if ignore_case { p.to_lowercase() } else { p })
+                    .collect(),
+                ignore_case,
+                line_regexp,
+            ))
+        } else {
+            let mut ps = vec![];
+
+            let mut cflags = 0;
+            if extended_regexp {
+                cflags |= REG_EXTENDED;
+            }
+            if ignore_case {
+                cflags |= REG_ICASE;
+            }
+            for p in patterns {
+                let pattern = if line_regexp { format!("^{p}$") } else { p };
+
+                let c_pattern = CString::new(pattern).map_err(|err| err.to_string())?;
+                let mut regex = unsafe { std::mem::zeroed::<regex_t>() };
+
+                let result = unsafe { regcomp(&mut regex, c_pattern.as_ptr(), cflags) };
+                if result != 0 {
+                    return Err(format!(
+                        "Error compiling regex '{}'",
+                        c_pattern.to_string_lossy()
+                    ));
                 }
-            })
-            .map(|p| {
-                RegexBuilder::new(&p)
-                    .case_insensitive(ignore_case)
-                    .build()
-                    .map_err(|err| format!("Error compiling regex '{}': {}", p, err))
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(Self)
+                ps.push(regex);
+            }
+            Ok(Self::Regex(ps))
+        }
     }
 
     /// Checks if input string matches to present patterns.
@@ -263,12 +289,47 @@ impl Patterns {
     ///
     /// Returns [bool](bool) - `true` if input matches present patterns, else `false`.
     fn matches(&self, input: impl AsRef<str>) -> bool {
-        self.0.iter().any(|r| r.is_match(input.as_ref()))
+        let input = input.as_ref();
+        match self {
+            Patterns::Fixed(patterns, ignore_case, line_regexp) => {
+                let input = if *ignore_case {
+                    input.to_lowercase()
+                } else {
+                    input.to_string()
+                };
+                patterns.iter().any(|p| {
+                    if *line_regexp {
+                        input == *p
+                    } else {
+                        input.contains(p)
+                    }
+                })
+            }
+            Patterns::Regex(patterns) => {
+                let c_input = CString::new(input).unwrap();
+                patterns.iter().any(|p| unsafe {
+                    regexec(p, c_input.as_ptr(), 0, ptr::null_mut(), 0) != REG_NOMATCH
+                })
+            }
+        }
+    }
+}
+
+impl Drop for Patterns {
+    fn drop(&mut self) {
+        match &self {
+            Patterns::Fixed(_, _, _) => {}
+            Patterns::Regex(regexes) => {
+                for regex in regexes {
+                    unsafe { regfree(regex as *const _ as *mut _) }
+                }
+            }
+        }
     }
 }
 
 /// Represents possible `grep` output modes.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum OutputMode {
     Count(u64),
     FilesWithMatches,
@@ -277,7 +338,6 @@ enum OutputMode {
 }
 
 /// Structure that contains all necessary information for `grep` utility processing.
-#[derive(Debug)]
 struct GrepModel {
     any_matches: bool,
     any_errors: bool,
