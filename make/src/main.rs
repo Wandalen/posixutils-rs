@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let parsed = parse_makefile(makefile_path.as_ref()).unwrap_or_else(|err| {
-        eprintln!("make: parse error: {}", err);
+        eprintln!("make: {}", err);
         process::exit(ParseError as i32);
     });
     let config = Config { silent };

@@ -101,7 +101,7 @@ mod io {
         run_test_helper(
             &["-f", "tests/makefiles/does_not_exist.mk"],
             "",
-            "No such file or directory",
+            "io error",
             ErrorCode::ParseError as i32, // os error
         );
     }
