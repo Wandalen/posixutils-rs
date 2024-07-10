@@ -97,7 +97,6 @@ impl Args {
     ///
     /// Returns an error if conflicting options are found.
     fn validate_args(&self) -> Result<(), String> {
-        // Check if conflicting options are used together
         if self.extended_regexp && self.fixed_strings {
             return Err("Options '-E' and '-F' cannot be used together".to_string());
         }
@@ -116,9 +115,8 @@ impl Args {
         Ok(())
     }
 
-    /// Resolves input patterns and input files. Reads patters from pattern files and merges them with specified as argument. Hadles input files if empty.
+    /// Resolves input patterns and input files. Reads patterns from pattern files and merges them with specified as argument. Handles input files if empty.
     fn resolve(&mut self) {
-        // Read all patterns from files
         for path_buf in &self.file {
             match Self::get_file_patterns(path_buf) {
                 Ok(patterns) => self.regexp.extend(patterns),
@@ -132,15 +130,11 @@ impl Args {
         }
 
         match &self.single_pattern {
-            // If `single_pattern` is none, then `regexp` is not empty
             None => {}
-            // `single_pattern` might get input_files value
             Some(pattern) => {
                 if !self.regexp.is_empty() {
-                    // `regexp` is not empty, then `single_pattern` took `input_files` value
                     self.input_files.insert(0, pattern.clone());
                 } else {
-                    // `regexp` is empty, then `single_pattern` is the only  pattern
                     self.regexp = vec![pattern.clone()];
                 }
             }
@@ -152,7 +146,6 @@ impl Args {
             .flat_map(|pattern| pattern.split('\n').map(String::from))
             .collect();
 
-        // If no input files specified, read from STDIN
         if self.input_files.is_empty() {
             self.input_files.push(String::from("-"))
         }
@@ -223,7 +216,7 @@ impl Patterns {
     ///
     /// * `patterns` - `Vec<String>` containing the patterns.
     /// * `extended_regexp` - `bool` indicating whether to use extended regular expressions.
-    /// * `fixed_string` - `bool` indicating whether patter is fixed string or regex.
+    /// * `fixed_string` - `bool` indicating whether pattern is fixed string or regex.
     /// * `ignore_case` - `bool` indicating whether to ignore case.
     /// * `line_regexp` - `bool` indicating whether to match the entire input.
     ///
@@ -279,7 +272,7 @@ impl Patterns {
         }
     }
 
-    /// Checks if input string matches to present patterns.
+    /// Checks if input string matches the present patterns.
     ///
     /// # Arguments
     ///
@@ -350,7 +343,7 @@ struct GrepModel {
 }
 
 impl GrepModel {
-    /// Processes input_files or STDIN content.
+    /// Processes input files or STDIN content.
     ///
     /// # Returns
     ///
@@ -374,7 +367,6 @@ impl GrepModel {
                     }
                 }
             }
-            // If process is in quiet mode and any line matches are present, stop processing
             if self.any_matches && self.output_mode == OutputMode::Quiet {
                 return 0;
             }
@@ -389,7 +381,7 @@ impl GrepModel {
         }
     }
 
-    /// Reads lines from buffer and precesses them.
+    /// Reads lines from buffer and processes them.
     ///
     /// # Arguments
     ///
