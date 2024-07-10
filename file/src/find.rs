@@ -334,7 +334,7 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
                 }
                 Expr::Links(links) => {
                     if let Ok(metadata) = file.metadata() {
-                        if metadata.nlink() == *links {
+                        if metadata.nlink() != *links {
                             c_files.remove(file.path());
                         }
                     }
@@ -357,6 +357,9 @@ fn evaluate_expression(expr: &[Expr], files: Vec<DirEntry>, root_dev: u64) -> Re
                                 c_files.remove(file.path());
                             }
                         } 
+                        else {
+                            c_files.remove(file.path());
+                        }
                     }
                 }
                 Expr::Size(size, in_bytes) => {
