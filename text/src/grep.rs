@@ -376,7 +376,7 @@ impl GrepModel {
             }
             // If process is in quiet mode and any line matches are present, stop processing
             if self.any_matches && self.output_mode == OutputMode::Quiet {
-                break;
+                return 0;
             }
         }
 
