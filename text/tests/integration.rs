@@ -2791,7 +2791,13 @@ mod grep_tests {
 
     #[test]
     fn test_basic_regexp_03() {
-        grep_test(&[BRE, INVALID_LINE_INPUT_FILE], "", "line_{1}\np_line_{2}_s\n", "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n", 2);
+        grep_test(
+            &[BRE, INVALID_LINE_INPUT_FILE],
+            "",
+            "line_{1}\np_line_{2}_s\n",
+            "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n",
+            2,
+        );
     }
 
     #[test]
@@ -2885,7 +2891,13 @@ mod grep_tests {
 
     #[test]
     fn test_basic_regexp_line_number_03() {
-        grep_test(&["-n", BRE, INVALID_LINE_INPUT_FILE], "", "1:line_{1}\n3:p_line_{2}_s\n", "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n", 2);
+        grep_test(
+            &["-n", BRE, INVALID_LINE_INPUT_FILE],
+            "",
+            "1:line_{1}\n3:p_line_{2}_s\n",
+            "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n",
+            2,
+        );
     }
 
     #[test]
@@ -2938,7 +2950,13 @@ mod grep_tests {
 
     #[test]
     fn test_basic_regexp_no_messages_with_error_05() {
-        grep_test(&["-s", BRE, INVALID_LINE_INPUT_FILE], "", "line_{1}\np_line_{2}_s\n", "", 2);
+        grep_test(
+            &["-s", BRE, INVALID_LINE_INPUT_FILE],
+            "",
+            "line_{1}\np_line_{2}_s\n",
+            "",
+            2,
+        );
     }
 
     #[test]
@@ -2996,7 +3014,13 @@ mod grep_tests {
 
     #[test]
     fn test_extended_regexp_03() {
-        grep_test(&["-E", ERE, INVALID_LINE_INPUT_FILE], "", "line_{1}\np_line_{2}_s\n", "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n", 2);
+        grep_test(
+            &["-E", ERE, INVALID_LINE_INPUT_FILE],
+            "",
+            "line_{1}\np_line_{2}_s\n",
+            "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n",
+            2,
+        );
     }
 
     #[test]
@@ -3096,7 +3120,13 @@ mod grep_tests {
 
     #[test]
     fn test_extended_regexp_line_number_03() {
-        grep_test(&["-E", "-n", ERE, INVALID_LINE_INPUT_FILE], "", "1:line_{1}\n3:p_line_{2}_s\n", "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n", 2);
+        grep_test(
+            &["-E", "-n", ERE, INVALID_LINE_INPUT_FILE],
+            "",
+            "1:line_{1}\n3:p_line_{2}_s\n",
+            "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n",
+            2,
+        );
     }
 
     #[test]
@@ -3155,7 +3185,13 @@ mod grep_tests {
 
     #[test]
     fn test_extended_regexp_no_messages_with_error_05() {
-        grep_test(&["-E", "-s", ERE, INVALID_LINE_INPUT_FILE], "", "line_{1}\np_line_{2}_s\n", "", 2);
+        grep_test(
+            &["-E", "-s", ERE, INVALID_LINE_INPUT_FILE],
+            "",
+            "line_{1}\np_line_{2}_s\n",
+            "",
+            2,
+        );
     }
 
     #[test]
@@ -3219,7 +3255,13 @@ mod grep_tests {
 
     #[test]
     fn test_fixed_strings_03() {
-        grep_test(&["-F", FIXED, INVALID_LINE_INPUT_FILE], "", "line_{1}\np_line_{2}_s\n", "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n", 2);
+        grep_test(
+            &["-F", FIXED, INVALID_LINE_INPUT_FILE],
+            "",
+            "line_{1}\np_line_{2}_s\n",
+            "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n",
+            2,
+        );
     }
 
     #[test]
@@ -3325,7 +3367,13 @@ mod grep_tests {
 
     #[test]
     fn test_fixed_strings_line_number_03() {
-        grep_test(&["-F", "-n", FIXED, INVALID_LINE_INPUT_FILE], "", "1:line_{1}\n3:p_line_{2}_s\n", "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n", 2);
+        grep_test(
+            &["-F", "-n", FIXED, INVALID_LINE_INPUT_FILE],
+            "",
+            "1:line_{1}\n3:p_line_{2}_s\n",
+            "tests/grep/invalid_line: Error reading line 2 (stream did not contain valid UTF-8)\n",
+            2,
+        );
     }
 
     #[test]
@@ -3384,7 +3432,13 @@ mod grep_tests {
 
     #[test]
     fn test_fixed_strings_no_messages_with_error_05() {
-        grep_test(&["-F", "-s", FIXED, INVALID_LINE_INPUT_FILE], "", "line_{1}\np_line_{2}_s\n", "", 2);
+        grep_test(
+            &["-F", "-s", FIXED, INVALID_LINE_INPUT_FILE],
+            "",
+            "line_{1}\np_line_{2}_s\n",
+            "",
+            2,
+        );
     }
 
     #[test]

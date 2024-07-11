@@ -446,7 +446,10 @@ impl GrepModel {
                 Err(err) => {
                     self.any_errors = true;
                     if !self.no_messages {
-                        eprintln!("{}: Error reading line {} ({})", input_name, line_number, err);
+                        eprintln!(
+                            "{}: Error reading line {} ({})",
+                            input_name, line_number, err
+                        );
                     }
                 }
             }
