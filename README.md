@@ -14,7 +14,9 @@ Implementation goals include clean, safe Rust code and maximal use of
 small Rust community crates.  This project's utilities should "look like
 normal Rust programs."
 
-Contributions are welcome.  Developers and helpers, please read [CONTRIBUTING](CONTRIBUTING.md) for details.
+## WANTED:  Volunteers!
+
+Contributions are welcome.  Developers and non-developers alike, please read [CONTRIBUTING](CONTRIBUTING.md) for details.
 
 Core specification: https://pubs.opengroup.org/onlinepubs/9699919799/
 
@@ -99,6 +101,7 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [x] uniq
  - [x] unlink
  - [x] wc
+ - [x] what (SCCS)
  - [x] zcat (compress cat.)
 
 ## Stage 2 - Feature-complete and POSIX compliant
@@ -173,7 +176,6 @@ Because it is a FAQ, the major differences between this project and uutils are:
  - [ ] sccs (SCCS)
  - [ ] unget (SCCS)
  - [ ] val (SCCS)
- - [ ] what (SCCS)
 
  ### i18n category
  - [ ] gencat (i18n)

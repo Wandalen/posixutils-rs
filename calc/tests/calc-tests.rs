@@ -7,17 +7,5 @@
 // SPDX-License-Identifier: MIT
 //
 
-pub mod curuser;
-pub mod group;
-pub mod io;
-pub mod lzw;
-pub mod modestr;
-pub mod sccsfile;
-pub mod testing;
-pub mod utmpx;
-
-pub const PROJECT_NAME: &'static str = "posixutils-rs";
-
-pub const BUFSZ: usize = 8 * 1024;
-
-pub use testing::*;
+mod bc;
+mod expr;
