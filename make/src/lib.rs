@@ -139,11 +139,11 @@ impl Make {
     /// Uses DFS to check for recursive prerequisites.
     fn _are_prerequisites_recursive(
         &self,
-        target: impl AsRef<str>,
+        target: &str,
         visited: &mut HashSet<&str>,
         stack: &mut HashSet<&str>,
     ) -> bool {
-        let Some(rule) = self.target_rule(&target) else {
+        let Some(rule) = self.target_rule(target) else {
             return false;
         };
 
@@ -151,14 +151,14 @@ impl Make {
 
         for prerequisite in prerequisites {
             if (!visited.contains(prerequisite.as_ref())
-                && self._are_prerequisites_recursive(prerequisite, visited, stack))
+                && self._are_prerequisites_recursive(prerequisite.as_ref(), visited, stack))
                 || stack.contains(prerequisite.as_ref())
             {
                 return true;
             }
         }
 
-        stack.remove(target.as_ref());
+        stack.remove(target);
         false
     }
 }
