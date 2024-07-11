@@ -10,7 +10,7 @@
 use std::process::Output;
 
 use plib::{run_test_with_checker, TestPlan};
-use posixutils_make::ErrorCode;
+use posixutils_make::error_code::ErrorCode;
 
 fn run_test_helper(
     args: &[&str],
@@ -102,7 +102,7 @@ mod io {
             &["-f", "tests/makefiles/does_not_exist.mk"],
             "",
             "io error",
-            ErrorCode::ParseError as i32, // os error
+            ErrorCode::IoError as i32,
         );
     }
 }

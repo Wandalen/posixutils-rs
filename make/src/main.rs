@@ -22,8 +22,8 @@ use gettextrs::{bind_textdomain_codeset, textdomain};
 use makefile_lossless::Makefile;
 use plib::PROJECT_NAME;
 use posixutils_make::{
-    Config,
-    ErrorCode::{self, *},
+    config::Config,
+    error_code::ErrorCode::{self, *},
     Make,
 };
 
@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let parsed = parse_makefile(makefile_path.as_ref()).unwrap_or_else(|err| {
         eprintln!("make: {}", err);
-        process::exit(ParseError as i32);
+        process::exit(err as i32);
     });
     let config = Config { silent };
 

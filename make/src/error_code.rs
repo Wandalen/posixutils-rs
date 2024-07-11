@@ -7,8 +7,10 @@
 // SPDX-License-Identifier: MIT
 //
 
+use core::fmt;
+
 /// Represents the error codes that can be returned by the make utility
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum ErrorCode {
     ExecutionError,
@@ -20,7 +22,7 @@ pub enum ErrorCode {
     RecursivePrerequisite,
 }
 
-impl core::fmt::Display for ErrorCode {
+impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(
             f,

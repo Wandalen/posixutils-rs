@@ -7,15 +7,18 @@
 // SPDX-License-Identifier: MIT
 //
 
-mod config;
-pub use config::Config;
-mod error_code;
-pub use error_code::ErrorCode;
+pub mod config;
+pub mod error_code;
+pub mod rule;
+pub mod special_target;
 
-use std::{collections::HashSet, env, fs, process::Command, time::SystemTime};
+use std::{collections::HashSet, fs, time::SystemTime};
 
-use makefile_lossless::{Makefile, Rule, VariableDefinition};
-use ErrorCode::*;
+use makefile_lossless::{Makefile, VariableDefinition};
+
+use config::Config;
+use error_code::ErrorCode::{self, *};
+use rule::{prerequisite::Prerequisite, Rule};
 
 /// The default shell variable name.
 const DEFAULT_SHELL_VAR: &str = "SHELL";
@@ -42,7 +45,7 @@ impl Make {
     /// - `None` if no rule with the target exists.
     pub fn target_rule(&self, target: impl AsRef<str>) -> Option<&Rule> {
         self.rules.iter().find(|rule| match rule.targets().next() {
-            Some(t) => t == target.as_ref(),
+            Some(t) => t.as_ref() == target.as_ref(),
             None => false,
         })
     }
@@ -55,7 +58,7 @@ impl Make {
     /// - `None` if there are no rules in the makefile.
     pub fn build_first_target(&self) -> Result<bool, ErrorCode> {
         let rule = self.rules.first().ok_or(NoTarget)?;
-        self.run_rule(rule)
+        self.run_rule_with_prerequisites(rule)
     }
 
     /// Builds the target with the given name.
@@ -66,7 +69,7 @@ impl Make {
     /// - `None` if the target does not exist.
     pub fn build_target(&self, target: impl AsRef<str>) -> Result<bool, ErrorCode> {
         let rule = self.target_rule(target).ok_or(NoTarget)?;
-        self.run_rule(rule)
+        self.run_rule_with_prerequisites(rule)
     }
 
     /// Runs the given rule.
@@ -74,52 +77,31 @@ impl Make {
     /// # Returns
     /// - `true` if the rule was run.
     /// - `false` if the rule was already up to date.
-    fn run_rule(&self, rule: &Rule) -> Result<bool, ErrorCode> {
+    fn run_rule_with_prerequisites(&self, rule: &Rule) -> Result<bool, ErrorCode> {
+        // TODO: there may be multiple targets in a rule
         let target = rule.targets().next().unwrap();
 
-        if self.are_prerequisites_recursive(&target) {
+        if self.are_prerequisites_recursive(target) {
             return Err(RecursivePrerequisite);
         }
 
-        let newer_prerequisites = self.get_newer_prerequisites(&target);
-        if newer_prerequisites.is_empty() && get_modified_time(&target).is_some() {
+        let newer_prerequisites = self.get_newer_prerequisites(target);
+        if newer_prerequisites.is_empty() && get_modified_time(target).is_some() {
             return Ok(false);
         }
 
-        for prerequisite in &newer_prerequisites {
+        for prerequisite in newer_prerequisites {
             self.build_target(prerequisite)?;
         }
 
-        for recipe in rule.recipes() {
-            if !self.config.silent {
-                println!("{}", recipe);
-            }
-
-            let mut command = Command::new(
-                env::var(DEFAULT_SHELL_VAR)
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or(DEFAULT_SHELL),
-            );
-            self.init_env(&mut command);
-            command.args(["-c", &recipe]);
-
-            let Ok(status) = command.status() else {
-                return Err(ExecutionError);
-            };
-
-            if !status.success() {
-                return Err(ExecutionError);
-            }
-        }
-
+        rule.run(&self.config, &self.variables)?;
         Ok(true)
     }
 
     /// Retrieves the prerequisites of the target that are newer than the target.
     /// Recursively checks the prerequisites of the prerequisites.
     /// Returns an empty vector if the target does not exist (or it's a file).
-    fn get_newer_prerequisites(&self, target: impl AsRef<str>) -> Vec<String> {
+    fn get_newer_prerequisites(&self, target: impl AsRef<str>) -> Vec<&Prerequisite> {
         let Some(target_rule) = self.target_rule(&target) else {
             return vec![];
         };
@@ -167,9 +149,9 @@ impl Make {
         let prerequisites = rule.prerequisites();
 
         for prerequisite in prerequisites {
-            if (!visited.contains(prerequisite.as_str())
-                && self._are_prerequisites_recursive(&prerequisite, visited, stack))
-                || stack.contains(prerequisite.as_str())
+            if (!visited.contains(prerequisite.as_ref())
+                && self._are_prerequisites_recursive(prerequisite, visited, stack))
+                || stack.contains(prerequisite.as_ref())
             {
                 return true;
             }
@@ -178,22 +160,17 @@ impl Make {
         stack.remove(target.as_ref());
         false
     }
-
-    /// A helper function to initialize env vars for shell commands.
-    fn init_env(&self, command: &mut Command) {
-        command.envs(self.variables.iter().map(|v| {
-            (
-                v.name().unwrap_or_default(),
-                v.raw_value().unwrap_or_default(),
-            )
-        }));
-    }
 }
 
 impl From<(Makefile, Config)> for Make {
     fn from((makefile, config): (Makefile, Config)) -> Self {
+        let mut rules = vec![];
+        for rule in makefile.rules() {
+            let rule = Rule::from(rule);
+                rules.push(rule);
+        }
         Make {
-            rules: makefile.rules().collect(),
+            rules,
             variables: makefile.variable_definitions().collect(),
             config,
         }

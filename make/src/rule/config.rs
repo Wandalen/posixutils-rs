@@ -7,10 +7,10 @@
 // SPDX-License-Identifier: MIT
 //
 
-/// Represents the configuration of the make utility
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// The configuration for a rule.
 pub struct Config {
-    /// Whether to print recipe lines
+    /// Whether the rule is silent.
     pub silent: bool,
 }
 
