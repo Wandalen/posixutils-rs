@@ -391,12 +391,12 @@ impl GrepModel {
         let mut line_number: u64 = 0;
         loop {
             let mut line = String::new();
+            line_number += 1;
             match reader.read_line(&mut line) {
                 Ok(n_read) => {
                     if n_read == 0 {
                         break;
                     }
-                    line_number += 1;
                     let trimmed = if line.ends_with('\n') {
                         &line[..line.len() - 1]
                     } else {
@@ -446,7 +446,7 @@ impl GrepModel {
                 Err(err) => {
                     self.any_errors = true;
                     if !self.no_messages {
-                        eprintln!("{}", err);
+                        eprintln!("{}: Error reading line {} ({})", input_name, line_number, err);
                     }
                 }
             }
