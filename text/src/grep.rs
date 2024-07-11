@@ -196,6 +196,7 @@ impl Args {
             line_number: self.line_number,
             no_messages: self.no_messages,
             invert_match: self.invert_match,
+            multiple_inputs: self.input_files.len() > 1,
             output_mode,
             patterns,
             input_files: self.input_files,
@@ -337,6 +338,7 @@ struct GrepModel {
     line_number: bool,
     no_messages: bool,
     invert_match: bool,
+    multiple_inputs: bool,
     output_mode: OutputMode,
     patterns: Patterns,
     input_files: Vec<String>,
@@ -349,7 +351,7 @@ impl GrepModel {
     ///
     /// Returns [i32](i32) that represents *exit status code*.
     fn grep(&mut self) -> i32 {
-        for input_name in self.input_files.clone() {
+        for input_name in self.input_files.drain(..).collect::<Vec<_>>() {
             if input_name == "-" {
                 let reader = Box::new(BufReader::new(io::stdin()));
                 self.process_input("(standard input)", reader);
@@ -425,7 +427,7 @@ impl GrepModel {
                             OutputMode::Default => {
                                 let result = format!(
                                     "{}{}{}",
-                                    if self.input_files.len() > 1 {
+                                    if self.multiple_inputs {
                                         format!("{input_name}:")
                                     } else {
                                         String::new()
@@ -455,7 +457,7 @@ impl GrepModel {
             }
         }
         if let OutputMode::Count(count) = &mut self.output_mode {
-            if self.input_files.len() > 1 {
+            if self.multiple_inputs {
                 println!("{input_name}:{count}");
             } else {
                 println!("{count}");
