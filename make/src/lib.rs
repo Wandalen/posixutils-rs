@@ -19,6 +19,7 @@ use makefile_lossless::{Makefile, VariableDefinition};
 use config::Config;
 use error_code::ErrorCode::{self, *};
 use rule::{prerequisite::Prerequisite, Rule};
+use special_target::SpecialTarget;
 
 /// The default shell variable name.
 const DEFAULT_SHELL_VAR: &str = "SHELL";
@@ -165,11 +166,21 @@ impl Make {
 impl From<(Makefile, Config)> for Make {
     fn from((makefile, config): (Makefile, Config)) -> Self {
         let mut rules = vec![];
+        let mut special_rules = vec![];
         for rule in makefile.rules() {
             let rule = Rule::from(rule);
+            if SpecialTarget::try_from(rule.targets().next().unwrap().clone()).is_ok() {
+                special_rules.push(rule);
+            } else {
                 rules.push(rule);
+            }
         }
-        Make {
+
+        for rule in special_rules {
+            special_target::Processor::process(&rule, &mut rules);
+        }
+
+        Self {
             rules,
             variables: makefile.variable_definitions().collect(),
             config,

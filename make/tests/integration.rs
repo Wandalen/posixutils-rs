@@ -204,3 +204,54 @@ mod target_behavior {
         );
     }
 }
+
+mod special_targets {
+    use super::*;
+
+    mod silent {
+        use super::*;
+
+        #[test]
+        fn works() {
+            run_test_helper(
+                &["-f", "tests/makefiles/special_targets/silent/works.mk"],
+                "I'm silent\n",
+                "",
+                0,
+            );
+        }
+
+        #[test]
+        fn empty_silent_equals_to_dash_s() {
+            run_test_helper(
+                &["-f", "tests/makefiles/special_targets/silent/empty_silent_equals_to_dash_s.mk"],
+                "I'm silent\n",
+                "",
+                0,
+            );
+        }
+
+        #[test]
+        fn multiple_targets_are_composed() {
+            run_test_helper(
+                &["-f", "tests/makefiles/special_targets/silent/multiple_targets_are_composed.mk"],
+                "I'm silent\nMe too\n",
+                "",
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn ignores_special_targets_as_first_target() {
+        run_test_helper(
+            &[
+                "-f",
+                "tests/makefiles/special_targets/ignores_special_targets_as_first_target.mk",
+            ],
+            "I'm silent\n",
+            "",
+            0,
+        );
+    }
+}
