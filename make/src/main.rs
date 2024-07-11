@@ -35,14 +35,17 @@ const MAKEFILE_PATH: [&str; 2] = [
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[arg(short = 'f', help = "Path to the makefile to parse")]
+    #[arg(short = 'C', long, help = "Change to DIRECTORY before doing anything")]
+    directory: Option<PathBuf>,
+
+    #[arg(short = 'f', long, help = "Path to the makefile to parse")]
     makefile: Option<PathBuf>,
 
-    #[arg(short = 's', help = "Do not print recipe lines")]
-    silent: bool,
+    #[arg(short = 'i', long, help = "Ignore errors in the recipe")]
+    ignore: bool,
 
-    #[arg(short = 'C', help = "Change to DIRECTORY before doing anything")]
-    directory: Option<PathBuf>,
+    #[arg(short = 's', long, help = "Do not print recipe lines")]
+    silent: bool,
 
     #[arg(help = "Targets to build")]
     targets: Vec<OsString>,
@@ -53,24 +56,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
     let Args {
-        makefile: makefile_path,
+        directory,
+        makefile,
+        ignore,
         silent,
-        directory: change_directory,
         targets,
     } = Args::parse();
 
     let mut status_code = 0;
 
     // -C flag
-    if let Some(dir) = change_directory {
+    if let Some(dir) = directory {
         env::set_current_dir(dir)?;
     }
 
-    let parsed = parse_makefile(makefile_path.as_ref()).unwrap_or_else(|err| {
+    let parsed = parse_makefile(makefile.as_ref()).unwrap_or_else(|err| {
         eprintln!("make: {}", err);
         process::exit(err as i32);
     });
-    let config = Config { silent };
+    let config = Config { ignore, silent };
 
     let make = Make::from((parsed, config));
 

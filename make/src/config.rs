@@ -10,6 +10,8 @@
 /// Represents the configuration of the make utility
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
+    /// Whether to ignore the errors in the rule
+    pub ignore: bool,
     /// Whether to print recipe lines
     pub silent: bool,
 }
@@ -17,6 +19,9 @@ pub struct Config {
 #[allow(clippy::derivable_impls)]
 impl Default for Config {
     fn default() -> Self {
-        Self { silent: false }
+        Self {
+            ignore: false,
+            silent: false,
+        }
     }
 }

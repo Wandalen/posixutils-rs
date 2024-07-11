@@ -208,50 +208,67 @@ mod target_behavior {
 mod special_targets {
     use super::*;
 
-    mod silent {
+    #[test]
+    fn ignore() {
+        run_test_helper(
+            &["-f", "tests/makefiles/special_targets/ignore.mk"],
+            "exit 1\necho \"Ignored\"\nIgnored\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn silent() {
+        run_test_helper(
+            &["-f", "tests/makefiles/special_targets/silent.mk"],
+            "I'm silent\n",
+            "",
+            0,
+        );
+    }
+
+    mod modifiers {
         use super::*;
 
         #[test]
-        fn works() {
+        fn additive() {
             run_test_helper(
-                &["-f", "tests/makefiles/special_targets/silent/works.mk"],
-                "I'm silent\n",
-                "",
-                0,
-            );
-        }
-
-        #[test]
-        fn empty_silent_equals_to_dash_s() {
-            run_test_helper(
-                &["-f", "tests/makefiles/special_targets/silent/empty_silent_equals_to_dash_s.mk"],
-                "I'm silent\n",
-                "",
-                0,
-            );
-        }
-
-        #[test]
-        fn multiple_targets_are_composed() {
-            run_test_helper(
-                &["-f", "tests/makefiles/special_targets/silent/multiple_targets_are_composed.mk"],
+                &[
+                    "-f",
+                    "tests/makefiles/special_targets/modifiers/additive.mk",
+                ],
                 "I'm silent\nMe too\n",
+                "",
+                0,
+            );
+        }
+
+        #[test]
+        fn global() {
+            run_test_helper(
+                &["-f", "tests/makefiles/special_targets/modifiers/global.mk"],
+                "I'm silent\n",
                 "",
                 0,
             );
         }
     }
 
-    #[test]
-    fn ignores_special_targets_as_first_target() {
-        run_test_helper(
-            &[
-                "-f",
-                "tests/makefiles/special_targets/ignores_special_targets_as_first_target.mk",
-            ],
-            "I'm silent\n",
-            "",
-            0,
-        );
+    mod behavior {
+        use super::*;
+
+        #[test]
+        fn ignores_special_targets_as_first_target() {
+            run_test_helper(
+                &[
+                    "-f",
+                    "tests/makefiles/special_targets/behavior/ignores_special_targets_as_first_target.mk",
+                ],
+                "I'm silent\n",
+                "",
+                0,
+            );
+        }
     }
 }

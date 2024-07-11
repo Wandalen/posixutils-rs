@@ -58,8 +58,11 @@ impl Rule {
         global_config: &GlobalConfig,
         variables: &[VariableDefinition],
     ) -> Result<(), ErrorCode> {
+        let ignore = global_config.ignore || self.config.ignore;
+        let silent = global_config.silent || self.config.silent;
+
         for recipe in self.recipes() {
-            if !global_config.silent && !self.config.silent {
+            if !silent {
                 println!("{}", recipe);
             }
 
@@ -73,10 +76,14 @@ impl Rule {
             command.args(["-c", recipe.as_ref()]);
 
             let Ok(status) = command.status() else {
-                return Err(ExecutionError);
+                if ignore {
+                    continue;
+                } else {
+                    return Err(ExecutionError);
+                };
             };
 
-            if !status.success() {
+            if !status.success() && !ignore {
                 return Err(ExecutionError);
             }
         }

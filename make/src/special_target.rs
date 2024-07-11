@@ -86,25 +86,36 @@ impl<'a> Processor<'a> {
         };
 
         match target {
+            Ignore => this.process_ignore(),
             Silent => this.process_silent(),
             unsupported => eprintln!("The {} target is not ye supported", unsupported.as_ref()),
         }
     }
+}
 
-    fn process_silent(&mut self) {
+impl Processor<'_> {
+    /// - Additive: multiple special targets can be specified in the same makefile and the effects are
+    ///   cumulative.
+    /// - Global: the special target applies to all rules in the makefile if no prerequisites are
+    ///   specified.
+    fn additive_and_global_modifier(&mut self, f: impl FnMut(&mut Rule) + Clone) {
         if self.rule.prerequisites().count() == 0 {
-            self.others.iter_mut().for_each(|r| {
-                r.config.silent = true;
-            });
+            self.others.iter_mut().for_each(f);
         } else {
             for prerequisite in self.rule.prerequisites() {
                 self.others
                     .iter_mut()
                     .filter(|r| r.targets().any(|t| t.as_ref() == prerequisite.as_ref()))
-                    .for_each(|r| {
-                        r.config.silent = true;
-                    });
+                    .for_each(f.clone());
             }
         }
+    }
+
+    fn process_ignore(&mut self) {
+        self.additive_and_global_modifier(|rule| rule.config.ignore = true);
+    }
+
+    fn process_silent(&mut self) {
+        self.additive_and_global_modifier(|rule| rule.config.silent = true);
     }
 }
