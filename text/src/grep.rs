@@ -420,7 +420,7 @@ impl GrepModel {
                                 break;
                             }
                             OutputMode::Quiet => {
-                                break;
+                                return;
                             }
                             OutputMode::Default => {
                                 let result = format!(
