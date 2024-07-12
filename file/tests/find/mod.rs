@@ -1,3 +1,6 @@
+use std::fs::{remove_file, File};
+use std::io::Write;
+
 use plib::{run_test, TestPlan};
 
 fn run_test_find(
@@ -189,10 +192,12 @@ fn find_group_test() {
 fn find_newer_test() {
     let project_root = env!("CARGO_MANIFEST_DIR");
     let test_dir = format!("{}/tests/find", project_root);
-    let test_file = format!("{}/empty_file.txt", test_dir);
-    let args = [&test_dir, "-newer", &test_file];
+    let path_to_test_file = format!("{}/empty_file.txt", test_dir);
+    let mut file = File::create(&path_to_test_file).unwrap();
+    writeln!(file, "File content").unwrap();
+    let args = [&test_dir, "-newer", &path_to_test_file];
 
-    let expected_output = format!("{}\n{}/file with space.txt\n{}/mod.rs\n{}/rust_file.rs\n", test_dir, test_dir, test_dir, test_dir);
+    run_test_find(&args, "", "", 0);
 
-    run_test_find(&args, &expected_output, "", 0)
+    remove_file(&path_to_test_file).unwrap();
 }
