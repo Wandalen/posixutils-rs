@@ -75,16 +75,21 @@ impl Rule {
             self.init_env(&mut command, variables);
             command.args(["-c", recipe.as_ref()]);
 
-            let Ok(status) = command.status() else {
-                if ignore {
-                    continue;
-                } else {
-                    return Err(ExecutionError);
-                };
+            let status = match command.status() {
+                Ok(status) => status,
+                Err(err) => {
+                    if ignore {
+                        continue;
+                    } else {
+                        return Err(IoError(err.kind()));
+                    }
+                }
             };
 
             if !status.success() && !ignore {
-                return Err(ExecutionError);
+                return Err(ExecutionError {
+                    exit_code: status.code(),
+                });
             }
         }
 

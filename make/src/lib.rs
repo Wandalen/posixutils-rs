@@ -58,7 +58,7 @@ impl Make {
     /// - `Some(false)` if the target was already up to date.
     /// - `None` if there are no rules in the makefile.
     pub fn build_first_target(&self) -> Result<bool, ErrorCode> {
-        let rule = self.rules.first().ok_or(NoTarget)?;
+        let rule = self.rules.first().ok_or(NoTarget { target: None })?;
         self.run_rule_with_prerequisites(rule)
     }
 
@@ -69,7 +69,9 @@ impl Make {
     /// - `Some(false)` if the target was already up to date.
     /// - `None` if the target does not exist.
     pub fn build_target(&self, target: impl AsRef<str>) -> Result<bool, ErrorCode> {
-        let rule = self.target_rule(target).ok_or(NoTarget)?;
+        let rule = self.target_rule(&target).ok_or(NoTarget {
+            target: Some(target.as_ref().to_string()),
+        })?;
         self.run_rule_with_prerequisites(rule)
     }
 
@@ -83,7 +85,9 @@ impl Make {
         let target = rule.targets().next().unwrap();
 
         if self.are_prerequisites_recursive(target) {
-            return Err(RecursivePrerequisite);
+            return Err(RecursivePrerequisite {
+                origin: target.to_string(),
+            });
         }
 
         let newer_prerequisites = self.get_newer_prerequisites(target);

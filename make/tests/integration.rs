@@ -7,9 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use std::process::Output;
-
-use plib::{run_test_with_checker, TestPlan};
+use plib::{run_test, TestPlan};
 use posixutils_make::error_code::ErrorCode;
 
 fn run_test_helper(
@@ -20,17 +18,14 @@ fn run_test_helper(
 ) {
     let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
 
-    run_test_with_checker(
-        TestPlan {
-            cmd: String::from("make"),
-            args: str_args,
-            stdin_data: String::new(),
-            expected_out: String::from(expected_output),
-            expected_err: String::from(expected_error),
-            expected_exit_code,
-        },
-        test_checker,
-    );
+    run_test(TestPlan {
+        cmd: String::from("make"),
+        args: str_args,
+        stdin_data: String::new(),
+        expected_out: String::from(expected_output),
+        expected_err: String::from(expected_error),
+        expected_exit_code,
+    });
 }
 
 fn run_test_helper_with_setup_and_destruct(
@@ -46,28 +41,6 @@ fn run_test_helper_with_setup_and_destruct(
     destruct();
 }
 
-fn test_checker(plan: &TestPlan, output: &Output) {
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(stdout, plan.expected_out);
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if plan.expected_err.is_empty() {
-        assert!(stderr.is_empty(), "stderr: {}", stderr.trim_end());
-    } else {
-        assert!(
-            stderr.contains(&plan.expected_err),
-            "stderr: {}\nexpected: {}",
-            stderr.trim_end(),
-            plan.expected_err
-        );
-    }
-
-    assert_eq!(output.status.code(), Some(plan.expected_exit_code));
-    if plan.expected_exit_code == 0 {
-        assert!(output.status.success());
-    }
-}
-
 // such tests should be moved directly to the package responsible for parsing makefiles
 mod parsing {
     use super::*;
@@ -77,8 +50,8 @@ mod parsing {
         run_test_helper(
             &["-f", "tests/makefiles/parsing/empty.mk"],
             "",
-            "parse error",
-            ErrorCode::ParseError as i32,
+            "make: parse error: unexpected token None\n\n",
+            ErrorCode::ParseError("the inner value does not matter for now".into()).into(),
         );
     }
 
@@ -94,6 +67,8 @@ mod parsing {
 }
 
 mod io {
+    use std::io;
+
     use super::*;
 
     #[test]
@@ -101,8 +76,8 @@ mod io {
         run_test_helper(
             &["-f", "tests/makefiles/does_not_exist.mk"],
             "",
-            "io error",
-            ErrorCode::IoError as i32,
+            "make: io error: entity not found\n",
+            ErrorCode::IoError(io::ErrorKind::NotFound).into(),
         );
     }
 }
@@ -131,8 +106,8 @@ mod target_behavior {
         run_test_helper(
             &["-f", "tests/makefiles/target_behavior/no_targets.mk"],
             "",
-            "no target",
-            ErrorCode::NoTarget as i32,
+            "make: no targets to execute\n",
+            ErrorCode::NoTarget { target: None }.into(),
         );
     }
 
@@ -199,8 +174,11 @@ mod target_behavior {
                 "tests/makefiles/target_behavior/recursive_chaining.mk",
             ],
             "",
-            "recursive prerequisite",
-            ErrorCode::RecursivePrerequisite as i32,
+            "make: recursive prerequisite found trying to build 'rule1'\n",
+            ErrorCode::RecursivePrerequisite {
+                origin: "rule1".into(),
+            }
+            .into(),
         );
     }
 }

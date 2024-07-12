@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let parsed = parse_makefile(makefile.as_ref()).unwrap_or_else(|err| {
         eprintln!("make: {}", err);
-        process::exit(err as i32);
+        process::exit(err.into());
     });
     let config = Config { ignore, silent };
 
@@ -81,14 +81,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if targets.is_empty() {
         let _ = make.build_first_target().inspect_err(|err| {
             eprintln!("make: {}", err);
-            status_code = *err as i32;
+            status_code = err.into();
         });
     } else {
         for target in targets {
             let target = target.into_string().unwrap();
             let _ = make.build_target(&target).inspect_err(|err| {
                 eprintln!("make: {}", err);
-                status_code = *err as i32;
+                status_code = err.into();
             });
 
             if status_code != 0 {
@@ -126,13 +126,13 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, ErrorCode>
 
     let contents = match fs::read_to_string(path) {
         Ok(contents) => contents,
-        Err(_) => {
-            return Err(IoError);
+        Err(err) => {
+            return Err(IoError(err.kind()));
         }
     };
 
     match Makefile::from_str(&contents) {
         Ok(makefile) => Ok(makefile),
-        Err(_) => Err(ParseError),
+        Err(err) => Err(ParseError(err.to_string())),
     }
 }
