@@ -399,13 +399,6 @@ impl GrepModel {
                     if n_read == 0 {
                         break;
                     }
-                    // let trimmed = if line.ends_with("\r\n") {
-                    //     &line[..line.len() - 2]
-                    // } else if line.ends_with('\n') {
-                    //     &line[..line.len() - 1]
-                    // } else  {
-                    //     &line
-                    // };
                     let trimmed = if line.ends_with('\n') {
                         &line[..line.len() - 1]
                     } else {
