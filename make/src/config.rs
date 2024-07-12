@@ -12,6 +12,8 @@
 pub struct Config {
     /// Whether to ignore the errors in the rule
     pub ignore: bool,
+    /// Whether to execute commands or print to stdout
+    pub dry_run: bool,
     /// Whether to print recipe lines
     pub silent: bool,
 }
@@ -21,6 +23,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             ignore: false,
+            dry_run: false,
             silent: false,
         }
     }

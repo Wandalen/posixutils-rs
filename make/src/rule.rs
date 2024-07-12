@@ -59,9 +59,17 @@ impl Rule {
         macros: &[VariableDefinition],
     ) -> Result<(), ErrorCode> {
         let ignore = global_config.ignore || self.config.ignore;
+        let dry_run = global_config.dry_run;
         let silent = global_config.silent || self.config.silent;
 
         for recipe in self.recipes() {
+            // -n flag
+            if dry_run {
+                println!("{}", recipe);
+                continue;
+            }
+
+            // -s flag
             if !silent {
                 println!("{}", recipe);
             }

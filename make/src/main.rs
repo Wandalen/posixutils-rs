@@ -44,6 +44,13 @@ struct Args {
     #[arg(short = 'i', long, help = "Ignore errors in the recipe")]
     ignore: bool,
 
+    #[arg(
+        short = 'n',
+        long,
+        help = "Print commands to stdout and do not execute them"
+    )]
+    dry_run: bool,
+
     #[arg(short = 's', long, help = "Do not print recipe lines")]
     silent: bool,
 
@@ -59,6 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         directory,
         makefile,
         ignore,
+        dry_run,
         silent,
         targets,
     } = Args::parse();
@@ -74,7 +82,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("make: {}", err);
         process::exit(err.into());
     });
-    let config = Config { ignore, silent };
+    let config = Config {
+        ignore,
+        dry_run,
+        silent,
+    };
 
     let make = Make::from((parsed, config));
 

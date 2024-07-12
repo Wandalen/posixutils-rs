@@ -41,6 +41,41 @@ fn run_test_helper_with_setup_and_destruct(
     destruct();
 }
 
+
+mod arguments {
+    use super::*;
+
+    #[test]
+    fn dash_cap_c() {
+        run_test_helper(
+            &["-C", "tests/makefiles/arguments/dash_cap_c"],
+            "cat works.txt\nChanged directory\n",
+            "",
+            0,
+        )
+    }
+
+    #[test]
+    fn dash_n() {
+        run_test_helper(
+            &["-nf", "tests/makefiles/arguments/dash_n.mk"],
+            "exit 1\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
+    fn dash_s() {
+        run_test_helper(
+            &["-sf", "tests/makefiles/arguments/dash_s.mk"],
+            "Silent\n",
+            "",
+            0,
+        )
+    }
+}
+
 // such tests should be moved directly to the package responsible for parsing makefiles
 mod parsing {
     use super::*;
