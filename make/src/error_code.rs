@@ -11,7 +11,7 @@ use core::fmt;
 use std::io;
 
 /// Represents the error codes that can be returned by the make utility
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ErrorCode {
     ExecutionError { exit_code: Option<i32> },
     IoError(io::ErrorKind),
@@ -23,27 +23,6 @@ pub enum ErrorCode {
     NoRule { rule: String },
     RecursivePrerequisite { origin: String },
 }
-
-impl PartialEq for ErrorCode {
-    fn eq(&self, other: &Self) -> bool {
-        use ErrorCode::*;
-
-        match (self, other) {
-            (ExecutionError { exit_code: e1 }, ExecutionError { exit_code: e2 }) => e1 == e2,
-            (IoError(err1), IoError(err2)) => err1 == err2,
-            (NoMakefile, NoMakefile) => true,
-            (ParseError(err1), ParseError(err2)) => err1 == err2,
-            (NoTarget { target: t1 }, NoTarget { target: t2 }) => t1 == t2,
-            (NoRule { rule: r1 }, NoRule { rule: r2 }) => r1 == r2,
-            (RecursivePrerequisite { origin: o1 }, RecursivePrerequisite { origin: o2 }) => {
-                o1 == o2
-            }
-            _ => false,
-        }
-    }
-}
-
-impl Eq for ErrorCode {}
 
 impl From<ErrorCode> for i32 {
     fn from(err: ErrorCode) -> i32 {
