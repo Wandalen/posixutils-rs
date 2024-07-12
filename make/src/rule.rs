@@ -50,13 +50,13 @@ impl Rule {
         self.recipes.iter()
     }
 
-    /// Runs the rule with the global config and variables passed in.
+    /// Runs the rule with the global config and macros passed in.
     ///
     /// Returns `Ok` on success and `Err` on any errors while running the rule.
     pub fn run(
         &self,
         global_config: &GlobalConfig,
-        variables: &[VariableDefinition],
+        macros: &[VariableDefinition],
     ) -> Result<(), ErrorCode> {
         let ignore = global_config.ignore || self.config.ignore;
         let silent = global_config.silent || self.config.silent;
@@ -72,7 +72,7 @@ impl Rule {
                     .map(|s| s.as_str())
                     .unwrap_or(DEFAULT_SHELL),
             );
-            self.init_env(&mut command, variables);
+            self.init_env(&mut command, macros);
             command.args(["-c", recipe.as_ref()]);
 
             let status = match command.status() {

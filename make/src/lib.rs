@@ -31,7 +31,7 @@ const DEFAULT_SHELL: &str = "/bin/sh";
 ///
 /// The only way to create a `Make` is from a `Makefile` and a `Config`.
 pub struct Make {
-    variables: Vec<VariableDefinition>,
+    macros: Vec<VariableDefinition>,
     rules: Vec<Rule>,
 
     pub config: Config,
@@ -99,7 +99,7 @@ impl Make {
             self.build_target(prerequisite)?;
         }
 
-        rule.run(&self.config, &self.variables)?;
+        rule.run(&self.config, &self.macros)?;
         Ok(true)
     }
 
@@ -186,7 +186,7 @@ impl From<(Makefile, Config)> for Make {
 
         Self {
             rules,
-            variables: makefile.variable_definitions().collect(),
+            macros: makefile.variable_definitions().collect(),
             config,
         }
     }

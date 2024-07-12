@@ -1,1 +1,1 @@
-VARIABLE = value
+MACRO = value

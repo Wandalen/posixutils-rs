@@ -82,14 +82,14 @@ mod io {
     }
 }
 
-mod variables {
+mod macros {
     use super::*;
 
     #[test]
-    fn substitutes() {
+    fn substitutes_in_recipes() {
         run_test_helper(
-            &["-sf", "tests/makefiles/variables/substitutes.mk"],
-            "Variable substitution works.\n",
+            &["-sf", "tests/makefiles/macros/substitutes_in_recipes.mk"],
+            "Macros substitution works.\n",
             "",
             0,
         );
