@@ -65,6 +65,16 @@ mod arguments {
     }
 
     #[test]
+    fn dash_i() {
+        run_test_helper(
+            &["-if", "tests/makefiles/arguments/dash_i.mk"],
+            "exit 1\necho Ignored\nIgnored\n",
+            "",
+            0,
+        )
+    }
+
+    #[test]
     fn dash_n() {
         run_test_helper(
             &["-nf", "tests/makefiles/arguments/dash_n.mk"],
