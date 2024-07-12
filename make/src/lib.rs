@@ -33,6 +33,7 @@ const DEFAULT_SHELL: &str = "/bin/sh";
 pub struct Make {
     macros: Vec<VariableDefinition>,
     rules: Vec<Rule>,
+    default_rule: Option<Rule>, // .DEFAULT
 
     pub config: Config,
 }
@@ -54,9 +55,9 @@ impl Make {
     /// Builds the first target in the makefile.
     ///
     /// # Returns
-    /// - `Some(true)` if the target was built.
-    /// - `Some(false)` if the target was already up to date.
-    /// - `None` if there are no rules in the makefile.
+    /// - `Ok(true)` if the target was built.
+    /// - `Ok(false)` if the target was already up to date.
+    /// - `Err(_)` if any errors occur.
     pub fn build_first_target(&self) -> Result<bool, ErrorCode> {
         let rule = self.rules.first().ok_or(NoTarget { target: None })?;
         self.run_rule_with_prerequisites(rule)
@@ -65,21 +66,30 @@ impl Make {
     /// Builds the target with the given name.
     ///
     /// # Returns
-    /// - `Some(true)` if the target was built.
-    /// - `Some(false)` if the target was already up to date.
-    /// - `None` if the target does not exist.
+    /// - `Ok(true)` if the target was built.
+    /// - `Ok(false)` if the target was already up to date.
+    /// - `Err(_)` if any errors occur.
     pub fn build_target(&self, target: impl AsRef<str>) -> Result<bool, ErrorCode> {
-        let rule = self.target_rule(&target).ok_or(NoTarget {
-            target: Some(target.as_ref().to_string()),
-        })?;
+        let rule = match self.target_rule(&target) {
+            Some(rule) => rule,
+            None => match &self.default_rule {
+                Some(rule) => rule,
+                None => {
+                    return Err(NoTarget {
+                        target: Some(target.as_ref().to_string()),
+                    })
+                }
+            },
+        };
         self.run_rule_with_prerequisites(rule)
     }
 
     /// Runs the given rule.
     ///
     /// # Returns
-    /// - `true` if the rule was run.
-    /// - `false` if the rule was already up to date.
+    /// - Ok(`true`) if the rule was run.
+    /// - Ok(`false`) if the rule was already up to date.
+    /// - `Err(_)` if any errors occur.
     fn run_rule_with_prerequisites(&self, rule: &Rule) -> Result<bool, ErrorCode> {
         // TODO: there may be multiple targets in a rule
         let target = rule.targets().next().unwrap();
@@ -180,15 +190,18 @@ impl From<(Makefile, Config)> for Make {
             }
         }
 
-        for rule in special_rules {
-            special_target::Processor::process(&rule, &mut rules);
-        }
-
-        Self {
+        let mut make = Self {
             rules,
             macros: makefile.variable_definitions().collect(),
+            default_rule: None,
             config,
+        };
+
+        for rule in special_rules {
+            special_target::Processor::process(rule, &mut make);
         }
+
+        make
     }
 }
 

@@ -9,7 +9,10 @@
 
 use core::fmt;
 
-use crate::rule::{target::Target, Rule};
+use crate::{
+    rule::{target::Target, Rule},
+    Make,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpecialTarget {
@@ -71,21 +74,23 @@ impl TryFrom<Target> for SpecialTarget {
     }
 }
 
-pub struct Processor<'a> {
-    rule: &'a Rule,
-    others: &'a mut [Rule],
+pub struct Processor<'make> {
+    rule: Rule,
+    make: &'make mut Make,
 }
 
-impl<'a> Processor<'a> {
-    pub fn process(rule: &'a Rule, others: &'a mut [Rule]) {
-        let mut this = Self { rule, others };
-
+impl<'make> Processor<'make> {
+    pub fn process(rule: Rule, make: &'make mut Make) {
         let target = rule.targets().next().unwrap().clone();
+
+        let this = Self { rule, make };
+
         let Ok(target) = SpecialTarget::try_from(target) else {
             return;
         };
 
         match target {
+            Default => this.process_default(),
             Ignore => this.process_ignore(),
             Silent => this.process_silent(),
             unsupported => eprintln!("The {} target is not ye supported", unsupported.as_ref()),
@@ -93,17 +98,19 @@ impl<'a> Processor<'a> {
     }
 }
 
+/// This impl block contains processing logic for special targets + some utilities
 impl Processor<'_> {
     /// - Additive: multiple special targets can be specified in the same makefile and the effects are
     ///   cumulative.
     /// - Global: the special target applies to all rules in the makefile if no prerequisites are
     ///   specified.
-    fn additive_and_global_modifier(&mut self, f: impl FnMut(&mut Rule) + Clone) {
+    fn additive_and_global_modifier(self, f: impl FnMut(&mut Rule) + Clone) {
         if self.rule.prerequisites().count() == 0 {
-            self.others.iter_mut().for_each(f);
+            self.make.rules.iter_mut().for_each(f);
         } else {
             for prerequisite in self.rule.prerequisites() {
-                self.others
+                self.make
+                    .rules
                     .iter_mut()
                     .filter(|r| r.targets().any(|t| t.as_ref() == prerequisite.as_ref()))
                     .for_each(f.clone());
@@ -111,11 +118,15 @@ impl Processor<'_> {
         }
     }
 
-    fn process_ignore(&mut self) {
+    fn process_default(self) {
+        self.make.default_rule.replace(self.rule);
+    }
+
+    fn process_ignore(self) {
         self.additive_and_global_modifier(|rule| rule.config.ignore = true);
     }
 
-    fn process_silent(&mut self) {
+    fn process_silent(self) {
         self.additive_and_global_modifier(|rule| rule.config.silent = true);
     }
 }

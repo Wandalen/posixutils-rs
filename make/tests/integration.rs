@@ -241,6 +241,16 @@ mod special_targets {
     use super::*;
 
     #[test]
+    fn default() {
+        run_test_helper(
+            &["-f", "tests/makefiles/special_targets/default.mk", "nonexisting_target"],
+            "echo Default\nDefault\n",
+            "",
+            0,
+        );
+    }
+
+    #[test]
     fn ignore() {
         run_test_helper(
             &["-f", "tests/makefiles/special_targets/ignore.mk"],
