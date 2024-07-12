@@ -41,7 +41,6 @@ fn run_test_helper_with_setup_and_destruct(
     destruct();
 }
 
-
 mod arguments {
     use super::*;
 
@@ -50,6 +49,16 @@ mod arguments {
         run_test_helper(
             &["-C", "tests/makefiles/arguments/dash_cap_c"],
             "cat works.txt\nChanged directory\n",
+            "",
+            0,
+        )
+    }
+
+    #[test]
+    fn dash_f() {
+        run_test_helper(
+            &["-f", "tests/makefiles/arguments/dash_f.mk"],
+            "echo \"Changed makefile\"\nChanged makefile\n",
             "",
             0,
         )
