@@ -12,7 +12,7 @@ pub mod error_code;
 pub mod rule;
 pub mod special_target;
 
-use std::{collections::HashSet, fs, time::SystemTime};
+use std::{collections::HashSet, fs::{self, File}, time::SystemTime};
 
 use makefile_lossless::{Makefile, VariableDefinition};
 
@@ -110,6 +110,11 @@ impl Make {
         }
 
         rule.run(&self.config, &self.macros)?;
+
+        if self.config.touch {
+            File::create(target.as_ref())?;
+        }
+
         Ok(true)
     }
 

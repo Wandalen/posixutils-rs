@@ -54,6 +54,9 @@ struct Args {
     #[arg(short = 's', long, help = "Do not print recipe lines")]
     silent: bool,
 
+    #[arg(short = 't', long, help = "If makefile should touch targets on execution")]
+    touch: bool,
+
     #[arg(help = "Targets to build")]
     targets: Vec<OsString>,
 }
@@ -68,6 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ignore,
         dry_run,
         silent,
+        touch,
         targets,
     } = Args::parse();
 
@@ -86,6 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ignore,
         dry_run,
         silent,
+        touch,
     };
 
     let make = Make::try_from((parsed, config)).unwrap_or_else(|err| {

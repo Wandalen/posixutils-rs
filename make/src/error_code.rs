@@ -88,3 +88,9 @@ impl fmt::Display for ErrorCode {
 }
 
 impl std::error::Error for ErrorCode {}
+
+impl From<io::Error> for ErrorCode {
+    fn from(err: io::Error) -> Self {
+        Self::IoError(err.kind())
+    }
+}

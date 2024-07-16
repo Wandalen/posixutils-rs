@@ -42,6 +42,8 @@ fn run_test_helper_with_setup_and_destruct(
 }
 
 mod arguments {
+    use std::fs;
+
     use super::*;
 
     #[test]
@@ -91,6 +93,25 @@ mod arguments {
             "Silent\n",
             "",
             0,
+        )
+    }
+
+    #[test]
+    fn dash_t() {
+        let remove_touches = || {
+            let dir = "tests/makefiles/arguments/dash_t";
+            for i in 1..=2 {
+                let _ = fs::remove_file(format!("{dir}/rule{i}"));
+            }
+        };
+
+        run_test_helper_with_setup_and_destruct(
+            &["-stC", "tests/makefiles/arguments/dash_t/"],
+            "rule2\n",
+            "",
+            0,
+            remove_touches,
+            remove_touches,
         )
     }
 }

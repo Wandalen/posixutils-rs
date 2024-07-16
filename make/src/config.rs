@@ -16,6 +16,8 @@ pub struct Config {
     pub dry_run: bool,
     /// Whether to print recipe lines
     pub silent: bool,
+    /// Whether to touch targets on execution
+    pub touch: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -25,6 +27,7 @@ impl Default for Config {
             ignore: false,
             dry_run: false,
             silent: false,
+            touch: false,
         }
     }
 }
