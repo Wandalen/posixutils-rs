@@ -238,12 +238,18 @@ mod target_behavior {
 }
 
 mod special_targets {
+    use posixutils_make::special_target;
+
     use super::*;
 
     #[test]
     fn default() {
         run_test_helper(
-            &["-f", "tests/makefiles/special_targets/default.mk", "nonexisting_target"],
+            &[
+                "-f",
+                "tests/makefiles/special_targets/default.mk",
+                "nonexisting_target",
+            ],
             "echo Default\nDefault\n",
             "",
             0,
@@ -268,6 +274,38 @@ mod special_targets {
             "",
             0,
         );
+    }
+
+    mod validations {
+        use super::*;
+
+        #[test]
+        fn without_prerequisites() {
+            run_test_helper(
+                &["-f", "tests/makefiles/special_targets/validations/without_prerequisites.mk"],
+                "",
+                "make: '.DEFAULT' special target constraint is not fulfilled: the special target must not have prerequisites\n",
+                ErrorCode::SpecialTargetConstraintNotFulfilled {
+                    target: String::default(),
+                    constraint: special_target::Error::MustNotHavePrerequisites,
+                }
+                .into(),
+            );
+        }
+
+        #[test]
+        fn without_recipes() {
+            run_test_helper(
+                &["-f", "tests/makefiles/special_targets/validations/without_recipes.mk"],
+                "",
+                "make: '.SILENT' special target constraint is not fulfilled: the special target must not have recipes\n",
+                ErrorCode::SpecialTargetConstraintNotFulfilled {
+                    target: String::default(),
+                    constraint: special_target::Error::MustNotHaveRecipes,
+                }
+                .into(),
+            );
+        }
     }
 
     mod modifiers {

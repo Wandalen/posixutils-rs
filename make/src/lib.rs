@@ -177,8 +177,10 @@ impl Make {
     }
 }
 
-impl From<(Makefile, Config)> for Make {
-    fn from((makefile, config): (Makefile, Config)) -> Self {
+impl TryFrom<(Makefile, Config)> for Make {
+    type Error = ErrorCode;
+
+    fn try_from((makefile, config): (Makefile, Config)) -> Result<Self, Self::Error> {
         let mut rules = vec![];
         let mut special_rules = vec![];
         for rule in makefile.rules() {
@@ -198,10 +200,16 @@ impl From<(Makefile, Config)> for Make {
         };
 
         for rule in special_rules {
-            special_target::Processor::process(rule, &mut make);
+            let target = rule.targets().next().unwrap().to_string();
+            special_target::process(rule, &mut make).map_err(|err| {
+                ErrorCode::SpecialTargetConstraintNotFulfilled {
+                    target,
+                    constraint: err,
+                }
+            })?;
         }
 
-        make
+        Ok(make)
     }
 }
 

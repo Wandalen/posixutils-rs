@@ -47,11 +47,39 @@ impl AsRef<str> for SpecialTarget {
     }
 }
 
-impl From<SpecialTarget> for String {
-    fn from(target: SpecialTarget) -> Self {
-        target.as_ref().to_string()
+impl fmt::Display for SpecialTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_ref())
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Error {
+    MustNotHavePrerequisites,
+    MustNotHaveRecipes,
+
+    NotSupported(SpecialTarget),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Error::*;
+
+        match self {
+            MustNotHavePrerequisites => {
+                write!(f, "the special target must not have prerequisites")
+            }
+            MustNotHaveRecipes => {
+                write!(f, "the special target must not have recipes")
+            }
+            NotSupported(target) => {
+                write!(f, "the special target '{target}' is not supported")
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 #[derive(Debug)]
 pub struct ParseError;
@@ -79,54 +107,91 @@ pub struct Processor<'make> {
     make: &'make mut Make,
 }
 
-impl<'make> Processor<'make> {
-    pub fn process(rule: Rule, make: &'make mut Make) {
-        let target = rule.targets().next().unwrap().clone();
+pub fn process(rule: Rule, make: &mut Make) -> Result<(), Error> {
+    let target = rule.targets().next().unwrap().clone();
 
-        let this = Self { rule, make };
+    let this = Processor { rule, make };
 
-        let Ok(target) = SpecialTarget::try_from(target) else {
-            return;
-        };
+    let Ok(target) = SpecialTarget::try_from(target) else {
+        // not an error, ignore
+        return Ok(());
+    };
 
-        match target {
-            Default => this.process_default(),
-            Ignore => this.process_ignore(),
-            Silent => this.process_silent(),
-            unsupported => eprintln!("The {} target is not ye supported", unsupported.as_ref()),
+    match target {
+        Default => this.process_default(),
+        Ignore => this.process_ignore(),
+        Silent => this.process_silent(),
+        unsupported => Err(Error::NotSupported(unsupported)),
+    }
+}
+
+/// This impl block contains modifiers for special targets
+impl Processor<'_> {
+    /// - Additive: multiple special targets can be specified in the same makefile and the effects are
+    ///   cumulative.
+    fn additive(&mut self, f: impl FnMut(&mut Rule) + Clone) {
+        for prerequisite in self.rule.prerequisites() {
+            self.make
+                .rules
+                .iter_mut()
+                .filter(|r| r.targets().any(|t| t.as_ref() == prerequisite.as_ref()))
+                .for_each(f.clone());
+        }
+    }
+
+    /// - Global: the special target applies to all rules in the makefile if no prerequisites are
+    ///   specified.
+    fn global(&mut self, f: impl FnMut(&mut Rule) + Clone) {
+        if self.rule.prerequisites().count() == 0 {
+            self.make.rules.iter_mut().for_each(f);
         }
     }
 }
 
-/// This impl block contains processing logic for special targets + some utilities
+/// This impl block contains constraint validations for special targets
 impl Processor<'_> {
-    /// - Additive: multiple special targets can be specified in the same makefile and the effects are
-    ///   cumulative.
-    /// - Global: the special target applies to all rules in the makefile if no prerequisites are
-    ///   specified.
-    fn additive_and_global_modifier(self, f: impl FnMut(&mut Rule) + Clone) {
-        if self.rule.prerequisites().count() == 0 {
-            self.make.rules.iter_mut().for_each(f);
-        } else {
-            for prerequisite in self.rule.prerequisites() {
-                self.make
-                    .rules
-                    .iter_mut()
-                    .filter(|r| r.targets().any(|t| t.as_ref() == prerequisite.as_ref()))
-                    .for_each(f.clone());
-            }
+    fn without_prerequisites(&self) -> Result<(), Error> {
+        if self.rule.prerequisites().count() > 0 {
+            return Err(Error::MustNotHavePrerequisites);
         }
+        Ok(())
     }
 
-    fn process_default(self) {
+    fn without_recipes(&self) -> Result<(), Error> {
+        if self.rule.recipes().count() > 0 {
+            return Err(Error::MustNotHaveRecipes);
+        }
+        Ok(())
+    }
+}
+
+/// This impl block contains processing logic for special targets
+impl Processor<'_> {
+    fn process_default(self) -> Result<(), Error> {
+        self.without_prerequisites()?;
+
         self.make.default_rule.replace(self.rule);
+
+        Ok(())
     }
 
-    fn process_ignore(self) {
-        self.additive_and_global_modifier(|rule| rule.config.ignore = true);
+    fn process_ignore(mut self) -> Result<(), Error> {
+        self.without_recipes()?;
+
+        let what_to_do = |rule: &mut Rule| rule.config.ignore = true;
+        self.additive(what_to_do);
+        self.global(what_to_do);
+
+        Ok(())
     }
 
-    fn process_silent(self) {
-        self.additive_and_global_modifier(|rule| rule.config.silent = true);
+    fn process_silent(mut self) -> Result<(), Error> {
+        self.without_recipes()?;
+
+        let what_to_do = |rule: &mut Rule| rule.config.silent = true;
+        self.additive(what_to_do);
+        self.global(what_to_do);
+
+        Ok(())
     }
 }

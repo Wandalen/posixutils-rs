@@ -88,7 +88,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         silent,
     };
 
-    let make = Make::from((parsed, config));
+    let make = Make::try_from((parsed, config)).unwrap_or_else(|err| {
+        eprintln!("make: {err}");
+        process::exit(err.into());
+    });
 
     if targets.is_empty() {
         let _ = make.build_first_target().inspect_err(|err| {
