@@ -145,6 +145,8 @@ impl Args {
             .iter()
             .flat_map(|pattern| pattern.split('\n').map(String::from))
             .collect();
+        self.regexp.sort_by_key(|r| r.len());
+        self.regexp.dedup();
 
         if self.input_files.is_empty() {
             self.input_files.push(String::from("-"))
@@ -254,8 +256,18 @@ impl Patterns {
             if ignore_case {
                 cflags |= REG_ICASE;
             }
+            let empty_regex = String::from("");
             for p in patterns {
-                let pattern = if line_regexp { format!("^{p}$") } else { p };
+                let pattern = if p == empty_regex {
+                    String::from(".*")
+                } else {
+                    p
+                };
+                let pattern = if line_regexp {
+                    format!("^{pattern}$")
+                } else {
+                    pattern
+                };
 
                 let c_pattern = CString::new(pattern).map_err(|err| err.to_string())?;
                 let mut regex = unsafe { std::mem::zeroed::<regex_t>() };
@@ -315,7 +327,7 @@ impl Drop for Patterns {
             Patterns::Fixed(_, _, _) => {}
             Patterns::Regex(regexes) => {
                 for regex in regexes {
-                    unsafe { regfree(regex as *const _ as *mut _) }
+                    unsafe { regfree(regex as *const regex_t as *mut regex_t) }
                 }
             }
         }
