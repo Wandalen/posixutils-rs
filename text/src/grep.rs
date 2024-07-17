@@ -256,13 +256,17 @@ impl Patterns {
             if ignore_case {
                 cflags |= REG_ICASE;
             }
-            let empty_regex = String::from("");
-            for p in patterns {
-                let pattern = if p == empty_regex {
-                    String::from(".*")
-                } else {
-                    p
-                };
+            for pattern in patterns {
+                /// macOS version of [regcomp](regcomp) from `libc` provides additional check for empty regex. In this case, an error [REG_EMPTY](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/regcomp.3.html) will be returned.
+                /// Therefore, an empty pattern is replaced with ".*".
+                #[cfg(target_os = "macos")]
+                {
+                    let pattern = if pattern == "" {
+                        String::from(".*")
+                    } else {
+                        pattern
+                    };
+                }
                 let pattern = if line_regexp {
                     format!("^{pattern}$")
                 } else {
