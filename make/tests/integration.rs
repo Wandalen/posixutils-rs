@@ -106,8 +106,8 @@ mod arguments {
         };
 
         run_test_helper_with_setup_and_destruct(
-            &["-stC", "tests/makefiles/arguments/dash_t/"],
-            "rule2\n",
+            &["-tC", "tests/makefiles/arguments/dash_t/"],
+            "touch rule2\ntouch rule1\n",
             "",
             0,
             remove_touches,

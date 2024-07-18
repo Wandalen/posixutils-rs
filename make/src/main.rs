@@ -54,7 +54,11 @@ struct Args {
     #[arg(short = 's', long, help = "Do not print recipe lines")]
     silent: bool,
 
-    #[arg(short = 't', long, help = "If makefile should touch targets on execution")]
+    #[arg(
+        short = 't',
+        long,
+        help = "If makefile should touch targets on execution"
+    )]
     touch: bool,
 
     #[arg(help = "Targets to build")]

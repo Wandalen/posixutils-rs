@@ -12,13 +12,13 @@ pub mod error_code;
 pub mod rule;
 pub mod special_target;
 
-use std::{collections::HashSet, fs::{self, File}, time::SystemTime};
+use std::{collections::HashSet, fs, time::SystemTime};
 
 use makefile_lossless::{Makefile, VariableDefinition};
 
 use config::Config;
 use error_code::ErrorCode::{self, *};
-use rule::{prerequisite::Prerequisite, Rule};
+use rule::{prerequisite::Prerequisite, target::Target, Rule};
 use special_target::SpecialTarget;
 
 /// The default shell variable name.
@@ -109,11 +109,7 @@ impl Make {
             self.build_target(prerequisite)?;
         }
 
-        rule.run(&self.config, &self.macros)?;
-
-        if self.config.touch {
-            File::create(target.as_ref())?;
-        }
+        rule.run(&self.config, &self.macros, target)?;
 
         Ok(true)
     }

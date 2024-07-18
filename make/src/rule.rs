@@ -12,7 +12,12 @@ pub mod prerequisite;
 pub mod recipe;
 pub mod target;
 
-use std::{env, process::Command};
+use std::{
+    env,
+    fs::{File, FileTimes},
+    process::Command,
+    time::SystemTime,
+};
 
 use crate::{
     config::Config as GlobalConfig,
@@ -57,10 +62,20 @@ impl Rule {
         &self,
         global_config: &GlobalConfig,
         macros: &[VariableDefinition],
+        target: &Target,
     ) -> Result<(), ErrorCode> {
         let ignore = global_config.ignore || self.config.ignore;
         let dry_run = global_config.dry_run;
         let silent = global_config.silent || self.config.silent;
+
+        if global_config.touch {
+            if !global_config.silent {
+                println!("touch {target}");
+            }
+            let file = File::create(target.as_ref())?;
+            file.set_times(FileTimes::new().set_modified(SystemTime::now()))?;
+            return Ok(());
+        }
 
         for recipe in self.recipes() {
             // -n flag
