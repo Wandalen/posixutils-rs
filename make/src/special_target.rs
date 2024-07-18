@@ -10,6 +10,7 @@
 use core::fmt;
 
 use crate::{
+    error_code::ErrorCode,
     rule::{target::Target, Rule},
     Make,
 };
@@ -107,8 +108,10 @@ pub struct Processor<'make> {
     make: &'make mut Make,
 }
 
-pub fn process(rule: Rule, make: &mut Make) -> Result<(), Error> {
-    let target = rule.targets().next().unwrap().clone();
+pub fn process(rule: Rule, make: &mut Make) -> Result<(), ErrorCode> {
+    let Some(target) = rule.targets().next().cloned() else {
+        return Err(ErrorCode::NoTarget { target: None });
+    };
 
     let this = Processor { rule, make };
 
@@ -123,6 +126,10 @@ pub fn process(rule: Rule, make: &mut Make) -> Result<(), Error> {
         Silent => this.process_silent(),
         unsupported => Err(Error::NotSupported(unsupported)),
     }
+    .map_err(|err| ErrorCode::SpecialTargetConstraintNotFulfilled {
+        target: target.to_string(),
+        constraint: err,
+    })
 }
 
 /// This impl block contains modifiers for special targets

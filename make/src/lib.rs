@@ -178,7 +178,10 @@ impl TryFrom<(Makefile, Config)> for Make {
         let mut special_rules = vec![];
         for rule in makefile.rules() {
             let rule = Rule::from(rule);
-            if SpecialTarget::try_from(rule.targets().next().unwrap().clone()).is_ok() {
+            let Some(target) = rule.targets().next() else {
+                return Err(NoTarget { target: None });
+            };
+            if SpecialTarget::try_from(target.clone()).is_ok() {
                 special_rules.push(rule);
             } else {
                 rules.push(rule);
@@ -193,13 +196,7 @@ impl TryFrom<(Makefile, Config)> for Make {
         };
 
         for rule in special_rules {
-            let target = rule.targets().next().unwrap().to_string();
-            special_target::process(rule, &mut make).map_err(|err| {
-                ErrorCode::SpecialTargetConstraintNotFulfilled {
-                    target,
-                    constraint: err,
-                }
-            })?;
+            special_target::process(rule, &mut make)?;
         }
 
         Ok(make)
