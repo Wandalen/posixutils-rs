@@ -258,6 +258,24 @@ mod target_behavior {
     }
 }
 
+mod recipes {
+    use super::*;
+
+    mod prefixes {
+        use super::*;
+
+        #[test]
+        fn ignore() {
+            run_test_helper(
+                &["-f", "tests/makefiles/recipes/prefixes/ignore.mk"],
+                "exit 1\necho ignored\nignored\n",
+                "",
+                0,
+            );
+        }
+    }
+}
+
 mod special_targets {
     use posixutils_make::special_target;
 

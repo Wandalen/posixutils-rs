@@ -7,19 +7,52 @@
 // SPDX-License-Identifier: MIT
 //
 
+pub mod config;
+
 use core::fmt;
+
+use config::Config;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Prefix {
+    Ignore,
+    Silent,
+    Execute,
+}
+
+impl Prefix {
+    fn get_prefix(c: char) -> Option<Self> {
+        match c {
+            '-' => Some(Prefix::Ignore),
+            '@' => Some(Prefix::Silent),
+            '+' => Some(Prefix::Execute),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// A recipe for a rule.
 pub struct Recipe {
     inner: String,
+
+    pub config: Config,
 }
 
 impl Recipe {
     /// Creates a new recipe with the given inner recipe.
     pub fn new(inner: impl Into<String>) -> Self {
+        let mut inner = inner.into();
+        let prefix = inner.chars().next().and_then(Prefix::get_prefix);
+
+        // remove the prefix from the inner
+        if prefix.is_some() {
+            inner.remove(0);
+        }
+
         Recipe {
-            inner: inner.into(),
+            inner,
+            config: Config::from(prefix),
         }
     }
 
