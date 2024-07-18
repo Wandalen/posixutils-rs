@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         dry_run,
         silent,
         touch,
-        targets,
+        mut targets,
     } = Args::parse();
 
     let mut status_code = 0;
@@ -103,21 +103,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     if targets.is_empty() {
-        let _ = make.build_first_target().inspect_err(|err| {
-            eprintln!("make: {}", err);
-            status_code = err.into();
-        });
-    } else {
-        for target in targets {
-            let target = target.into_string().unwrap();
-            let _ = make.build_target(&target).inspect_err(|err| {
+        let target = make
+            .first_target()
+            .unwrap_or_else(|err| {
+                eprintln!("make: {err}");
+                process::exit(err.into());
+            })
+            .to_string()
+            .into();
+
+        targets.push(target);
+    }
+
+    for target in targets {
+        let target = target.into_string().unwrap();
+        match make.build_target(&target) {
+            Ok(updated) => {
+                if !updated {
+                    println!("make: `{target}` is up to date.");
+                }
+            }
+            Err(err) => {
                 eprintln!("make: {}", err);
                 status_code = err.into();
-            });
-
-            if status_code != 0 {
-                break;
             }
+        }
+
+        if status_code != 0 {
+            break;
         }
     }
 

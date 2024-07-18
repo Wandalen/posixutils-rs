@@ -45,22 +45,15 @@ impl Make {
     ///
     /// - `Some(rule)` if a rule with the target exists.
     /// - `None` if no rule with the target exists.
-    pub fn target_rule(&self, target: impl AsRef<str>) -> Option<&Rule> {
-        self.rules.iter().find(|rule| match rule.targets().next() {
-            Some(t) => t.as_ref() == target.as_ref(),
-            None => false,
-        })
+    fn rule_by_target_name(&self, target: impl AsRef<str>) -> Option<&Rule> {
+        self.rules
+            .iter()
+            .find(|rule| rule.targets().any(|t| t.as_ref() == target.as_ref()))
     }
 
-    /// Builds the first target in the makefile.
-    ///
-    /// # Returns
-    /// - `Ok(true)` if the target was built.
-    /// - `Ok(false)` if the target was already up to date.
-    /// - `Err(_)` if any errors occur.
-    pub fn build_first_target(&self) -> Result<bool, ErrorCode> {
+    pub fn first_target(&self) -> Result<&Target, ErrorCode> {
         let rule = self.rules.first().ok_or(NoTarget { target: None })?;
-        self.run_rule_with_prerequisites(rule)
+        rule.targets().next().ok_or(NoTarget { target: None })
     }
 
     /// Builds the target with the given name.
@@ -69,19 +62,21 @@ impl Make {
     /// - `Ok(true)` if the target was built.
     /// - `Ok(false)` if the target was already up to date.
     /// - `Err(_)` if any errors occur.
-    pub fn build_target(&self, target: impl AsRef<str>) -> Result<bool, ErrorCode> {
-        let rule = match self.target_rule(&target) {
+    pub fn build_target(&self, name: impl AsRef<str>) -> Result<bool, ErrorCode> {
+        let rule = match self.rule_by_target_name(&name) {
             Some(rule) => rule,
             None => match &self.default_rule {
                 Some(rule) => rule,
                 None => {
                     return Err(NoTarget {
-                        target: Some(target.as_ref().to_string()),
+                        target: Some(name.as_ref().to_string()),
                     })
                 }
             },
         };
-        self.run_rule_with_prerequisites(rule)
+        let target = Target::new(name.as_ref());
+
+        self.run_rule_with_prerequisites(rule, &target)
     }
 
     /// Runs the given rule.
@@ -90,10 +85,7 @@ impl Make {
     /// - Ok(`true`) if the rule was run.
     /// - Ok(`false`) if the rule was already up to date.
     /// - `Err(_)` if any errors occur.
-    fn run_rule_with_prerequisites(&self, rule: &Rule) -> Result<bool, ErrorCode> {
-        // TODO: there may be multiple targets in a rule
-        let target = rule.targets().next().unwrap();
-
+    fn run_rule_with_prerequisites(&self, rule: &Rule, target: &Target) -> Result<bool, ErrorCode> {
         if self.are_prerequisites_recursive(target) {
             return Err(RecursivePrerequisite {
                 origin: target.to_string(),
@@ -118,7 +110,7 @@ impl Make {
     /// Recursively checks the prerequisites of the prerequisites.
     /// Returns an empty vector if the target does not exist (or it's a file).
     fn get_newer_prerequisites(&self, target: impl AsRef<str>) -> Vec<&Prerequisite> {
-        let Some(target_rule) = self.target_rule(&target) else {
+        let Some(target_rule) = self.rule_by_target_name(&target) else {
             return vec![];
         };
         let target_modified = get_modified_time(target);
@@ -158,7 +150,7 @@ impl Make {
         visited: &mut HashSet<&str>,
         stack: &mut HashSet<&str>,
     ) -> bool {
-        let Some(rule) = self.target_rule(target) else {
+        let Some(rule) = self.rule_by_target_name(target) else {
             return false;
         };
 
