@@ -27,6 +27,7 @@ use crate::{
 use config::Config;
 use makefile_lossless::{Rule as ParsedRule, VariableDefinition};
 use prerequisite::Prerequisite;
+use recipe::config::Config as RecipeConfig;
 use recipe::Recipe;
 use target::Target;
 
@@ -64,27 +65,41 @@ impl Rule {
         macros: &[VariableDefinition],
         target: &Target,
     ) -> Result<(), ErrorCode> {
-        let ignore = global_config.ignore || self.config.ignore;
-        let dry_run = global_config.dry_run;
-        let silent = global_config.silent || self.config.silent;
-
-        if global_config.touch {
-            if !global_config.silent {
-                println!("touch {target}");
-            }
-            let file = File::create(target.as_ref())?;
-            file.set_times(FileTimes::new().set_modified(SystemTime::now()))?;
-            return Ok(());
-        }
+        let GlobalConfig {
+            ignore: global_ignore,
+            dry_run: global_dry_run,
+            silent: global_silent,
+            touch: global_touch,
+        } = *global_config;
+        let Config {
+            ignore: rule_ignore,
+            silent: rule_silent,
+        } = self.config;
 
         for recipe in self.recipes() {
-            let ignore = ignore || recipe.config.ignore;
-            let silent = silent || recipe.config.silent;
+            let RecipeConfig {
+                ignore: recipe_ignore,
+                silent: recipe_silent,
+                force_run: recipe_force_run,
+            } = recipe.config;
 
-            // -n flag
-            if dry_run {
-                println!("{}", recipe);
-                continue;
+            let ignore = global_ignore || rule_ignore || recipe_ignore;
+            let dry_run = global_dry_run;
+            let silent = global_silent || rule_silent || recipe_silent;
+            let force_run = recipe_force_run;
+            let touch = global_touch;
+
+            if !force_run {
+                // -n flag
+                if dry_run {
+                    println!("{}", recipe);
+                    continue;
+                }
+
+                // -t flag
+                if touch {
+                    continue;
+                }
             }
 
             // -s flag
@@ -117,6 +132,19 @@ impl Rule {
                     exit_code: status.code(),
                 });
             }
+        }
+
+        let silent = global_silent || rule_silent;
+        let touch = global_touch;
+
+        // -t flag
+        if touch {
+            if !silent {
+                println!("touch {target}");
+            }
+            let file = File::create(target.as_ref())?;
+            file.set_times(FileTimes::new().set_modified(SystemTime::now()))?;
+            return Ok(());
         }
 
         Ok(())

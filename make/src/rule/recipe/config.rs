@@ -9,6 +9,8 @@ pub struct Config {
     pub ignore: bool,
     /// Whether the recipe should be silent.
     pub silent: bool,
+    /// Whether the recipe should be forced to run even with -n, -t options
+    pub force_run: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -17,6 +19,7 @@ impl Default for Config {
         Config {
             ignore: false,
             silent: false,
+            force_run: false,
         }
     }
 }
@@ -25,15 +28,20 @@ impl From<HashSet<Prefix>> for Config {
     fn from(prefixes: HashSet<Prefix>) -> Self {
         let mut ignore = false;
         let mut silent = false;
+        let mut force_run = false;
 
         for prefix in prefixes {
             match prefix {
                 Prefix::Ignore => ignore = true,
                 Prefix::Silent => silent = true,
-                Prefix::Execute => todo!(),
+                Prefix::ForceRun => force_run = true,
             }
         }
 
-        Self { ignore, silent }
+        Self {
+            ignore,
+            silent,
+            force_run,
+        }
     }
 }

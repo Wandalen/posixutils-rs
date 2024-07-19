@@ -7,6 +7,8 @@
 // SPDX-License-Identifier: MIT
 //
 
+use std::fs;
+
 use plib::{run_test, TestPlan};
 use posixutils_make::error_code::ErrorCode;
 
@@ -42,8 +44,6 @@ fn run_test_helper_with_setup_and_destruct(
 }
 
 mod arguments {
-    use std::fs;
-
     use super::*;
 
     #[test]
@@ -172,8 +172,6 @@ mod macros {
 }
 
 mod target_behavior {
-    use std::fs;
-
     use super::*;
 
     #[test]
@@ -279,6 +277,54 @@ mod recipes {
             run_test_helper(
                 &["-f", "tests/makefiles/recipes/prefixes/silent.mk"],
                 "silent\n",
+                "",
+                0,
+            );
+        }
+
+        mod force_run {
+            use super::*;
+
+            #[test]
+            fn with_dry_run() {
+                run_test_helper(
+                    &[
+                        "-snf",
+                        "tests/makefiles/recipes/prefixes/force_run/with_dry_run.mk",
+                    ],
+                    "I am NOT skipped\n",
+                    "",
+                    0,
+                );
+            }
+
+            #[test]
+            fn with_touch() {
+                let remove_touches = || {
+                    let _ = fs::remove_file(
+                        "tests/makefiles/recipes/prefixes/force_run/with_touch/rule",
+                    );
+                };
+
+                run_test_helper_with_setup_and_destruct(
+                    &[
+                        "-stC",
+                        "tests/makefiles/recipes/prefixes/force_run/with_touch",
+                    ],
+                    "I am NOT skipped\n",
+                    "",
+                    0,
+                    remove_touches,
+                    remove_touches,
+                );
+            }
+        }
+
+        #[test]
+        fn multiple() {
+            run_test_helper(
+                &["-f", "tests/makefiles/recipes/prefixes/multiple.mk"],
+                "ignored\n",
                 "",
                 0,
             );

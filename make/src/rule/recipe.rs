@@ -18,7 +18,7 @@ use config::Config;
 enum Prefix {
     Ignore,
     Silent,
-    Execute,
+    ForceRun,
 }
 
 impl Prefix {
@@ -26,7 +26,7 @@ impl Prefix {
         match c {
             '-' => Some(Prefix::Ignore),
             '@' => Some(Prefix::Silent),
-            '+' => Some(Prefix::Execute),
+            '+' => Some(Prefix::ForceRun),
             _ => None,
         }
     }
