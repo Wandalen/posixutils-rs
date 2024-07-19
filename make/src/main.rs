@@ -12,6 +12,7 @@ use std::{
     env,
     ffi::OsString,
     fs,
+    io::{self, Read},
     path::{Path, PathBuf},
     process,
 };
@@ -161,10 +162,14 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, ErrorCode>
         }
     };
 
-    let contents = match fs::read_to_string(path) {
-        Ok(contents) => contents,
-        Err(err) => {
-            return Err(IoError(err.kind()));
+    let contents = if path == Path::new("-") {
+        read_stdin()?
+    } else {
+        match fs::read_to_string(path) {
+            Ok(contents) => contents,
+            Err(err) => {
+                return Err(IoError(err.kind()));
+            }
         }
     };
 
@@ -172,4 +177,11 @@ fn parse_makefile(path: Option<impl AsRef<Path>>) -> Result<Makefile, ErrorCode>
         Ok(makefile) => Ok(makefile),
         Err(err) => Err(ParseError(err.to_string())),
     }
+}
+
+/// Reads the makefile from `stdin` until EOF (Ctrl + D)
+fn read_stdin() -> Result<String, ErrorCode> {
+    let mut buffer = String::new();
+    io::stdin().read_to_string(&mut buffer)?;
+    Ok(buffer)
 }

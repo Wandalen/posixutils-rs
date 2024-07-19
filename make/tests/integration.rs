@@ -30,6 +30,25 @@ fn run_test_helper(
     });
 }
 
+fn run_test_with_stdin_helper(
+    args: &[&str],
+    stdin_data: &str,
+    expected_output: &str,
+    expected_error: &str,
+    expected_exit_code: i32,
+) {
+    let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+
+    run_test(TestPlan {
+        cmd: String::from("make"),
+        args: str_args,
+        stdin_data: String::from(stdin_data),
+        expected_out: String::from(expected_output),
+        expected_err: String::from(expected_error),
+        expected_exit_code,
+    });
+}
+
 fn run_test_helper_with_setup_and_destruct(
     args: &[&str],
     expected_output: &str,
@@ -154,6 +173,17 @@ mod io {
             "make: io error: entity not found\n",
             ErrorCode::IoError(io::ErrorKind::NotFound).into(),
         );
+    }
+
+    #[test]
+    fn stdin() {
+        run_test_with_stdin_helper(
+            &["-sf", "-"],
+            "rule:\n\techo executed\n",
+            "executed\n",
+            "",
+            0,
+        )
     }
 }
 
