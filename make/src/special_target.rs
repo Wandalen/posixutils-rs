@@ -25,6 +25,7 @@ pub enum SpecialTarget {
     Silent,
     Suffixes,
 }
+use gettextrs::gettext;
 use SpecialTarget::*;
 
 impl SpecialTarget {
@@ -68,13 +69,22 @@ impl fmt::Display for Error {
 
         match self {
             MustNotHavePrerequisites => {
-                write!(f, "the special target must not have prerequisites")
+                write!(
+                    f,
+                    "{}",
+                    gettext("the special target must not have prerequisites"),
+                )
             }
             MustNotHaveRecipes => {
-                write!(f, "the special target must not have recipes")
+                write!(f, "{}", gettext("the special target must not have recipes"))
             }
             NotSupported(target) => {
-                write!(f, "the special target '{target}' is not supported")
+                write!(
+                    f,
+                    "{}: '{}'",
+                    gettext("the special target is not supported"),
+                    target,
+                )
             }
         }
     }
@@ -86,7 +96,7 @@ impl std::error::Error for Error {}
 pub struct ParseError;
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "parse error")
+        write!(f, "{}", gettext("parse error"))
     }
 }
 

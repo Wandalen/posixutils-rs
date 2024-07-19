@@ -10,6 +10,8 @@
 use core::fmt;
 use std::io;
 
+use gettextrs::gettext;
+
 use crate::special_target::Error;
 
 /// Represents the error codes that can be returned by the make utility
@@ -60,27 +62,40 @@ impl fmt::Display for ErrorCode {
         match self {
             ExecutionError { exit_code } => match exit_code {
                 Some(exit_code) => {
-                    write!(f, "execution error: {exit_code}")
+                    write!(f, "{}: {}", gettext("execution error"), exit_code)
                 }
                 None => {
-                    write!(f, "execution error: terminated by signal")
+                    write!(
+                        f,
+                        "{}: {}",
+                        gettext("execution error"),
+                        gettext("terminated by signal"),
+                    )
                 }
             },
-            IoError(err) => write!(f, "io error: {err}"),
-            NoMakefile => write!(f, "no makefile"),
-            ParseError(err) => write!(f, "parse error: {err}"),
+            IoError(err) => write!(f, "{}: {}", gettext("io error"), err),
+            NoMakefile => write!(f, "{}", gettext("no makefile")),
+            ParseError(err) => write!(f, "{}: {}", gettext("parse error"), err),
             NoTarget { target } => match target {
-                Some(target) => write!(f, "no target '{target}'"),
-                None => write!(f, "no targets to execute"),
+                Some(target) => write!(f, "{} '{}'", gettext("no target"), target),
+                None => write!(f, "{}", gettext("no targets to execute")),
             },
-            NoRule { rule: name } => write!(f, "no rule '{name}'"),
+            NoRule { rule } => write!(f, "{} '{}'", gettext("no rule"), rule),
             RecursivePrerequisite { origin } => {
-                write!(f, "recursive prerequisite found trying to build '{origin}'")
+                write!(
+                    f,
+                    "{} '{}'",
+                    gettext("recursive prerequisite found trying to build"),
+                    origin,
+                )
             }
             SpecialTargetConstraintNotFulfilled { target, constraint } => {
                 write!(
                     f,
-                    "'{target}' special target constraint is not fulfilled: {constraint}"
+                    "'{}' {}: {}",
+                    target,
+                    gettext("special target constraint is not fulfilled"),
+                    constraint,
                 )
             }
         }
