@@ -219,7 +219,7 @@ mod target_behavior {
         run_test_helper(
             &[
                 "-sC",
-                "tests/makefiles/target_behavior/makefile_priority/makefile",
+                "tests/makefiles/target_behavior/makefile_priority/little_makefile",
             ],
             "makefile\n",
             "",
@@ -229,7 +229,7 @@ mod target_behavior {
         run_test_helper(
             &[
                 "-sC",
-                "tests/makefiles/target_behavior/makefile_priority/Makefile",
+                "tests/makefiles/target_behavior/makefile_priority/big_Makefile",
             ],
             "Makefile\n",
             "",
