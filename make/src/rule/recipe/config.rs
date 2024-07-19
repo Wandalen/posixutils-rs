@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::Prefix;
 
 /// A recipe configuration.
@@ -5,27 +7,33 @@ use super::Prefix;
 pub struct Config {
     /// Whether the errors should be ignored.
     pub ignore: bool,
+    /// Whether the recipe should be silent.
+    pub silent: bool,
 }
 
 #[allow(clippy::derivable_impls)]
 impl Default for Config {
     fn default() -> Self {
-        Config { ignore: false }
+        Config {
+            ignore: false,
+            silent: false,
+        }
     }
 }
 
-impl From<Option<Prefix>> for Config {
-    fn from(prefix: Option<Prefix>) -> Self {
+impl From<HashSet<Prefix>> for Config {
+    fn from(prefixes: HashSet<Prefix>) -> Self {
         let mut ignore = false;
+        let mut silent = false;
 
-        if let Some(prefix) = prefix {
+        for prefix in prefixes {
             match prefix {
                 Prefix::Ignore => ignore = true,
-                Prefix::Silent => todo!(),
+                Prefix::Silent => silent = true,
                 Prefix::Execute => todo!(),
             }
         }
 
-        Self { ignore }
+        Self { ignore, silent }
     }
 }

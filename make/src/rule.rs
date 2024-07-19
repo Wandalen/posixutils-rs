@@ -79,6 +79,7 @@ impl Rule {
 
         for recipe in self.recipes() {
             let ignore = ignore || recipe.config.ignore;
+            let silent = silent || recipe.config.silent;
 
             // -n flag
             if dry_run {

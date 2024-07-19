@@ -273,6 +273,16 @@ mod recipes {
                 0,
             );
         }
+
+        #[test]
+        fn silent() {
+            run_test_helper(
+                &["-f", "tests/makefiles/recipes/prefixes/silent.mk"],
+                "silent\n",
+                "",
+                0,
+            );
+        }
     }
 }
 

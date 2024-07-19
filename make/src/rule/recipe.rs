@@ -10,6 +10,7 @@
 pub mod config;
 
 use core::fmt;
+use std::collections::HashSet;
 
 use config::Config;
 
@@ -43,16 +44,17 @@ impl Recipe {
     /// Creates a new recipe with the given inner recipe.
     pub fn new(inner: impl Into<String>) -> Self {
         let mut inner = inner.into();
-        let prefix = inner.chars().next().and_then(Prefix::get_prefix);
+        let prefixes = inner
+            .chars()
+            .map_while(Prefix::get_prefix)
+            .collect::<Vec<_>>();
 
-        // remove the prefix from the inner
-        if prefix.is_some() {
-            inner.remove(0);
-        }
+        // remove the prefix from the inner;
+        inner.replace_range(..prefixes.len(), "");
 
         Recipe {
             inner,
-            config: Config::from(prefix),
+            config: Config::from(prefixes.into_iter().collect::<HashSet<_>>()),
         }
     }
 
