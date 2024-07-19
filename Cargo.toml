@@ -13,6 +13,7 @@ members = [
 	"pathnames",
 	"plib",
 	"process",
+	"sccs",
 	"screen",
 	"sys",
 	"text",
