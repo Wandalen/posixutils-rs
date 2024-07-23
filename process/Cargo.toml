@@ -16,6 +16,10 @@ errno = "0.3"
 dirs = "5.0"
 
 [[bin]]
+name = "fuser"
+path = "./fuser.rs"
+
+[[bin]]
 name = "env"
 path = "./env.rs"
 
