@@ -19,7 +19,7 @@ use std::{error::Error, time::Duration};
 const DEFAULT_ERROR_EXIT_STATUS: i32 = 125;
 
 #[cfg(target_os = "macos")]
-const SIGLIST: [(&str, u32); 31] = [
+const SIGLIST: [(&str, i32); 31] = [
     ("HUP", 1),
     ("INT", 2),
     ("QUIT", 3),
@@ -54,7 +54,7 @@ const SIGLIST: [(&str, u32); 31] = [
 ];
 
 #[cfg(target_os = "linux")]
-const SIGLIST: [(&str, u32); 32] = [
+const SIGLIST: [(&str, i32); 32] = [
     ("HUP", 1),
     ("INT", 2),
     ("QUIT", 3),
@@ -110,7 +110,7 @@ struct Args {
     /// Specify the signal to send when the time limit is reached, using one of the symbolic names defined in the <signal.h> header.
     /// Values of signal_name shall be recognized in a case-independent fashion, without the SIG prefix. By default, SIGTERM shall be sent.
     #[arg(short = 's', long, default_value = "TERM", value_parser = parse_signal)]
-    signal: u32,
+    signal: i32,
 
     /// The maximum amount of time to allow the utility to run, specified as a decimal number with an optional decimal fraction and an optional suffix.
     #[arg(name = "DURATION", value_parser = parse_duration)]
@@ -169,7 +169,7 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 /// # Returns
 ///
 /// Returns the integer value of the signal.
-fn parse_signal(s: &str) -> Result<u32, String> {
+fn parse_signal(s: &str) -> Result<i32, String> {
     let signal = s.to_uppercase();
 
     let sig_num = SIGLIST
@@ -185,7 +185,7 @@ fn parse_signal(s: &str) -> Result<u32, String> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // parse command line arguments
-    let _args = Args::try_parse().unwrap_or_else(|err| match err.kind() {
+    let args = Args::try_parse().unwrap_or_else(|err| match err.kind() {
         clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
             print!("{err}");
             std::process::exit(0);
