@@ -1,14 +1,23 @@
+//
+// Copyright (c) 2024 Hemi Labs, Inc.
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
+
+use std::env;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::io::{self, Write};
 
-use clap::{Parser, Arg};
+use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use plib::PROJECT_NAME;
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[derive(Debug)]
 struct Args {
     /// Write timing output to standard error in POSIX format
-    #[arg(short, long)]
     posix: bool,
 
     /// The utility to be invoked
@@ -18,10 +27,60 @@ struct Args {
     arguments: Vec<String>,
 }
 
+fn parse() -> Args {
+    // Get the command line arguments
+    let args: Vec<String> = env::args().skip(1).collect();
+
+    // Initialize the default values
+    let mut posix = false;
+    let mut utility = String::new();
+    let mut arguments = Vec::new();
+    let mut utility_found = false;
+
+    // Parse arguments
+    for arg in args {
+        if !utility_found {
+            if arg == "-p" {
+                posix = true;
+            } else {
+                utility = arg;
+                utility_found = true;
+            }
+        } else {
+            arguments.push(arg);
+        }
+    }
+
+    // Create the Args struct
+    let parsed_args = Args {
+        posix,
+        utility,
+        arguments,
+    };
+
+    parsed_args
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+    // parse command line arguments
+    let args = parse();
+
+    setlocale(LocaleCategory::LcAll, "");
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
     let start_time = Instant::now();
+    // SAFETY: std::mem::zeroed() is used to create an instance of libc::tms with all fields set to zero.
+    // This is safe here because libc::tms is a Plain Old Data type, and zero is a valid value for all its fields.
+    let mut tms_start: libc::tms = unsafe { std::mem::zeroed() };
+    // SAFETY: sysconf is a POSIX function that returns the number of clock ticks per second.
+    // It is safe to call because it does not modify any memory and has no side effects.
+    let clock_ticks_per_second = unsafe { libc::sysconf(libc::_SC_CLK_TCK) as f64 };
+
+    // SAFETY: times is a POSIX function that fills the provided tms structure with time-accounting information.
+    // It is safe to call because we have correctly allocated and initialized tms_start, and the function
+    // only writes to this structure.
+    unsafe { libc::times(&mut tms_start) };
 
     let mut child = Command::new(&args.utility)
         .args(args.arguments)
@@ -31,8 +90,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let status = child.wait()?;
 
     let elapsed = start_time.elapsed();
-    let user_time = 0.0; 
-    let system_time = 0.0;
+    let tms_end: libc::tms = unsafe { std::mem::zeroed() };
+
+    let user_time = (tms_start.tms_utime - tms_end.tms_utime) as f64 / clock_ticks_per_second;
+    let system_time = (tms_start.tms_stime - tms_end.tms_stime) as f64 / clock_ticks_per_second;
 
     if args.posix {
         writeln!(
