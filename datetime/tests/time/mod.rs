@@ -65,6 +65,7 @@ fn run_test_time(
     });
 
     let stderr = String::from_utf8_lossy(&output.stderr);
+
     assert!(stderr.contains(expected_error));
 }
 
@@ -76,4 +77,14 @@ fn simple_test() {
 #[test]
 fn p_test() {
     run_test_time(&["-p", "ls", "-l"], "", "user", 0);
+}
+
+#[test]
+fn parse_error_test() {
+    run_test_time(&[], "", "No arguments provided", 0);
+}
+
+#[test]
+fn command_error_test() {
+    run_test_time(&["-s", "ls", "-l"], "", "Command not found", 0);
 }

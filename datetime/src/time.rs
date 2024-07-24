@@ -27,9 +27,13 @@ struct Args {
     arguments: Vec<String>,
 }
 
-fn parse() -> Args {
+fn parse() -> Result<Args, Box<dyn std::error::Error>> {
     // Get the command line arguments
     let args: Vec<String> = env::args().skip(1).collect();
+
+    if args.is_empty() {
+        return Err(format!("No arguments provided").into());
+    }
 
     // Initialize the default values
     let mut posix = false;
@@ -58,17 +62,10 @@ fn parse() -> Args {
         arguments,
     };
 
-    parsed_args
+    Ok(parsed_args)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // parse command line arguments
-    let args = parse();
-
-    setlocale(LocaleCategory::LcAll, "");
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
-
+fn time(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
     // SAFETY: std::mem::zeroed() is used to create an instance of libc::tms with all fields set to zero.
     // This is safe here because libc::tms is a Plain Old Data type, and zero is a valid value for all its fields.
@@ -85,7 +82,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut child = Command::new(&args.utility)
         .args(args.arguments)
         .stderr(Stdio::piped())
-        .spawn()?;
+        .spawn()
+        .map_err(|_| format!("Command not found: {}", args.utility))?;
 
     let status = child.wait()?;
 
@@ -114,4 +112,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(status.code().unwrap_or(1));
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // parse command line arguments
+    let args = parse()?;
+
+    setlocale(LocaleCategory::LcAll, "");
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+
+    time(args)?;
+
+    Ok(())
 }
