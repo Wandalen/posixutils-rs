@@ -7,62 +7,28 @@
 // SPDX-License-Identifier: MIT
 //
 
-use std::env;
 use std::process::{Command, Stdio};
 use std::time::Instant;
 use std::io::{self, Write};
 
+use clap::Parser;
+
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 
-#[derive(Debug)]
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
 struct Args {
     /// Write timing output to standard error in POSIX format
+    #[arg(short, long)]
     posix: bool,
 
     /// The utility to be invoked
     utility: String,
 
     /// Arguments for the utility
+    #[arg(name = "ARGUMENT", trailing_var_arg = true)]
     arguments: Vec<String>,
-}
-
-fn parse() -> Result<Args, Box<dyn std::error::Error>> {
-    // Get the command line arguments
-    let args: Vec<String> = env::args().skip(1).collect();
-
-    if args.is_empty() {
-        return Err(format!("No arguments provided").into());
-    }
-
-    // Initialize the default values
-    let mut posix = false;
-    let mut utility = String::new();
-    let mut arguments = Vec::new();
-    let mut utility_found = false;
-
-    // Parse arguments
-    for arg in args {
-        if !utility_found {
-            if arg == "-p" {
-                posix = true;
-            } else {
-                utility = arg;
-                utility_found = true;
-            }
-        } else {
-            arguments.push(arg);
-        }
-    }
-
-    // Create the Args struct
-    let parsed_args = Args {
-        posix,
-        utility,
-        arguments,
-    };
-
-    Ok(parsed_args)
 }
 
 enum TimeError {
@@ -148,14 +114,7 @@ impl Status {
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {   
-    // parse command line arguments
-    let args = match parse() {
-        Ok(res) => res,
-        Err(err) => {
-            eprintln!("{}", err);
-            Status::TimeError.exit()
-        }
-    };
+    let args = Args::parse();
 
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;

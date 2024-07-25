@@ -71,20 +71,20 @@ fn run_test_time(
 
 #[test]
 fn simple_test() {
-    run_test_time(&["ls", "-l"], "", "User time", 0);
+    run_test_time(&["--", "ls", "-l"], "", "User time", 0);
 }
 
 #[test]
 fn p_test() {
-    run_test_time(&["-p", "ls", "-l"], "", "user", 0);
+    run_test_time(&["-p", "--", "ls", "-l"], "", "user", 0);
 }
 
 #[test]
 fn parse_error_test() {
-    run_test_time(&[], "", "No arguments provided", 0);
+    run_test_time(&[], "", "not provided", 0);
 }
 
 #[test]
 fn command_error_test() {
-    run_test_time(&["-s", "ls", "-l"], "", "Command not found", 0);
+    run_test_time(&["-s", "ls", "-l"], "", "unexpected argument found", 0);
 }
