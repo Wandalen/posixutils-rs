@@ -204,12 +204,12 @@ impl Display for TimeoutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TimeoutError::TimeoutReached => write!(f, ""),
-            TimeoutError::Other(msg) => write!(f, "Error: {}", msg),
+            TimeoutError::Other(msg) => write!(f, "Error: {}\n", msg),
             TimeoutError::UnableToRunUtility(utility) => {
-                write!(f, "Error: unable to run the utility '{utility}'")
+                write!(f, "Error: unable to run the utility '{utility}'\n")
             }
             TimeoutError::UtilityNotFound(utility) => {
-                write!(f, "Error: utility '{utility}' not found")
+                write!(f, "Error: utility '{utility}' not found\n")
             }
         }
     }
@@ -255,7 +255,7 @@ fn run_command(args: Args) -> Result<i32, TimeoutError> {
     });
 
     if duration.is_zero() {
-        println!("Waiting without timeout");
+        // println!("Waiting without timeout");
         match rx.recv() {
             Ok(status_res) => Ok(status_res
                 .map_err(|e| TimeoutError::Other(e.to_string()))?
@@ -264,7 +264,7 @@ fn run_command(args: Args) -> Result<i32, TimeoutError> {
             Err(err) => Err(TimeoutError::Other(err.to_string())),
         }
     } else {
-        println!("Waiting with timeout");
+        // println!("Waiting with timeout");
         match rx.recv_timeout(duration) {
             Ok(status_res) => Ok(status_res
                 .map_err(|e| TimeoutError::Other(e.to_string()))?
@@ -318,7 +318,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let exit_code = match run_command(args) {
         Ok(exit_status) => exit_status,
         Err(err) => {
-            eprintln!("{err}");
+            eprint!("{err}");
             err.into()
         }
     };
