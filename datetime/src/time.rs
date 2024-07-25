@@ -66,8 +66,9 @@ fn parse() -> Result<Args, Box<dyn std::error::Error>> {
 }
 
 enum TimeError {
-    ExecCommand(String),
+    ExecCommand,
     ExecTime,
+    CommandNotFound(String),
 }
 
 fn time(args: Args) -> Result<(), TimeError> {
@@ -89,7 +90,12 @@ fn time(args: Args) -> Result<(), TimeError> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|_| TimeError::ExecCommand(args.utility))?;
+        .map_err(|e| {
+            match e.kind() {
+                io::ErrorKind::NotFound => TimeError::CommandNotFound(args.utility),
+                _ => TimeError::ExecCommand,
+            }
+        })?;
 
     let _ = child.wait().map_err(|_| TimeError::ExecTime)?;
 
@@ -147,7 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(res) => res,
         Err(err) => {
             eprintln!("{}", err);
-            Status::UtilNotFound.exit()
+            Status::TimeError.exit()
         }
     };
 
@@ -157,10 +163,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(err) = time(args) {
         match err {
-            TimeError::ExecCommand(err) => {
+            TimeError::CommandNotFound(err) => {
                 eprintln!("Command not found: {}", err);
-                Status::UtilError.exit()
+                Status::UtilNotFound.exit()
             },
+            TimeError::ExecCommand => {
+                Status::UtilError.exit()
+            }
             TimeError::ExecTime => {
                 Status::TimeError.exit()
             },
