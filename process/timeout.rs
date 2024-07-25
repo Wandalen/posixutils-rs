@@ -14,7 +14,14 @@ extern crate plib;
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
-use std::{error::Error, time::Duration};
+use std::{
+    error::Error,
+    fmt::{self, Display},
+    process::Command,
+    sync::mpsc::{self, channel},
+    thread,
+    time::Duration,
+};
 
 const DEFAULT_ERROR_EXIT_STATUS: i32 = 125;
 
@@ -183,6 +190,110 @@ fn parse_signal(s: &str) -> Result<i32, String> {
     }
 }
 
+#[derive(Debug)]
+enum TimeoutError {
+    TimeoutReached,
+    Other(String),
+    UnableToRunUtility(String),
+    UtilityNotFound(String),
+}
+
+impl Error for TimeoutError {}
+
+impl Display for TimeoutError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TimeoutError::TimeoutReached => write!(f, ""),
+            TimeoutError::Other(msg) => write!(f, "Error: {}", msg),
+            TimeoutError::UnableToRunUtility(utility) => {
+                write!(f, "Error: unable to run the utility '{utility}'")
+            }
+            TimeoutError::UtilityNotFound(utility) => {
+                write!(f, "Error: utility '{utility}' not found")
+            }
+        }
+    }
+}
+
+impl From<TimeoutError> for i32 {
+    fn from(error: TimeoutError) -> Self {
+        match error {
+            TimeoutError::TimeoutReached => 124,
+            TimeoutError::Other(_) => DEFAULT_ERROR_EXIT_STATUS,
+            TimeoutError::UnableToRunUtility(_) => 126,
+            TimeoutError::UtilityNotFound(_) => 127,
+        }
+    }
+}
+
+fn run_command(args: Args) -> Result<i32, TimeoutError> {
+    let Args {
+        kill_after,
+        signal,
+        duration,
+        utility,
+        arguments,
+        ..
+    } = args;
+
+    let mut child = Command::new(&utility)
+        .args(arguments)
+        .spawn()
+        .map_err(|err| match err.kind() {
+            std::io::ErrorKind::NotFound => TimeoutError::UtilityNotFound(utility),
+            std::io::ErrorKind::PermissionDenied => TimeoutError::UnableToRunUtility(utility),
+            _ => TimeoutError::Other(err.to_string()),
+        })?;
+    let pid = child.id();
+
+    let (tx, rx) = channel();
+
+    thread::spawn(move || {
+        let status = child.wait();
+        tx.send(status)
+            .expect("Failed to send child process status");
+    });
+
+    if duration.is_zero() {
+        println!("Waiting without timeout");
+        match rx.recv() {
+            Ok(status_res) => Ok(status_res
+                .map_err(|e| TimeoutError::Other(e.to_string()))?
+                .code()
+                .unwrap_or(-1)),
+            Err(err) => Err(TimeoutError::Other(err.to_string())),
+        }
+    } else {
+        println!("Waiting with timeout");
+        match rx.recv_timeout(duration) {
+            Ok(status_res) => Ok(status_res
+                .map_err(|e| TimeoutError::Other(e.to_string()))?
+                .code()
+                .unwrap_or(-1)),
+            Err(err) => {
+                match err {
+                    mpsc::RecvTimeoutError::Timeout => {
+                        // Sending first signal
+                        unsafe { libc::kill(pid as libc::pid_t, signal) };
+
+                        if let Some(kill_after_duration) = kill_after {
+                            if rx.recv_timeout(kill_after_duration).is_err() {
+                                // Sending second kill signal
+                                unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+                            }
+                        }
+
+                        Err(TimeoutError::TimeoutReached)
+                    }
+                    mpsc::RecvTimeoutError::Disconnected => {
+                        Err(TimeoutError::Other(err.to_string()))
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // parse command line arguments
     let args = Args::try_parse().unwrap_or_else(|err| match err.kind() {
@@ -204,7 +315,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    // println!("{_args:?}");
+    let exit_code = match run_command(args) {
+        Ok(exit_status) => exit_status,
+        Err(err) => {
+            eprintln!("{err}");
+            err.into()
+        }
+    };
 
-    Ok(())
+    std::process::exit(exit_code);
 }
