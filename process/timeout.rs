@@ -128,7 +128,7 @@ struct Args {
     utility: String,
 
     /// Any string to be supplied as an argument when executing the utility named by the utility operand.
-    #[arg(name = "ARGUMENT")]
+    #[arg(name = "ARGUMENT", trailing_var_arg = true)]
     arguments: Vec<String>,
 }
 
