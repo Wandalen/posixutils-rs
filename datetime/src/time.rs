@@ -65,7 +65,12 @@ fn parse() -> Result<Args, Box<dyn std::error::Error>> {
     Ok(parsed_args)
 }
 
-fn time(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+enum TimeError {
+    ExecCommand(String),
+    ExecTime,
+}
+
+fn time(args: Args) -> Result<(), TimeError> {
     let start_time = Instant::now();
     // SAFETY: std::mem::zeroed() is used to create an instance of libc::tms with all fields set to zero.
     // This is safe here because libc::tms is a Plain Old Data type, and zero is a valid value for all its fields.
@@ -81,11 +86,12 @@ fn time(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut child = Command::new(&args.utility)
         .args(args.arguments)
-        .stderr(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|_| format!("Command not found: {}", args.utility))?;
+        .map_err(|_| TimeError::ExecCommand(args.utility))?;
 
-    let status = child.wait()?;
+    let _ = child.wait().map_err(|_| TimeError::ExecTime)?;
 
     let elapsed = start_time.elapsed();
     let tms_end: libc::tms = unsafe { std::mem::zeroed() };
@@ -100,7 +106,7 @@ fn time(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             elapsed.as_secs_f64(),
             user_time,
             system_time
-        )?;
+        ).map_err(|_| TimeError::ExecTime)?;
     } else {
         writeln!(
             io::stderr(),
@@ -108,21 +114,58 @@ fn time(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             elapsed.as_secs_f64(),
             user_time,
             system_time
-        )?;
+        ).map_err(|_| TimeError::ExecTime)?;
     }
 
-    std::process::exit(status.code().unwrap_or(1));
+    Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+enum Status {
+    Ok,
+    TimeError,
+    UtilError,
+    UtilNotFound,
+}
+
+impl Status {
+    fn exit(self) -> ! {
+        let res = match self {
+            Status::Ok => 0,
+            Status::TimeError => 1,
+            Status::UtilError => 126,
+            Status::UtilNotFound => 127,
+        };
+
+        std::process::exit(res)
+    }
+}
+
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {   
     // parse command line arguments
-    let args = parse()?;
+    let args = match parse() {
+        Ok(res) => res,
+        Err(err) => {
+            eprintln!("{}", err);
+            Status::UtilNotFound.exit()
+        }
+    };
 
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    time(args)?;
+    if let Err(err) = time(args) {
+        match err {
+            TimeError::ExecCommand(err) => {
+                eprintln!("Command not found: {}", err);
+                Status::UtilError.exit()
+            },
+            TimeError::ExecTime => {
+                Status::TimeError.exit()
+            },
+        }
+    }
 
-    Ok(())
+    Status::Ok.exit()
 }
