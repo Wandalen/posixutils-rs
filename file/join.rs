@@ -1,3 +1,12 @@
+//
+// Copyright (c) 2024 Hemi Labs, Inc.
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
+
 extern crate clap;
 extern crate gettextrs;
 extern crate walkdir;
@@ -31,13 +40,17 @@ struct Args {
     #[arg(short, long, default_value_t = ' ')]
     t: char,
 
-    /// Join on the specified field of file 1
+    /// Output only unpairable lines from file_number
     #[arg(short, long)]
-    field1: Option<usize>,
+    v: Option<u8>,
+
+    /// Join on the specified field of file 1
+    #[arg(short = '1', long, default_value_t = 1)]
+    field1: usize,
 
     /// Join on the specified field of file 2
-    #[arg(short, long)]
-    field2: Option<usize>,
+    #[arg(short = '2', long, default_value_t = 1)]
+    field2: usize,
 
     /// File 1
     file1: PathBuf,
@@ -68,17 +81,25 @@ fn perform_join(
     a: Option<u8>,
     e: String,
     o: String,
+    v: Option<u8>,
 ) {
     let mut map: HashMap<String, Vec<Vec<String>>> = HashMap::new();
+
+    if field1 == 0 || field2 == 0 {
+        // error
+    }
 
     for line in &file1 {
         let key = line[field1 - 1].clone();
         map.entry(key).or_insert_with(Vec::new).push(line.clone());
     }
 
+    let mut matched: HashMap<String, bool> = HashMap::new();
+
     for line in &file2 {
         let key = line[field2 - 1].clone();
         if let Some(matches) = map.get_mut(&key) {
+            matched.insert(key.clone(), true);
             for l in matches.iter_mut() {
                 let mut output = vec![l[field1 - 1].clone()];
                 output.extend_from_slice(&l[1..]);
@@ -103,23 +124,21 @@ fn perform_join(
             }
         }
     }
+
+    if v.unwrap_or(0) == 1 {
+        for line in &file1 {
+            let key = line[field1 - 1].clone();
+            if !matched.contains_key(&key) {
+                println!("{}", line.join(" "));
+            }
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    //let args = Args::parse();
+    let args = Args::parse();
 
-    let args = Args {
-        a: None,
-        e: "".to_string(),
-        o: "0".to_string(),
-        t: ' ',
-        field1: Some(1),
-        field2: Some(1),
-        file1: "file1.txt".into(),
-        file2: "file2.txt".into(),
-    };
-
-    //dbg!(&args);
+    dbg!(&args);
 
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
@@ -128,10 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file1 = read_file_lines(&args.file1, args.t);
     let file2 = read_file_lines(&args.file2, args.t);
 
-    let field1 = args.field1.expect("Field for file 1 is required");
-    let field2 = args.field2.expect("Field for file 2 is required");
-
-    perform_join(file1, file2, field1, field2, args.a, args.e, args.o);
+    perform_join(file1, file2, args.field1, args.field2, args.a, args.e, args.o, args.v);
 
     Ok(())
 }
