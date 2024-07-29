@@ -8,22 +8,21 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::{close, fstat, socket, AF_INET, SOCK_DGRAM};
 use plib::PROJECT_NAME;
 use std::{
-    collections::HashMap,
-    default, env,
+    env,
     ffi::CString,
     fs::{self, File},
-    io::{self, BufRead, Write},
+    io::{self, BufRead},
     path::{Component, Path, PathBuf},
     sync::mpsc,
     thread,
     time::Duration,
 };
 
-const PROC_MOUNTS: &'static str = "/proc/mounts";
 const PROC_PATH: &'static str = "/proc";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq)]
 enum ProcType {
+    #[default]
     Normal = 0,
     Mount = 1,
     Knfsd = 2,
@@ -37,7 +36,7 @@ enum Namespace {
     Udp = 2,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 enum Access {
     Cwd = 1,
     Exe = 2,
@@ -53,7 +52,7 @@ struct Procs {
     pid: i32,
     uid: u32,
     access: Access,
-    proc_type: i8,
+    proc_type: ProcType,
     username: Option<i8>,
     command: Option<i8>,
     next: Option<Box<Procs>>,
@@ -65,7 +64,7 @@ impl Procs {
             pid,
             uid,
             access,
-            proc_type: proc_type as i8,
+            proc_type,
             username: None,
             command: None,
             next: None,
@@ -75,7 +74,7 @@ impl Procs {
 
 #[derive(Debug, Default, Clone)]
 struct UnixSocketList {
-    sun_name: i8,
+    name: String,
     device_id: u64,
     inode: u64,
     net_inode: u64,
@@ -83,14 +82,47 @@ struct UnixSocketList {
 }
 
 impl UnixSocketList {
-    fn new(sun_name: i8, device_id: u64, inode: u64, net_inode: u64) -> Self {
+    fn new(name: String, device_id: u64, inode: u64, net_inode: u64) -> Self {
         UnixSocketList {
-            sun_name,
+            name,
             device_id,
             inode,
             net_inode,
             next: None,
         }
+    }
+
+    fn add_socket(&mut self, name: String, device_id: u64, inode: u64, net_inode: u64) {
+        let new_node = Box::new(UnixSocketList {
+            name,
+            device_id,
+            net_inode,
+            inode,
+            next: self.next.take(),
+        });
+
+        self.next = Some(new_node);
+    }
+
+    fn iter(&self) -> UnixSocketListIterator {
+        UnixSocketListIterator {
+            current: Some(self),
+        }
+    }
+}
+
+struct UnixSocketListIterator<'a> {
+    current: Option<&'a UnixSocketList>,
+}
+
+impl<'a> Iterator for UnixSocketListIterator<'a> {
+    type Item = &'a UnixSocketList;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.current.map(|node| {
+            self.current = node.next.as_deref();
+            node
+        })
     }
 }
 
@@ -121,6 +153,27 @@ impl InodeList {
         });
 
         self.next = Some(new_node);
+    }
+
+    fn iter(&self) -> InodeListIterator {
+        InodeListIterator {
+            current: Some(self),
+        }
+    }
+}
+
+struct InodeListIterator<'a> {
+    current: Option<&'a InodeList>,
+}
+
+impl<'a> Iterator for InodeListIterator<'a> {
+    type Item = &'a InodeList;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.current.map(|node| {
+            self.current = node.next.as_deref();
+            node
+        })
     }
 }
 
@@ -174,6 +227,9 @@ impl Names {
         }
     }
 
+    fn add_procs(&mut self, proc: Procs) {
+        self.matched_procs.push(proc);
+    }
     fn iter(&self) -> NamesIterator {
         NamesIterator {
             current: Some(self),
@@ -187,54 +243,6 @@ struct NamesIterator<'a> {
 
 impl<'a> Iterator for NamesIterator<'a> {
     type Item = &'a Names;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.current.map(|node| {
-            self.current = node.next.as_deref();
-            node
-        })
-    }
-}
-
-#[derive(Debug, Default)]
-struct DeviceList {
-    name: Names,
-    device_id: u64,
-    next: Option<Box<DeviceList>>,
-}
-
-impl DeviceList {
-    fn new(name: Names, device_id: u64) -> Self {
-        DeviceList {
-            name,
-            device_id,
-            next: None,
-        }
-    }
-
-    fn add_device(&mut self, name: Names, device_id: u64) {
-        let new_node = Box::new(DeviceList {
-            name,
-            device_id,
-            next: self.next.take(),
-        });
-
-        self.next = Some(new_node);
-    }
-
-    fn iter(&self) -> DeviceListIterator {
-        DeviceListIterator {
-            current: Some(self),
-        }
-    }
-}
-
-struct DeviceListIterator<'a> {
-    current: Option<&'a DeviceList>,
-}
-
-impl<'a> Iterator for DeviceListIterator<'a> {
-    type Item = &'a DeviceList;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.current.map(|node| {
@@ -274,26 +282,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..
     } = args;
 
-    let expanded_path = expand_path(&file[0])?;
-
+    // init structures
     let mut names = Names::default();
-    let mut device_list = DeviceList::default();
     let mut inode_list = InodeList::default();
-    let unixsocket_list = UnixSocketList::default();
+    let mut unix_socket_list = UnixSocketList::default();
 
     names.name_space = Namespace::File as u8;
-    names.filename = expanded_path;
+    names.filename = PathBuf::from(&file[0]);
 
-    parse_file(&mut names, &mut inode_list)?;
-    parse_unixsockets(names.clone(), &mut inode_list, unixsocket_list.clone());
-    scan_procs(names.clone(), inode_list, device_list, unixsocket_list, 0)?;
+    let expanded_path = expand_path(&file[0])?;
 
-    // must be implemented:
-    // - mounted files
+    fill_unix_cache(&mut unix_socket_list)?;
 
-    // parse_mounts(&mut names, &mut device_list)?;
+    let st = timeout(&names.filename.to_string_lossy(), 5)?;
+    inode_list = InodeList::new(names.clone(), st.st_dev, st.st_ino);
+    let net_dev = find_net_dev()?;
 
-    print_matches(names, mount, named_files, users)?;
+    for unix_socket in unix_socket_list.iter() {
+        if (unix_socket.device_id == inode_list.device_id) {
+            InodeList::add_inode(
+                &mut inode_list,
+                names.clone(),
+                net_dev,
+                unix_socket.net_inode,
+            );
+        }
+    }
+
+    scan_procs(&mut names, &inode_list)?;
+
+    print_matches(names, mount, named_files, users, expanded_path)?;
 
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
@@ -309,124 +327,128 @@ fn print_matches(
     mount: bool,
     named_files: bool,
     users: bool,
+    expanded_path: PathBuf,
 ) -> Result<(), io::Error> {
-    todo!();
-}
+    let mut output = String::new();
+    let mut name_has_procs = false;
+    output.push_str(&format!("{:?}:", expanded_path));
+    for name in names.iter() {
+        for procs in name.matched_procs.iter() {
+            if procs.proc_type == ProcType::Normal {
+                name_has_procs = true;
+            }
+            output.push_str(&format!(" {}", procs.pid));
 
-fn parse_file(names: &mut Names, inode_list: &mut InodeList) -> Result<(), io::Error> {
-    InodeList::add_inode(
-        inode_list,
-        names.to_owned(),
-        names.st.inner.st_dev,
-        names.st.inner.st_ino,
-    );
-
-    Ok(())
-}
-
-fn parse_unixsockets(names: Names, inode_list: &mut InodeList, unix_socket_list: UnixSocketList) {
-    let net_dev = find_net_dev().unwrap();
-    InodeList::add_inode(inode_list, names, net_dev, unix_socket_list.net_inode);
-}
-
-/// This function processing mount points in a filesystem
-///
-/// # Arguments
-///
-/// * `this_name` - Names that represents the names_list.
-/// * `device_list` - DeviceList.
-///
-/// # Errors
-///
-/// Returns an error if passed invalid input.
-///
-/// # Returns
-/// * `Ok(())` - If the operation completes successfully.
-/// * `Err(Box<dyn std::error::Error>)` - If an error occurs during reading.
-///
-fn parse_mounts(
-    this_name: &mut Names,
-    device_list: &mut DeviceList,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let device_id;
-    if (libc::S_IFBLK == this_name.st.inner.st_mode) {
-        device_id = this_name.st.inner.st_rdev;
-    } else {
-        device_id = this_name.st.inner.st_dev;
+            match procs.access {
+                Access::Root => output.push_str("r"),
+                Access::Cwd => output.push_str("c"),
+                Access::Exe => output.push_str("e"),
+                Access::Mmap => output.push_str("m"),
+                _ => todo!(),
+            }
+            output.push_str(" ");
+        }
     }
 
-    DeviceList::add_device(device_list, this_name.to_owned(), device_id);
-    Ok(())
-}
-
-fn read_proc_mounts(mount_list: &mut Option<Box<MountList>>) -> Result<(), std::io::Error> {
-    let file = File::open(PROC_MOUNTS)?;
-    let reader = io::BufReader::new(file);
-
-    for line in reader.lines() {
-        let line = line?;
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        let mountpoint = PathBuf::from(parts[1].trim());
-        mount_list.as_mut().unwrap().mountpoints.push(mountpoint);
+    if name_has_procs {
+        println!("{}", output.trim_end());
     }
 
     Ok(())
 }
 
-fn scan_mounts(
-    names_head: Names,
-    inode_list: InodeList,
-    device_list: &mut DeviceList,
-) -> Result<Vec<libc::stat>, std::io::Error> {
-    let file = File::open(PROC_MOUNTS).expect(&format!("Cannot open {}", PROC_MOUNTS));
-    let reader = io::BufReader::new(file);
-    let mut contents: Vec<libc::stat> = Vec::new();
-    for line in reader.lines() {
-        let line = line?;
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        let mount_point = parts[1];
-        let st = match timeout(mount_point, 5) {
-            Ok(stat) => stat,
-            Err(_) => continue,
-        };
-        contents.push(st);
-    }
-    Ok(contents)
-}
-
-fn scan_procs(
-    names_head: Names,
-    inode_list: InodeList,
-    device_list: DeviceList,
-    unix_socket_list: UnixSocketList,
-    netdev: u64,
-) -> Result<(), std::io::Error> {
+fn scan_procs(names: &mut Names, inode_list: &InodeList) -> Result<(), io::Error> {
+    let my_pid = std::process::id() as i32;
     for entry in fs::read_dir(PROC_PATH)? {
         let entry = entry?;
-        let filename = entry.file_name().into_string().unwrap();
-        if filename.parse::<i32>().is_ok() {
-            let pid = filename.parse::<i32>().unwrap();
-            let uid = stat(&entry.path().to_string_lossy()).unwrap().st_uid;
-            let len = entry.path().to_string_lossy().len();
+        let filename = entry.file_name().into_string().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid file name"))?;
+        if let Ok(pid) = filename.parse::<i32>() {
+            if pid == my_pid {
+                continue;
+            }
+            let st = timeout(&entry.path().to_string_lossy(), 5)?;
+            let uid = st.st_uid;
 
-            // let cwd_dev = stat(&entry.path().join("cwd/").to_string_lossy()).unwrap().st_dev;
-            // let exe_dev = stat(&entry.path().join("exe/").to_string_lossy()).unwrap().st_dev;
-            // let root_dev = stat(&entry.path().join("root/").to_string_lossy()).unwrap().st_dev;
+            let cwd_stat = match get_pid_stat(pid, "/cwd") {
+                Ok(stat) => stat,
+                Err(_) => continue,
+            };
+            let root_stat = match get_pid_stat(pid, "/root") {
+                Ok(stat) => stat,
+                Err(_) => continue,
+            };
 
-            let cwd_dev = get_pid_stat(pid, "/cwd").st_dev;
-            let root_dev = get_pid_stat(pid, "/root").st_dev;
+            let cwd_dev = cwd_stat.st_dev;
+            let root_dev = root_stat.st_dev;
 
-            for device in device_list.iter() {
-                if root_dev == device.device_id {
-                    add_matched_proc(&mut device.name.clone(), pid, uid, Access::Root);
+            for inode in inode_list.iter() {
+                if root_dev == inode.device_id && root_stat.st_ino == inode.inode {
+                    add_matched_proc(names, pid, uid, Access::Root);
                 }
-                if cwd_dev == device.device_id {
-                    add_matched_proc(&mut device.name.clone(), pid, uid, Access::Cwd);
+                if cwd_dev == inode.device_id && cwd_stat.st_ino == inode.inode {
+                    add_matched_proc(names, pid, uid, Access::Cwd);
                 }
             }
         }
     }
+
     Ok(())
+}
+
+fn add_matched_proc(names: &mut Names, pid: i32, uid: u32, access: Access) {
+    let proc = Procs::new(pid, uid, access, ProcType::Normal);
+    names.add_procs(proc);
+}
+
+/// get stat of current /proc/{pid}/{filename}
+fn get_pid_stat(pid: i32, filename: &str) -> Result<libc::stat, std::io::Error> {
+    let path = format!("{}/{}{}", PROC_PATH, pid, filename);
+    timeout(&path, 5)
+}
+
+fn fill_unix_cache(unix_socket_list: &mut UnixSocketList) -> Result<(), std::io::Error> {
+    let file = File::open("/proc/net/unix")?;
+    let reader = io::BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = line?;
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        let net_inode = match parts.get(6) {
+            Some(part) => part.parse().unwrap_or(0),
+            None => continue,
+        };
+
+        let scanned_path = match parts.get(7) {
+            Some(part) => part.to_string(),
+            None => continue,
+        };
+
+        let path = normalize_path(&scanned_path);
+
+        let st = match timeout(&path, 5) {
+            Ok(stat) => stat,
+            Err(_) => continue,
+        };
+
+        UnixSocketList::add_socket(
+            unix_socket_list,
+            scanned_path,
+            st.st_ino,
+            st.st_dev,
+            net_inode,
+        );
+    }
+    Ok(())
+}
+
+/// Normalizes the path by removing the leading '@' if present.
+fn normalize_path(scanned_path: &str) -> String {
+    if scanned_path.starts_with('@') {
+        scanned_path[1..].to_string()
+    } else {
+        scanned_path.to_string()
+    }
 }
 
 fn find_net_dev() -> io::Result<u64> {
@@ -454,11 +476,6 @@ fn find_net_dev() -> io::Result<u64> {
     }
 }
 
-fn add_matched_proc(names: &mut Names, pid: i32, uid: u32, access: Access) {
-    let proc = Procs::new(pid, uid, access, ProcType::Normal);
-    names.matched_procs.push(proc);
-}
-
 fn stat(filename_str: &str) -> io::Result<libc::stat> {
     let filename = CString::new(filename_str).unwrap();
 
@@ -471,12 +488,6 @@ fn stat(filename_str: &str) -> io::Result<libc::stat> {
             Err(io::Error::last_os_error())
         }
     }
-}
-
-/// get stat of current /proc/{pid}/{filename}
-fn get_pid_stat(pid: i32, filename: &str) -> libc::stat {
-    let path = format!("{}/{}{}", PROC_PATH, pid, filename);
-    timeout(&path, 5).unwrap()
 }
 
 /// Execute stat() system call with timeout to avoid deadlock
