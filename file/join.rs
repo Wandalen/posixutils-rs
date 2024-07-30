@@ -11,14 +11,13 @@ extern crate clap;
 extern crate gettextrs;
 extern crate walkdir;
 
-use clap::{Parser, Arg};
+use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use walkdir::WalkDir;
 
 /// join - relational database operator
 #[derive(Parser, Debug)]
@@ -29,12 +28,12 @@ struct Args {
     a: Option<u8>,
 
     /// Replace empty output fields with the specified string
-    #[arg(short, long, default_value_t = String::from(""))]
-    e: String,
+    #[arg(short, long)]
+    e: Option<String>,
 
     /// Output fields in specified order
-    #[arg(short, long, default_value_t = String::from("0"))]
-    o: String,
+    #[arg(short, long, value_delimiter = ',')]
+    o: Option<Vec<String>>,
 
     /// Field separator character
     #[arg(short, long, default_value_t = ' ')]
@@ -65,12 +64,17 @@ fn parse_fields(line: &str, sep: char) -> Vec<String> {
         .collect()
 }
 
-fn read_file_lines(file_path: &PathBuf, sep: char) -> Vec<Vec<String>> {
-    let file = File::open(file_path).expect("Unable to open file");
+fn read_file_lines(file_path: &PathBuf, sep: char) -> Result<Vec<Vec<String>>, Box<dyn std::error::Error>> {
+    let file = File::open(file_path).map_err(|_| format!("Unable to open file"))?;
     let reader = BufReader::new(file);
-    reader.lines()
-        .map(|line| parse_fields(&line.expect("Unable to read line"), sep))
-        .collect()
+    let mut lines = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(|_| format!("Unable to read line"))?;
+        lines.push(parse_fields(&line, sep));
+    }
+
+    Ok(lines)
 }
 
 fn perform_join(
@@ -79,15 +83,43 @@ fn perform_join(
     field1: usize,
     field2: usize,
     a: Option<u8>,
-    e: String,
-    o: String,
+    e: Option<String>,
+    o: Option<Vec<String>>,
     v: Option<u8>,
-) {
-    let mut map: HashMap<String, Vec<Vec<String>>> = HashMap::new();
-
+) -> Result<(), Box<dyn std::error::Error>>{
     if field1 == 0 || field2 == 0 {
-        // error
+        return Err(format!("field 1 and field 2 must be greater than one").into());
     }
+
+    if o.is_some() {
+        let mut i = 0;
+        for s in &file1 {
+            let mut res = Vec::new();
+            for num in o.clone().unwrap() {
+                let f_num: Vec<&str> = num.split('.').collect();
+                if f_num[0] == "1" {
+                    res.push(s[f_num[1].parse::<usize>().unwrap() - 1].clone());
+                }
+                if f_num[0] == "2" {
+                    if i >= file2.len() && e.is_some() {
+                        res.push(e.clone().unwrap());
+                    }
+                    else {
+                        res.push(file2[i][f_num[1].parse::<usize>().unwrap() - 1].clone());
+                    }
+                }
+            }
+            i += 1;
+            
+            println!("{}", res.join(" "));
+            if i >= file2.len() && e.is_none() {
+                break;
+            }
+        }
+        return Ok(());
+    }
+
+    let mut map: HashMap<String, Vec<Vec<String>>> = HashMap::new();
 
     for line in &file1 {
         let key = line[field1 - 1].clone();
@@ -101,10 +133,14 @@ fn perform_join(
         if let Some(matches) = map.get_mut(&key) {
             matched.insert(key.clone(), true);
             for l in matches.iter_mut() {
-                let mut output = vec![l[field1 - 1].clone()];
-                output.extend_from_slice(&l[1..]);
-                output.extend_from_slice(&line);
-                println!("{}", output.join(" "));
+                let mut output = vec![];
+
+                output.extend_from_slice(&l);
+                output.extend_from_slice(&line[1..]);
+
+                if v.unwrap_or(0) != 1 && v.unwrap_or(0) != 2 {
+                    println!("{}", output.join(" "));
+                }
             }
         } else if a.unwrap_or(0) == 2 {
             let mut output = vec![String::from("(unknown)")];
@@ -113,41 +149,76 @@ fn perform_join(
         }
     }
 
-    if a.unwrap_or(0) == 1 {
-        for line in &file1 {
-            let key = line[field1 - 1].clone();
-            if !map.contains_key(&key) {
-                let mut output = vec![line[field1 - 1].clone()];
-                output.extend_from_slice(&line[1..]);
-                output.push(e.clone());
-                println!("{}", output.join(" "));
+    let mut map1: HashMap<String, Vec<String>> = HashMap::new();
+    let mut map2: HashMap<String, Vec<String>> = HashMap::new();
+
+    for line in &file1 {
+        let key = line[field1 - 1].clone();
+        map1.insert(key, line.clone());
+    }
+
+    for line in &file2 {
+        let key = line[field2 - 1].clone();
+        map2.insert(key, line.clone());
+    }
+
+    if v.unwrap_or(0) == 1 {
+        for (key, line1) in &map1 {
+            if !map2.contains_key(key) {
+                println!("{}", line1.join(" "));
             }
         }
     }
 
-    if v.unwrap_or(0) == 1 {
-        for line in &file1 {
-            let key = line[field1 - 1].clone();
-            if !matched.contains_key(&key) {
-                println!("{}", line.join(" "));
+    if v.unwrap_or(0) == 2 {
+        for (key, line1) in &map2 {
+            if !map1.contains_key(key) {
+                println!("{}", line1.join(" "));
             }
         }
     }
+
+    if a.unwrap_or(0) == 1 {
+        for (key, line1) in &map1 {
+            if !map2.contains_key(key) {
+                println!("{}", line1.join(" "));
+            }
+        }
+    }
+
+    if a.unwrap_or(0) == 2 {
+        for (key, line1) in &map2 {
+            if !map1.contains_key(key) {
+                println!("{}", line1.join(" "));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn join(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+    let file1 = read_file_lines(&args.file1, args.t)?;
+    let file2 = read_file_lines(&args.file2, args.t)?;
+
+    perform_join(file1, file2, args.field1, args.field2, args.a, args.e, args.o, args.v)?;
+
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    dbg!(&args);
-
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    let file1 = read_file_lines(&args.file1, args.t);
-    let file2 = read_file_lines(&args.file2, args.t);
+    let mut exit_code = 0;
 
-    perform_join(file1, file2, args.field1, args.field2, args.a, args.e, args.o, args.v);
+    if let Err(err) = join(args) {
+        exit_code = 1;
+        eprint!("{}", err);
+    }
 
-    Ok(())
+    std::process::exit(exit_code)
 }
