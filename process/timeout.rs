@@ -16,6 +16,7 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::{
     error::Error,
+    os::unix::process::ExitStatusExt,
     process::Command,
     sync::mpsc::{self, channel},
     thread,
@@ -187,7 +188,7 @@ fn parse_signal(s: &str) -> Result<i32, String> {
 #[derive(thiserror::Error, Debug, PartialEq)]
 enum TimeoutError {
     #[error("timeout reached")]
-    TimeoutReached,
+    TimeoutReached(Option<i32>),
     #[error("{0}")]
     Other(String),
     #[error("unable to run the utility '{0}'")]
@@ -199,7 +200,7 @@ enum TimeoutError {
 impl From<TimeoutError> for i32 {
     fn from(error: TimeoutError) -> Self {
         match error {
-            TimeoutError::TimeoutReached => 124,
+            TimeoutError::TimeoutReached(preserved) => preserved.unwrap_or(124),
             TimeoutError::Other(_) => 125,
             TimeoutError::UnableToRunUtility(_) => 126,
             TimeoutError::UtilityNotFound(_) => 127,
@@ -214,6 +215,7 @@ fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
         duration,
         utility,
         arguments,
+        preserve_status,
         ..
     } = args;
 
@@ -235,25 +237,14 @@ fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
             .expect("Failed to send child process status");
     });
 
-    if duration.is_zero() {
-        // println!("Waiting without timeout");
-        match rx.recv() {
-            Ok(status_res) => Ok(status_res
-                .map_err(|e| TimeoutError::Other(e.to_string()))?
-                .code()
-                .unwrap_or(-1)),
-            Err(err) => Err(TimeoutError::Other(err.to_string())),
-        }
-    } else {
-        // println!("Waiting with timeout");
-        match rx.recv_timeout(duration) {
-            Ok(status_res) => Ok(status_res
-                .map_err(|e| TimeoutError::Other(e.to_string()))?
-                .code()
-                .unwrap_or(-1)),
-            Err(err) => {
-                match err {
-                    mpsc::RecvTimeoutError::Timeout => {
+    match rx.recv_timeout(duration) {
+        Ok(status_res) => status_res
+            .map(|es| es.into_raw())
+            .map_err(|err| TimeoutError::Other(err.to_string())),
+        Err(err) => {
+            match err {
+                mpsc::RecvTimeoutError::Timeout => {
+                    if !duration.is_zero() {
                         // Sending first signal
                         unsafe { libc::kill(pid as libc::pid_t, signal) };
 
@@ -263,13 +254,25 @@ fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
                                 unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
                             }
                         }
-
-                        Err(TimeoutError::TimeoutReached)
                     }
-                    mpsc::RecvTimeoutError::Disconnected => {
-                        Err(TimeoutError::Other(err.to_string()))
+
+                    if duration.is_zero() || preserve_status {
+                        let exit_code = match rx.recv() {
+                            Ok(status_res) => Ok(status_res
+                                .map(|es| es.into_raw())
+                                .map_err(|err| TimeoutError::Other(err.to_string()))?),
+                            Err(err) => Err(TimeoutError::Other(err.to_string())),
+                        }?;
+                        if duration.is_zero() {
+                            Ok(exit_code)
+                        } else {
+                            Err(TimeoutError::TimeoutReached(Some(128 + exit_code)))
+                        }
+                    } else {
+                        Err(TimeoutError::TimeoutReached(None))
                     }
                 }
+                mpsc::RecvTimeoutError::Disconnected => Err(TimeoutError::Other(err.to_string())),
             }
         }
     }
@@ -299,8 +302,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let exit_code = match run_timeout(args) {
         Ok(exit_status) => exit_status,
         Err(err) => {
-            if err != TimeoutError::TimeoutReached {
-                eprintln!("Error: {err}");
+            match err {
+                TimeoutError::TimeoutReached(_) => {}
+                _ => eprintln!("Error: {err}"),
             }
             err.into()
         }
