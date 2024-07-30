@@ -22,8 +22,6 @@ use std::{
     time::Duration,
 };
 
-const DEFAULT_ERROR_EXIT_STATUS: i32 = 125;
-
 #[cfg(target_os = "macos")]
 const SIGLIST: [(&str, i32); 31] = [
     ("HUP", 1),
@@ -202,7 +200,7 @@ impl From<TimeoutError> for i32 {
     fn from(error: TimeoutError) -> Self {
         match error {
             TimeoutError::TimeoutReached => 124,
-            TimeoutError::Other(_) => DEFAULT_ERROR_EXIT_STATUS,
+            TimeoutError::Other(_) => 125,
             TimeoutError::UnableToRunUtility(_) => 126,
             TimeoutError::UtilityNotFound(_) => 127,
         }
@@ -290,7 +288,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 err.source()
                     .map_or_else(|| err.kind().to_string(), |err| err.to_string())
             );
-            std::process::exit(DEFAULT_ERROR_EXIT_STATUS);
+            std::process::exit(125);
         }
     });
 
