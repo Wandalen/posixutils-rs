@@ -136,7 +136,7 @@ struct Args {
 ///
 /// # Arguments
 ///
-/// * `s` - [str](std::str) that represents input duration.
+/// * `s` - [str] that represents input duration.
 ///
 /// # Errors
 ///
@@ -146,28 +146,31 @@ struct Args {
 ///
 /// Returns [Duration].
 fn parse_duration(s: &str) -> Result<Duration, String> {
-    let (value, suffix) = s
-        .find(|c: char| !c.is_digit(10) && c != '.')
-        .map_or((s, "s"), |pos| s.split_at(pos));
+    let (value, suffix) = s.split_at(
+        s.find(|c: char| !c.is_ascii_digit() && c != '.')
+            .unwrap_or(s.len()),
+    );
 
     let value: f64 = value
         .parse()
         .map_err(|_| format!("invalid duration format '{}'", s))?;
 
-    match suffix {
-        "s" => Ok(Duration::from_secs_f64(value)),
-        "m" => Ok(Duration::from_secs_f64(value * 60.0)),
-        "h" => Ok(Duration::from_secs_f64(value * 3600.0)),
-        "d" => Ok(Duration::from_secs_f64(value * 86400.0)),
-        _ => Err(format!("invalid duration format '{}'", s)),
-    }
+    let multiplier = match suffix {
+        "s" | "" => 1.0,
+        "m" => 60.0,
+        "h" => 3600.0,
+        "d" => 86400.0,
+        _ => return Err(format!("invalid duration format '{}'", s)),
+    };
+
+    Ok(Duration::from_secs_f64(value * multiplier))
 }
 
 /// Parses and validates the signal name, returning its integer value.
 ///
 /// # Arguments
 ///
-/// * `s` - [str](std::str) that represents the signal name.
+/// * `s` - [str] that represents the signal name.
 ///
 /// # Errors
 ///
@@ -177,17 +180,11 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 ///
 /// Returns the integer value of the signal.
 fn parse_signal(s: &str) -> Result<i32, String> {
-    let signal = s.to_uppercase();
-
-    let sig_num = SIGLIST
+    SIGLIST
         .iter()
-        .find(|(name, _)| name == &signal)
-        .map(|(_, num)| *num);
-
-    match sig_num {
-        Some(num) => Ok(num),
-        None => Err(format!("invalid signal name '{}'", s)),
-    }
+        .find(|(name, _)| name.eq_ignore_ascii_case(s))
+        .map(|&(_, num)| num)
+        .ok_or_else(|| format!("invalid signal name '{}'", s))
 }
 
 #[derive(Debug)]
@@ -204,12 +201,12 @@ impl Display for TimeoutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TimeoutError::TimeoutReached => write!(f, ""),
-            TimeoutError::Other(msg) => write!(f, "Error: {}\n", msg),
+            TimeoutError::Other(msg) => writeln!(f, "Error: {}", msg),
             TimeoutError::UnableToRunUtility(utility) => {
-                write!(f, "Error: unable to run the utility '{utility}'\n")
+                writeln!(f, "Error: unable to run the utility '{utility}'")
             }
             TimeoutError::UtilityNotFound(utility) => {
-                write!(f, "Error: utility '{utility}' not found\n")
+                writeln!(f, "Error: utility '{utility}' not found")
             }
         }
     }
