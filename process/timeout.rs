@@ -16,7 +16,6 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::{
     error::Error,
-    fmt::{self, Display},
     process::Command,
     sync::mpsc::{self, channel},
     thread,
@@ -187,29 +186,16 @@ fn parse_signal(s: &str) -> Result<i32, String> {
         .ok_or_else(|| format!("invalid signal name '{}'", s))
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 enum TimeoutError {
+    #[error("timeout reached")]
     TimeoutReached,
+    #[error("{0}")]
     Other(String),
+    #[error("unable to run the utility '{0}'")]
     UnableToRunUtility(String),
+    #[error("utility '{0}' not found")]
     UtilityNotFound(String),
-}
-
-impl Error for TimeoutError {}
-
-impl Display for TimeoutError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TimeoutError::TimeoutReached => write!(f, ""),
-            TimeoutError::Other(msg) => writeln!(f, "Error: {}", msg),
-            TimeoutError::UnableToRunUtility(utility) => {
-                writeln!(f, "Error: unable to run the utility '{utility}'")
-            }
-            TimeoutError::UtilityNotFound(utility) => {
-                writeln!(f, "Error: utility '{utility}' not found")
-            }
-        }
-    }
 }
 
 impl From<TimeoutError> for i32 {
@@ -315,7 +301,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let exit_code = match run_timeout(args) {
         Ok(exit_status) => exit_status,
         Err(err) => {
-            eprint!("{err}");
+            if err != TimeoutError::TimeoutReached {
+                eprintln!("Error: {err}");
+            }
             err.into()
         }
     };

@@ -12,6 +12,7 @@ clap.workspace = true
 gettext-rs.workspace = true
 libc.workspace = true
 atty.workspace = true
+thiserror.workspace = true
 errno = "0.3"
 dirs = "5.0"
 
