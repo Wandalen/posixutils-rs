@@ -63,6 +63,15 @@ fn test_signal_parsing_3() {
 }
 
 #[test]
+fn test_signal_parsing_4() {
+    timeout_test(
+        &["-s", "TERM", "-s", "KILL", "1", TRUE],
+        "Error: an argument cannot be used with one or more of the other specified arguments\n",
+        125,
+    );
+}
+
+#[test]
 fn test_invalid_duration_format_1() {
     // "-1" is considered as argument, not a value
     timeout_test(&["-1", TRUE], "Error: unexpected argument found\n", 125);
@@ -127,3 +136,17 @@ fn test_timeout_error() {
     timeout_test(&["1", SLEEP, "2"], "", 124);
 }
 
+#[test]
+fn test_preserve_status_1() {
+    timeout_test(&["-p", "2", SLEEP, "1"], "", 0);
+}
+
+#[test]
+fn test_preserve_status_2() {
+    timeout_test(&["-p", "1", SLEEP, "2"], "", 143);
+}
+
+#[test]
+fn test_preserve_status_3() {
+    timeout_test(&["-p", "-s", "CONT", "-k", "1", "1", SLEEP, "3"], "", 137);
+}

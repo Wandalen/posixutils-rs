@@ -106,7 +106,7 @@ struct Args {
 
     /// Always preserve (mimic) the wait status of the executed utility, even if the time limit was reached.
     #[arg(short = 'p', long)]
-    preserve: bool,
+    preserve_status: bool,
 
     /// Send a SIGKILL signal if the child process created to execute the utility has not terminated after the time period
     /// specified by time has elapsed since the first signal was sent. The value of time shall be interpreted as specified for
@@ -132,7 +132,7 @@ struct Args {
     arguments: Vec<String>,
 }
 
-/// Parses string slice into [Duration](std::time::Duration).
+/// Parses string slice into [Duration].
 ///
 /// # Arguments
 ///
@@ -144,7 +144,7 @@ struct Args {
 ///
 /// # Returns
 ///
-/// Returns [Duration](std::time::Duration).
+/// Returns [Duration].
 fn parse_duration(s: &str) -> Result<Duration, String> {
     let (value, suffix) = s
         .find(|c: char| !c.is_digit(10) && c != '.')
@@ -226,7 +226,7 @@ impl From<TimeoutError> for i32 {
     }
 }
 
-fn run_command(args: Args) -> Result<i32, TimeoutError> {
+fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
     let Args {
         kill_after,
         signal,
@@ -315,7 +315,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    let exit_code = match run_command(args) {
+    let exit_code = match run_timeout(args) {
         Ok(exit_status) => exit_status,
         Err(err) => {
             eprint!("{err}");
