@@ -266,17 +266,8 @@ fn process_files(
                             res.push(field.clone());
                         }
                         if f_num[0] == "2" {
-                            if let Some(ref e) = e {
-                                if i >= map2.len() {
-                                    res.push(e.to_string());
-                                } else {
-                                    let field = &fields2[f_num[1].parse::<usize>()? - 1];
-                                    res.push(field.to_string());
-                                }
-                            } else {
-                                let field = &fields2[f_num[1].parse::<usize>()? - 1];
-                                res.push(field.to_string());
-                            }
+                            let field = &fields2[f_num[1].parse::<usize>()? - 1];
+                            res.push(field.to_string());
                         }
                     }
                     println!("{}", res.join(" "));
