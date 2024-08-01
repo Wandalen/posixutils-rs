@@ -100,23 +100,11 @@ fn t_test() {
 }
 
 #[test]
-fn field1_test() {
+fn fields_test() {
     let project_root = env!("CARGO_MANIFEST_DIR");
     let file1 = format!("{}/tests/join/file1.txt", project_root);
     let file2 = format!("{}/tests/join/file2.txt", project_root);
-    let args = ["-1", "1", file1.as_str(), file2.as_str()];
-
-    let expected_output = "1 Alice HR\n2 Bob Finance\n3 Charlie IT\n";
-
-    run_test_join(&args, &expected_output, "", 0)
-}
-
-#[test]
-fn field2_test() {
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file1 = format!("{}/tests/join/file1.txt", project_root);
-    let file2 = format!("{}/tests/join/file2.txt", project_root);
-    let args = ["-2", "1", file1.as_str(), file2.as_str()];
+    let args = ["-1", "1", "-2", "1", file1.as_str(), file2.as_str()];
 
     let expected_output = "1 Alice HR\n2 Bob Finance\n3 Charlie IT\n";
 
