@@ -150,3 +150,8 @@ fn test_preserve_status_2() {
 fn test_preserve_status_3() {
     timeout_test(&["-p", "-s", "CONT", "-k", "1", "1", SLEEP, "3"], "", 137);
 }
+
+#[test]
+fn test_preserve_status_4() {
+    timeout_test(&["-p", "-s", "CONT", "-k", "1", "0", SLEEP, "3"], "", 0);
+}
