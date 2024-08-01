@@ -1,98 +1,20 @@
-//
-// Copyright (c) 2024 Hemi Labs, Inc.
-//
-// This file is part of the posixutils-rs project covered under
-// the MIT License.  For the full license text, please see the LICENSE
-// file in the root directory of this project.
-// SPDX-License-Identifier: MIT
-//
-
 extern crate clap;
 extern crate libc;
 extern crate plib;
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use nix::sys::signal::Signal;
 use plib::PROJECT_NAME;
 use std::{
     error::Error,
     os::unix::process::ExitStatusExt,
     process::Command,
+    str::FromStr,
     sync::mpsc::{self, channel},
     thread,
     time::Duration,
 };
-
-#[cfg(target_os = "macos")]
-const SIGLIST: [(&str, i32); 31] = [
-    ("HUP", libc::SIGHUP),
-    ("INT", libc::SIGINT),
-    ("QUIT", libc::SIGQUIT),
-    ("ILL", libc::SIGILL),
-    ("TRAP", libc::SIGTRAP),
-    ("ABRT", libc::SIGABRT),
-    ("EMT", libc::SIGEMT),
-    ("FPE", libc::SIGFPE),
-    ("KILL", libc::SIGKILL),
-    ("BUS", libc::SIGBUS),
-    ("SEGV", libc::SIGSEGV),
-    ("SYS", libc::SIGSYS),
-    ("PIPE", libc::SIGPIPE),
-    ("ALRM", libc::SIGALRM),
-    ("TERM", libc::SIGTERM),
-    ("URG", libc::SIGURG),
-    ("STOP", libc::SIGSTOP),
-    ("TSTP", libc::SIGTSTP),
-    ("CONT", libc::SIGCONT),
-    ("CHLD", libc::SIGCHLD),
-    ("TTIN", libc::SIGTTIN),
-    ("TTOU", libc::SIGTTOU),
-    ("IO", libc::SIGIO),
-    ("XCPU", libc::SIGXCPU),
-    ("XFSZ", libc::SIGXFSZ),
-    ("VTALRM", libc::SIGVTALRM),
-    ("PROF", libc::SIGPROF),
-    ("WINCH", libc::SIGWINCH),
-    ("INFO", libc::SIGINFO),
-    ("USR1", libc::SIGUSR1),
-    ("USR2", libc::SIGUSR2),
-];
-
-#[cfg(target_os = "linux")]
-const SIGLIST: [(&str, i32); 32] = [
-    ("HUP", libc::SIGHUP),
-    ("INT", libc::SIGINT),
-    ("QUIT", libc::SIGQUIT),
-    ("ILL", libc::SIGILL),
-    ("TRAP", libc::SIGTRAP),
-    ("ABRT", libc::SIGABRT),
-    ("IOT", libc::SIGIOT),
-    ("BUS", libc::SIGBUS),
-    ("FPE", libc::SIGFPE),
-    ("KILL", libc::SIGKILL),
-    ("USR1", libc::SIGUSR1),
-    ("SEGV", libc::SIGSEGV),
-    ("USR2", libc::SIGUSR2),
-    ("PIPE", libc::SIGPIPE),
-    ("ALRM", libc::SIGALRM),
-    ("TERM", libc::SIGTERM),
-    ("STKFLT", libc::SIGSTKFLT),
-    ("CHLD", libc::SIGCHLD),
-    ("CONT", libc::SIGCONT),
-    ("STOP", libc::SIGSTOP),
-    ("TSTP", libc::SIGTSTP),
-    ("TTIN", libc::SIGTTIN),
-    ("TTOU", libc::SIGTTOU),
-    ("URG", libc::SIGURG),
-    ("XCPU", libc::SIGXCPU),
-    ("XFSZ", libc::SIGXFSZ),
-    ("VTALRM", libc::SIGVTALRM),
-    ("PROF", libc::SIGPROF),
-    ("WINCH", libc::SIGWINCH),
-    ("IO", libc::SIGIO),
-    ("PWR", libc::SIGPWR),
-    ("SYS", libc::SIGSYS),
-];
 
 /// timeout — execute a utility with a time limit
 #[derive(Parser, Debug)]
@@ -134,7 +56,7 @@ struct Args {
 ///
 /// # Arguments
 ///
-/// * `s` - [str] that represents input duration.
+/// * s - [str] that represents input duration.
 ///
 /// # Errors
 ///
@@ -168,7 +90,7 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 ///
 /// # Arguments
 ///
-/// * `s` - [str] that represents the signal name.
+/// * s - [str] that represents the signal name.
 ///
 /// # Errors
 ///
@@ -178,11 +100,13 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 ///
 /// Returns the integer value of the signal.
 fn parse_signal(s: &str) -> Result<i32, String> {
-    SIGLIST
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(s))
-        .map(|&(_, num)| num)
-        .ok_or_else(|| format!("invalid signal name '{}'", s))
+    let signal_name = format!("SIG{}", s.to_uppercase());
+
+    // Try to convert the string to a `Signal` variant
+    match Signal::from_str(signal_name.as_str()) {
+        Ok(signal) => Ok(signal as i32),
+        Err(_) => Err(format!("invalid signal name '{}'", s)),
+    }
 }
 
 #[derive(thiserror::Error, Debug, PartialEq)]
@@ -220,7 +144,7 @@ fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
     } = args;
 
     let mut child = Command::new(&utility)
-        .args(arguments)
+        .args(&arguments)
         .spawn()
         .map_err(|err| match err.kind() {
             std::io::ErrorKind::NotFound => TimeoutError::UtilityNotFound(utility),
