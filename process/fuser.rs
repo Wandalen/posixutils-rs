@@ -1140,6 +1140,7 @@ fn find_net_sockets(
             }
         }
     }
+
     Err(Error::new(ErrorKind::ConnectionRefused, "Cannot parsenet sockets"))
 }
 
