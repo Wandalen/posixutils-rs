@@ -10,9 +10,9 @@ use plib::PROJECT_NAME;
 use std::{
     collections::BTreeMap,
     env,
-    ffi::{CStr, CString},
+    ffi::CString,
     fs::{self, File},
-    io::{self, BufRead, Write},
+    io::{self, BufRead, Error, ErrorKind, Write},
     net::{IpAddr, UdpSocket},
     os::unix::io::AsRawFd,
     path::{Component, Path, PathBuf},
@@ -380,81 +380,55 @@ struct Args {
 
     #[arg(required = true, name = "FILE", num_args(0..))]
     /// A pathname on which the file or file system is to be reported.
-    file: Vec<String>,
+    file: Vec<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    setlocale(LocaleCategory::LcAll, "");
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+
     let Args {
         mount, user, file, ..
     } = Args::parse();
-    // init default structures
-    let mut names = Names::default();
-    let mut unix_socket_list = UnixSocketList::default();
-    let mut mount_list = MountList::default();
-    let mut device_list = DeviceList::default();
-    let mut inode_list = InodeList::default();
-    let mut tcp_connection_list = IpConnections::default();
-    let mut udp_connection_list = IpConnections::default();
 
-    names.name_space = NameSpace::default();
-    names.filename = PathBuf::from(&file[0]);
+    let (
+        mut names,
+        mut unix_socket_list,
+        mut mount_list,
+        device_list,
+        mut inode_list,
+        mut tcp_connection_list,
+        mut udp_connection_list,
+    ) = init_defaults(file);
 
     fill_unix_cache(&mut unix_socket_list)?;
-    let expanded_path = expand_path(&file[0])?;
 
     let net_dev = find_net_dev()?;
 
-    if let Some(name_str) = names.filename.to_str() {
-        if name_str.contains("tcp") {
-            names.name_space = NameSpace::Tcp;
-        } else if name_str.contains("udp") {
-            names.name_space = NameSpace::Udp;
-        } else if name_str.contains("file") {
-            names.name_space = NameSpace::File;
-        }
-    }
+    names.name_space = determine_namespace(&names.filename);
 
     match names.name_space {
-        NameSpace::File => {
-            let st = timeout(&names.filename.to_string_lossy(), 5)?;
-
-            if mount {
-                read_proc_mounts(&mut mount_list)?;
-                inode_list = InodeList::new(names.clone(), st.st_dev, 0);
-                // adding device to DeviceList
-                let device_id;
-                if (libc::S_IFBLK == names.st.inner.st_mode) {
-                    device_id = st.st_rdev;
-                } else {
-                    device_id = st.st_dev;
-                }
-
-                device_list = DeviceList::new(names.clone(), device_id);
-            } else {
-                inode_list = InodeList::new(names.clone(), st.st_dev, st.st_ino);
-                //adding inode to InodeList
-                for unix_socket in unix_socket_list.iter() {
-                    if unix_socket.device_id == names.st.inner.st_dev
-                        && unix_socket.inode == names.st.inner.st_ino
-                    {
-                        InodeList::add_inode(
-                            &mut inode_list,
-                            names.clone(),
-                            net_dev,
-                            unix_socket.net_inode,
-                        );
-                    }
-                }
-            }
-        }
-        NameSpace::Tcp => {
-            let tcp_connection_list = parse_inet(&mut names, &mut tcp_connection_list)?;
-            inode_list = find_net_sockets(&mut inode_list, &tcp_connection_list, "tcp", net_dev)?;
-        }
-        NameSpace::Udp => {
-            let udp_connection_list = parse_inet(&mut names, &mut udp_connection_list)?;
-            inode_list = find_net_sockets(&mut inode_list, &udp_connection_list, "udp", net_dev)?;
-        }
+        NameSpace::File => handle_file_namespace(
+            &mut names,
+            mount,
+            &mut mount_list,
+            &mut inode_list,
+            &unix_socket_list,
+            net_dev,
+        )?,
+        NameSpace::Tcp => handle_tcp_namespace(
+            &mut names,
+            &mut tcp_connection_list,
+            &mut inode_list,
+            net_dev,
+        )?,
+        NameSpace::Udp => handle_udp_namespace(
+            &mut names,
+            &mut udp_connection_list,
+            &mut inode_list,
+            net_dev,
+        )?,
     }
 
     scan_procs(
@@ -466,18 +440,132 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     // scan_mounts(&mut names, &inode_list, &device_list)?;
 
-    print_matches(names, user, expanded_path)?;
-
-    setlocale(LocaleCategory::LcAll, "");
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+    print_matches(names, user)?;
 
     let exit_code = 0;
 
     std::process::exit(exit_code)
 }
 
-fn print_matches(names: Names, user: bool, expanded_path: PathBuf) -> Result<(), io::Error> {
+fn init_defaults(
+    file: Vec<PathBuf>,
+) -> (
+    Names,
+    UnixSocketList,
+    MountList,
+    DeviceList,
+    InodeList,
+    IpConnections,
+    IpConnections,
+) {
+    let mut names = Names::default();
+    let unix_socket_list = UnixSocketList::default();
+    let mount_list = MountList::default();
+    let device_list = DeviceList::default();
+    let inode_list = InodeList::default();
+    let tcp_connection_list = IpConnections::default();
+    let udp_connection_list = IpConnections::default();
+
+    names.name_space = NameSpace::default();
+    names.filename = file[0].clone();
+
+    (
+        names,
+        unix_socket_list,
+        mount_list,
+        device_list,
+        inode_list,
+        tcp_connection_list,
+        udp_connection_list,
+    )
+}
+
+fn determine_namespace(path: &PathBuf) -> NameSpace {
+    if let Some(name_str) = path.to_str() {
+        if name_str.contains("tcp") {
+            NameSpace::Tcp
+        } else if name_str.contains("udp") {
+            NameSpace::Udp
+        } else if name_str.contains("file") {
+            NameSpace::File
+        } else {
+            NameSpace::default()
+        }
+    } else {
+        NameSpace::default()
+    }
+}
+
+fn handle_file_namespace(
+    names: &mut Names,
+    mount: bool,
+    mount_list: &mut MountList,
+    inode_list: &mut InodeList,
+    unix_socket_list: &UnixSocketList,
+    net_dev: u64,
+) -> Result<(), std::io::Error> {
+    names.filename = expand_path(&names.filename)?;
+    let st = timeout(&names.filename.to_string_lossy(), 5)?;
+
+    if mount {
+        read_proc_mounts(mount_list)?;
+        *inode_list = InodeList::new(names.clone(), st.st_dev, 0);
+        parse_mounts(names.clone(), st);
+    } else {
+        *inode_list = InodeList::new(names.clone(), st.st_dev, st.st_ino);
+        parse_unix_sockets(names.clone(), inode_list, unix_socket_list, net_dev);
+    }
+    Ok(())
+}
+
+fn handle_tcp_namespace(
+    names: &mut Names,
+    tcp_connection_list: &mut IpConnections,
+    inode_list: &mut InodeList,
+    net_dev: u64,
+) -> Result<(), std::io::Error> {
+    let tcp_connection_list = parse_inet(names, tcp_connection_list).unwrap();
+    *inode_list = find_net_sockets(inode_list, &tcp_connection_list, "tcp", net_dev)?;
+    Ok(())
+}
+
+fn handle_udp_namespace(
+    names: &mut Names,
+    udp_connection_list: &mut IpConnections,
+    inode_list: &mut InodeList,
+    net_dev: u64,
+) -> Result<(), std::io::Error> {
+    let udp_connection_list = parse_inet(names, udp_connection_list).unwrap();
+    *inode_list = find_net_sockets(inode_list, &udp_connection_list, "udp", net_dev)?;
+    Ok(())
+}
+fn parse_mounts(names: Names, st: libc::stat) -> DeviceList {
+    let device_id;
+    if libc::S_IFBLK == names.st.inner.st_mode {
+        device_id = st.st_rdev;
+    } else {
+        device_id = st.st_dev;
+    }
+
+    DeviceList::new(names.clone(), device_id)
+}
+
+fn parse_unix_sockets(
+    names: Names,
+    inode_list: &mut InodeList,
+    unix_socket_list: &UnixSocketList,
+    net_dev: u64,
+) {
+    for unix_socket in unix_socket_list.iter() {
+        if unix_socket.device_id == names.st.inner.st_dev
+            && unix_socket.inode == names.st.inner.st_ino
+        {
+            InodeList::add_inode(inode_list, names.clone(), net_dev, unix_socket.net_inode);
+        }
+    }
+}
+
+fn print_matches(names: Names, user: bool) -> Result<(), io::Error> {
     let mut proc_map: BTreeMap<i32, (String, u32)> = BTreeMap::new();
     let mut name_has_procs = false;
     for name in names.iter() {
@@ -504,13 +592,12 @@ fn print_matches(names: Names, user: bool, expanded_path: PathBuf) -> Result<(),
         // exit if no processes matched
         return Ok(());
     }
-    eprint!("{}: ", expanded_path.display());
+    eprint!("{}: ", names.filename.display());
     io::stderr().flush()?;
 
     let mut output = String::new();
     let mut max_pid_length = 0;
 
-    // First pass to determine the maximum PID length for alignment
     for (pid, (_, _)) in proc_map.clone() {
         let pid_len = pid.to_string().len();
         if pid_len > max_pid_length {
@@ -524,17 +611,14 @@ fn print_matches(names: Names, user: bool, expanded_path: PathBuf) -> Result<(),
 
         let formatted_str = format!("{}{}", pid_str, access_str);
         output.push_str(&formatted_str);
-        output.push_str(" "); // Add space between entries
+        output.push_str(" ");
 
-        // Flush stderr after each write to ensure all output is visible
         io::stderr().flush()?;
     }
 
-    // Print to stdout and flush
     print!("{}", output.trim_end());
     io::stdout().flush()?;
 
-    // Print newline to stderr and flush
     eprintln!("\n");
     io::stderr().flush()?;
     Ok(())
@@ -579,41 +663,41 @@ fn scan_procs(
             check_cwd_access(names, pid, uid, &cwd_stat, device_list, inode_list)?;
             check_exe_access(names, pid, uid, &exe_stat, device_list, inode_list)?;
 
-            // check_dir(
-            //     names,
-            //     pid,
-            //     "lib",
-            //     device_list,
-            //     inode_list,
-            //     uid,
-            //     Access::Mmap,
-            //     unix_socket_list,
-            //     net_dev,
-            // )?;
+            check_dir(
+                names,
+                pid,
+                "lib",
+                device_list,
+                inode_list,
+                uid,
+                Access::Mmap,
+                unix_socket_list,
+                net_dev,
+            )?;
 
-            // check_dir(
-            //     names,
-            //     pid,
-            //     "mmap",
-            //     device_list,
-            //     inode_list,
-            //     uid,
-            //     Access::Mmap,
-            //     unix_socket_list,
-            //     net_dev,
-            // )?;
+            check_dir(
+                names,
+                pid,
+                "mmap",
+                device_list,
+                inode_list,
+                uid,
+                Access::Mmap,
+                unix_socket_list,
+                net_dev,
+            )?;
 
-            // check_dir(
-            //     names,
-            //     pid,
-            //     "fd",
-            //     device_list,
-            //     inode_list,
-            //     uid,
-            //     Access::File,
-            //     unix_socket_list,
-            //     net_dev,
-            // )?;
+            check_dir(
+                names,
+                pid,
+                "fd",
+                device_list,
+                inode_list,
+                uid,
+                Access::File,
+                unix_socket_list,
+                net_dev,
+            )?;
 
             // check_map(names,pid, "maps", device_list, inode_list, uid, Access::Mmap)?;
         }
@@ -629,7 +713,7 @@ fn check_root_access(
     root_stat: &libc::stat,
     device_list: &DeviceList,
     inode_list: &InodeList,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     for device in device_list.iter() {
         if root_stat.st_dev == device.device_id {
             add_process(names, pid, uid, Access::Root, ProcType::Normal, None);
@@ -679,7 +763,7 @@ fn check_exe_access(
     exe_stat: &libc::stat,
     device_list: &DeviceList,
     inode_list: &InodeList,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     for device in device_list.iter() {
         if exe_stat.st_dev == device.device_id {
             add_process(names, pid, uid, Access::Exe, ProcType::Normal, None);
@@ -702,7 +786,7 @@ fn scan_mounts(
     names: &mut Names,
     inode_list: &InodeList,
     device_list: &DeviceList,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     let file = File::open(PROC_MOUNTS).expect(&format!("Cannot open {}", PROC_MOUNTS));
     let reader = io::BufReader::new(file);
 
@@ -772,7 +856,7 @@ fn check_dir(
     access: Access,
     unix_socket_list: &UnixSocketList,
     net_dev: u64,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     let dir_path = format!("/proc/{}/{}", pid, dirname);
     if let Ok(dir_entries) = fs::read_dir(&dir_path) {
         for entry in dir_entries {
@@ -792,11 +876,24 @@ fn check_dir(
                 }
             }
             for device in device_list.iter() {
-                match access {
-                    Access::File => {
-                        add_process(names, pid, uid, access.clone(), ProcType::Normal, None);
+                if device.name.filename != PathBuf::from("") {
+                    if stat.st_dev != device.device_id {
+                        match access {
+                            Access::File => {
+                                add_process(
+                                    names,
+                                    pid,
+                                    uid,
+                                    access.clone(),
+                                    ProcType::Normal,
+                                    None,
+                                );
+                            }
+                            _ => {
+                                add_process(names, pid, uid, access.clone(), ProcType::Normal, None)
+                            }
+                        }
                     }
-                    _ => add_process(names, pid, uid, access.clone(), ProcType::Normal, None),
                 }
             }
 
@@ -812,7 +909,6 @@ fn check_dir(
             }
         }
     } else {
-        // eprintln!("Cannot open directory: {}", dir_path);
     }
 
     Ok(())
@@ -826,7 +922,7 @@ fn check_map(
     inode_list: &InodeList,
     uid: u32,
     access: Access,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     let pathname = format!("/proc/{}/{}", pid, filename);
     let file = File::open(&pathname)?;
     let reader = io::BufReader::new(file);
@@ -857,12 +953,12 @@ fn check_map(
 }
 
 /// get stat of current /proc/{pid}/{filename}
-fn get_pid_stat(pid: i32, filename: &str) -> Result<libc::stat, std::io::Error> {
+fn get_pid_stat(pid: i32, filename: &str) -> Result<libc::stat, io::Error> {
     let path = format!("{}/{}{}", PROC_PATH, pid, filename);
     timeout(&path, 5)
 }
 
-fn fill_unix_cache(unix_socket_list: &mut UnixSocketList) -> Result<(), std::io::Error> {
+fn fill_unix_cache(unix_socket_list: &mut UnixSocketList) -> Result<(), io::Error> {
     let file = File::open("/proc/net/unix")?;
     let reader = io::BufReader::new(file);
 
@@ -922,10 +1018,7 @@ fn normalize_path(scanned_path: &str) -> String {
     }
 }
 
-fn parse_inet(
-    names: &mut Names,
-    ip_list: &mut IpConnections,
-) -> Result<IpConnections, &'static str> {
+fn parse_inet(names: &mut Names, ip_list: &mut IpConnections) -> io::Result<IpConnections> {
     let mut hints: libc::addrinfo = unsafe { std::mem::zeroed() };
     hints.ai_family = PF_UNSPEC;
     let filename_str = names.filename.to_string_lossy();
@@ -952,8 +1045,11 @@ fn parse_inet(
             IpAddr::V4("0.0.0.0".parse().unwrap()),
         ));
     } else {
+        Err(Error::new(
+            ErrorKind::ConnectionRefused,
+            "can't parse tcp/udp net socket",
+        ))
     }
-    Err("Can't parse tcp/udp net sockets")
 }
 
 fn find_net_dev() -> Result<u64, String> {
@@ -969,7 +1065,7 @@ fn find_net_sockets(
     connections_list: &IpConnections,
     protocol: &str,
     net_dev: u64,
-) -> Result<InodeList, std::io::Error> {
+) -> Result<InodeList, io::Error> {
     let pathname = format!("/proc/net/{}", protocol);
 
     let file = File::open(&pathname)?;
@@ -1044,7 +1140,7 @@ fn find_net_sockets(
             }
         }
     }
-    Err(std::io::Error::new(io::ErrorKind::Other, "oh no!"))
+    Err(Error::new(ErrorKind::ConnectionRefused, "Cannot parsenet sockets"))
 }
 
 fn stat(filename_str: &str) -> io::Result<libc::stat> {
@@ -1061,23 +1157,9 @@ fn stat(filename_str: &str) -> io::Result<libc::stat> {
     }
 }
 
-fn lstat(filename_str: &str) -> io::Result<libc::stat> {
-    let filename = CString::new(filename_str).unwrap();
-
-    unsafe {
-        let mut st: libc::stat = std::mem::zeroed();
-        let rc = libc::lstat(filename.as_ptr(), &mut st);
-        if rc == 0 {
-            Ok(st)
-        } else {
-            Err(io::Error::last_os_error())
-        }
-    }
-}
-
 /// Execute stat() system call with timeout to avoid deadlock
 /// on network based file systems.
-fn timeout(path: &str, seconds: u32) -> Result<libc::stat, std::io::Error> {
+fn timeout(path: &str, seconds: u32) -> Result<libc::stat, io::Error> {
     let (tx, rx) = mpsc::channel();
 
     thread::scope(|s| {
@@ -1111,8 +1193,8 @@ fn timeout(path: &str, seconds: u32) -> Result<libc::stat, std::io::Error> {
 /// # Returns
 ///
 /// Returns PathBuf real_path.
-pub fn expand_path(path: &str) -> Result<PathBuf, io::Error> {
-    let mut real_path = if path.starts_with('/') {
+pub fn expand_path(path: &PathBuf) -> Result<PathBuf, io::Error> {
+    let mut real_path = if path.starts_with(Path::new("/")) {
         PathBuf::from("/")
     } else {
         env::current_dir()?
