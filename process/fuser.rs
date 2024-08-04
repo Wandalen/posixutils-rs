@@ -10,7 +10,7 @@ use plib::PROJECT_NAME;
 use std::{
     collections::BTreeMap,
     env,
-    ffi::CString,
+    ffi::{CStr, CString},
     fs::{self, File},
     io::{self, BufRead, Error, ErrorKind, Write},
     net::{IpAddr, UdpSocket},
@@ -23,6 +23,9 @@ use std::{
 
 const PROC_PATH: &'static str = "/proc";
 const PROC_MOUNTS: &'static str = "/proc/mounts";
+const PROC_SWAPS: &'static str = "/proc/swaps";
+const KNFSD_EXPORTS: &'static str = "/proc/fs/nfs/exports";
+const NAME_FIELD: usize = 20;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 enum ProcType {
@@ -43,6 +46,7 @@ enum NameSpace {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 enum Access {
+    None = 0,
     Cwd = 1,
     Exe = 2,
     #[default]
@@ -396,7 +400,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         mut names,
         mut unix_socket_list,
         mut mount_list,
-        device_list,
+        mut device_list,
         mut inode_list,
         mut tcp_connection_list,
         mut udp_connection_list,
@@ -414,6 +418,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             mount,
             &mut mount_list,
             &mut inode_list,
+            &mut device_list,
             &unix_socket_list,
             net_dev,
         )?,
@@ -438,10 +443,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &unix_socket_list,
         net_dev,
     )?;
-    // scan_mounts(&mut names, &inode_list, &device_list)?;
+    scan_mounts(&mut names, &inode_list, &device_list)?;
 
     print_matches(names, user)?;
-
     let exit_code = 0;
 
     std::process::exit(exit_code)
@@ -501,6 +505,7 @@ fn handle_file_namespace(
     mount: bool,
     mount_list: &mut MountList,
     inode_list: &mut InodeList,
+    device_list: &mut DeviceList,
     unix_socket_list: &UnixSocketList,
     net_dev: u64,
 ) -> Result<(), std::io::Error> {
@@ -509,11 +514,11 @@ fn handle_file_namespace(
 
     if mount {
         read_proc_mounts(mount_list)?;
+        *device_list = DeviceList::new(names.clone(), st.st_dev);
         *inode_list = InodeList::new(names.clone(), st.st_dev, 0);
-        parse_mounts(names.clone(), st);
     } else {
+        let st = stat(&names.filename.to_string_lossy())?;
         *inode_list = InodeList::new(names.clone(), st.st_dev, st.st_ino);
-        parse_unix_sockets(names.clone(), inode_list, unix_socket_list, net_dev);
     }
     Ok(())
 }
@@ -546,28 +551,21 @@ fn parse_mounts(names: Names, st: libc::stat) -> DeviceList {
     } else {
         device_id = st.st_dev;
     }
+    dbg!(device_id);
 
     DeviceList::new(names.clone(), device_id)
-}
-
-fn parse_unix_sockets(
-    names: Names,
-    inode_list: &mut InodeList,
-    unix_socket_list: &UnixSocketList,
-    net_dev: u64,
-) {
-    for unix_socket in unix_socket_list.iter() {
-        if unix_socket.device_id == names.st.inner.st_dev
-            && unix_socket.inode == names.st.inner.st_ino
-        {
-            InodeList::add_inode(inode_list, names.clone(), net_dev, unix_socket.net_inode);
-        }
-    }
 }
 
 fn print_matches(names: Names, user: bool) -> Result<(), io::Error> {
     let mut proc_map: BTreeMap<i32, (String, u32)> = BTreeMap::new();
     let mut name_has_procs = false;
+    let mut len = names.filename.to_string_lossy().len() + 1;
+    eprint!("{}:", names.filename.display());
+    while len < NAME_FIELD {
+        len += 1;
+        eprint!(" ");
+    }
+    io::stderr().flush()?;
     for name in names.iter() {
         for procs in name.matched_procs.iter() {
             if procs.proc_type == ProcType::Normal {
@@ -584,6 +582,7 @@ fn print_matches(names: Names, user: bool) -> Result<(), io::Error> {
                 Access::Mmap => entry.0.push_str("m"),
                 Access::File => (),
                 Access::Filewr => (),
+                _ => (),
             }
         }
     }
@@ -592,35 +591,26 @@ fn print_matches(names: Names, user: bool) -> Result<(), io::Error> {
         // exit if no processes matched
         return Ok(());
     }
-    eprint!("{}: ", names.filename.display());
-    io::stderr().flush()?;
 
-    let mut output = String::new();
-    let mut max_pid_length = 0;
+    for (pid, (access, uid)) in proc_map {
+        let width = if pid.to_string().len() > 4 { " " } else { "  " };
 
-    for (pid, (_, _)) in proc_map.clone() {
-        let pid_len = pid.to_string().len();
-        if pid_len > max_pid_length {
-            max_pid_length = pid_len;
+        print!("{}{}", width, pid);
+        io::stdout().flush()?;
+
+        eprint!("{}", access);
+        if user {
+            let owner = unsafe {
+                CStr::from_ptr(libc::getpwuid(uid).as_ref().unwrap().pw_name)
+                    .to_str()
+                    .unwrap()
+            };
+            eprint!("({})", owner);
         }
-    }
-
-    for (pid, (access, _)) in proc_map {
-        let pid_str = format!("{:width$}", pid, width = max_pid_length);
-        let access_str = access.to_string();
-
-        let formatted_str = format!("{}{}", pid_str, access_str);
-        output.push_str(&formatted_str);
-        output.push_str(" ");
-
         io::stderr().flush()?;
     }
 
-    print!("{}", output.trim_end());
-    io::stdout().flush()?;
-
-    eprintln!("\n");
-    io::stderr().flush()?;
+    eprint!("\n");
     Ok(())
 }
 
@@ -663,43 +653,56 @@ fn scan_procs(
             check_cwd_access(names, pid, uid, &cwd_stat, device_list, inode_list)?;
             check_exe_access(names, pid, uid, &exe_stat, device_list, inode_list)?;
 
-            check_dir(
-                names,
-                pid,
-                "lib",
-                device_list,
-                inode_list,
-                uid,
-                Access::Mmap,
-                unix_socket_list,
-                net_dev,
-            )?;
+            #[cfg(target_os = "linux")]
+            {
+                check_dir(
+                    names,
+                    pid,
+                    "lib",
+                    device_list,
+                    inode_list,
+                    uid,
+                    Access::Mmap,
+                    unix_socket_list,
+                    net_dev,
+                )?;
 
-            check_dir(
-                names,
-                pid,
-                "mmap",
-                device_list,
-                inode_list,
-                uid,
-                Access::Mmap,
-                unix_socket_list,
-                net_dev,
-            )?;
+                check_dir(
+                    names,
+                    pid,
+                    "mmap",
+                    device_list,
+                    inode_list,
+                    uid,
+                    Access::Mmap,
+                    unix_socket_list,
+                    net_dev,
+                )?;
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                check_dir(
+                    names,
+                    pid,
+                    "fd",
+                    device_list,
+                    inode_list,
+                    uid,
+                    Access::File,
+                    unix_socket_list,
+                    net_dev,
+                )?;
 
-            check_dir(
-                names,
-                pid,
-                "fd",
-                device_list,
-                inode_list,
-                uid,
-                Access::File,
-                unix_socket_list,
-                net_dev,
-            )?;
-
-            // check_map(names,pid, "maps", device_list, inode_list, uid, Access::Mmap)?;
+                check_map(
+                    names,
+                    pid,
+                    "maps",
+                    device_list,
+                    inode_list,
+                    uid,
+                    Access::Mmap,
+                )?;
+            }
         }
     }
 
@@ -792,15 +795,14 @@ fn scan_mounts(
 
     for line in reader.lines() {
         let line = line?;
-        let mut parts = line.split_whitespace();
+        let parts: Vec<&str> = line.split_whitespace().collect();
 
-        // Skip if there are not enough parts
-        let find_mountp = match parts.nth(1) {
+        let find_mountp = match parts.get(1) {
             Some(mount) => mount,
             None => continue,
         };
 
-        let st = match timeout(find_mountp, 5) {
+        let st = match timeout(&find_mountp[1..], 5) {
             Ok(stat) => stat,
             Err(_) => continue,
         };
@@ -811,7 +813,7 @@ fn scan_mounts(
                     names,
                     0,
                     0,
-                    Access::Mmap,
+                    Access::None,
                     ProcType::Mount,
                     Some(find_mountp.to_string()),
                 );
@@ -823,7 +825,7 @@ fn scan_mounts(
                     names,
                     0,
                     0,
-                    Access::Mmap,
+                    Access::None,
                     ProcType::Mount,
                     Some(find_mountp.to_string()),
                 );
@@ -858,6 +860,7 @@ fn check_dir(
     net_dev: u64,
 ) -> Result<(), io::Error> {
     let dir_path = format!("/proc/{}/{}", pid, dirname);
+
     if let Ok(dir_entries) = fs::read_dir(&dir_path) {
         for entry in dir_entries {
             let entry = entry?;
@@ -865,16 +868,15 @@ fn check_dir(
                 Ok(stat) => stat,
                 Err(_) => continue,
             };
-
             if stat.st_dev == net_dev {
                 for unix_socket in unix_socket_list.iter() {
                     if (unix_socket.net_inode == stat.st_ino) {
-                        stat.st_ino = unix_socket.inode;
                         stat.st_dev = unix_socket.device_id;
-                        break;
+                        stat.st_ino = unix_socket.inode;
                     }
                 }
             }
+
             for device in device_list.iter() {
                 if device.name.filename != PathBuf::from("") {
                     if stat.st_dev != device.device_id {
@@ -896,7 +898,6 @@ fn check_dir(
                     }
                 }
             }
-
             for inode in inode_list.iter() {
                 if stat.st_ino == inode.inode {
                     match access {
@@ -926,23 +927,23 @@ fn check_map(
     let pathname = format!("/proc/{}/{}", pid, filename);
     let file = File::open(&pathname)?;
     let reader = io::BufReader::new(file);
-
     for line in reader.lines() {
         let line = line?;
         let parts: Vec<&str> = line.split_whitespace().collect();
+
         let dev_info: Vec<&str> = parts[3].split(':').collect();
+        let tmp_inode = parts[4].parse::<u64>().unwrap_or(0);
         if dev_info.len() == 2 {
             let tmp_maj = u32::from_str_radix(dev_info[0], 16).unwrap_or(0);
             let tmp_min = u32::from_str_radix(dev_info[1], 16).unwrap_or(0);
-            let tmp_inode = parts[4].parse::<u64>().unwrap_or(0);
-            let tmp_device = (tmp_maj as u64) * 256 + (tmp_min as u64);
+            let tmp_device = tmp_maj * 256 + tmp_min;
             for device in device_list.iter() {
-                if device.device_id == tmp_device {
+                if device.device_id == tmp_device as u64 {
                     add_process(names, pid, uid, access.clone(), ProcType::Normal, None);
                 }
             }
             for inode in inode_list.iter() {
-                if inode.device_id == tmp_device && inode.inode == tmp_inode {
+                if inode.device_id == tmp_device as u64 && inode.inode == tmp_inode {
                     add_process(names, pid, uid, access.clone(), ProcType::Normal, None);
                 }
             }
@@ -986,8 +987,8 @@ fn fill_unix_cache(unix_socket_list: &mut UnixSocketList) -> Result<(), io::Erro
         UnixSocketList::add_socket(
             unix_socket_list,
             scanned_path,
-            st.st_ino,
             st.st_dev,
+            st.st_ino,
             net_inode,
         );
     }
@@ -1130,7 +1131,6 @@ fn find_net_sockets(
 
             if (connection.lcl_port == 0 || connection.lcl_port == loc_port)
                 && (connection.rmt_port == 0 || connection.rmt_port == rmt_port)
-            // && (connection.rmt_addr == rmt_addr)
             {
                 return Ok(InodeList::new(
                     connection.names.clone(),
@@ -1141,7 +1141,10 @@ fn find_net_sockets(
         }
     }
 
-    Err(Error::new(ErrorKind::ConnectionRefused, "Cannot parsenet sockets"))
+    Err(Error::new(
+        ErrorKind::ConnectionRefused,
+        "Cannot parse net sockets",
+    ))
 }
 
 fn stat(filename_str: &str) -> io::Result<libc::stat> {
