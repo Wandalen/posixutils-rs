@@ -1,4 +1,8 @@
-use std::process::{Command, Output};
+use std::{
+    net::{TcpListener, UdpSocket},
+    os::unix::net::UnixListener,
+    process::{Command, Output},
+};
 
 use plib::{run_test_with_checker, TestPlan};
 
@@ -20,29 +24,87 @@ fn fuser_test(
         checker,
     );
 }
+
 #[test]
 fn test_fuser_basic() {
     fuser_test(vec!["/".to_string()], "", 0, |_, output| {
         let manual_output = Command::new("fuser").arg("/").output().unwrap();
-
         assert_eq!(output.status.code(), Some(0));
         assert_eq!(output.stdout, manual_output.stdout);
         assert_eq!(output.stderr, manual_output.stderr);
     });
 }
 
-// #[test]
-// fn test_fuser_tcp() {
-//     fuser_test(
-//         vec!["port/tcp".to_string()],
-//         "",
-//         0,
-//         |_, output| {
-//             let manual_output = Command::new("fuser").arg("/").output().unwrap();
+#[test]
+#[ignore]
+fn test_fuser_with_user() {
+    fuser_test(
+        vec!["/".to_string(), "-u".to_string()],
+        "",
+        0,
+        |_, output| {
+            let manual_output = Command::new("fuser").arg("/").arg("-u").output().unwrap();
 
-//             assert_eq!(output.status.code(), Some(0));
-//             assert_eq!(output.stdout, manual_output.stdout);
-//             // assert_eq!(output.stderr, manual_output.stderr);
-//         },
-//     );
-// }
+            dbg!(output, &manual_output);
+            assert_eq!(output.status.code(), Some(0));
+            assert_eq!(output.stdout, manual_output.stdout);
+            assert_eq!(output.stderr, manual_output.stderr);
+        },
+    );
+}
+
+fn start_tcp_server() -> TcpListener {
+    TcpListener::bind(("127.0.0.1", 8080)).expect("Failed to bind")
+}
+
+#[test]
+#[ignore]
+fn test_fuser_tcp() {
+    let _server = start_tcp_server();
+    fuser_test(vec!["8080/tcp".to_string()], "", 0, |_, output| {
+        let manual_output = Command::new("fuser").arg("8080/tcp").output().unwrap();
+        assert_eq!(output.status.code(), manual_output.status.code());
+        assert_eq!(output.stdout, manual_output.stdout);
+        assert_eq!(output.stderr, manual_output.stderr);
+    });
+}
+
+fn start_udp_server() -> UdpSocket {
+    UdpSocket::bind(("127.0.0.1", 8080)).expect("Failed to bind")
+}
+
+#[test]
+#[ignore]
+fn test_fuser_udp() {
+    let _server = start_udp_server();
+
+    fuser_test(vec!["8080/udp".to_string()], "", 0, |_, output| {
+        let manual_output = Command::new("fuser").arg("8080/udp").output().unwrap();
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(output.stdout, manual_output.stdout);
+        assert_eq!(output.stderr, manual_output.stderr);
+    });
+}
+fn start_unix_socket() -> UnixListener {
+    let socket_path = "loopback-socket";
+    if std::fs::metadata(socket_path).is_ok() {
+        println!("A socket is already present. Deleting...");
+        std::fs::remove_file(socket_path).unwrap();
+    }
+    UnixListener::bind("loopback-socket").expect("can't bind unix socket")
+}
+#[test]
+#[ignore]
+fn test_fuser_unixsocket() {
+    let _unix_socket = start_unix_socket();
+    fuser_test(vec!["loopback-socket".to_string()], "", 0, |_, output| {
+        let manual_output = Command::new("fuser")
+            .arg("loopback-socket")
+            .output()
+            .unwrap();
+
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(output.stdout, manual_output.stdout);
+        assert_eq!(output.stderr, manual_output.stderr);
+    });
+}
