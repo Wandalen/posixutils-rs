@@ -16,7 +16,7 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 
 /// join - relational database operator
@@ -112,6 +112,7 @@ fn print_o_fields(file1: Vec<Vec<String>>, file2: Vec<Vec<String>>, o: Vec<Strin
     Ok(())
 }
 
+// version 1
 fn perform_join(
     file1: Vec<Vec<String>>,
     file2: Vec<Vec<String>>,
@@ -211,6 +212,7 @@ fn perform_join(
     Ok(())
 }
 
+// version 2
 fn process_files(
     file1_path: &PathBuf,
     file2_path: &PathBuf,
@@ -222,8 +224,19 @@ fn process_files(
     o: Option<Vec<String>>,
     v: u8
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let file1 = File::open(file1_path)?;
-    let file2 = File::open(file2_path)?;
+    // code to support stdin
+    let stdin = io::stdin();
+    let file1: Box<dyn BufRead> = if file1_path.to_str() == Some("-") {
+        Box::new(stdin.lock())
+    } else {
+        Box::new(BufReader::new(File::open(file1_path)?))
+    };
+
+    let file2: Box<dyn BufRead> = if file2_path.to_str() == Some("-") {
+        Box::new(stdin.lock())
+    } else {
+        Box::new(BufReader::new(File::open(file2_path)?))
+    };
     
     let mut reader1 = BufReader::new(file1).lines();
     let mut reader2 = BufReader::new(file2).lines();
@@ -404,13 +417,119 @@ fn process_files(
     Ok(())
 }
 
+// version 3
+fn process_files2(
+    file1_path: &PathBuf,
+    file2_path: &PathBuf,
+    sep: char,
+    field1: usize,
+    field2: usize,
+    a: u8,
+    e: Option<String>,
+    o: Option<Vec<String>>,
+    v: u8
+) -> Result<(), Box<dyn std::error::Error>> {
+    // code to support stdin
+    let stdin = io::stdin();
+    let file1: Box<dyn BufRead> = if file1_path.to_str() == Some("-") {
+        Box::new(stdin.lock())
+    } else {
+        Box::new(BufReader::new(File::open(file1_path)?))
+    };
+
+    let file2: Box<dyn BufRead> = if file2_path.to_str() == Some("-") {
+        Box::new(stdin.lock())
+    } else {
+        Box::new(BufReader::new(File::open(file2_path)?))
+    };
+
+    let mut file2_cache = vec![];
+    for line in file2.lines() {
+        let line = line?;
+        let fields2 = parse_fields(&line, sep);
+        file2_cache.push(fields2);
+    }
+
+    let mut matched_keys = HashMap::new();
+    for line1 in file1.lines() {
+        let line1 = line1?;
+        let fields1 = parse_fields(&line1, sep);
+        let key1 = &fields1[field1 - 1];
+
+        let mut found_match = false;
+        for fields2 in &file2_cache {
+            let key2 = &fields2[field2 - 1];
+            if key1 == key2 {
+                found_match = true;
+                matched_keys.insert(key2.clone(), true);
+
+                if let Some(order) = &o {
+                    let mut res: Vec<String> = Vec::new();
+                    for num in order {
+                        let f_num: Vec<&str> = num.split('.').collect();
+                        if f_num[0] == "1" {
+                            res.push(fields1[f_num[1].parse::<usize>()? - 1].clone());
+                        } else if f_num[0] == "2" {
+                            res.push(fields2[f_num[1].parse::<usize>()? - 1].clone());
+                        }
+                    }
+                    if v == 0 {
+                        println!("{}", res.join(" "));
+                    }
+                } else {
+                    if v == 0 {
+                        println!("{} {}", fields1.join(" "), fields2[1..].join(" "));
+                    }
+                }
+            }
+        }
+
+        if !found_match && a == 1 {
+            println!("{}", fields1.join(" "));
+        }
+    }
+
+    let file1 = BufReader::new(File::open(file1_path)?);
+    if v == 1 {
+        for line1 in file1.lines() {
+            let line1 = line1?;
+            let fields1 = parse_fields(&line1, sep);
+            let key1 = &fields1[field1 - 1];
+            if !matched_keys.contains_key(key1) {
+                println!("{}", fields1.join(" "));
+            }
+        }
+    } else if v == 2 {
+        for fields2 in &file2_cache {
+            let key2 = &fields2[field2 - 1];
+            if !matched_keys.contains_key(key2) {
+                println!("{}", fields2.join(" "));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn join(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // let file1 = read_file_lines(&args.file1, args.t)?;
     // let file2 = read_file_lines(&args.file2, args.t)?;
 
     // perform_join(file1, file2, args.field1, args.field2, args.a, args.e, args.o, args.v)?;
 
-    process_files(
+    // process_files(
+    //     &args.file1,
+    //     &args.file2,
+    //     args.separator,
+    //     args.field1,
+    //     args.field2,
+    //     args.additional,
+    //     args.empty,
+    //     args.order,
+    //     args.unpairable
+    // )?;
+
+    process_files2(
         &args.file1,
         &args.file2,
         args.separator,
