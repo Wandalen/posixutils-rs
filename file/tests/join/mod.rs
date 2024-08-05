@@ -110,3 +110,27 @@ fn fields_test() {
 
     run_test_join(&args, &expected_output, "", 0)
 }
+
+#[test]
+fn three_fields_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let file1 = format!("{}/tests/join/file3.txt", project_root);
+    let file2 = format!("{}/tests/join/file4.txt", project_root);
+    let args = [file1.as_str(), file2.as_str()];
+
+    let expected_output = "1 Bob HR Director HR\n2 Charlie Finance Analyst Finance\n3 Alice Engineering Manager IT\n";
+
+    run_test_join(&args, &expected_output, "", 0)
+}
+
+#[test]
+fn third_field_join_test() {
+    let project_root = env!("CARGO_MANIFEST_DIR");
+    let file1 = format!("{}/tests/join/file3.txt", project_root);
+    let file2 = format!("{}/tests/join/file4.txt", project_root);
+    let args = ["-1", "3", "-2", "3", file1.as_str(), file2.as_str()];
+
+    let expected_output = "1 Bob HR Director HR\n2 Charlie Finance Analyst Finance\n";
+
+    run_test_join(&args, &expected_output, "", 0)
+}

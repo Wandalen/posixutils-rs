@@ -25,23 +25,23 @@ use std::path::PathBuf;
 struct Args {
     /// Additional lines to include when there are no matches
     #[arg(short, default_value_t = 0)]
-    a: u8,
+    additional: u8,
 
     /// Replace empty output fields with the specified string
     #[arg(short)]
-    e: Option<String>,
+    empty: Option<String>,
 
     /// Output fields in specified order
     #[arg(short, value_delimiter = ',')]
-    o: Option<Vec<String>>,
+    order: Option<Vec<String>>,
 
     /// Field separator character
-    #[arg(short, default_value_t = ' ')]
-    t: char,
+    #[arg(short = 't', default_value_t = ' ')]
+    separator: char,
 
     /// Output only unpairable lines from file_number
-    #[arg(short, default_value_t = 0)]
-    v: u8,
+    #[arg(short = 'v', default_value_t = 0)]
+    unpairable: u8,
 
     /// Join on the specified field of file 1
     #[arg(short = '1', default_value_t = 1)]
@@ -413,13 +413,13 @@ fn join(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     process_files(
         &args.file1,
         &args.file2,
-        args.t,
+        args.separator,
         args.field1,
         args.field2,
-        args.a,
-        args.e,
-        args.o,
-        args.v
+        args.additional,
+        args.empty,
+        args.order,
+        args.unpairable
     )?;
 
     Ok(())
