@@ -122,6 +122,15 @@ fn test_utility_not_found() {
 }
 
 #[test]
+fn test_utility_error() {
+    timeout_test(
+        &["1", SLEEP, "invalid_value"],
+        "sleep: invalid time interval ‘invalid_value’\nTry 'sleep --help' for more information.\n",
+        1,
+    );
+}
+
+#[test]
 fn test_basic() {
     timeout_test(&["2", SLEEP, "1"], "", 0);
 }
