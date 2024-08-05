@@ -121,7 +121,9 @@ fn parse_signal(s: &str) -> Result<Signal, String> {
 #[derive(thiserror::Error, Debug, PartialEq)]
 enum TimeoutError {
     #[error("timeout reached")]
-    TimeoutReached(Option<i32>),
+    TimeoutReached,
+    #[error("signal sent '{0}'")]
+    SignalSent(i32),
     #[error("{0}")]
     Other(String),
     #[error("unable to run the utility '{0}'")]
@@ -133,7 +135,8 @@ enum TimeoutError {
 impl From<TimeoutError> for i32 {
     fn from(error: TimeoutError) -> Self {
         match error {
-            TimeoutError::TimeoutReached(preserved) => preserved.unwrap_or(124),
+            TimeoutError::TimeoutReached => 124,
+            TimeoutError::SignalSent(signal) => 128 + signal,
             TimeoutError::Other(_) => 125,
             TimeoutError::UnableToRunUtility(_) => 126,
             TimeoutError::UtilityNotFound(_) => 127,
@@ -203,10 +206,10 @@ fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
                         if duration.is_zero() {
                             Ok(exit_code)
                         } else {
-                            Err(TimeoutError::TimeoutReached(Some(128 + exit_code)))
+                            Err(TimeoutError::SignalSent(exit_code))
                         }
                     } else {
-                        Err(TimeoutError::TimeoutReached(None))
+                        Err(TimeoutError::TimeoutReached)
                     }
                 }
                 mpsc::RecvTimeoutError::Disconnected => Err(TimeoutError::Other(err.to_string())),
@@ -240,7 +243,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(exit_status) => exit_status,
         Err(err) => {
             match err {
-                TimeoutError::TimeoutReached(_) => {}
+                TimeoutError::TimeoutReached | TimeoutError::SignalSent(_) => {}
                 _ => eprintln!("Error: {err}"),
             }
             err.into()
