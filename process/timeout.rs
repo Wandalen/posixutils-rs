@@ -21,11 +21,10 @@ use plib::PROJECT_NAME;
 use std::{
     error::Error,
     os::unix::process::ExitStatusExt,
-    process::Command,
+    process::{Child, Command, ExitStatus},
     str::FromStr,
-    sync::mpsc::{self, channel},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// timeout — execute a utility with a time limit
@@ -114,11 +113,10 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 fn parse_signal(s: &str) -> Result<Signal, String> {
     let signal_name = format!("SIG{}", s.to_uppercase());
 
-    // Try to convert the string to a `Signal` variant
-    Signal::from_str(signal_name.as_str()).map_err(|_| format!("invalid signal name '{}'", s))
+    Signal::from_str(&signal_name).map_err(|_| format!("invalid signal name '{}'", s))
 }
 
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug)]
 enum TimeoutError {
     #[error("timeout reached")]
     TimeoutReached,
@@ -148,7 +146,38 @@ fn send_signal(pid: Pid, signal: Signal) -> Result<(), TimeoutError> {
     kill(pid, signal).map_err(|err| TimeoutError::Other(err.to_string()))
 }
 
-fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
+fn wait(child: &mut Child) -> Result<i32, TimeoutError> {
+    child
+        .wait()
+        .map(ExitStatus::into_raw)
+        .map_err(|err| TimeoutError::Other(err.to_string()))
+}
+
+fn wait_for_duration(child: &mut Child, duration: Duration) -> Result<i32, TimeoutError> {
+    drop(child.stdin.take());
+
+    let start = Instant::now();
+    while start.elapsed() < duration {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|err| TimeoutError::Other(err.to_string()))?
+        {
+            return Ok(status.into_raw());
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Err(TimeoutError::TimeoutReached)
+}
+
+fn resolve_status(status: i32, preserve_status: bool) -> TimeoutError {
+    if preserve_status {
+        TimeoutError::SignalSent(status)
+    } else {
+        TimeoutError::TimeoutReached
+    }
+}
+
+fn timeout(args: Args) -> Result<i32, TimeoutError> {
     let Args {
         kill_after,
         signal,
@@ -169,57 +198,44 @@ fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
         })?;
     let pid = Pid::from_raw(child.id() as libc::pid_t);
 
-    let (tx, rx) = channel();
+    if duration.is_zero() {
+        wait(&mut child)
+    } else {
+        match wait_for_duration(&mut child, duration) {
+            Ok(status) => Ok(status),
+            Err(TimeoutError::TimeoutReached) => {
+                // Send first signal
+                send_signal(pid, signal)?;
 
-    thread::spawn(move || {
-        let status = child.wait();
-        tx.send(status)
-            .expect("Failed to send child process status");
-    });
-
-    match rx.recv_timeout(duration) {
-        Ok(status_res) => status_res
-            .map(|es| es.into_raw())
-            .map_err(|err| TimeoutError::Other(err.to_string())),
-        Err(err) => {
-            match err {
-                mpsc::RecvTimeoutError::Timeout => {
-                    if !duration.is_zero() {
-                        // Sending first signal
-                        send_signal(pid, signal)?;
-
-                        if let Some(kill_after_duration) = kill_after {
-                            if rx.recv_timeout(kill_after_duration).is_err() {
-                                // Sending second kill signal
-                                send_signal(pid, Signal::SIGKILL)?;
-                            }
-                        }
+                match kill_after {
+                    Some(kill_duration) => {
+                        // Attempt to wait for process exit status again
+                        wait_for_duration(&mut child, kill_duration)
+                            .and_then(|status| Err(resolve_status(status, preserve_status)))
+                            .or_else(|err| {
+                                if let TimeoutError::TimeoutReached = err {
+                                    // Send SIGKILL signal
+                                    send_signal(pid, Signal::SIGKILL)?;
+                                    let status = wait(&mut child)?;
+                                    Err(resolve_status(status, preserve_status))
+                                } else {
+                                    Err(err)
+                                }
+                            })
                     }
-
-                    if duration.is_zero() || preserve_status {
-                        let exit_code = match rx.recv() {
-                            Ok(status_res) => Ok(status_res
-                                .map(|es| es.into_raw())
-                                .map_err(|err| TimeoutError::Other(err.to_string()))?),
-                            Err(err) => Err(TimeoutError::Other(err.to_string())),
-                        }?;
-                        if duration.is_zero() {
-                            Ok(exit_code)
-                        } else {
-                            Err(TimeoutError::SignalSent(exit_code))
-                        }
-                    } else {
-                        Err(TimeoutError::TimeoutReached)
+                    None => {
+                        let status = wait(&mut child)?;
+                        Err(resolve_status(status, preserve_status))
                     }
                 }
-                mpsc::RecvTimeoutError::Disconnected => Err(TimeoutError::Other(err.to_string())),
             }
+            Err(err) => Err(err),
         }
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // parse command line arguments
+    // Parse command line arguments
     let args = Args::try_parse().unwrap_or_else(|err| match err.kind() {
         clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
             print!("{err}");
@@ -239,7 +255,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    let exit_code = match run_timeout(args) {
+    let exit_code = match timeout(args) {
         Ok(exit_status) => exit_status,
         Err(err) => {
             match err {
