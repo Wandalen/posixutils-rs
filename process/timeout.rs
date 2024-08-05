@@ -13,7 +13,10 @@ extern crate plib;
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
-use nix::sys::signal::Signal;
+use nix::{
+    sys::signal::{kill, Signal},
+    unistd::Pid,
+};
 use plib::PROJECT_NAME;
 use std::{
     error::Error,
@@ -46,7 +49,7 @@ struct Args {
     /// Specify the signal to send when the time limit is reached, using one of the symbolic names defined in the <signal.h> header.
     /// Values of signal_name shall be recognized in a case-independent fashion, without the SIG prefix. By default, SIGTERM shall be sent.
     #[arg(short = 's', long, default_value = "TERM", value_parser = parse_signal)]
-    signal: i32,
+    signal: Signal,
 
     /// The maximum amount of time to allow the utility to run, specified as a decimal number with an optional decimal fraction and an optional suffix.
     #[arg(name = "DURATION", value_parser = parse_duration)]
@@ -108,14 +111,11 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 /// # Returns
 ///
 /// Returns the integer value of the signal.
-fn parse_signal(s: &str) -> Result<i32, String> {
+fn parse_signal(s: &str) -> Result<Signal, String> {
     let signal_name = format!("SIG{}", s.to_uppercase());
 
     // Try to convert the string to a `Signal` variant
-    match Signal::from_str(signal_name.as_str()) {
-        Ok(signal) => Ok(signal as i32),
-        Err(_) => Err(format!("invalid signal name '{}'", s)),
-    }
+    Signal::from_str(signal_name.as_str()).map_err(|_| format!("invalid signal name '{}'", s))
 }
 
 #[derive(thiserror::Error, Debug, PartialEq)]
@@ -141,6 +141,10 @@ impl From<TimeoutError> for i32 {
     }
 }
 
+fn send_signal(pid: Pid, signal: Signal) -> Result<(), TimeoutError> {
+    kill(pid, signal).map_err(|err| TimeoutError::Other(err.to_string()))
+}
+
 fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
     let Args {
         kill_after,
@@ -160,7 +164,7 @@ fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
             std::io::ErrorKind::PermissionDenied => TimeoutError::UnableToRunUtility(utility),
             _ => TimeoutError::Other(err.to_string()),
         })?;
-    let pid = child.id();
+    let pid = Pid::from_raw(child.id() as libc::pid_t);
 
     let (tx, rx) = channel();
 
@@ -179,12 +183,12 @@ fn run_timeout(args: Args) -> Result<i32, TimeoutError> {
                 mpsc::RecvTimeoutError::Timeout => {
                     if !duration.is_zero() {
                         // Sending first signal
-                        unsafe { libc::kill(pid as libc::pid_t, signal) };
+                        send_signal(pid, signal)?;
 
                         if let Some(kill_after_duration) = kill_after {
                             if rx.recv_timeout(kill_after_duration).is_err() {
                                 // Sending second kill signal
-                                unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+                                send_signal(pid, Signal::SIGKILL)?;
                             }
                         }
                     }
