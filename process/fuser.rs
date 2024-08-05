@@ -5,10 +5,9 @@ extern crate plib;
 use clap::Parser;
 use core::fmt;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
-use libc::{fstat, PF_UNSPEC, SOCK_DGRAM, SOCK_STREAM};
+use libc::{fstat, SOCK_DGRAM, SOCK_STREAM};
 use plib::PROJECT_NAME;
 use std::{
-    arch::x86_64::_SIDD_MASKED_NEGATIVE_POLARITY,
     collections::BTreeMap,
     env,
     ffi::{CStr, CString},
@@ -24,8 +23,6 @@ use std::{
 
 const PROC_PATH: &'static str = "/proc";
 const PROC_MOUNTS: &'static str = "/proc/mounts";
-const PROC_SWAPS: &'static str = "/proc/swaps";
-const KNFSD_EXPORTS: &'static str = "/proc/fs/nfs/exports";
 const NAME_FIELD: usize = 20;
 
 #[derive(Clone, Debug, Default, PartialEq)]
