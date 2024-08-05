@@ -10,6 +10,8 @@
 extern crate clap;
 
 use clap::Parser;
+use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use plib::PROJECT_NAME;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -79,8 +81,8 @@ fn resolve_path(path: &Path, args: &Args) -> io::Result<PathBuf> {
             }
             std::path::Component::Normal(part) => {
                 result.push(part);
-                if !args.canonicalize_missing && !result.exists() {
-                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("{} does not exist", result.display())));
+                if args.canonicalize_missing && !result.exists() {
+                    return Ok(result);
                 }
             }
             _ => {}
@@ -91,15 +93,21 @@ fn resolve_path(path: &Path, args: &Args) -> io::Result<PathBuf> {
         return Err(io::Error::new(io::ErrorKind::NotFound, format!("{} does not exist", result.display())));
     }
 
-    Ok(result.canonicalize()?)
+    Ok(result)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
-
+fn realpath(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     for file in &args.files {
         match resolve_path(file, &args) {
-            Ok(resolved_path) => {
+            Ok(mut resolved_path) => {
+                if let Some(ref relative_to) = args.relative_to {
+                    resolved_path = resolved_path.strip_prefix(relative_to).unwrap_or(&resolved_path).to_path_buf();
+                }
+                if let Some(ref relative_base) = args.relative_base {
+                    if resolved_path.starts_with(relative_base) {
+                        resolved_path = resolved_path.strip_prefix(relative_base)?.to_path_buf();
+                    }
+                }
                 if args.zero {
                     print!("{}\0", resolved_path.display());
                 } else {
@@ -115,4 +123,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // parse command line arguments
+    let args = Args::parse();
+
+    setlocale(LocaleCategory::LcAll, "");
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+
+    let mut exit_code = 0;
+
+    if let Err(err) = realpath(args) {
+        exit_code = 1;
+        eprint!("{}", err);
+    }
+
+    std::process::exit(exit_code)
 }
