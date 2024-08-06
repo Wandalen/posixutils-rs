@@ -14,6 +14,7 @@ extern crate plib;
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use nix::{
+    errno::Errno,
     sys::signal::{kill, Signal},
     unistd::Pid,
 };
@@ -130,6 +131,18 @@ enum TimeoutError {
     UtilityNotFound(String),
 }
 
+impl From<std::io::Error> for TimeoutError {
+    fn from(error: std::io::Error) -> Self {
+        TimeoutError::Other(error.to_string())
+    }
+}
+
+impl From<Errno> for TimeoutError {
+    fn from(error: Errno) -> Self {
+        TimeoutError::Other(error.to_string())
+    }
+}
+
 impl From<TimeoutError> for i32 {
     fn from(error: TimeoutError) -> Self {
         match error {
@@ -143,14 +156,14 @@ impl From<TimeoutError> for i32 {
 }
 
 fn send_signal(pid: Pid, signal: Signal) -> Result<(), TimeoutError> {
-    kill(pid, signal).map_err(|err| TimeoutError::Other(err.to_string()))
+    kill(pid, signal).map_err(Into::into)
 }
 
 fn wait(child: &mut Child) -> Result<i32, TimeoutError> {
     child
         .wait()
         .map(ExitStatus::into_raw)
-        .map_err(|err| TimeoutError::Other(err.to_string()))
+        .map_err(Into::into)
 }
 
 fn wait_for_duration(child: &mut Child, duration: Duration) -> Result<i32, TimeoutError> {
@@ -194,7 +207,7 @@ fn timeout(args: Args) -> Result<i32, TimeoutError> {
         .map_err(|err| match err.kind() {
             std::io::ErrorKind::NotFound => TimeoutError::UtilityNotFound(utility),
             std::io::ErrorKind::PermissionDenied => TimeoutError::UnableToRunUtility(utility),
-            _ => TimeoutError::Other(err.to_string()),
+            _ => err.into(),
         })?;
     let pid = Pid::from_raw(child.id() as libc::pid_t);
 
