@@ -12,9 +12,10 @@ use std::{
     ffi::{CStr, CString},
     fs::{self, File},
     io::{self, BufRead, Error, ErrorKind, Write},
-    net::{IpAddr, UdpSocket},
+    net::{IpAddr, Ipv4Addr, UdpSocket},
     os::unix::io::AsRawFd,
     path::{Component, Path, PathBuf},
+    str::FromStr,
     sync::mpsc,
     thread,
     time::Duration,
@@ -67,7 +68,7 @@ impl Default for IpConnections {
             names: Names::default(),
             lcl_port: 0,
             rmt_port: 0,
-            rmt_addr: IpAddr::V4("0.0.0.0".parse().unwrap()),
+            rmt_addr: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             next: None,
         }
     }
@@ -282,13 +283,13 @@ impl Names {
     fn new(
         filename: PathBuf,
         name_space: NameSpace,
-        st: libc::stat,
+        st: LibcStat,
         matched_procs: Vec<Procs>,
     ) -> Self {
         Names {
             filename,
             name_space,
-            st: LibcStat { inner: st },
+            st,
             matched_procs,
         }
     }
@@ -354,7 +355,8 @@ struct Args {
     file: Vec<PathBuf>,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
@@ -383,14 +385,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         match name.name_space {
             NameSpace::File => handle_file_namespace(
-                &mut need_check_map,
                 name,
                 mount,
                 &mut mount_list,
                 &mut inode_list,
                 &mut device_list,
-                &unix_socket_list,
-                net_dev,
+                &mut need_check_map,
             )?,
             NameSpace::Tcp => {
                 if !mount {
@@ -411,7 +411,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &device_list,
             &unix_socket_list,
             net_dev,
-        )?;
+        )
+        .await?;
         print_matches(name, user)?;
     }
     let exit_code = 0;
@@ -419,8 +420,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::process::exit(exit_code)
 }
 
+/// Initializes and returns default values for various structures used in the application.
+///
+/// # Arguments
+///
+/// * `file` - A vector of `PathBuf` representing the file paths used to initialize `Names` objects.
+///
+/// # Returns
+///
+/// Returns a tuple containing:
+///
+/// * A vector of `Names` objects initialized with file paths and default values.
+/// * Default-initialized `UnixSocketList`, `MountList`, `DeviceList`, `InodeList`, `IpConnections` (TCP), and `IpConnections` (UDP).
+/// * A boolean value set to `false`, indicating the initial state.
 fn init_defaults(
-    file: Vec<PathBuf>,
+    files: Vec<PathBuf>,
 ) -> (
     Vec<Names>,
     UnixSocketList,
@@ -431,40 +445,41 @@ fn init_defaults(
     IpConnections,
     bool,
 ) {
-    let mut names = Names::default();
-
-    names.filename = file[0].clone();
-    let mut names_vec = vec![];
-    for name in file.iter() {
-        names_vec.push(Names::new(
-            name.clone(),
-            NameSpace::default(),
-            unsafe { std::mem::zeroed() },
-            vec![],
-        ))
-    }
-
-    let unix_socket_list = UnixSocketList::default();
-    let mount_list = MountList::default();
-    let device_list = DeviceList::default();
-    let inode_list = InodeList::default();
-    let tcp_connection_list = IpConnections::default();
-    let udp_connection_list = IpConnections::default();
+    let names_vec = files
+        .iter()
+        .map(|path| {
+            Names::new(
+                path.clone(),
+                NameSpace::default(),
+                LibcStat::default(),
+                vec![],
+            )
+        })
+        .collect();
 
     (
         names_vec,
-        unix_socket_list,
-        mount_list,
-        device_list,
-        inode_list,
-        tcp_connection_list,
-        udp_connection_list,
+        UnixSocketList::default(),
+        MountList::default(),
+        DeviceList::default(),
+        InodeList::default(),
+        IpConnections::default(),
+        IpConnections::default(),
         false,
     )
 }
 
-fn determine_namespace(path: &PathBuf) -> NameSpace {
-    if let Some(name_str) = path.to_str() {
+/// Determines the `NameSpace` based on the presence of "tcp" or "udp" in the path string.
+///
+/// # Arguments
+///
+/// * `filename` -`PathBuf` representing the filename.
+///
+/// # Returns
+///
+/// Namespace type
+fn determine_namespace(filename: &PathBuf) -> NameSpace {
+    if let Some(name_str) = filename.to_str() {
         if name_str.contains("tcp") {
             NameSpace::Tcp
         } else if name_str.contains("udp") {
@@ -477,15 +492,31 @@ fn determine_namespace(path: &PathBuf) -> NameSpace {
     }
 }
 
+/// Processes file namespaces by expanding paths and updating lists based on the mount flag.
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` object containing the file path.
+/// * `mount` - A boolean indicating whether to handle mount information or not.
+/// * `mount_list` - A mutable reference to a `MountList` for reading mount points.
+/// * `inode_list` - A mutable reference to an `InodeList` for updating inode information.
+/// * `device_list` - A mutable reference to a `DeviceList` for updating device information.
+/// * `need_check_map` - A mutable reference to a boolean indicating if the map needs checking.
+///
+/// # Errors
+///
+/// Returns an error if path expansion, file status retrieval, or `/proc/mounts` reading fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn handle_file_namespace(
-    need_check_map: &mut bool,
     names: &mut Names,
     mount: bool,
     mount_list: &mut MountList,
     inode_list: &mut InodeList,
     device_list: &mut DeviceList,
-    unix_socket_list: &UnixSocketList,
-    net_dev: u64,
+    need_check_map: &mut bool,
 ) -> Result<(), std::io::Error> {
     names.filename = expand_path(&names.filename)?;
     let st = timeout(&names.filename.to_string_lossy(), 5)?;
@@ -501,28 +532,74 @@ fn handle_file_namespace(
     Ok(())
 }
 
+/// Handles TCP namespace processing by updating connection and inode lists.
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` object containing the file path.
+/// * `tcp_connection_list` - A mutable reference to an `IpConnections` object for TCP connections.
+/// * `inode_list` - A mutable reference to an `InodeList` for updating inode information.
+/// * `net_dev` - A `u64` representing the network device identifier.
+///
+/// # Errors
+///
+/// Returns an error if parsing TCP connections or finding network sockets fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn handle_tcp_namespace(
     names: &mut Names,
     tcp_connection_list: &mut IpConnections,
     inode_list: &mut InodeList,
     net_dev: u64,
 ) -> Result<(), std::io::Error> {
-    let tcp_connection_list = parse_inet(names, tcp_connection_list).unwrap();
+    let tcp_connection_list = parse_inet(names, tcp_connection_list)?;
     *inode_list = find_net_sockets(inode_list, &tcp_connection_list, "tcp", net_dev)?;
     Ok(())
 }
 
+/// Handles UDP namespace processing by updating connection and inode lists.
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` object containing the file path.
+/// * `udp_connection_list` - A mutable reference to an `IpConnections` object for UDP connections.
+/// * `inode_list` - A mutable reference to an `InodeList` for updating inode information.
+/// * `net_dev` - A `u64` representing the network device identifier.
+///
+/// # Errors
+///
+/// Returns an error if parsing UDP connections or finding network sockets fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn handle_udp_namespace(
     names: &mut Names,
     udp_connection_list: &mut IpConnections,
     inode_list: &mut InodeList,
     net_dev: u64,
 ) -> Result<(), std::io::Error> {
-    let udp_connection_list = parse_inet(names, udp_connection_list).unwrap();
+    let udp_connection_list = parse_inet(names, udp_connection_list)?;
     *inode_list = find_net_sockets(inode_list, &udp_connection_list, "udp", net_dev)?;
     Ok(())
 }
 
+/// Prints process matches for a given `Names` object to `stderr` and `stdout`.
+///
+/// # Arguments
+///
+/// * `name` - A mutable reference to a `Names` object containing matched processes.
+/// * `user` - A boolean indicating whether to display the process owner name.
+///
+/// # Errors
+///
+/// Returns an error if flushing output to `stderr` or `stdout` fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn print_matches(name: &mut Names, user: bool) -> Result<(), io::Error> {
     let mut proc_map: BTreeMap<i32, (String, u32)> = BTreeMap::new();
     let mut name_has_procs = false;
@@ -567,9 +644,15 @@ fn print_matches(name: &mut Names, user: bool) -> Result<(), io::Error> {
         eprint!("{}", access);
         if user {
             let owner = unsafe {
-                CStr::from_ptr(libc::getpwuid(uid).as_ref().unwrap().pw_name)
-                    .to_str()
-                    .unwrap()
+                let pw_entry = libc::getpwuid(uid);
+                if pw_entry.is_null() {
+                    "unknownr"
+                } else {
+                    match CStr::from_ptr((*pw_entry).pw_name).to_str() {
+                        Ok(name) => name,
+                        Err(_) => "invalid_string",
+                    }
+                }
             };
             eprint!("({})", owner);
         }
@@ -581,7 +664,24 @@ fn print_matches(name: &mut Names, user: bool) -> Result<(), io::Error> {
 }
 
 /// Scans the `/proc` directory for process information and checks various access types.
-fn scan_procs(
+///
+/// # Arguments
+///
+/// * `need_check_map` - A boolean indicating whether to check the process map files.
+/// * `names` - A mutable reference to a `Names` object for storing matched processes.
+/// * `inode_list` - A reference to an `InodeList` for updating inode information.
+/// * `device_list` - A reference to a `DeviceList` for updating device information.
+/// * `unix_socket_list` - A reference to a `UnixSocketList` for checking Unix sockets.
+/// * `net_dev` - A `u64` representing the network device identifier.
+///
+/// # Errors
+///
+/// Returns an error if reading directory entries, accessing process stats, or checking access types fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
+async fn scan_procs(
     need_check_map: bool,
     names: &mut Names,
     inode_list: &InodeList,
@@ -590,9 +690,9 @@ fn scan_procs(
     net_dev: u64,
 ) -> Result<(), io::Error> {
     let my_pid = std::process::id() as i32;
+    let mut read_dir = tokio::fs::read_dir(PROC_PATH).await?;
 
-    for entry in fs::read_dir(PROC_PATH)? {
-        let entry = entry?;
+    while let Some(entry) = read_dir.next_entry().await? {
         let filename = entry
             .file_name()
             .into_string()
@@ -645,6 +745,24 @@ fn scan_procs(
     Ok(())
 }
 
+/// Checks if a process has access to the root directory and updates the `Names` object if it does.
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` object for adding process information.
+/// * `pid` - The process ID to check.
+/// * `uid` - The user ID of the process.
+/// * `root_stat` - A reference to a `libc::stat` structure containing root directory information.
+/// * `device_list` - A reference to a `DeviceList` for checking device IDs.
+/// * `inode_list` - A reference to an `InodeList` for checking inode information.
+///
+/// # Errors
+///
+/// Returns an error if adding process information fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn check_root_access(
     names: &mut Names,
     pid: i32,
@@ -671,6 +789,24 @@ fn check_root_access(
     Ok(())
 }
 
+/// Checks if a process has access to the current working directory and updates the `Names` object if it does.
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` object for adding process information.
+/// * `pid` - The process ID to check.
+/// * `uid` - The user ID of the process.
+/// * `cwd_stat` - A reference to a `libc::stat` structure containing current working directory information.
+/// * `device_list` - A reference to a `DeviceList` for checking device IDs.
+/// * `inode_list` - A reference to an `InodeList` for checking inode information.
+///
+/// # Errors
+///
+/// Returns an error if adding process information fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn check_cwd_access(
     names: &mut Names,
     pid: i32,
@@ -697,6 +833,24 @@ fn check_cwd_access(
     Ok(())
 }
 
+/// Checks if a process has access to the executable file and updates the `Names` object if it does.
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` object for adding process information.
+/// * `pid` - The process ID to check.
+/// * `uid` - The user ID of the process.
+/// * `exe_stat` - A reference to a `libc::stat` structure containing executable file information.
+/// * `device_list` - A reference to a `DeviceList` for checking device IDs.
+/// * `inode_list` - A reference to an `InodeList` for checking inode information.
+///
+/// # Errors
+///
+/// Returns an error if adding process information fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn check_exe_access(
     names: &mut Names,
     pid: i32,
@@ -723,6 +877,7 @@ fn check_exe_access(
     Ok(())
 }
 
+/// Adds a new process to the `Names` object with specified access and process type.
 fn add_process(
     names: &mut Names,
     pid: i32,
@@ -735,6 +890,28 @@ fn add_process(
     names.add_procs(proc);
 }
 
+/// Checks a directory within a process's `/proc` entry for matching devices and inodes,
+/// and updates the `Names` object with relevant process information.
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` object for adding process information.
+/// * `pid` - The process ID whose directory is being checked.
+/// * `dirname` - The name of the directory to check (e.g., "fd").
+/// * `device_list` - A reference to a `DeviceList` for checking device IDs.
+/// * `inode_list` - A reference to an `InodeList` for checking inode information.
+/// * `uid` - The user ID of the process.
+/// * `access` - The type of access to assign (e.g., File, Filewr).
+/// * `unix_socket_list` - A reference to a `UnixSocketList` for checking Unix sockets.
+/// * `net_dev` - A `u64` representing the network device identifier.
+///
+/// # Errors
+///
+/// Returns an error if reading directory entries or accessing file stats fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn check_dir(
     names: &mut Names,
     pid: i32,
@@ -785,6 +962,24 @@ fn check_dir(
     Ok(())
 }
 
+/// Checks the memory map of a process for matching devices and updates the `Names` object.
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` object for adding process information.
+/// * `pid` - The process ID whose memory map is being checked.
+/// * `filename` - The name of the file containing the memory map (e.g., "maps").
+/// * `device_list` - A reference to a `DeviceList` for checking device IDs.
+/// * `uid` - The user ID of the process.
+/// * `access` - The type of access to assign (e.g., Mmap).
+///
+/// # Errors
+///
+/// Returns an error if opening the file or reading lines fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn check_map(
     names: &mut Names,
     pid: i32,
@@ -834,7 +1029,19 @@ fn get_pid_stat(pid: i32, filename: &str) -> Result<libc::stat, io::Error> {
     timeout(&path, 5)
 }
 
-/// Fills the `unix_socket_list` with info from `/proc/net/unix`.
+/// Fills the `unix_socket_list` with information from the `/proc/net/unix` file.
+///
+/// # Arguments
+///
+/// * `unix_socket_list` - A mutable reference to a `UnixSocketList` to be populated with socket information.
+///
+/// # Errors
+///
+/// Returns an error if opening the file or reading lines fails.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success.
 fn fill_unix_cache(unix_socket_list: &mut UnixSocketList) -> Result<(), io::Error> {
     let file = File::open("/proc/net/unix")?;
     let reader = io::BufReader::new(file);
@@ -862,7 +1069,19 @@ fn fill_unix_cache(unix_socket_list: &mut UnixSocketList) -> Result<(), io::Erro
     Ok(())
 }
 
-/// Reads the `/proc/mounts` file and populates the provided `MountList` with mount points.
+/// Reads the `/proc/mounts` file and updates the `mount_list` with mount points.
+///
+/// # Arguments
+///
+/// * `mount_list` - A mutable reference to a `MountList` for storing the mount points.
+///
+/// # Errors
+///
+/// Returns an error if opening the file or reading lines fails.
+///
+/// # Returns
+///
+/// Returns `Ok(mount_list)` on success, with the `mount_list` updated.
 fn read_proc_mounts(mount_list: &mut MountList) -> io::Result<&mut MountList> {
     let file = File::open(PROC_MOUNTS)?;
     let reader = io::BufReader::new(file);
@@ -888,7 +1107,20 @@ fn normalize_path(scanned_path: &str) -> String {
 
 /// Parses network socket information from the `filename` field of the `Names` struct
 /// and returns an `IpConnections` instance.
-fn parse_inet(names: &mut Names, ip_list: &mut IpConnections) -> io::Result<IpConnections> {
+///
+/// # Arguments
+///
+/// * `names` - A mutable reference to a `Names` struct containing the filename to parse.
+/// * `ip_list` - A mutable reference to an `IpConnections` instance to be populated.
+///
+/// # Errors
+///
+/// Returns an error if the filename format is invalid or if parsing fails.
+///
+/// # Returns
+///
+/// Returns an `IpConnections` instance populated with parsed network information.
+fn parse_inet(names: &mut Names, ip_list: &mut IpConnections) -> Result<IpConnections, io::Error> {
     let filename_str = names.filename.to_string_lossy();
     let parts: Vec<&str> = filename_str.split('/').collect();
 
@@ -899,7 +1131,6 @@ fn parse_inet(names: &mut Names, ip_list: &mut IpConnections) -> io::Result<IpCo
         ));
     }
 
-    let protocol = parts[1];
     let hostspec = parts[0];
     let host_parts: Vec<&str> = hostspec.split(',').collect();
 
@@ -913,27 +1144,42 @@ fn parse_inet(names: &mut Names, ip_list: &mut IpConnections) -> io::Result<IpCo
         .parse::<u64>()
         .map_err(|_| Error::new(ErrorKind::InvalidInput, "Invalid local port format"))?;
 
-    let protocol_socktype = match protocol {
-        "tcp" => libc::SOCK_STREAM,
-        "udp" => libc::SOCK_DGRAM,
-        _ => {
-            return Err(Error::new(ErrorKind::InvalidInput, "Unsupported protocol"));
-        }
+    let rmt_port = rmt_port_str
+        .as_ref()
+        .map(|s| {
+            s.parse::<u64>()
+                .map_err(|_| Error::new(ErrorKind::InvalidInput, "Invalid remote port format"))
+        })
+        .transpose()?
+        .unwrap_or(0);
+
+    let rmt_addr = match rmt_addr_str {
+        Some(addr_str) => match addr_str.parse::<IpAddr>() {
+            Ok(addr) => addr,
+            Err(_) => {
+                eprintln!("Warning: Invalid remote address {}", addr_str);
+                IpAddr::V4(Ipv4Addr::UNSPECIFIED) // Default value if address parsing fails
+            }
+        },
+        None => IpAddr::V4(Ipv4Addr::UNSPECIFIED), // Default value if address is not provided
     };
 
-    if rmt_addr_str.is_none() && rmt_port_str.is_none() {
-        let rmt_addr = IpAddr::V4("0.0.0.0".parse().unwrap());
-
-        Ok(IpConnections::new(names.clone(), lcl_port, 0, rmt_addr))
-    } else {
-        Err(Error::new(
-            ErrorKind::InvalidInput,
-            "Can't parse tcp/udp net socket",
-        ))
-    }
+    Ok(IpConnections::new(
+        names.clone(),
+        lcl_port,
+        rmt_port,
+        rmt_addr,
+    ))
 }
-
 /// Retrieves the device identifier of the network interface associated with a UDP socket.
+///
+/// # Errors
+///
+/// Returns an error if binding the socket or retrieving the device identifier fails.
+///
+/// # Returns
+///
+/// Returns the device identifier (`u64`) of the network interface.
 fn find_net_dev() -> Result<u64, io::Error> {
     let socket = UdpSocket::bind("0.0.0.0:0")?;
     let fd = socket.as_raw_fd();
@@ -991,9 +1237,6 @@ fn find_net_sockets(
         };
 
         let loc_port = parts.get(1).and_then(|&s| parse_hex_port(s));
-        let rmt_addr = parts
-            .get(2)
-            .and_then(|&s| parse_hex_port(s.split(':').next().unwrap_or("")));
         let rmt_port = parts.get(2).and_then(|&s| parse_hex_port(s));
         let scanned_inode = parts.get(9).and_then(|&s| s.parse::<u64>().ok());
 
@@ -1001,10 +1244,13 @@ fn find_net_sockets(
             for connection in connections_list.iter() {
                 let loc_port = loc_port.unwrap_or(0);
                 let rmt_port = rmt_port.unwrap_or(0);
-                let rmt_addr = rmt_addr.unwrap_or(0);
+                let rmt_addr = parse_ipv4_addr(parts[2].split(':').next().unwrap_or(""))
+                    .unwrap_or(Ipv4Addr::UNSPECIFIED);
 
                 if (connection.lcl_port == 0 || connection.lcl_port == loc_port)
                     && (connection.rmt_port == 0 || connection.rmt_port == rmt_port)
+                    && (connection.rmt_addr == Ipv4Addr::UNSPECIFIED
+                        || connection.rmt_addr == rmt_addr)
                 {
                     return Ok(InodeList::new(
                         connection.names.clone(),
@@ -1022,8 +1268,24 @@ fn find_net_sockets(
     ))
 }
 
+/// Parses a hexadecimal string representation of an IPv4 address.
+fn parse_ipv4_addr(addr: &str) -> Option<Ipv4Addr> {
+    if addr.len() == 8 {
+        let octets = [
+            u8::from_str_radix(&addr[0..2], 16).ok()?,
+            u8::from_str_radix(&addr[2..4], 16).ok()?,
+            u8::from_str_radix(&addr[4..6], 16).ok()?,
+            u8::from_str_radix(&addr[6..8], 16).ok()?,
+        ];
+        Some(Ipv4Addr::from(octets))
+    } else {
+        None
+    }
+}
+
+/// Retrieves the status of a file given its filename.
 fn stat(filename_str: &str) -> io::Result<libc::stat> {
-    let filename = CString::new(filename_str).unwrap();
+    let filename = CString::new(filename_str)?;
 
     unsafe {
         let mut st: libc::stat = std::mem::zeroed();
@@ -1043,7 +1305,9 @@ fn timeout(path: &str, seconds: u32) -> Result<libc::stat, io::Error> {
 
     thread::scope(|s| {
         s.spawn(|| {
-            tx.send(stat(path)).unwrap();
+            if let Err(e) = tx.send(stat(path)) {
+                eprintln!("Failed to send result through channel: {}", e);
+            }
         });
     });
 
