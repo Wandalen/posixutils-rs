@@ -56,7 +56,7 @@ async fn test_fuser_basic() {
     });
 }
 
-// Retrieves the username associated with the given process ID.
+/// Retrieves the username associated with the given process ID.
 ///
 /// # Arguments
 ///
@@ -96,13 +96,13 @@ fn get_process_user(pid: u32) -> io::Result<String> {
     }
 }
 
-/// Tests `fuser` with the `-u` flag to ensure it outputs the username of the process owner.
+/// Tests `fuser` with the `-u` flag to ensure it outputs the process owner.
 ///
 /// **Setup:**
 /// - Starts a process running `sleep 1`.
 ///
 /// **Assertions:**
-/// - Verifies that the owner's username appears in the `fuser` error output.
+/// - Verifies that the owner printed in stderr.
 #[test]
 fn test_fuser_with_user() {
     let process = Command::new("sleep")
@@ -160,13 +160,13 @@ fn test_fuser_with_mount() {
     );
 }
 
-/// Tests `fuser` with multiple file paths to ensure it can handle multiple files and report their PIDs.
+/// Tests `fuser` with multiple file paths.
 ///
 /// **Setup:**
 /// - Starts two processes running `sleep 1` in different directories.
 ///
 /// **Assertions:**
-/// - Verifies that the PIDs of both processes are included in the `fuser` output for the specified directories.
+/// - Verifies that the PIDs of both processes are included in the stdout.
 #[test]
 fn test_fuser_with_many_files() {
     let process1 = Command::new("sleep")
@@ -206,14 +206,14 @@ fn test_fuser_with_many_files() {
     );
 }
 
-/// Starts a TCP server on port 8080 for testing.
+/// Starts a TCP server on port 8080.
 async fn start_tcp_server() -> TcpListener {
     TcpListener::bind(("127.0.0.1", 8080))
         .await
         .expect("Failed to bind TCP server")
 }
 
-/// Tests `fuser` with TCP sockets to ensure it matches the expected output.
+/// Tests `fuser` with TCP socket.
 ///
 /// **Setup:**
 /// - Starts a TCP server on port 8080.
@@ -231,14 +231,14 @@ async fn test_fuser_tcp() {
     });
 }
 
-/// Starts a UDP server on port 8081 for testing.
+/// Starts a UDP server on port 8081.
 async fn start_udp_server() -> UdpSocket {
     UdpSocket::bind(("127.0.0.1", 8081))
         .await
         .expect("Failed to bind UDP server")
 }
 
-/// Tests `fuser` with UDP sockets to ensure it matches the expected output.
+/// Tests `fuser` with UDP socket.
 ///
 /// **Setup:**
 /// - Starts a UDP server on port 8081.
@@ -265,14 +265,13 @@ async fn start_unix_socket(socket_path: &str) -> UnixListener {
     UnixListener::bind(socket_path).expect("Failed to bind Unix socket")
 }
 
-/// Tests `fuser` with Unix sockets to ensure it correctly identifies processes using a Unix socket.
+/// Tests `fuser` with Unix socket.
 ///
 /// **Setup:**
 /// - Starts a Unix socket server at the specified path (`/tmp/test.sock`).
 ///
 /// **Assertions:**
 /// - Verifies that the output of `fuser` matches the manual execution for the Unix socket at `/tmp/test.sock`.
-/// - Compares the `stdout` and `stderr` of the `fuser` command with the output of a manual execution to ensure consistency.
 ///
 /// **Note:**
 /// - Before binding to the socket, the function checks if a socket file already exists at the path and deletes it if present.

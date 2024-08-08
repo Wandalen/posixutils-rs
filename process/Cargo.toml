@@ -19,9 +19,6 @@ tokio = { version = "1.39.2", features = ["full"]}
 [[bin]]
 name = "fuser"
 path = "./fuser.rs"
-[[bin]]
-name = "ruser"
-path = "./ruser.rs"
 
 [[bin]]
 name = "env"
