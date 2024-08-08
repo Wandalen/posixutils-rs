@@ -15,7 +15,6 @@ use std::{
     net::{IpAddr, Ipv4Addr, UdpSocket},
     os::unix::io::AsRawFd,
     path::{Component, Path, PathBuf},
-    str::FromStr,
     sync::mpsc,
     thread,
     time::Duration,
@@ -25,7 +24,7 @@ const PROC_PATH: &'static str = "/proc";
 const PROC_MOUNTS: &'static str = "/proc/mounts";
 const NAME_FIELD: usize = 20;
 
-#[derive(Clone, Default, PartialEq, Debug)]
+#[derive(Clone, Default, PartialEq)]
 enum ProcType {
     #[default]
     Normal = 0,
@@ -34,7 +33,7 @@ enum ProcType {
     Swap = 3,
 }
 
-#[derive(Clone, Default, PartialEq, Debug)]
+#[derive(Clone, Default, PartialEq)]
 enum NameSpace {
     #[default]
     File = 0,
@@ -42,7 +41,7 @@ enum NameSpace {
     Udp = 2,
 }
 
-#[derive(Clone, Default, PartialEq, Debug)]
+#[derive(Clone, Default, PartialEq)]
 enum Access {
     Cwd = 1,
     Exe = 2,
@@ -53,7 +52,7 @@ enum Access {
     Filewr = 32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct IpConnections {
     names: Names,
     lcl_port: u64,
@@ -84,17 +83,6 @@ impl IpConnections {
             next: None,
         }
     }
-    fn add_ip_conn(&mut self, names: Names, lcl_port: u64, rmt_port: u64, rmt_addr: IpAddr) {
-        let new_node = Box::new(IpConnections {
-            names,
-            lcl_port,
-            rmt_port,
-            rmt_addr,
-            next: self.next.take(),
-        });
-
-        self.next = Some(new_node);
-    }
 
     fn iter(&self) -> IpConnectionsIterator {
         IpConnectionsIterator {
@@ -118,7 +106,7 @@ impl<'a> Iterator for IpConnectionsIterator<'a> {
     }
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default)]
 struct Procs {
     pid: i32,
     uid: u32,
@@ -126,7 +114,6 @@ struct Procs {
     proc_type: ProcType,
     username: Option<i8>,
     command: String,
-    next: Option<Box<Procs>>,
 }
 
 impl Procs {
@@ -138,15 +125,11 @@ impl Procs {
             proc_type,
             username: None,
             command,
-            next: None,
         }
-    }
-    pub fn is_unique(pid: i32, procs_list: &Vec<Procs>) -> bool {
-        procs_list.iter().all(|p| p.pid != pid)
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone)]
 struct UnixSocketList {
     name: String,
     device_id: u64,
@@ -200,7 +183,7 @@ impl<'a> Iterator for UnixSocketListIterator<'a> {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 struct InodeList {
     name: Names,
     device_id: u64,
@@ -240,21 +223,13 @@ impl<'a> Iterator for InodeListIterator<'a> {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone)]
 struct MountList {
     mountpoints: Vec<PathBuf>,
 }
 
 struct LibcStat {
     inner: libc::stat,
-}
-
-use std::fmt;
-
-impl fmt::Debug for LibcStat {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Ok(())
-    }
 }
 
 impl Default for LibcStat {
@@ -271,7 +246,7 @@ impl Clone for LibcStat {
     }
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default)]
 struct Names {
     filename: PathBuf,
     name_space: NameSpace,
@@ -299,7 +274,7 @@ impl Names {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 struct DeviceList {
     name: Names,
     device_id: u64,
@@ -420,7 +395,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::process::exit(exit_code)
 }
 
-/// Initializes and returns default values for various structures used in the application.
+/// Initializes and returns default values.
 ///
 /// # Arguments
 ///
@@ -430,8 +405,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// Returns a tuple containing:
 ///
-/// * A vector of `Names` objects initialized with file paths and default values.
-/// * Default-initialized `UnixSocketList`, `MountList`, `DeviceList`, `InodeList`, `IpConnections` (TCP), and `IpConnections` (UDP).
+/// * Default-initialized `Vec<Names>`, UnixSocketList`, `MountList`, `DeviceList`, `InodeList`, `IpConnections` (TCP), and `IpConnections` (UDP).
 /// * A boolean value set to `false`, indicating the initial state.
 fn init_defaults(
     files: Vec<PathBuf>,
@@ -473,7 +447,7 @@ fn init_defaults(
 ///
 /// # Arguments
 ///
-/// * `filename` -`PathBuf` representing the filename.
+/// * `filename` -`PathBuf`.
 ///
 /// # Returns
 ///
