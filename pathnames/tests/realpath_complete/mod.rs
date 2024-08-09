@@ -18,7 +18,7 @@ fn run_test_realpath(
     let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
 
     run_test(TestPlan {
-        cmd: String::from("realpath_new"),
+        cmd: String::from("realpath_complete"),
         args: str_args,
         stdin_data: String::new(),
         expected_out: String::from(expected_output),
