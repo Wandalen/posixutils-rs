@@ -27,3 +27,7 @@ path = "./pathchk.rs"
 [[bin]]
 name = "realpath"
 path = "./realpath.rs"
+
+[[bin]]
+name = "realpath_complete"
+path = "./realpath_complete.rs"
