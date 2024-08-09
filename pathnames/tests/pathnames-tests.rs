@@ -9,4 +9,5 @@
 
 mod basename;
 mod dirname;
+mod realpath;
 mod realpath_new;

@@ -25,5 +25,9 @@ name = "pathchk"
 path = "./pathchk.rs"
 
 [[bin]]
+name = "realpath"
+path = "./realpath.rs"
+
+[[bin]]
 name = "realpath_new"
 path = "./realpath_new.rs"
