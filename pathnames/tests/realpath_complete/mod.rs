@@ -18,7 +18,7 @@ fn run_test_realpath(
     let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
 
     run_test(TestPlan {
-        cmd: String::from("realpath"),
+        cmd: String::from("realpath_new"),
         args: str_args,
         stdin_data: String::new(),
         expected_out: String::from(expected_output),
@@ -44,7 +44,7 @@ fn realpath_e_test() {
     let test_dir = format!("{}", project_root);
     let args = ["-e", "mod/mod.rs"];
 
-    let expected_error = format!("realpath: mod/mod.rs: {}/mod/mod.rs does not exist\n", test_dir);
+    let expected_error = format!("realpath: mod/mod.rs: Path does not exist: {}/mod/mod.rs\n", test_dir);
 
     run_test_realpath(&args, "", &expected_error, 0)
 }

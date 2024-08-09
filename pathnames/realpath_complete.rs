@@ -120,7 +120,7 @@ fn resolve_path(path: &Path, args: &Args) -> Result<PathBuf, RealpathError> {
                 }
 
                 // If --strip is not set, we resolve symlinks
-                if !args.strip {
+                if !args.strip && path.is_symlink() {
                     result = result.canonicalize().map_err(|_| RealpathError::CanonicalizeError(format!("{}", result.display())))?;
                 }
             }

@@ -29,5 +29,5 @@ name = "realpath"
 path = "./realpath.rs"
 
 [[bin]]
-name = "realpath_new"
-path = "./realpath_new.rs"
+name = "realpath_complete"
+path = "./realpath_complete.rs"
