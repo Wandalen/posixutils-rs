@@ -12,7 +12,7 @@ extern crate clap;
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
-use std::io;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// realpath - print the resolved path
@@ -57,14 +57,40 @@ struct Args {
 
     /// Files to resolve
     files: Vec<PathBuf>,
+
+    /// Do not treat it as an error if the last component does not exist
+    #[arg(short = 'E')]
+    no_error_on_last_component: bool,
 }
 
-fn resolve_path(path: &Path, args: &Args) -> io::Result<PathBuf> {
+enum RealpathError {
+    InvalidPath(String),
+    PathNotExist(String),
+    CanonicalizeError(String),
+}
+
+impl fmt::Display for RealpathError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RealpathError::InvalidPath(path) => {
+                write!(f, "Invalid path: {}", path)
+            }
+            RealpathError::PathNotExist(path) => {
+                write!(f, "Path does not exist: {}", path)
+            }
+            RealpathError::CanonicalizeError(path) => {
+                write!(f, "Error canonicalizing path: {}", path)
+            }
+        }
+    }
+}
+
+fn resolve_path(path: &Path, args: &Args) -> Result<PathBuf, RealpathError> {
     let mut components = path.components().peekable();
     let mut result = if path.is_absolute() {
         PathBuf::from("/")
     } else {
-        std::env::current_dir()?
+        std::env::current_dir().map_err(|_| RealpathError::InvalidPath(format!("{}", path.display())))?
     };
 
     while let Some(component) = components.next() {
@@ -73,7 +99,9 @@ fn resolve_path(path: &Path, args: &Args) -> io::Result<PathBuf> {
             std::path::Component::CurDir => {}
             std::path::Component::ParentDir => {
                 if args.logical {
-                    result.pop();
+                    if result.parent().is_some() {
+                        result.pop();
+                    }
                 } else {
                     let symlink = result.read_link().unwrap_or_else(|_| result.clone());
                     result = symlink.parent().unwrap_or_else(|| Path::new("/")).to_path_buf();
@@ -81,16 +109,30 @@ fn resolve_path(path: &Path, args: &Args) -> io::Result<PathBuf> {
             }
             std::path::Component::Normal(part) => {
                 result.push(part);
-                if args.canonicalize_missing && !result.exists() {
-                    return Ok(result);
+
+                if !args.strip && args.canonicalize_missing && !result.exists() {
+                    // Check if this is the last component and --no_error_on_last_component is set
+                    if args.no_error_on_last_component && components.peek().is_none() {
+                        break;
+                    } else {
+                        return Ok(result);
+                    }
+                }
+
+                // If --strip is not set, we resolve symlinks
+                if !args.strip {
+                    result = result.canonicalize().map_err(|_| RealpathError::CanonicalizeError(format!("{}", result.display())))?;
                 }
             }
             _ => {}
         }
     }
 
-    if args.canonicalize_existing && !result.exists() {
-        return Err(io::Error::new(io::ErrorKind::NotFound, format!("{} does not exist", result.display())));
+    if !args.strip && args.canonicalize_existing && !result.exists() {
+        // Check if this is the last component and --no_error_on_last_component is set
+        if !(args.no_error_on_last_component && components.peek().is_none()) {
+            return Err(RealpathError::PathNotExist(format!("{}", result.display())));
+        }
     }
 
     Ok(result)
