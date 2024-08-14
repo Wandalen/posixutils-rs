@@ -731,7 +731,8 @@ async fn scan_procs(
                 Access::File,
                 unix_socket_list,
                 net_dev,
-            ).await?;
+            )
+            .await?;
         }
     }
 
@@ -980,6 +981,12 @@ async fn check_map(
     uid: u32,
     access: Access,
 ) -> Result<(), io::Error> {
+    let already_exists = names.matched_procs.iter().any(|p| p.pid == pid);
+
+    if already_exists {
+        return Ok(());
+    }
+
     let pathname = format!("/proc/{}/{}", pid, filename);
     let file = File::open(&pathname)?;
     let reader = io::BufReader::new(file);
