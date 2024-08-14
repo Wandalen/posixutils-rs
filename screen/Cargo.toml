@@ -26,3 +26,8 @@ path = "./tabs.rs"
 name = "tput"
 path = "./tput.rs"
 
+[[bin]]
+name = "more"
+path = "./more.rs"
+
+
