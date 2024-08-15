@@ -343,8 +343,7 @@ struct Args {
     file: Vec<PathBuf>,
 }
 use clap::CommandFactory;
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
@@ -409,9 +408,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &device_list,
             &unix_socket_list,
             net_dev,
-        )
-        .await)
-            .is_err()
+        ))
+        .is_err()
         {
             std::process::exit(1);
         }
@@ -476,17 +474,21 @@ fn init_defaults(
 ///
 /// Namespace type
 fn determine_namespace(filename: &Path) -> NameSpace {
-    if let Some(name_str) = filename.to_str() {
-        if name_str.contains("tcp") {
-            NameSpace::Tcp
-        } else if name_str.contains("udp") {
-            NameSpace::Udp
-        } else {
-            NameSpace::default()
-        }
-    } else {
-        NameSpace::default()
-    }
+    filename
+        .to_str()
+        .and_then(|name_str| {
+            let parts: Vec<&str> = name_str.split('/').collect();
+            if parts.len() == 2 && parts[0].parse::<u16>().is_ok() {
+                match parts[1] {
+                    "tcp" => Some(NameSpace::Tcp),
+                    "udp" => Some(NameSpace::Udp),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(NameSpace::default)
 }
 
 /// Processes file namespaces by expanding paths and updating lists based on the mount flag.
@@ -673,7 +675,7 @@ fn print_matches(name: &mut Names, user: bool) -> Result<(), io::Error> {
 /// # Returns
 ///
 /// Returns `Ok(())` on success.
-async fn scan_procs(
+fn scan_procs(
     need_check_map: bool,
     names: &mut Names,
     inode_list: &InodeList,
@@ -682,9 +684,10 @@ async fn scan_procs(
     net_dev: u64,
 ) -> Result<(), io::Error> {
     let my_pid = std::process::id() as i32;
-    let mut read_dir = tokio::fs::read_dir(PROC_PATH).await?;
+    let dir_entries = fs::read_dir(PROC_PATH)?;
 
-    while let Some(entry) = read_dir.next_entry().await? {
+    for entry in dir_entries {
+        let entry = entry?;
         let filename = entry
             .file_name()
             .into_string()
@@ -713,12 +716,12 @@ async fn scan_procs(
             let st = timeout(&entry.path().to_string_lossy(), 5)?;
             let uid = st.st_uid;
 
-            check_root_access(names, pid, uid, &root_stat, device_list, inode_list).await?;
-            check_cwd_access(names, pid, uid, &cwd_stat, device_list, inode_list).await?;
-            check_exe_access(names, pid, uid, &exe_stat, device_list, inode_list).await?;
+            check_root_access(names, pid, uid, &root_stat, device_list, inode_list)?;
+            check_cwd_access(names, pid, uid, &cwd_stat, device_list, inode_list)?;
+            check_exe_access(names, pid, uid, &exe_stat, device_list, inode_list)?;
 
             if need_check_map {
-                check_map(names, pid, "maps", device_list, uid, Access::Mmap).await?;
+                check_map(names, pid, "maps", device_list, uid, Access::Mmap)?;
             }
 
             check_dir(
@@ -731,8 +734,7 @@ async fn scan_procs(
                 Access::File,
                 unix_socket_list,
                 net_dev,
-            )
-            .await?;
+            )?;
         }
     }
 
@@ -757,7 +759,7 @@ async fn scan_procs(
 /// # Returns
 ///
 /// Returns `Ok(())` on success.
-async fn check_root_access(
+fn check_root_access(
     names: &mut Names,
     pid: i32,
     uid: u32,
@@ -801,7 +803,7 @@ async fn check_root_access(
 /// # Returns
 ///
 /// Returns `Ok(())` on success.
-async fn check_cwd_access(
+fn check_cwd_access(
     names: &mut Names,
     pid: i32,
     uid: u32,
@@ -845,7 +847,7 @@ async fn check_cwd_access(
 /// # Returns
 ///
 /// Returns `Ok(())` on success.
-async fn check_exe_access(
+fn check_exe_access(
     names: &mut Names,
     pid: i32,
     uid: u32,
@@ -906,7 +908,7 @@ fn add_process(
 /// # Returns
 ///
 /// Returns `Ok(())` on success.
-async fn check_dir(
+fn check_dir(
     names: &mut Names,
     pid: i32,
     dirname: &str,
@@ -973,7 +975,7 @@ async fn check_dir(
 /// # Returns
 ///
 /// Returns `Ok(())` on success.
-async fn check_map(
+fn check_map(
     names: &mut Names,
     pid: i32,
     filename: &str,
