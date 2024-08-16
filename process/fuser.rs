@@ -574,7 +574,8 @@ fn handle_file_namespace(
 fn handle_tcp_namespace(
     names: &mut Names,
     inode_list: &mut InodeList,
-    net_dev: u64,
+    #[cfg(target_os = "linux")] net_dev: u64,
+    #[cfg(target_os = "macos")] net_dev: i32,
 ) -> Result<(), std::io::Error> {
     let tcp_connection_list = parse_inet(names)?;
     *inode_list = find_net_sockets(&tcp_connection_list, "tcp", net_dev)?;
@@ -600,7 +601,8 @@ fn handle_tcp_namespace(
 fn handle_udp_namespace(
     names: &mut Names,
     inode_list: &mut InodeList,
-    net_dev: u64,
+    #[cfg(target_os = "linux")] net_dev: u64,
+    #[cfg(target_os = "macos")] net_dev: i32,
 ) -> Result<(), std::io::Error> {
     let udp_connection_list = parse_inet(names)?;
     *inode_list = find_net_sockets(&udp_connection_list, "udp", net_dev)?;
@@ -706,7 +708,8 @@ fn scan_procs(
     inode_list: &InodeList,
     device_list: &DeviceList,
     unix_socket_list: &UnixSocketList,
-    net_dev: u64,
+    #[cfg(target_os = "linux")] net_dev: u64,
+    #[cfg(target_os = "macos")] net_dev: i32,
 ) -> Result<(), io::Error> {
     let my_pid = std::process::id() as i32;
     let dir_entries = fs::read_dir(PROC_PATH)?;
