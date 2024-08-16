@@ -133,14 +133,25 @@ impl Procs {
 #[derive(Default, Clone)]
 struct UnixSocketList {
     name: String,
+    #[cfg(target_os = "linux")]
     device_id: u64,
+    #[cfg(target_os = "macos")]
+    device_id: i32,
     inode: u64,
     net_inode: u64,
     next: Option<Box<UnixSocketList>>,
 }
 
 impl UnixSocketList {
-    fn new(name: String, device_id: u64, inode: u64, net_inode: u64) -> Self {
+    fn new(
+        name: String,
+        #[cfg(target_os = "linux")] 
+        device_id: u64,
+        #[cfg(target_os = "macos")] 
+        idevice_id: i32,
+        inode: u64,
+        net_inode: u64,
+    ) -> Self {
         UnixSocketList {
             name,
             device_id,
@@ -150,7 +161,16 @@ impl UnixSocketList {
         }
     }
 
-    fn add_socket(&mut self, name: String, device_id: u64, inode: u64, net_inode: u64) {
+    fn add_socket(
+        &mut self,
+        name: String,
+        #[cfg(target_os = "linux")] 
+        device_id: u64,
+        #[cfg(target_os = "macos")] 
+        device_id: i32,
+        inode: u64,
+        net_inode: u64,
+    ) {
         let new_node = Box::new(UnixSocketList {
             name,
             device_id,
@@ -186,14 +206,23 @@ impl<'a> Iterator for UnixSocketListIterator<'a> {
 
 #[derive(Default)]
 struct InodeList {
-    name: Names,
+    name: Names,  
+    #[cfg(target_os = "linux")] 
     device_id: u64,
+    #[cfg(target_os = "macos")] 
+    device_id: i32,
     inode: u64,
     next: Option<Box<InodeList>>,
 }
 
 impl InodeList {
-    fn new(name: Names, device_id: u64, inode: u64) -> Self {
+    fn new(name: Names,  
+        #[cfg(target_os = "linux")] 
+        device_id: u64,
+        #[cfg(target_os = "macos")] 
+        device_id: i32,
+        inode: u64
+     ) -> Self {
         InodeList {
             name,
             device_id,
@@ -285,12 +314,20 @@ impl Names {
 #[derive(Default)]
 struct DeviceList {
     name: Names,
+    #[cfg(target_os = "linux")] 
     device_id: u64,
+    #[cfg(target_os = "macos")] 
+    device_id: i32,
     next: Option<Box<DeviceList>>,
 }
 
 impl DeviceList {
-    fn new(name: Names, device_id: u64) -> Self {
+    fn new(name: Names,   
+        #[cfg(target_os = "linux")] 
+        device_id: u64,
+        #[cfg(target_os = "macos")] 
+        device_id: i32,
+    ) -> Self {
         DeviceList {
             name,
             device_id,
