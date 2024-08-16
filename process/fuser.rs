@@ -25,7 +25,7 @@ const PROC_PATH: &'static str = "/proc";
 const PROC_MOUNTS: &'static str = "/proc/mounts";
 const NAME_FIELD: usize = 20;
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 enum ProcType {
     #[default]
     Normal = 0,
@@ -34,7 +34,7 @@ enum ProcType {
     Swap = 3,
 }
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 enum NameSpace {
     #[default]
     File = 0,
@@ -42,7 +42,7 @@ enum NameSpace {
     Udp = 2,
 }
 
-#[derive(Clone, Default, Debug, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 enum Access {
     Cwd = 1,
     Exe = 2,
@@ -107,7 +107,7 @@ impl<'a> Iterator for IpConnectionsIterator<'a> {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 struct Procs {
     pid: i32,
     uid: u32,
@@ -184,7 +184,7 @@ impl<'a> Iterator for UnixSocketListIterator<'a> {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 struct InodeList {
     name: Names,
     device_id: u64,
@@ -224,7 +224,7 @@ impl<'a> Iterator for InodeListIterator<'a> {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Clone)]
 struct MountList {
     mountpoints: Vec<PathBuf>,
 }
@@ -233,11 +233,6 @@ struct LibcStat {
     inner: libc::stat,
 }
 
-impl fmt::Debug for LibcStat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Ok(())
-    }
-}
 impl Default for LibcStat {
     fn default() -> Self {
         LibcStat {
@@ -252,7 +247,7 @@ impl Clone for LibcStat {
     }
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default)]
 struct Names {
     filename: PathBuf,
     name_space: NameSpace,
