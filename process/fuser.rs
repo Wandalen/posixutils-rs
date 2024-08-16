@@ -24,6 +24,12 @@ const PROC_PATH: &'static str = "/proc";
 const PROC_MOUNTS: &'static str = "/proc/mounts";
 const NAME_FIELD: usize = 20;
 
+#[cfg(target_os = "macos")]
+type DeviceId = i32;
+
+#[cfg(target_os = "linux")]
+type DeviceId = u64;
+
 #[derive(Clone, Default, PartialEq)]
 enum ProcType {
     #[default]
@@ -132,23 +138,14 @@ impl Procs {
 #[derive(Clone, Default)]
 struct UnixSocketList {
     name: String,
-    #[cfg(target_os = "linux")]
-    device_id: u64,
-    #[cfg(target_os = "macos")]
-    device_id: i32,
+    device_id: DeviceId,
     inode: u64,
     net_inode: u64,
     next: Option<Box<UnixSocketList>>,
 }
 
 impl UnixSocketList {
-    fn new(
-        name: String,
-        #[cfg(target_os = "linux")] device_id: u64,
-        #[cfg(target_os = "macos")] device_id: i32,
-        inode: u64,
-        net_inode: u64,
-    ) -> Self {
+    fn new(name: String, device_id: DeviceId, inode: u64, net_inode: u64) -> Self {
         UnixSocketList {
             name,
             device_id,
@@ -158,14 +155,7 @@ impl UnixSocketList {
         }
     }
 
-    fn add_socket(
-        &mut self,
-        name: String,
-        #[cfg(target_os = "linux")] device_id: u64,
-        #[cfg(target_os = "macos")] device_id: i32,
-        inode: u64,
-        net_inode: u64,
-    ) {
+    fn add_socket(&mut self, name: String, device_id: DeviceId, inode: u64, net_inode: u64) {
         let new_node = Box::new(UnixSocketList {
             name,
             device_id,
@@ -202,21 +192,13 @@ impl<'a> Iterator for UnixSocketListIterator<'a> {
 #[derive(Default)]
 struct InodeList {
     name: Names,
-    #[cfg(target_os = "linux")]
-    device_id: u64,
-    #[cfg(target_os = "macos")]
-    device_id: i32,
+    device_id: DeviceId,
     inode: u64,
     next: Option<Box<InodeList>>,
 }
 
 impl InodeList {
-    fn new(
-        name: Names,
-        #[cfg(target_os = "linux")] device_id: u64,
-        #[cfg(target_os = "macos")] device_id: i32,
-        inode: u64,
-    ) -> Self {
+    fn new(name: Names, device_id: DeviceId, inode: u64) -> Self {
         InodeList {
             name,
             device_id,
@@ -308,19 +290,12 @@ impl Names {
 #[derive(Default)]
 struct DeviceList {
     name: Names,
-    #[cfg(target_os = "linux")]
-    device_id: u64,
-    #[cfg(target_os = "macos")]
-    device_id: i32,
+    device_id: DeviceId,
     next: Option<Box<DeviceList>>,
 }
 
 impl DeviceList {
-    fn new(
-        name: Names,
-        #[cfg(target_os = "linux")] device_id: u64,
-        #[cfg(target_os = "macos")] device_id: i32,
-    ) -> Self {
+    fn new(name: Names, device_id: DeviceId) -> Self {
         DeviceList {
             name,
             device_id,
@@ -574,8 +549,7 @@ fn handle_file_namespace(
 fn handle_tcp_namespace(
     names: &mut Names,
     inode_list: &mut InodeList,
-    #[cfg(target_os = "linux")] net_dev: u64,
-    #[cfg(target_os = "macos")] net_dev: i32,
+    net_dev: DeviceId,
 ) -> Result<(), std::io::Error> {
     let tcp_connection_list = parse_inet(names)?;
     *inode_list = find_net_sockets(&tcp_connection_list, "tcp", net_dev)?;
@@ -601,8 +575,7 @@ fn handle_tcp_namespace(
 fn handle_udp_namespace(
     names: &mut Names,
     inode_list: &mut InodeList,
-    #[cfg(target_os = "linux")] net_dev: u64,
-    #[cfg(target_os = "macos")] net_dev: i32,
+    net_dev: DeviceId,
 ) -> Result<(), std::io::Error> {
     let udp_connection_list = parse_inet(names)?;
     *inode_list = find_net_sockets(&udp_connection_list, "udp", net_dev)?;
@@ -708,8 +681,7 @@ fn scan_procs(
     inode_list: &InodeList,
     device_list: &DeviceList,
     unix_socket_list: &UnixSocketList,
-    #[cfg(target_os = "linux")] net_dev: u64,
-    #[cfg(target_os = "macos")] net_dev: i32,
+    net_dev: DeviceId,
 ) -> Result<(), io::Error> {
     let my_pid = std::process::id() as i32;
     let dir_entries = fs::read_dir(PROC_PATH)?;
@@ -945,8 +917,7 @@ fn check_dir(
     uid: u32,
     access: Access,
     unix_socket_list: &UnixSocketList,
-    #[cfg(target_os = "linux")] net_dev: u64,
-    #[cfg(target_os = "macos")] net_dev: i32,
+   net_dev: DeviceId,
 ) -> Result<(), io::Error> {
     let dir_path = format!("/proc/{}/{}", pid, dirname);
     let dir_entries = fs::read_dir(&dir_path)?;
@@ -1039,10 +1010,7 @@ fn check_map(
                 };
 
                 let device = tmp_maj * 256 + tmp_min;
-                #[cfg(target_os = "linux")]
-                let device_int = device as u64;
-                #[cfg(target_os = "macos")]
-                let device_int = device as i32;
+                let device_int = device as DeviceId;
 
                 if device_list
                     .iter()
@@ -1213,7 +1181,7 @@ fn parse_inet(names: &mut Names) -> Result<IpConnections, io::Error> {
 /// # Returns
 ///
 /// Returns the device identifier (`u64`) of the network interface.
-fn find_net_dev() -> Result<u64, io::Error> {
+fn find_net_dev() -> Result<DeviceId, io::Error> {
     let socket = UdpSocket::bind("0.0.0.0:0")?;
     let fd = socket.as_raw_fd();
     let mut stat_buf = unsafe { std::mem::zeroed() };
@@ -1224,7 +1192,7 @@ fn find_net_dev() -> Result<u64, io::Error> {
         }
     }
 
-    Ok(stat_buf.st_dev as u64)
+    Ok(stat_buf.st_dev)
 }
 
 /// Finds network sockets based on the given protocol and updates the `InodeList`
@@ -1250,8 +1218,7 @@ fn find_net_dev() -> Result<u64, io::Error> {
 fn find_net_sockets(
     connections_list: &IpConnections,
     protocol: &str,
-    #[cfg(target_os = "linux")] net_dev: u64,
-    #[cfg(target_os = "macos")] net_dev: i32,
+net_dev: DeviceId,
 ) -> Result<InodeList, io::Error> {
     let pathname = format!("/proc/net/{}", protocol);
 
