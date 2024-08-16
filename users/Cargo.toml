@@ -43,3 +43,6 @@ path = "./tty.rs"
 name = "write"
 path = "./write.rs"
 
+[[bin]]
+name = "talk"
+path = "./talk.rs"
