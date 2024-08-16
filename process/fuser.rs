@@ -10,7 +10,6 @@ use std::{
     collections::BTreeMap,
     env,
     ffi::{CStr, CString},
-    fmt,
     fs::{self, File},
     io::{self, BufRead, Error, ErrorKind, Write},
     net::{IpAddr, Ipv4Addr, UdpSocket},
@@ -130,7 +129,7 @@ impl Procs {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 struct UnixSocketList {
     name: String,
     #[cfg(target_os = "linux")]
@@ -145,10 +144,8 @@ struct UnixSocketList {
 impl UnixSocketList {
     fn new(
         name: String,
-        #[cfg(target_os = "linux")] 
-        device_id: u64,
-        #[cfg(target_os = "macos")] 
-        idevice_id: i32,
+        #[cfg(target_os = "linux")] device_id: u64,
+        #[cfg(target_os = "macos")] device_id: i32,
         inode: u64,
         net_inode: u64,
     ) -> Self {
@@ -164,10 +161,8 @@ impl UnixSocketList {
     fn add_socket(
         &mut self,
         name: String,
-        #[cfg(target_os = "linux")] 
-        device_id: u64,
-        #[cfg(target_os = "macos")] 
-        device_id: i32,
+        #[cfg(target_os = "linux")] device_id: u64,
+        #[cfg(target_os = "macos")] device_id: i32,
         inode: u64,
         net_inode: u64,
     ) {
@@ -206,23 +201,22 @@ impl<'a> Iterator for UnixSocketListIterator<'a> {
 
 #[derive(Default)]
 struct InodeList {
-    name: Names,  
-    #[cfg(target_os = "linux")] 
+    name: Names,
+    #[cfg(target_os = "linux")]
     device_id: u64,
-    #[cfg(target_os = "macos")] 
+    #[cfg(target_os = "macos")]
     device_id: i32,
     inode: u64,
     next: Option<Box<InodeList>>,
 }
 
 impl InodeList {
-    fn new(name: Names,  
-        #[cfg(target_os = "linux")] 
-        device_id: u64,
-        #[cfg(target_os = "macos")] 
-        device_id: i32,
-        inode: u64
-     ) -> Self {
+    fn new(
+        name: Names,
+        #[cfg(target_os = "linux")] device_id: u64,
+        #[cfg(target_os = "macos")] device_id: i32,
+        inode: u64,
+    ) -> Self {
         InodeList {
             name,
             device_id,
@@ -314,19 +308,18 @@ impl Names {
 #[derive(Default)]
 struct DeviceList {
     name: Names,
-    #[cfg(target_os = "linux")] 
+    #[cfg(target_os = "linux")]
     device_id: u64,
-    #[cfg(target_os = "macos")] 
+    #[cfg(target_os = "macos")]
     device_id: i32,
     next: Option<Box<DeviceList>>,
 }
 
 impl DeviceList {
-    fn new(name: Names,   
-        #[cfg(target_os = "linux")] 
-        device_id: u64,
-        #[cfg(target_os = "macos")] 
-        device_id: i32,
+    fn new(
+        name: Names,
+        #[cfg(target_os = "linux")] device_id: u64,
+        #[cfg(target_os = "macos")] device_id: i32,
     ) -> Self {
         DeviceList {
             name,
@@ -949,7 +942,8 @@ fn check_dir(
     uid: u32,
     access: Access,
     unix_socket_list: &UnixSocketList,
-    net_dev: u64,
+    #[cfg(target_os = "linux")] net_dev: u64,
+    #[cfg(target_os = "macos")] net_dev: i32,
 ) -> Result<(), io::Error> {
     let dir_path = format!("/proc/{}/{}", pid, dirname);
     let dir_entries = fs::read_dir(&dir_path)?;
@@ -1042,11 +1036,14 @@ fn check_map(
                 };
 
                 let device = tmp_maj * 256 + tmp_min;
-                let device_u64 = device as u64;
+                #[cfg(target_os = "linux")]
+                let device_int = device as u64;
+                #[cfg(target_os = "macos")]
+                let device_int = device as i32;
 
                 if device_list
                     .iter()
-                    .any(|device| device.device_id == device_u64)
+                    .any(|device| device.device_id == device_int)
                 {
                     add_process(names, pid, uid, access.clone(), ProcType::Normal, None);
                 }
@@ -1250,7 +1247,8 @@ fn find_net_dev() -> Result<u64, io::Error> {
 fn find_net_sockets(
     connections_list: &IpConnections,
     protocol: &str,
-    net_dev: u64,
+    #[cfg(target_os = "linux")] net_dev: u64,
+    #[cfg(target_os = "macos")] net_dev: i32,
 ) -> Result<InodeList, io::Error> {
     let pathname = format!("/proc/net/{}", protocol);
 
