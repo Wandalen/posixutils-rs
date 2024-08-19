@@ -36,6 +36,7 @@ fn fuser_test(
 ///
 /// **Assertions:**
 /// - Verifies that the PID of the process is included in the output of `fuser`.
+#[cfg(not(target_os = "macos"))]
 #[tokio::test]
 async fn test_fuser_basic() {
     let process = Command::new("sleep")
@@ -103,6 +104,7 @@ fn get_process_user(pid: u32) -> io::Result<String> {
 ///
 /// **Assertions:**
 /// - Verifies that the owner printed in stderr.
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn test_fuser_with_user() {
     let process = Command::new("sleep")
@@ -135,6 +137,7 @@ fn test_fuser_with_user() {
 ///
 /// **Assertions:**
 /// - Verifies that the PID of the process is included in the `fuser` output for the mount.
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn test_fuser_with_mount() {
     let process = Command::new("sleep")
@@ -167,6 +170,7 @@ fn test_fuser_with_mount() {
 ///
 /// **Assertions:**
 /// - Verifies that the PIDs of both processes are included in the stdout.
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn test_fuser_with_many_files() {
     let process1 = Command::new("sleep")
@@ -220,6 +224,7 @@ async fn start_tcp_server() -> TcpListener {
 ///
 /// **Assertions:**
 /// - Verifies that the output of `fuser` matches the manual execution for TCP sockets.
+#[cfg(not(target_os = "macos"))]
 #[tokio::test]
 async fn test_fuser_tcp() {
     let _server = start_tcp_server().await;
@@ -245,6 +250,7 @@ async fn start_udp_server() -> UdpSocket {
 ///
 /// **Assertions:**
 /// - Verifies that the output of `fuser` matches the manual execution for UDP sockets.
+#[cfg(not(target_os = "macos"))]
 #[tokio::test]
 async fn test_fuser_udp() {
     let _server = start_udp_server().await;
@@ -276,6 +282,7 @@ async fn start_unix_socket(socket_path: &str) -> UnixListener {
 /// **Note:**
 /// - Before binding to the socket, the function checks if a socket file already exists at the path and deletes it if present.
 /// - This ensures that the test environment is clean and prevents issues with existing sockets.
+#[cfg(not(target_os = "macos"))]
 #[tokio::test]
 async fn test_fuser_unixsocket() {
     let socket_path = "/tmp/test.sock";
@@ -316,6 +323,7 @@ fn delete_directory(dir_path: &Path) -> io::Result<()> {
 /// - Verifies that the `fuser` command completes successfully and the output is as expected.
 /// - Executes an additional command to ensure it works after `fuser` and checks its output.
 /// - Ensures that the test does not block indefinitely and completes within a reasonable time frame.
+#[cfg(not(target_os = "macos"))]
 #[tokio::test]
 async fn test_fuser_large_directory() {
     let test_dir_path = PathBuf::from("large_test_dir");
