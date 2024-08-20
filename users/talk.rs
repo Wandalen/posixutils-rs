@@ -33,6 +33,17 @@ struct Args {
     terminal: Option<String>,
 }
 
+/// Handles user input and sends it to the connected peer.
+///
+/// This function listens for keyboard input from the user, processes special
+/// control characters (such as Ctrl+C to terminate the session or Ctrl+L to
+/// clear the screen), and sends the input to the connected peer via the
+/// provided TCP stream.
+///
+/// # Arguments
+///
+/// * `stream` - The TCP stream connected to the peer.
+/// * `running` - An atomic boolean flag indicating whether the session is still active.
 fn handle_input(mut stream: TcpStream, running: Arc<AtomicBool>) -> io::Result<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout().into_raw_mode()?;
@@ -64,6 +75,16 @@ fn handle_input(mut stream: TcpStream, running: Arc<AtomicBool>) -> io::Result<(
     Ok(())
 }
 
+/// Handles output received from the connected peer.
+///
+/// This function listens for incoming data from the connected peer, and
+/// writes it to the user's terminal screen. The session continues as long
+/// as the `running` flag is set to `true`.
+///
+/// # Arguments
+///
+/// * `stream` - The TCP stream connected to the peer.
+/// * `running` - An atomic boolean flag indicating whether the session is still active.
 fn handle_output(mut stream: TcpStream, running: Arc<AtomicBool>) -> io::Result<()> {
     let mut stdout = io::stdout().into_raw_mode()?;
     let mut buffer = [0; 512];
@@ -78,6 +99,15 @@ fn handle_output(mut stream: TcpStream, running: Arc<AtomicBool>) -> io::Result<
     Ok(())
 }
 
+/// Manages the `talk` session by setting up the connection and handling input and output.
+///
+/// This function either starts a listener on the specified address to wait
+/// for incoming connections or connects to a remote address as a client. Once
+/// connected, it spawns separate threads for handling input and output streams.
+///
+/// # Arguments
+///
+/// * `args` - The command-line arguments specifying the address to connect to or listen on.
 fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let running = Arc::new(AtomicBool::new(true));
     let address = args.address.clone();
