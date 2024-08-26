@@ -47,6 +47,9 @@ struct Args {
 fn handle_input(mut stream: TcpStream, running: Arc<AtomicBool>) -> io::Result<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout().into_raw_mode()?;
+    let mut input_buffer = String::new();
+    let username = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+
     for c in stdin.keys() {
         if let Ok(key) = c {
             match key {
@@ -62,10 +65,23 @@ fn handle_input(mut stream: TcpStream, running: Arc<AtomicBool>) -> io::Result<(
                     write!(stdout, "\x07")?;
                 }
                 termion::event::Key::Char(c) => {
-                    stream.write_all(&[c as u8])?;
+                    if c == '\n' {
+                        // Send the collected input on Enter
+                        // Format the message with the username and send it
+                        let message = format!("{}: {}\r\n", username, input_buffer);
+                        stream.write_all(message.as_bytes())?;
+                        input_buffer.clear();
+                        writeln!(stdout, "\r")?; // Move to the next line in the terminal
+                    } else {
+                        input_buffer.push(c);
+                        write!(stdout, "{}", c)?; // Echo the character to the terminal
+                    }
                 }
                 termion::event::Key::Backspace => {
-                    write!(stdout, "\x08 \x08")?;
+                    if !input_buffer.is_empty() {
+                        input_buffer.pop();
+                        write!(stdout, "\x08 \x08")?;
+                    }
                 }
                 _ => {}
             }
@@ -112,16 +128,15 @@ fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let running = Arc::new(AtomicBool::new(true));
     let address = args.address.clone();
 
-    // Start a listener or connect based on the address
-    let listener = TcpListener::bind(&address)?;
-
     // Inform user about connection
     println!("Message from <unspecified string>");
     println!("talk: connection requested by {}", address);
     println!("talk: respond with: talk {}", address);
 
-    for stream in listener.incoming() {
-        let stream = stream?;
+    // Attempt to connect as a client first
+    if let Ok(stream) = TcpStream::connect(&address) {
+        println!("Connected to {}", address);
+
         let running_input = running.clone();
         let running_output = running.clone();
         let stream_input = stream.try_clone()?;
@@ -132,11 +147,30 @@ fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             }
         });
 
-        thread::spawn(move || {
+        if let Err(e) = handle_output(stream, running_output) {
+            eprintln!("Error handling output: {}", e);
+        }
+    } else {
+        // If connection fails, start a listener
+        let listener = TcpListener::bind(&address)?;
+        println!("Listening on {}", address);
+
+        for stream in listener.incoming() {
+            let stream = stream?;
+            let running_input = running.clone();
+            let running_output = running.clone();
+            let stream_input = stream.try_clone()?;
+
+            thread::spawn(move || {
+                if let Err(e) = handle_input(stream_input, running_input) {
+                    eprintln!("Error handling input: {}", e);
+                }
+            });
+
             if let Err(e) = handle_output(stream, running_output) {
                 eprintln!("Error handling output: {}", e);
             }
-        });
+        }
     }
 
     Ok(())
