@@ -8,6 +8,9 @@ members = [
 	"display",
 	"file",
 	"fs",
+	"m4",
+	"m4/test-manager",
+	"gettext-rs",
 	"misc",
 	"pathnames",
 	"plib",
@@ -23,9 +26,9 @@ members = [
 
 [workspace.dependencies]
 atty = "0.2"
-clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage"] }
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "cargo"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-gettext-rs = { version = "0.7", features = ["gettext-system"] }
 libc = "0.2"
 regex = "1.10"
 thiserror = "1.0"
+gettext-rs = { path = "./gettext-rs" }
