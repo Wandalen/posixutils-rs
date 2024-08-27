@@ -64,6 +64,22 @@ fn test_signal_parsing_3() {
 
 #[test]
 fn test_signal_parsing_4() {
+    timeout_test(&["-s", "SIGTERM", "1", TRUE], "", 0);
+    timeout_test(&["-s", "SIGKILL", "1", TRUE], "", 0);
+    timeout_test(&["-s", "SIGCONT", "1", TRUE], "", 0);
+    timeout_test(&["-s", "SIGSTOP", "1", TRUE], "", 0);
+}
+
+#[test]
+fn test_signal_parsing_5() {
+    timeout_test(&["-s", "sigterm", "1", TRUE], "", 0);
+    timeout_test(&["-s", "sigkill", "1", TRUE], "", 0);
+    timeout_test(&["-s", "sigcont", "1", TRUE], "", 0);
+    timeout_test(&["-s", "sigstop", "1", TRUE], "", 0);
+}
+
+#[test]
+fn test_signal_parsing_6() {
     timeout_test(
         &["-s", "TERM", "-s", "KILL", "1", TRUE],
         "Error: an argument cannot be used with one or more of the other specified arguments\n",

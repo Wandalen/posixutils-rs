@@ -112,7 +112,12 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 ///
 /// Returns the integer value of the signal.
 fn parse_signal(s: &str) -> Result<Signal, String> {
-    let signal_name = format!("SIG{}", s.to_uppercase());
+    let s = s.to_uppercase();
+    let signal_name = if s.starts_with("SIG") {
+        s.to_string()
+    } else {
+        format!("SIG{}", s)
+    };
 
     Signal::from_str(&signal_name).map_err(|_| format!("invalid signal name '{}'", s))
 }
