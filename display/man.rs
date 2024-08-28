@@ -7,7 +7,7 @@ use plib::PROJECT_NAME;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Command, exit};
+use std::process::{exit, Command, Output};
 
 /// man - display system documentation
 #[derive(Parser, Debug)]
@@ -21,12 +21,18 @@ struct Args {
     names: Vec<String>,
 }
 
+/// Checks if the `man` package 
+/// is installed by verifying the existence of the directory 
+/// `/usr/share/man` on linux or `/usr/local/share/man` on macOS.
 fn is_man_package_installed() -> bool {
     // Check if the man package is installed by looking for a known directory or file
-    // 1 - linux, 2 - macos
+    // 1 - linux, 2 - macOS
     PathBuf::from("/usr/share/man").exists() || PathBuf::from("/usr/local/share/man").exists()
 }
 
+/// Prompts the user to install 
+/// the `man` package if it is not already installed. Returns 
+/// `true` if the user agrees to install, otherwise `false`.
 fn prompt_install_man_package() -> bool {
     println!("The man package is not installed. Do you want to install it? (y/n)");
 
@@ -35,6 +41,8 @@ fn prompt_install_man_package() -> bool {
     answer.trim().eq_ignore_ascii_case("y")
 }
 
+/// Attempts to install the `man` package 
+/// using either `apt-get` on Linux or `brew` on macOS.
 fn install_man_package() -> io::Result<()> {
     println!("Installing the man package...");
 
@@ -55,6 +63,9 @@ fn install_man_package() -> io::Result<()> {
     Ok(())
 }
 
+/// Formats `roff` markup (used in man pages) 
+/// to display in the console, translating formatting tags like bold, 
+/// italics, and others into terminal escape codes.
 fn format_roff_to_console(input: &str) -> String {
     let mut output = input.to_string();
 
@@ -82,6 +93,9 @@ fn format_roff_to_console(input: &str) -> String {
     output + "\x1b[0m"
 }
 
+/// Searches for and displays a man page for the 
+/// provided utility name. Handles both plain text and compressed (`.gz`) 
+/// man pages.
 fn display_man_page(name: &str) -> io::Result<()> {
     let possible_paths = [
         format!("/usr/share/man/man1/{}.1.gz", name),
@@ -126,30 +140,27 @@ fn display_man_page(name: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Uses the `apropos` command to search the 
+/// man page summaries for the given keyword for -k option.
 fn search_summary_database(keyword: &str) -> io::Result<()> {
-    let summary_db_path = if PathBuf::from("/usr/share/man/whatis").exists() {
-        "/usr/share/man/whatis"
-    } else {
-        "/usr/local/share/man/whatis"
-    };
+    let output: Output = Command::new("apropos")
+        .arg(keyword)
+        .output()?;
 
-    if !PathBuf::from(summary_db_path).exists() {
-        return Err(io::Error::new(io::ErrorKind::NotFound, "Summary database not found"));
+    if !output.status.success() {
+        return Err(io::Error::new(io::ErrorKind::Other, "apropos command failed"));
     }
 
-    let file = File::open(summary_db_path)?;
-    let reader = BufReader::new(file);
+    let result = String::from_utf8_lossy(&output.stdout);
 
-    for line in reader.lines() {
-        let line = line?;
-        if line.to_lowercase().contains(&keyword.to_lowercase()) {
-            println!("{}", line);
-        }
-    }
+    println!("{}", result);
 
     Ok(())
 }
 
+/// The main function that handles the program logic. It checks 
+/// if the `man` package is installed, processes the input arguments, 
+/// and either displays man pages or searches the summary database.
 fn man(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     if !is_man_package_installed() {
         if prompt_install_man_package() {

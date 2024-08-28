@@ -76,10 +76,10 @@ fn run_test_man(
 
 #[test]
 fn simple_test() {
-    run_test_man(&["--", "ls"], "ls - list directory contents", "", 0);
+    run_test_man(&["ls"], "ls - list directory contents", "", 0);
 }
 
 #[test]
 fn k_test() {
-    run_test_man(&["--", "-k", "user"], "ls - list directory contents", "", 0);
+    run_test_man(&["-k", "user"], "fuser", "", 0);
 }
