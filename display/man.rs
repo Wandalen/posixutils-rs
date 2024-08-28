@@ -66,16 +66,18 @@ fn format_roff_to_console(input: &str) -> String {
     output = output.replace(r"\,", ",");
 
     output = output.lines()
-        .filter(|line| !line.starts_with(".\""))
+        .filter(|line| !line.starts_with(r#".\""#))
         .collect::<Vec<&str>>()
         .join("\n");
 
     output = output.replace(r".SH", "\n\x1b[1m"); // Title
     output = output.replace(r".TP", "\n\x1b[4m"); // Paragraph
-    output = output.replace(r".BR", "\x1b[1m");   // Bold and italic
+    output = output.replace(".BR", "\x1b[1m");   // Bold and italic
     output = output.replace(r".PP", "\n\n");       // New paragraph
     output = output.replace(r".SS", "\n\x1b[4m"); // Subtitle
     output = output.replace(r".TH", "\x1b[1m");   // Page title
+    output = output.replace(r".br", ""); // Moving a line
+    output = output.replace(r".B", "\x1b[1m\n\x1b[0m"); // Half bold
 
     output + "\x1b[0m"
 }
@@ -148,14 +150,7 @@ fn search_summary_database(keyword: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // parse command line arguments
-    let args = Args::parse();
-
-    setlocale(LocaleCategory::LcAll, "");
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
-
+fn man(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     if !is_man_package_installed() {
         if prompt_install_man_package() {
             if let Err(e) = install_man_package() {
@@ -168,22 +163,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut exit_code = 0;
-
     if args.keyword {
         for keyword in &args.names {
             if let Err(e) = search_summary_database(keyword) {
-                exit_code = 1;
                 eprintln!("man: {}: {}", keyword, e);
             }
         }
     } else {
         for name in &args.names {
             if let Err(e) = display_man_page(name) {
-                exit_code = 1;
                 eprintln!("man: {}: {}", name, e);
             }
         }
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // parse command line arguments
+    let args = Args::parse();
+
+    setlocale(LocaleCategory::LcAll, "");
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+
+    let mut exit_code = 0;
+
+    if let Err(err) = man(args) {
+        exit_code = 1;
+        eprint!("{}", err);
     }
 
     std::process::exit(exit_code)
