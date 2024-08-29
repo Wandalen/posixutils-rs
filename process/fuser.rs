@@ -24,11 +24,13 @@ const PROC_PATH: &'static str = "/proc";
 const PROC_MOUNTS: &'static str = "/proc/mounts";
 const NAME_FIELD: usize = 20;
 
+
 #[cfg(target_os = "macos")]
 type DeviceId = i32;
 
 #[cfg(target_os = "linux")]
 type DeviceId = u64;
+
 
 #[derive(Clone, Default, PartialEq)]
 enum ProcType {
@@ -135,6 +137,7 @@ impl Procs {
     }
 }
 
+
 #[derive(Clone, Default)]
 struct UnixSocketList {
     name: String,
@@ -154,6 +157,7 @@ impl UnixSocketList {
             next: None,
         }
     }
+
 
     fn add_socket(&mut self, name: String, device_id: DeviceId, inode: u64, net_inode: u64) {
         let new_node = Box::new(UnixSocketList {
@@ -1218,7 +1222,7 @@ fn find_net_dev() -> Result<DeviceId, io::Error> {
 fn find_net_sockets(
     connections_list: &IpConnections,
     protocol: &str,
-net_dev: DeviceId,
+    net_dev: DeviceId,
 ) -> Result<InodeList, io::Error> {
     let pathname = format!("/proc/net/{}", protocol);
 
