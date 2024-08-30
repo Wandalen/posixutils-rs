@@ -10,7 +10,7 @@ pub mod osx_libproc_bindings {
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
-use libc::{c_int, fstat};
+use libc::{c_char, c_int, c_void, fstat};
 use plib::PROJECT_NAME;
 use std::{
     collections::BTreeMap,
@@ -18,9 +18,11 @@ use std::{
     ffi::{CStr, CString},
     fs::{self, File},
     io::{self, BufRead, Error, ErrorKind, Write},
+    mem,
     net::{IpAddr, Ipv4Addr, UdpSocket},
-    os::unix::io::AsRawFd,
+    os::unix::{ffi::OsStrExt, io::AsRawFd},
     path::{Component, Path, PathBuf},
+    ptr,
     sync::mpsc,
     thread,
     time::Duration,
@@ -88,12 +90,12 @@ pub(crate) fn listpids(proc_type: u32) -> io::Result<Vec<u32>> {
 #[cfg(target_os = "macos")]
 pub(crate) fn listpidspath(
     proc_type: u32,
-    path: &path::Path,
+    path: &Path,
     is_volume: bool,
     exclude_event_only: bool,
 ) -> io::Result<Vec<u32>> {
     let path_bytes = path.as_os_str().as_bytes();
-    let c_path = ffi::CString::new(path_bytes)
+    let c_path = CString::new(path_bytes)
         .map_err(|_| io::Error::new(io::ErrorKind::Other, "CString::new failed"))?;
     let mut pathflags: u32 = 0;
     if is_volume {
@@ -484,8 +486,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fill_unix_cache(&mut unix_socket_list)?;
 
         let net_dev = find_net_dev()?;
+    }
 
-        for name in names.iter_mut() {
+    for name in names.iter_mut() {
+        #[cfg(target_os = "linux")]
+        {
             name.name_space = determine_namespace(&name.filename);
             match name.name_space {
                 NameSpace::File => handle_file_namespace(
@@ -520,35 +525,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 std::process::exit(1);
             }
-            print_matches(name, user)?;
+        }
+        let st = timeout(&name.filename.to_string_lossy(), 5)?;
+        let uid = st.st_uid;
+
+        let pids = listpidspath(
+            osx_libproc_bindings::PROC_ALL_PIDS,
+            Path::new(&name.filename),
+            mount,
+            false,
+        )?;
+
+        for pid in pids {
+            add_process(
+                name,
+                pid.try_into().unwrap(),
+                uid,
+                Access::Cwd,
+                ProcType::Normal,
+                None,
+            );
         }
 
-        #[cfg(target_os = "macos")]
-        {
-            for name in names.iter_mut() {
-                let st = timeout(&name.filename.to_string_lossy(), 5)?;
-                let uid = st.st_uid;
-
-                let pids = listpidspath(
-                    osx_libproc_bindings::PROC_ALL_PIDS,
-                    Path::new(&name.filename),
-                    mount,
-                    false,
-                )?;
-
-                for pid in pids {
-                    add_process(
-                        name,
-                        pid.try_into().unwrap(),
-                        uid,
-                        Access::Cwd,
-                        ProcType::Normal,
-                        None,
-                    );
-                }
-            }
-            print_matches(name, user)?;
-        }
+        print_matches(name, user)?;
     }
 
     std::process::exit(0)
