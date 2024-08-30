@@ -1,11 +1,11 @@
-use libc::{c_int, uid_t};
-use libproc::proc_pid;
+use libc::uid_t;
 use plib::{run_test_with_checker, TestPlan};
+#[cfg(target_os = "macos")]
+use std::os::unix::fs::MetadataExt;
 use std::{
     ffi::CStr,
     fs::{self, File},
     io::{self, Read},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     process::{Command, Output},
     str,
@@ -58,10 +58,8 @@ async fn test_fuser_basic() {
     });
 }
 
-/// - `Err(io::Error)` contains an error if the process status file cannot be read, if the UID cannot be parsed, or if other issues occur.
+#[cfg(target_os = "linux")]
 fn get_process_user(pid: u32) -> io::Result<String> {
-    #[cfg(target_os = "linux")]
-    {
     let status_path = format!("/proc/{}/status", pid);
     let mut file = File::open(&status_path)?;
     let mut contents = String::new();
@@ -80,24 +78,35 @@ fn get_process_user(pid: u32) -> io::Result<String> {
         .parse()
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid UID"))?;
 
-
+    get_username_by_uid(uid)
 }
-use std::os::unix::fs::MetadataExt;
 
-    #[cfg(target_os = "macos")]
-let uid = fs::metadata("/").map(|md| md.uid())?;
+#[cfg(target_os = "macos")]
+fn get_process_user(pid: u32) -> io::Result<String> {
+    use libproc::libproc::bsd_info::BSDInfo;
+    use libproc::libproc::proc_pid;
 
+    let info = proc_pid::pidinfo::<BSDInfo>(pid as i32)
+        .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "Process not found"))?;
 
+    let uid = info.pbi_uid;
+    get_username_by_uid(uid)
+}
+
+fn get_username_by_uid(uid: uid_t) -> io::Result<String> {
     let pwd = unsafe { libc::getpwuid(uid) };
-
-    unsafe {
-        let user_name = CStr::from_ptr((*pwd).pw_name)
-            .to_string_lossy()
-            .into_owned();
-        Ok(user_name)
+    if pwd.is_null() {
+        return Err(io::Error::new(io::ErrorKind::NotFound, "User not found"));
     }
-}
 
+    let user_name = unsafe {
+        CStr::from_ptr((*pwd).pw_name)
+            .to_string_lossy()
+            .into_owned()
+    };
+
+    Ok(user_name)
+}
 /// Tests `fuser` with the `-u` flag to ensure it outputs the process owner.
 ///
 /// **Setup:**
@@ -129,8 +138,6 @@ fn test_fuser_with_user() {
         },
     );
 }
-
-
 
 /// Tests `fuser` with multiple file paths.
 ///
@@ -193,7 +200,7 @@ async fn start_tcp_server() -> TcpListener {
 /// **Assertions:**
 /// - Verifies that the output of `fuser` matches the manual execution for TCP sockets.
 #[tokio::test]
-    #[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 async fn test_fuser_tcp() {
     let _server = start_tcp_server().await;
     fuser_test(vec!["8080/tcp".to_string()], "", 0, |_, output| {
@@ -219,7 +226,7 @@ async fn start_udp_server() -> UdpSocket {
 /// **Assertions:**
 /// - Verifies that the output of `fuser` matches the manual execution for UDP sockets.
 #[tokio::test]
-    #[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 async fn test_fuser_udp() {
     let _server = start_udp_server().await;
     fuser_test(vec!["8081/udp".to_string()], "", 0, |_, output| {
@@ -251,7 +258,7 @@ async fn start_unix_socket(socket_path: &str) -> UnixListener {
 /// - Before binding to the socket, the function checks if a socket file already exists at the path and deletes it if present.
 /// - This ensures that the test environment is clean and prevents issues with existing sockets.
 #[tokio::test]
-    #[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 async fn test_fuser_unixsocket() {
     let socket_path = "/tmp/test.sock";
     let _unix_socket = start_unix_socket(socket_path).await;

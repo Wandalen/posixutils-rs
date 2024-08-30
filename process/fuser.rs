@@ -10,7 +10,9 @@ pub mod osx_libproc_bindings {
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
-use libc::{c_char, c_int, c_void, fstat};
+use libc::fstat;
+#[cfg(target_os = "macos")]
+use libc::{c_char, c_int, c_void};
 use plib::PROJECT_NAME;
 use std::{
     collections::BTreeMap,
@@ -18,15 +20,15 @@ use std::{
     ffi::{CStr, CString},
     fs::{self, File},
     io::{self, BufRead, Error, ErrorKind, Write},
-    mem,
     net::{IpAddr, Ipv4Addr, UdpSocket},
-    os::unix::{ffi::OsStrExt, io::AsRawFd},
+    os::unix::io::AsRawFd,
     path::{Component, Path, PathBuf},
-    ptr,
     sync::mpsc,
     thread,
     time::Duration,
 };
+#[cfg(target_os = "macos")]
+use std::{os::unix::ffi::OsStrExt, ptr};
 
 const PROC_PATH: &'static str = "/proc";
 const PROC_MOUNTS: &'static str = "/proc/mounts";
@@ -486,11 +488,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fill_unix_cache(&mut unix_socket_list)?;
 
         let net_dev = find_net_dev()?;
-    }
 
-    for name in names.iter_mut() {
-        #[cfg(target_os = "linux")]
-        {
+        for name in names.iter_mut() {
             name.name_space = determine_namespace(&name.filename);
             match name.name_space {
                 NameSpace::File => handle_file_namespace(
@@ -503,54 +502,62 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )?,
                 NameSpace::Tcp => {
                     if !mount {
-                        handle_tcp_namespace(name, &mut inode_list, net_dev)?
+                        handle_tcp_namespace(name, &mut inode_list, net_dev)?;
                     }
                 }
                 NameSpace::Udp => {
                     if !mount {
-                        handle_udp_namespace(name, &mut inode_list, net_dev)?
+                        handle_udp_namespace(name, &mut inode_list, net_dev)?;
                     }
                 }
             }
 
-            if (scan_procs(
+            if scan_procs(
                 need_check_map,
                 name,
                 &inode_list,
                 &device_list,
                 &unix_socket_list,
                 net_dev,
-            ))
+            )
             .is_err()
             {
                 std::process::exit(1);
             }
         }
-        let st = timeout(&name.filename.to_string_lossy(), 5)?;
-        let uid = st.st_uid;
+    }
 
-        let pids = listpidspath(
-            osx_libproc_bindings::PROC_ALL_PIDS,
-            Path::new(&name.filename),
-            mount,
-            false,
-        )?;
+    #[cfg(target_os = "macos")]
+    {
+        for name in names.iter_mut() {
+            let st = timeout(&name.filename.to_string_lossy(), 5)?;
+            let uid = st.st_uid;
 
-        for pid in pids {
-            add_process(
-                name,
-                pid.try_into().unwrap(),
-                uid,
-                Access::Cwd,
-                ProcType::Normal,
-                None,
-            );
+            let pids = listpidspath(
+                osx_libproc_bindings::PROC_ALL_PIDS,
+                Path::new(&name.filename),
+                mount,
+                false,
+            )?;
+
+            for pid in pids {
+                add_process(
+                    name,
+                    pid.try_into().unwrap(),
+                    uid,
+                    Access::Cwd,
+                    ProcType::Normal,
+                    None,
+                );
+            }
         }
+    }
 
+    for name in names.iter_mut() {
         print_matches(name, user)?;
     }
 
-    std::process::exit(0)
+    std::process::exit(0);
 }
 
 /// Initializes and returns default values.
