@@ -10,7 +10,7 @@ pub mod osx_libproc_bindings {
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
-use libc::{c_char, c_int, c_void, fstat};
+use libc::{c_int, fstat};
 use plib::PROJECT_NAME;
 use std::{
     collections::BTreeMap,
@@ -30,12 +30,10 @@ const PROC_PATH: &'static str = "/proc";
 const PROC_MOUNTS: &'static str = "/proc/mounts";
 const NAME_FIELD: usize = 20;
 
-use std::os::unix::ffi::OsStrExt;
-use std::{ffi, mem, path, ptr};
-
 // similar to list_pids_ret() below, there are two cases when 0 is returned, one when there are
 // no pids, and the other when there is an error
 // when `errno` is set to indicate an error in the input type, the return value is 0
+#[cfg(target_os = "macos")]
 fn check_listpid_ret(ret: c_int) -> io::Result<Vec<u32>> {
     if ret < 0 || (ret == 0 && io::Error::last_os_error().raw_os_error().unwrap_or(0) != 0) {
         return Err(io::Error::last_os_error());
@@ -43,7 +41,7 @@ fn check_listpid_ret(ret: c_int) -> io::Result<Vec<u32>> {
 
     // `ret` cannot be negative here - so no possible loss of sign
     #[allow(clippy::cast_sign_loss)]
-    let capacity = ret as usize / mem::size_of::<u32>();
+    let capacity = ret as usize / std::mem::size_of::<u32>();
     Ok(Vec::with_capacity(capacity))
 }
 
@@ -51,6 +49,7 @@ fn check_listpid_ret(ret: c_int) -> io::Result<Vec<u32>> {
 // but is also used in the error case - so we need to look at errno to distringish between a valid
 // 0 return and an error return
 // when `errno` is set to indicate an error in the input type, the return value is 0
+#[cfg(target_os = "macos")]
 fn list_pids_ret(ret: c_int, mut pids: Vec<u32>) -> io::Result<Vec<u32>> {
     match ret {
         value
@@ -62,7 +61,7 @@ fn list_pids_ret(ret: c_int, mut pids: Vec<u32>) -> io::Result<Vec<u32>> {
         _ => {
             // `ret` cannot be negative here - so no possible loss of sign
             #[allow(clippy::cast_sign_loss)]
-            let items_count = ret as usize / mem::size_of::<u32>();
+            let items_count = ret as usize / std::mem::size_of::<u32>();
             unsafe {
                 pids.set_len(items_count);
             }
@@ -71,6 +70,7 @@ fn list_pids_ret(ret: c_int, mut pids: Vec<u32>) -> io::Result<Vec<u32>> {
     }
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn listpids(proc_type: u32) -> io::Result<Vec<u32>> {
     let buffer_size =
         unsafe { osx_libproc_bindings::proc_listpids(proc_type, proc_type, ptr::null_mut(), 0) };
@@ -85,6 +85,7 @@ pub(crate) fn listpids(proc_type: u32) -> io::Result<Vec<u32>> {
     list_pids_ret(ret, pids)
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn listpidspath(
     proc_type: u32,
     path: &path::Path,
@@ -483,11 +484,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fill_unix_cache(&mut unix_socket_list)?;
 
         let net_dev = find_net_dev()?;
-    }
 
-    for name in names.iter_mut() {
-        #[cfg(target_os = "linux")]
-        {
+        for name in names.iter_mut() {
             name.name_space = determine_namespace(&name.filename);
             match name.name_space {
                 NameSpace::File => handle_file_namespace(
@@ -522,29 +520,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 std::process::exit(1);
             }
+            print_matches(name, user)?;
         }
 
-        let st = timeout(&name.filename.to_string_lossy(), 5)?;
-        let uid = st.st_uid;
+        #[cfg(target_os = "macos")]
+        {
+            for name in names.iter_mut() {
+                let st = timeout(&name.filename.to_string_lossy(), 5)?;
+                let uid = st.st_uid;
 
-        let pids = listpidspath(
-            osx_libproc_bindings::PROC_ALL_PIDS,
-            Path::new(&name.filename),
-            mount,
-            false,
-        )?;
+                let pids = listpidspath(
+                    osx_libproc_bindings::PROC_ALL_PIDS,
+                    Path::new(&name.filename),
+                    mount,
+                    false,
+                )?;
 
-        for pid in pids {
-            add_process(
-                name,
-                pid.try_into().unwrap(),
-                uid,
-                Access::Cwd,
-                ProcType::Normal,
-                None,
-            );
+                for pid in pids {
+                    add_process(
+                        name,
+                        pid.try_into().unwrap(),
+                        uid,
+                        Access::Cwd,
+                        ProcType::Normal,
+                        None,
+                    );
+                }
+            }
+            print_matches(name, user)?;
         }
-        print_matches(name, user)?;
     }
 
     std::process::exit(0)
