@@ -83,13 +83,9 @@ fn get_process_user(pid: u32) -> io::Result<String> {
 
 #[cfg(target_os = "macos")]
 fn get_process_user(pid: u32) -> io::Result<String> {
-    use libproc::libproc::bsd_info::BSDInfo;
-    use libproc::libproc::proc_pid;
+    use std::os::unix::fs::MetadataExt;
 
-    let info = proc_pid::pidinfo::<BSDInfo>(pid as i32)
-        .map_err(|_| io::Error::new(io::ErrorKind::NotFound, "Process not found"))?;
-
-    let uid = info.pbi_uid;
+    let uid = fs::metadata("/").map(|md| md.uid())?;
     get_username_by_uid(uid)
 }
 
