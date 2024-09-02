@@ -1,7 +1,5 @@
 use libc::uid_t;
 use plib::{run_test_with_checker, TestPlan};
-#[cfg(target_os = "macos")]
-use std::os::unix::fs::MetadataExt;
 use std::{
     ffi::CStr,
     fs::{self, File},
@@ -83,9 +81,7 @@ fn get_process_user(pid: u32) -> io::Result<String> {
 
 #[cfg(target_os = "macos")]
 fn get_process_user(pid: u32) -> io::Result<String> {
-    use std::os::unix::fs::MetadataExt;
-
-    let uid = fs::metadata("/").map(|md| md.uid())?;
+    let uid = unsafe{ libc::getuid() };
     get_username_by_uid(uid)
 }
 
@@ -120,7 +116,7 @@ fn test_fuser_with_user() {
     let pid = process.id();
 
     fuser_test(
-        vec!["/".to_string(), "-u".to_string()],
+        vec!["./".to_string(), "-u".to_string()],
         "",
         0,
         |_, output| {
