@@ -8,7 +8,7 @@ pub mod osx_libproc_bindings {
     include!(concat!(env!("OUT_DIR"), "/osx_libproc_bindings.rs"));
 }
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::fstat;
 #[cfg(target_os = "macos")]
@@ -55,22 +55,16 @@ fn check_listpid_ret(ret: c_int) -> io::Result<Vec<u32>> {
 // when `errno` is set to indicate an error in the input type, the return value is 0
 #[cfg(target_os = "macos")]
 fn list_pids_ret(ret: c_int, mut pids: Vec<u32>) -> io::Result<Vec<u32>> {
-    match ret {
-        value
-            if value < 0
-                || (ret == 0 && io::Error::last_os_error().raw_os_error().unwrap_or(0) != 0) =>
-        {
-            Err(io::Error::last_os_error())
+    if ret < 0 || (ret == 0 && io::Error::last_os_error().raw_os_error().unwrap_or(0) != 0) {
+        Err(io::Error::last_os_error())
+    } else {
+        // `ret` cannot be negative here, so no possible loss of sign
+        #[allow(clippy::cast_sign_loss)]
+        let items_count = ret as usize / std::mem::size_of::<u32>();
+        unsafe {
+            pids.set_len(items_count);
         }
-        _ => {
-            // `ret` cannot be negative here - so no possible loss of sign
-            #[allow(clippy::cast_sign_loss)]
-            let items_count = ret as usize / std::mem::size_of::<u32>();
-            unsafe {
-                pids.set_len(items_count);
-            }
-            Ok(pids)
-        }
+        Ok(pids)
     }
 }
 
@@ -452,7 +446,6 @@ struct Args {
     /// A pathname on which the file or file system is to be reported.
     file: Vec<PathBuf>,
 }
-use clap::CommandFactory;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
@@ -483,81 +476,105 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         mut need_check_map,
     ) = init_defaults(file);
 
-    #[cfg(target_os = "linux")]
-    {
-        fill_unix_cache(&mut unix_socket_list)?;
-
-        let net_dev = find_net_dev()?;
-
-        for name in names.iter_mut() {
-            name.name_space = determine_namespace(&name.filename);
-            match name.name_space {
-                NameSpace::File => handle_file_namespace(
-                    name,
-                    mount,
-                    &mut mount_list,
-                    &mut inode_list,
-                    &mut device_list,
-                    &mut need_check_map,
-                )?,
-                NameSpace::Tcp => {
-                    if !mount {
-                        handle_tcp_namespace(name, &mut inode_list, net_dev)?;
-                    }
-                }
-                NameSpace::Udp => {
-                    if !mount {
-                        handle_udp_namespace(name, &mut inode_list, net_dev)?;
-                    }
-                }
-            }
-
-            if scan_procs(
-                need_check_map,
-                name,
-                &inode_list,
-                &device_list,
-                &unix_socket_list,
-                net_dev,
-            )
-            .is_err()
-            {
-                std::process::exit(1);
-            }
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        for name in names.iter_mut() {
-            let st = timeout(&name.filename.to_string_lossy(), 5)?;
-            let uid = st.st_uid;
-
-            let pids = listpidspath(
-                osx_libproc_bindings::PROC_ALL_PIDS,
-                Path::new(&name.filename),
-                mount,
-                false,
-            )?;
-
-            for pid in pids {
-                add_process(
-                    name,
-                    pid.try_into().unwrap(),
-                    uid,
-                    Access::Cwd,
-                    ProcType::Normal,
-                    None,
-                );
-            }
-        }
-    }
+    get_matched_procs(
+        &mut names,
+        &mut unix_socket_list,
+        &mut mount_list,
+        &mut inode_list,
+        &mut device_list,
+        &mut need_check_map,
+        mount,
+    )?;
 
     for name in names.iter_mut() {
         print_matches(name, user)?;
     }
 
     std::process::exit(0);
+}
+
+#[cfg(target_os = "linux")]
+fn get_matched_procs(
+    names: &mut Vec<Names>,
+    unix_socket_list: &mut UnixSocketList,
+    mount_list: &mut MountList,
+    inode_list: &mut InodeList,
+    device_list: &mut DeviceList,
+    need_check_map: &mut bool,
+    mount: bool,
+) -> Result<(), io::Error> {
+    fill_unix_cache(unix_socket_list)?;
+
+    let net_dev = find_net_dev()?;
+
+    for name in names.iter_mut() {
+        name.name_space = determine_namespace(&name.filename);
+        match name.name_space {
+            NameSpace::File => handle_file_namespace(
+                name,
+                mount,
+                mount_list,
+                inode_list,
+                device_list,
+                need_check_map,
+            )?,
+            NameSpace::Tcp => {
+                if !mount {
+                    handle_tcp_namespace(name, inode_list, net_dev)?;
+                }
+            }
+            NameSpace::Udp => {
+                if !mount {
+                    handle_udp_namespace(name, inode_list, net_dev)?;
+                }
+            }
+        }
+
+        if scan_procs(
+            *need_check_map,
+            name,
+            &inode_list,
+            &device_list,
+            &unix_socket_list,
+            net_dev,
+        )
+        .is_err()
+        {
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn get_matched_procs(
+    names: &mut Vec<Names>,
+    mount: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for name in names.iter_mut() {
+        let st = timeout(&name.filename.to_string_lossy(), 5)?;
+        let uid = st.st_uid;
+
+        let pids = listpidspath(
+            osx_libproc_bindings::PROC_ALL_PIDS,
+            Path::new(&name.filename),
+            mount,
+            false,
+        )?;
+
+        for pid in pids {
+            add_process(
+                name,
+                pid.try_into().unwrap(),
+                uid,
+                Access::Cwd,
+                ProcType::Normal,
+                None,
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Initializes and returns default values.
