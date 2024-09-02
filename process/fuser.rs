@@ -476,7 +476,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         mut need_check_map,
     ) = init_defaults(file);
 
-    get_matched_procs(
+    #[cfg(target_os = "linux")]
+    get_matched_procs_linux(
         &mut names,
         &mut unix_socket_list,
         &mut mount_list,
@@ -486,6 +487,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         mount,
     )?;
 
+    #[cfg(target_os = "macos")]
+    get_matched_procs_macos(&mut names, mount)?;
+
     for name in names.iter_mut() {
         print_matches(name, user)?;
     }
@@ -494,7 +498,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(target_os = "linux")]
-fn get_matched_procs(
+fn get_matched_procs_linux(
     names: &mut Vec<Names>,
     unix_socket_list: &mut UnixSocketList,
     mount_list: &mut MountList,
@@ -548,7 +552,7 @@ fn get_matched_procs(
 }
 
 #[cfg(target_os = "macos")]
-fn get_matched_procs(
+fn get_matched_procs_macos(
     names: &mut Vec<Names>,
     mount: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
