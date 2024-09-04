@@ -19,3 +19,7 @@ path = "./echo.rs"
 name = "printf"
 path = "./printf.rs"
 
+
+[[bin]]
+name = "man"
+path = "./man.rs"
