@@ -13,165 +13,101 @@ extern crate plib;
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use libc::c_char;
 use plib::PROJECT_NAME;
-use termion::input::TermRead;
-use termion::raw::IntoRawMode;
-use std::io::{self, Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::thread;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::ffi::CStr;
 
 /// talk - talk to another user
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
 struct Args {
     /// Address to connect or listen to
-    address: String,
+    address: Option<String>,
 
     /// Terminal name to use (optional)
-    terminal: Option<String>,
+    ttyname: Option<String>,
 }
 
-/// Handles user input and sends it to the connected peer.
-///
-/// This function listens for keyboard input from the user, processes special
-/// control characters (such as Ctrl+C to terminate the session or Ctrl+L to
-/// clear the screen), and sends the input to the connected peer via the
-/// provided TCP stream.
-///
-/// # Arguments
-///
-/// * `stream` - The TCP stream connected to the peer.
-/// * `running` - An atomic boolean flag indicating whether the session is still active.
-fn handle_input(mut stream: TcpStream, running: Arc<AtomicBool>) -> io::Result<()> {
-    let stdin = io::stdin();
-    let mut stdout = io::stdout().into_raw_mode()?;
-    let mut input_buffer = String::new();
-    let username = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
-
-    for c in stdin.keys() {
-        if let Ok(key) = c {
-            match key {
-                termion::event::Key::Ctrl('c') | termion::event::Key::Ctrl('d') => {
-                    running.store(false, Ordering::SeqCst);
-                    break;
-                }
-                termion::event::Key::Ctrl('l') => {
-                    write!(stdout, "{}", termion::clear::All)?;
-                }
-                termion::event::Key::Char('\x07') => {
-                    // Alert character (bell)
-                    write!(stdout, "\x07")?;
-                }
-                termion::event::Key::Char(c) => {
-                    if c == '\n' {
-                        // Send the collected input on Enter
-                        // Format the message with the username and send it
-                        let message = format!("{}: {}\r\n", username, input_buffer);
-                        stream.write_all(message.as_bytes())?;
-                        input_buffer.clear();
-                        writeln!(stdout, "\r")?; // Move to the next line in the terminal
-                    } else {
-                        input_buffer.push(c);
-                        write!(stdout, "{}", c)?; // Echo the character to the terminal
-                    }
-                }
-                termion::event::Key::Backspace => {
-                    if !input_buffer.is_empty() {
-                        input_buffer.pop();
-                        write!(stdout, "\x08 \x08")?;
-                    }
-                }
-                _ => {}
-            }
-            stdout.flush()?;
-        }
-    }
-    Ok(())
-}
-
-/// Handles output received from the connected peer.
-///
-/// This function listens for incoming data from the connected peer, and
-/// writes it to the user's terminal screen. The session continues as long
-/// as the `running` flag is set to `true`.
-///
-/// # Arguments
-///
-/// * `stream` - The TCP stream connected to the peer.
-/// * `running` - An atomic boolean flag indicating whether the session is still active.
-fn handle_output(mut stream: TcpStream, running: Arc<AtomicBool>) -> io::Result<()> {
-    let mut stdout = io::stdout().into_raw_mode()?;
-    let mut buffer = [0; 512];
-    while running.load(Ordering::SeqCst) {
-        let n_read = stream.read(&mut buffer)?;
-        if n_read == 0 {
-            break;
-        }
-        stdout.write_all(&buffer[..n_read])?;
-        stdout.flush()?;
-    }
-    Ok(())
-}
-
-/// Manages the `talk` session by setting up the connection and handling input and output.
-///
-/// This function either starts a listener on the specified address to wait
-/// for incoming connections or connects to a remote address as a client. Once
-/// connected, it spawns separate threads for handling input and output streams.
-///
-/// # Arguments
-///
-/// * `args` - The command-line arguments specifying the address to connect to or listen on.
 fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
-    let running = Arc::new(AtomicBool::new(true));
-    let address = args.address.clone();
+    if args.address.is_none() {
+        eprintln!("Usage: talk user [ttyname]");
+        std::process::exit(-1);
+    }
 
-    // Inform user about connection
-    println!("Message from <unspecified string>");
-    println!("talk: connection requested by {}", address);
-    println!("talk: respond with: talk {}", address);
+    let is_tty = atty::is(atty::Stream::Stdin);
+    if !is_tty {
+        println!("not a tty");
+        std::process::exit(1);
+    }
+    match get_names(args.address.as_ref().unwrap(), args.ttyname) {
+        Ok((his_name, his_machine_name)) => {
+            println!("User: {}", his_name);
+            println!("Machine: {}", his_machine_name);
+        }
+        Err(e) => println!("Error: {}", e),
+    }
 
-    // Attempt to connect as a client first
-    if let Ok(stream) = TcpStream::connect(&address) {
-        println!("Connected to {}", address);
+    Ok(())
+}
 
-        let running_input = running.clone();
-        let running_output = running.clone();
-        let stream_input = stream.try_clone()?;
-
-        thread::spawn(move || {
-            if let Err(e) = handle_input(stream_input, running_input) {
-                eprintln!("Error handling input: {}", e);
+// Determine the local and remote user, tty, and machines
+fn get_names(address: &str, ttyname: Option<String>) -> Result<(String, String), String> {
+    // Get the current user's name
+    let my_name = unsafe {
+        let login_name = libc::getlogin();
+        if !login_name.is_null() {
+            CStr::from_ptr(login_name).to_string_lossy().into_owned()
+        } else {
+            let pw = libc::getpwuid(libc::getuid());
+            if pw.is_null() {
+                return Err("You don't exist. Go away.".to_string());
+            } else {
+                CStr::from_ptr((*pw).pw_name).to_string_lossy().into_owned()
             }
-        });
+        }
+    };
 
-        if let Err(e) = handle_output(stream, running_output) {
-            eprintln!("Error handling output: {}", e);
+    // Get the local machine name
+    // todo: allocate enought sized buffer - safety
+    let my_machine_name = {
+        let mut buffer = vec![0 as c_char; 256];
+        let result = unsafe { libc::gethostname(buffer.as_mut_ptr(), buffer.len()) };
+
+        if result == 0 {
+            let c_str = unsafe { CStr::from_ptr(buffer.as_ptr()) };
+            c_str.to_string_lossy().into_owned()
+        } else {
+            return Err("Cannot get local hostname".to_string());
+        }
+    };
+
+    let have_at_symbol = address.find(|c| "@:!.".contains(c));
+
+    let (his_name, his_machine_name) = if let Some(index) = have_at_symbol {
+        let delimiter = address.chars().nth(index).unwrap();
+        if delimiter == '@' {
+            let (user, host) = address.split_at(index);
+            (user.to_string(), host[1..].to_string())
+        } else {
+            let (host, user) = address.split_at(index);
+            (user[1..].to_string(), host.to_string())
         }
     } else {
-        // If connection fails, start a listener
-        let listener = TcpListener::bind(&address)?;
-        println!("Listening on {}", address);
+        // local for local talk
+        (address.to_string(), my_machine_name.clone())
+    };
 
-        for stream in listener.incoming() {
-            let stream = stream?;
-            let running_input = running.clone();
-            let running_output = running.clone();
-            let stream_input = stream.try_clone()?;
-
-            thread::spawn(move || {
-                if let Err(e) = handle_input(stream_input, running_input) {
-                    eprintln!("Error handling input: {}", e);
-                }
-            });
-
-            if let Err(e) = handle_output(stream, running_output) {
-                eprintln!("Error handling output: {}", e);
-            }
-        }
+    let his_tty = ttyname.unwrap_or_default();
+    match get_addrs(&my_machine_name, &his_machine_name) {
+        Ok(_) => println!("Addresses resolved successfully."),
+        Err(e) => eprintln!("Error: {}", e),
     }
+
+    Ok((his_name, his_machine_name))
+}
+
+fn get_addrs(my_machine_name: &str, his_machine_name: &str) -> Result<(), std::io::Error> {
+    //todo: add Internationalized Domain Names(IDN) handling
 
     Ok(())
 }

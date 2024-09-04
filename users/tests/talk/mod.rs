@@ -89,15 +89,3 @@ fn run_test_talk(
     assert!(stdout.contains(expected_output));
 }
 
-#[test]
-fn simple_test() {
-    // simple_test
-    run_test_talk(&["--", "127.0.0.1:8080"], "talk: connection requested by", "", 0);
-    // correct address test
-    run_test_talk(&["--", "127.0.0.1:8080"], "127.0.0.1:8080", "", 0);
-}
-
-#[test]
-fn error_test() {
-    run_test_talk(&["--", "text"], "", "invalid socket address", 0);
-}
