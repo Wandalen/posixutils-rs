@@ -9,6 +9,12 @@ use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{exit, Command, Output};
 
+#[cfg(target_os = "linux")]
+const MAN_PATH: &str = "/usr/share/man";
+
+#[cfg(target_os = "macos")]
+const MAN_PATH: &str = "/usr/local/share/man";
+
 /// man - display system documentation
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about)]
@@ -22,12 +28,9 @@ struct Args {
 }
 
 /// Checks if the `man` package
-/// is installed by verifying the existence of the directory
-/// `/usr/share/man` on linux or `/usr/local/share/man` on macOS.
+/// is installed by verifying the existence of the directory.
 fn is_man_package_installed() -> bool {
-    // Check if the man package is installed by looking for a known directory or file
-    // 1 - linux, 2 - macOS
-    PathBuf::from("/usr/share/man").exists() || PathBuf::from("/usr/local/share/man").exists()
+    PathBuf::from(MAN_PATH).exists()
 }
 
 /// Prompts the user to install
@@ -46,14 +49,17 @@ fn prompt_install_man_package() -> bool {
 fn install_man_package() -> io::Result<()> {
     println!("Installing the man package...");
 
-    if cfg!(target_os = "linux") {
+    #[cfg(target_os = "linux")]
+    {
         Command::new("sudo")
             .arg("apt-get")
             .arg("install")
             .arg("-y")
             .arg("man-db")
             .status()?;
-    } else if cfg!(target_os = "macos") {
+    }
+    #[cfg(target_os = "macos")]
+    {
         Command::new("brew").arg("install").arg("man-db").status()?;
     }
 
@@ -96,10 +102,8 @@ fn format_roff_to_console(input: &str) -> String {
 /// man pages.
 fn display_man_page(name: &str) -> io::Result<()> {
     let possible_paths = [
-        format!("/usr/share/man/man1/{}.1.gz", name),
-        format!("/usr/share/man/man1/{}.1", name),
-        format!("/usr/local/share/man/man1/{}.1.gz", name),
-        format!("/usr/local/share/man/man1/{}.1", name),
+        format!("/{MAN_PATH}/man1/{name}.1.gz"),
+        format!("/{MAN_PATH}/man1/{name}.1"),
     ];
 
     let mut man_page_path = None;
