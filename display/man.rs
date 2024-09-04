@@ -176,6 +176,11 @@ fn man(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    if args.names.is_empty() {
+        eprintln!("man: no names specified");
+        exit(1);
+    }
+
     if args.keyword {
         for keyword in &args.names {
             if let Err(e) = search_summary_database(keyword) {

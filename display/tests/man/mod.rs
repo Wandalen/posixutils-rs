@@ -79,6 +79,16 @@ fn simple_test() {
 }
 
 #[test]
+fn simple_empty_names_test() {
+    run_test_man(&[], "", "man: no names specified\n", 1);
+}
+
+#[test]
 fn k_test() {
     run_test_man(&["-k", "user"], "fuser", "", 0);
+}
+
+#[test]
+fn k_empty_names_test() {
+    run_test_man(&["-k"], "", "man: no names specified\n", 1);
 }
