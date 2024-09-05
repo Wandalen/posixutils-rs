@@ -5,7 +5,7 @@ use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Cursor, Read};
 use std::path::PathBuf;
 use std::process::{exit, Command, Output};
 
@@ -118,24 +118,18 @@ fn display_man_page(name: &str) -> io::Result<()> {
     let man_page_path = man_page_path
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Man page not found"))?;
 
-    if man_page_path.ends_with(".gz") {
+    let source: Box<dyn Read> = if man_page_path.ends_with(".gz") {
         let output = Command::new("zcat").arg(man_page_path).output()?;
-        let reader = BufReader::new(&output.stdout[..]);
-
-        for line in reader.lines() {
-            let line = line?;
-            let r_line = format_roff_to_console(&line);
-            println!("{}", r_line);
-        }
+        Box::new(Cursor::new(output.stdout))
     } else {
-        let file = File::open(man_page_path)?;
-        let reader = BufReader::new(file);
+        Box::new(File::open(man_page_path)?)
+    };
+    let reader = BufReader::new(source);
 
-        for line in reader.lines() {
-            let line = line?;
-            let r_line = format_roff_to_console(&line);
-            println!("{}", r_line);
-        }
+    for line in reader.lines() {
+        let line = line?;
+        let r_line = format_roff_to_console(&line);
+        println!("{r_line}");
     }
 
     Ok(())
