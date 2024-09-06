@@ -3,9 +3,10 @@ extern crate plib;
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use pager_rs::{CommandList, State, StatusBar};
 use plib::PROJECT_NAME;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Cursor, Read};
+use std::io::{self, BufReader, Cursor, Read};
 use std::path::PathBuf;
 use std::process::{exit, Command, Output};
 
@@ -124,13 +125,22 @@ fn display_man_page(name: &str) -> io::Result<()> {
     } else {
         Box::new(File::open(man_page_path)?)
     };
-    let reader = BufReader::new(source);
+    let mut reader = BufReader::new(source);
 
-    for line in reader.lines() {
-        let line = line?;
-        let r_line = format_roff_to_console(&line);
-        println!("{r_line}");
-    }
+    let mut content = String::new();
+    reader.read_to_string(&mut content)?;
+
+    // TODO: format content
+
+    let status_bar = StatusBar::new(format!(
+        "Manual page {name} (press h for help or q to quit)"
+    ));
+    let mut state = State::new(content, status_bar, CommandList::default())?;
+    state.show_line_numbers = false;
+
+    pager_rs::init()?;
+    pager_rs::run(&mut state)?;
+    pager_rs::finish()?;
 
     Ok(())
 }

@@ -10,6 +10,7 @@ repository = "https://github.com/rustcoreutils/posixutils-rs.git"
 plib = { path = "../plib" }
 clap.workspace = true
 gettext-rs.workspace = true
+pager-rs = "0.3.0"
 
 [[bin]]
 name = "echo"
