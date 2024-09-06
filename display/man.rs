@@ -76,10 +76,11 @@ fn format_roff_to_console(input: &str) -> String {
 /// provided utility name. Handles both plain text and compressed (`.gz`)
 /// man pages.
 fn display_man_page(name: &str) -> io::Result<()> {
-    let possible_paths = [
-        format!("/{MAN_PATH}/man1/{name}.1.gz"),
-        format!("/{MAN_PATH}/man1/{name}.1"),
-    ];
+    let mut possible_paths = Vec::new();
+    for section in 1..=9 {
+        possible_paths.push(format!("/{MAN_PATH}/man{section}/{name}.{section}.gz"));
+        possible_paths.push(format!("/{MAN_PATH}/man{section}/{name}.{section}"));
+    }
 
     let mut man_page_path = None;
 
