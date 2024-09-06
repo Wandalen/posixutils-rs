@@ -5,10 +5,12 @@ use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use pager_rs::{CommandList, State, StatusBar};
 use plib::PROJECT_NAME;
+use std::error::Error;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, BufReader, Cursor, Read};
 use std::path::PathBuf;
-use std::process::{exit, Command, Output};
+use std::process::{Command, Output};
 
 #[cfg(target_os = "linux")]
 const MAN_PATH: &str = "/usr/share/man";
@@ -27,6 +29,17 @@ struct Args {
     /// Names of the utilities or keywords to display documentation for.
     names: Vec<String>,
 }
+
+#[derive(Debug)]
+struct ManError(String);
+
+impl Display for ManError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "man: {}", self.0)
+    }
+}
+
+impl Error for ManError {}
 
 /// Checks if the `man` package
 /// is installed by verifying the existence of the directory.
@@ -147,7 +160,7 @@ fn display_man_page(name: &str) -> io::Result<()> {
 
 /// Uses the `apropos` command to search the
 /// man page summaries for the given keyword for -k option.
-fn search_summary_database(keyword: &str) -> io::Result<()> {
+fn display_summary_database(keyword: &str) -> io::Result<()> {
     let output: Output = Command::new("apropos").arg(keyword).output()?;
 
     if !output.status.success() {
@@ -159,7 +172,7 @@ fn search_summary_database(keyword: &str) -> io::Result<()> {
 
     let result = String::from_utf8_lossy(&output.stdout);
 
-    println!("{}", result);
+    print!("{result}");
 
     Ok(())
 }
@@ -167,35 +180,29 @@ fn search_summary_database(keyword: &str) -> io::Result<()> {
 /// The main function that handles the program logic. It checks
 /// if the `man` package is installed, processes the input arguments,
 /// and either displays man pages or searches the summary database.
-fn man(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+fn man(args: Args) -> Result<(), ManError> {
     if !is_man_package_installed() {
         if prompt_install_man_package() {
-            if let Err(e) = install_man_package() {
-                eprintln!("Failed to install man package: {}", e);
-                exit(1);
-            }
+            install_man_package()
+                .map_err(|err| ManError(format!("failed to install man package: {err}")))?;
         } else {
-            eprintln!("man: package is not installed.");
-            exit(1);
+            return Err(ManError("package is not installed".to_string()));
         }
     }
 
     if args.names.is_empty() {
-        eprintln!("man: no names specified");
-        exit(1);
+        return Err(ManError("no names specified".to_string()));
     }
 
-    if args.keyword {
-        for keyword in &args.names {
-            if let Err(e) = search_summary_database(keyword) {
-                eprintln!("man: {}: {}", keyword, e);
-            }
-        }
+    let display = if args.keyword {
+        display_summary_database
     } else {
-        for name in &args.names {
-            if let Err(e) = display_man_page(name) {
-                eprintln!("man: {}: {}", name, e);
-            }
+        display_man_page
+    };
+
+    for name in &args.names {
+        if let Err(err) = display(name).map_err(|err| ManError(format!("{name}: {err}"))) {
+            eprintln!("{err}");
         }
     }
 
@@ -214,7 +221,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(err) = man(args) {
         exit_code = 1;
-        eprint!("{}", err);
+        eprintln!("{err}");
     }
 
     std::process::exit(exit_code)
