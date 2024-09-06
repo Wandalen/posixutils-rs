@@ -41,45 +41,6 @@ impl Display for ManError {
 
 impl Error for ManError {}
 
-/// Checks if the `man` package
-/// is installed by verifying the existence of the directory.
-fn is_man_package_installed() -> bool {
-    PathBuf::from(MAN_PATH).exists()
-}
-
-/// Prompts the user to install
-/// the `man` package if it is not already installed. Returns
-/// `true` if the user agrees to install, otherwise `false`.
-fn prompt_install_man_package() -> bool {
-    println!("The man package is not installed. Do you want to install it? (y/n)");
-
-    let mut answer = String::new();
-    io::stdin().read_line(&mut answer).unwrap();
-    answer.trim().eq_ignore_ascii_case("y")
-}
-
-/// Attempts to install the `man` package
-/// using either `apt-get` on Linux or `brew` on macOS.
-fn install_man_package() -> io::Result<()> {
-    println!("Installing the man package...");
-
-    #[cfg(target_os = "linux")]
-    {
-        Command::new("sudo")
-            .arg("apt-get")
-            .arg("install")
-            .arg("-y")
-            .arg("man-db")
-            .status()?;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("brew").arg("install").arg("man-db").status()?;
-    }
-
-    Ok(())
-}
-
 /// Formats `roff` markup (used in man pages)
 /// to display in the console, translating formatting tags like bold,
 /// italics, and others into terminal escape codes.
@@ -177,17 +138,13 @@ fn display_summary_database(keyword: &str) -> io::Result<()> {
     Ok(())
 }
 
-/// The main function that handles the program logic. It checks
-/// if the `man` package is installed, processes the input arguments,
-/// and either displays man pages or searches the summary database.
+/// The main function that handles the program logic. It processes the input
+/// arguments, and either displays man pages or searches the summary database.
 fn man(args: Args) -> Result<(), ManError> {
-    if !is_man_package_installed() {
-        if prompt_install_man_package() {
-            install_man_package()
-                .map_err(|err| ManError(format!("failed to install man package: {err}")))?;
-        } else {
-            return Err(ManError("package is not installed".to_string()));
-        }
+    if !PathBuf::from(MAN_PATH).exists() {
+        return Err(ManError(format!(
+            "{MAN_PATH} path to man pages doesn't exist"
+        )));
     }
 
     if args.names.is_empty() {
