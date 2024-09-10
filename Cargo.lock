@@ -1252,6 +1252,7 @@ name = "posixutils-users"
 version = "0.2.0"
 dependencies = [
  "atty",
+ "byteorder",
  "chrono",
  "clap",
  "gettext-rs",
