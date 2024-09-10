@@ -2,21 +2,22 @@ extern crate clap;
 extern crate plib;
 
 use clap::Parser;
+use flate2::read::GzDecoder;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use pager_rs::{CommandList, State, StatusBar};
 use plib::PROJECT_NAME;
 use std::error::Error;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufReader, Cursor, Read};
+use std::io::{self, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-#[cfg(target_os = "linux")]
-const MAN_PATH: &str = "/usr/share/man";
-
 #[cfg(target_os = "macos")]
 const MAN_PATH: &str = "/usr/local/share/man";
+
+#[cfg(target_family = "unix")]
+const MAN_PATH: &str = "/usr/share/man";
 
 /// man - display system documentation
 #[derive(Parser, Debug)]
@@ -40,6 +41,30 @@ impl Display for ManError {
 }
 
 impl Error for ManError {}
+
+fn get_map_page(name: &str) -> Result<(String, i32), io::Error> {
+    let (man_page_path, section) = (1..=9)
+        .flat_map(|section| {
+            let plain_path = format!("/{MAN_PATH}/man{section}/{name}.{section}");
+            let gz_path = format!("{plain_path}.gz");
+            vec![(gz_path, section), (plain_path, section)]
+        })
+        .find(|(path, _)| PathBuf::from(path).exists())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "man page not found"))?;
+
+    let source: Box<dyn Read> = if man_page_path.ends_with(".gz") {
+        let file = File::open(man_page_path)?;
+        Box::new(GzDecoder::new(file))
+    } else {
+        Box::new(File::open(man_page_path)?)
+    };
+
+    let mut reader = BufReader::new(source);
+    let mut man_page = String::new();
+    reader.read_to_string(&mut man_page)?;
+
+    Ok((man_page, section))
+}
 
 /// Formats `roff` markup (used in man pages)
 /// to display in the console, translating formatting tags like bold,
@@ -72,46 +97,19 @@ fn format_roff_to_console(input: &str) -> String {
     output + "\x1b[0m"
 }
 
-/// Searches for and displays a man page for the
-/// provided utility name. Handles both plain text and compressed (`.gz`)
-/// man pages.
+/// Searches for and displays a man page for the provided utility name.
+/// Handles both plain text and compressed (`.gz`) man pages.
 fn display_man_page(name: &str) -> io::Result<()> {
-    let mut possible_paths = Vec::new();
-    for section in 1..=9 {
-        possible_paths.push(format!("/{MAN_PATH}/man{section}/{name}.{section}.gz"));
-        possible_paths.push(format!("/{MAN_PATH}/man{section}/{name}.{section}"));
-    }
+    let (man_page, section) = get_map_page(name)?;
 
-    let mut man_page_path = None;
-
-    for path in &possible_paths {
-        if PathBuf::from(path).exists() {
-            man_page_path = Some(path);
-            break;
-        }
-    }
-
-    let man_page_path = man_page_path
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Man page not found"))?;
-
-    let source: Box<dyn Read> = if man_page_path.ends_with(".gz") {
-        let output = Command::new("zcat").arg(man_page_path).output()?;
-        Box::new(Cursor::new(output.stdout))
-    } else {
-        Box::new(File::open(man_page_path)?)
-    };
-    let mut reader = BufReader::new(source);
-
-    let mut content = String::new();
-    reader.read_to_string(&mut content)?;
-
-    // TODO: format content
+    // TODO: format man_page
 
     let status_bar = StatusBar::new(format!(
-        "Manual page {name} (press h for help or q to quit)"
+        "Manual page {name}({section}) (press h for help or q to quit)"
     ));
-    let mut state = State::new(content, status_bar, CommandList::default())?;
+    let mut state = State::new(man_page, status_bar, CommandList::default())?;
     state.show_line_numbers = false;
+    state.word_wrap = false;
 
     pager_rs::init()?;
     pager_rs::run(&mut state)?;

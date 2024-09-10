@@ -11,6 +11,7 @@ plib = { path = "../plib" }
 clap.workspace = true
 gettext-rs.workspace = true
 pager-rs = "0.3.0"
+flate2 = "1.0.33"
 
 [[bin]]
 name = "echo"
@@ -19,7 +20,6 @@ path = "./echo.rs"
 [[bin]]
 name = "printf"
 path = "./printf.rs"
-
 
 [[bin]]
 name = "man"
