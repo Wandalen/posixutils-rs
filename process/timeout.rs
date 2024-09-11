@@ -85,14 +85,14 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
 
     let value: f64 = value
         .parse()
-        .map_err(|_| format!("invalid duration format '{}'", s))?;
+        .map_err(|_| format!("invalid duration format '{s}'"))?;
 
     let multiplier = match suffix {
         "s" | "" => 1.0,
         "m" => 60.0,
         "h" => 3600.0,
         "d" => 86400.0,
-        _ => return Err(format!("invalid duration format '{}'", s)),
+        _ => return Err(format!("invalid duration format '{s}'")),
     };
 
     Ok(Duration::from_secs_f64(value * multiplier))
@@ -116,10 +116,10 @@ fn parse_signal(s: &str) -> Result<Signal, String> {
     let signal_name = if s.starts_with("SIG") {
         s.to_string()
     } else {
-        format!("SIG{}", s)
+        format!("SIG{s}")
     };
 
-    Signal::from_str(&signal_name).map_err(|_| format!("invalid signal name '{}'", s))
+    Signal::from_str(&signal_name).map_err(|_| format!("invalid signal name '{s}'"))
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -127,7 +127,7 @@ enum TimeoutError {
     #[error("timeout reached")]
     TimeoutReached,
     #[error("signal sent '{0}'")]
-    SignalSent(i32),
+    SignalSent(ExitStatus),
     #[error("{0}")]
     Other(String),
     #[error("unable to run the utility '{0}'")]
@@ -152,7 +152,7 @@ impl From<TimeoutError> for i32 {
     fn from(error: TimeoutError) -> Self {
         match error {
             TimeoutError::TimeoutReached => 124,
-            TimeoutError::SignalSent(signal) => 128 + signal,
+            TimeoutError::SignalSent(signal) => 128 + signal.signal().unwrap(),
             TimeoutError::Other(_) => 125,
             TimeoutError::UnableToRunUtility(_) => 126,
             TimeoutError::UtilityNotFound(_) => 127,
@@ -164,30 +164,24 @@ fn send_signal(pid: Pid, signal: Signal) -> Result<(), TimeoutError> {
     kill(pid, signal).map_err(Into::into)
 }
 
-fn wait(child: &mut Child) -> Result<i32, TimeoutError> {
-    child
-        .wait()
-        .map(ExitStatus::into_raw)
-        .map_err(Into::into)
+fn wait(child: &mut Child) -> Result<ExitStatus, TimeoutError> {
+    child.wait().map_err(Into::into)
 }
 
-fn wait_for_duration(child: &mut Child, duration: Duration) -> Result<i32, TimeoutError> {
+fn wait_for_duration(child: &mut Child, duration: Duration) -> Result<ExitStatus, TimeoutError> {
     drop(child.stdin.take());
 
     let start = Instant::now();
     while start.elapsed() < duration {
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|err| TimeoutError::Other(err.to_string()))?
-        {
-            return Ok(status.into_raw());
+        if let Some(status) = child.try_wait().map_err(Into::<TimeoutError>::into)? {
+            return Ok(status);
         }
         thread::sleep(Duration::from_millis(100));
     }
     Err(TimeoutError::TimeoutReached)
 }
 
-fn resolve_status(status: i32, preserve_status: bool) -> TimeoutError {
+fn resolve_status(status: ExitStatus, preserve_status: bool) -> TimeoutError {
     if preserve_status {
         TimeoutError::SignalSent(status)
     } else {
@@ -195,7 +189,7 @@ fn resolve_status(status: i32, preserve_status: bool) -> TimeoutError {
     }
 }
 
-fn timeout(args: Args) -> Result<i32, TimeoutError> {
+fn timeout(args: Args) -> Result<ExitStatus, TimeoutError> {
     let Args {
         kill_after,
         signal,
@@ -261,7 +255,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {
             eprintln!(
-                "Error: {}",
+                "timeout: {}",
                 err.source()
                     .map_or_else(|| err.kind().to_string(), |err| err.to_string())
             );
@@ -274,11 +268,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
     let exit_code = match timeout(args) {
-        Ok(exit_status) => exit_status,
+        Ok(exit_status) => exit_status.code().unwrap(),
         Err(err) => {
             match err {
                 TimeoutError::TimeoutReached | TimeoutError::SignalSent(_) => {}
-                _ => eprintln!("Error: {err}"),
+                _ => eprintln!("timeout: {err}"),
             }
             err.into()
         }
