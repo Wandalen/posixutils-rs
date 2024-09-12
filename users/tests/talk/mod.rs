@@ -32,6 +32,18 @@ mod localhost {
 
     #[test]
     fn basic_server() {
+        let response: [u8; 24] = [
+            1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+
+        let response_2: [u8; 24] = [
+            1, 3, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+
+        let response_3: [u8; 24] = [
+            1, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+
         run_test_helper(
             &["egor"],
             "not a tty\n[Connected to the server!]\n[Waiting for your party to respond]\n",

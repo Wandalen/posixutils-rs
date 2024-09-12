@@ -1,4 +1,3 @@
-//
 // Copyright (c) 2024 Hemi Labs, Inc.
 //
 // This file is part of the posixutils-rs project covered under
@@ -11,7 +10,6 @@ extern crate clap;
 extern crate gettextrs;
 extern crate plib;
 
-use byteorder::{BigEndian, ByteOrder};
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
@@ -23,11 +21,9 @@ use libc::{
 };
 use std::{
     ffi::{self, CStr, CString},
-    fmt,
-    fs::{self, File},
-    io::{self, BufRead, BufReader, BufWriter, Cursor, Error, Write},
+    io::{self, BufRead, BufReader, Cursor, Error, Write},
     mem::{size_of, zeroed},
-    net::{self, Ipv4Addr, SocketAddr, TcpListener, TcpStream, UdpSocket},
+    net::{self, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream, UdpSocket},
     process::{self, Command},
     ptr,
     sync::{Arc, Mutex},
@@ -46,6 +42,20 @@ enum MessageType {
     Announce,    // announce invitation by caller
 }
 
+impl TryFrom<u8> for MessageType {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(MessageType::LeaveInvite),
+            1 => Ok(MessageType::LookUp),
+            2 => Ok(MessageType::Delete),
+            3 => Ok(MessageType::Announce),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 enum Answer {
     Success,          // operation completed properly
@@ -59,20 +69,22 @@ enum Answer {
     BadCtlAddr,       // request has invalid ctl_addr value
 }
 
-impl fmt::Display for Answer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s = match self {
-            Answer::Success => "Success",
-            Answer::NotHere => "Not Here",
-            Answer::Failed => "Failed",
-            Answer::MachineUnknown => "Machine Unknown",
-            Answer::PermissionDenied => "Permission Denied",
-            Answer::UnknownRequest => "Unknown Request",
-            Answer::BadVersion => "Bad Version",
-            Answer::BadAddr => "Bad Address",
-            Answer::BadCtlAddr => "Bad Control Address",
-        };
-        write!(f, "{}", s)
+impl TryFrom<u8> for Answer {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Answer::Success),
+            1 => Ok(Answer::NotHere),
+            2 => Ok(Answer::Failed),
+            3 => Ok(Answer::MachineUnknown),
+            4 => Ok(Answer::PermissionDenied),
+            5 => Ok(Answer::UnknownRequest),
+            6 => Ok(Answer::BadVersion),
+            7 => Ok(Answer::BadAddr),
+            8 => Ok(Answer::BadCtlAddr),
+            _ => Err(()),
+        }
     }
 }
 
@@ -95,13 +107,30 @@ impl StateLogger {
     }
 }
 
-#[repr(C, packed(1))]
+#[repr(C, packed)]
 pub struct Osockaddr {
     pub sa_family: sa_family_t,
     pub sa_data: [u8; 14],
 }
 
-#[repr(C, packed(1))]
+impl Osockaddr {
+    pub fn to_socket_addr_v4(&self) -> Option<SocketAddrV4> {
+        // Extract the port (first 2 bytes, big-endian)
+        let port = u16::from_be_bytes([self.sa_data[2], self.sa_data[3]]);
+
+        // Extract the IP address (next 4 bytes)
+        let ip = Ipv4Addr::new(
+            self.sa_data[4],
+            self.sa_data[5],
+            self.sa_data[6],
+            self.sa_data[7],
+        );
+
+        Some(SocketAddrV4::new(ip, port))
+    }
+}
+
+#[repr(C, packed)]
 struct CtlMsg {
     vers: c_uchar,
     r#type: c_uchar,
@@ -114,16 +143,6 @@ struct CtlMsg {
     l_name: [c_char; 12],
     r_name: [c_char; 12],
     r_tty: [c_char; 12],
-}
-
-#[repr(C, packed(1))]
-pub struct CtlRes {
-    pub vers: c_uchar,
-    r#type: MessageType,
-    answer: Answer,
-    pub pad: c_uchar,
-    pub id_num: u64,
-    pub addr: Osockaddr,
 }
 
 impl CtlMsg {
@@ -153,11 +172,10 @@ impl CtlMsg {
             .map(|s| s.parse::<u8>().unwrap_or(0))
             .collect();
 
-        if ip_bytes.len() == 4 {
-            sa_data[..4].copy_from_slice(&ip_bytes);
-        }
+        sa_data[0..2].copy_from_slice(&port.to_be_bytes());
+        sa_data[2..6].copy_from_slice(&ip_bytes);
+        sa_data[12..14].copy_from_slice(&[0, 2]);
 
-        sa_data[12..14].copy_from_slice(&port.to_be_bytes());
         sa_data
     }
 
@@ -176,22 +194,43 @@ impl CtlMsg {
     }
 }
 
-fn save_socket_addr(socket_addr: &SocketAddr, file_path: &str) -> io::Result<()> {
-    let file = File::create(file_path)?;
-    let mut writer = BufWriter::new(file);
-    writeln!(writer, "{}", socket_addr)?;
-    Ok(())
+#[repr(C, packed)]
+pub struct CtlRes {
+    pub vers: c_uchar,
+    r#type: MessageType,
+    answer: Answer,
+    pub pad: c_uchar,
+    pub id_num: u32,
+    pub addr: Osockaddr,
 }
 
-fn load_socket_addr(file_path: &str) -> io::Result<SocketAddr> {
-    let file = File::open(file_path)?;
-    let reader = io::BufReader::new(file);
-    let line = reader
-        .lines()
-        .next()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "File is empty"))??;
-    line.parse::<SocketAddr>()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+impl CtlRes {
+    fn from_bytes(&self, bytes: &[u8]) -> Result<Self, &'static str> {
+        if bytes.len() < size_of::<CtlRes>() {
+            return Err("Not enough data to form CtlRes");
+        }
+
+        let vers = bytes[0];
+        let r#type = MessageType::try_from(bytes[1]).map_err(|_| "Invalid MessageType")?;
+        let answer = Answer::try_from(bytes[2]).map_err(|_| "Invalid Answer")?;
+        let pad = bytes[3];
+        let id_num = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+
+        let sa_family = u16::from_le_bytes(bytes[8..10].try_into().unwrap());
+        let mut sa_data = [0u8; 14];
+        sa_data.copy_from_slice(&bytes[10..24]);
+
+        let addr = Osockaddr { sa_family, sa_data };
+
+        Ok(CtlRes {
+            vers,
+            r#type,
+            answer,
+            pad,
+            id_num,
+            addr,
+        })
+    }
 }
 
 /// talk - talk to another user
@@ -210,6 +249,8 @@ fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut msg = initialize_ctl_msg();
     let mut res = initialize_ctl_res();
+    let mut local_id = 0;
+    let mut remote_id = 0;
 
     let (width, height) = get_terminal_size();
     let mut logger = StateLogger::new("No connection yet.");
@@ -222,41 +263,36 @@ fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let (ctl_addr, socket) = open_ctl(my_machine_addr)?;
 
     let ctl_addr_data = msg.create_ctl_addr(ctl_addr);
-    let his_addr_data = msg.create_sockaddr_data(&his_machine_addr.to_string(), 2);
-    let my_addr_data = msg.create_sockaddr_data(&my_machine_addr.to_string(), 2);
+    let his_addr_data = msg.create_sockaddr_data(&his_machine_addr.to_string(), 0);
+    let my_addr_data = msg.create_sockaddr_data(&my_machine_addr.to_string(), 0);
 
     msg.addr.sa_data = his_addr_data;
     msg.ctl_addr.sa_data = ctl_addr_data;
 
     look_for_invite(daemon_port, &mut msg, &socket, &mut res);
 
-    // todo: get socket address from answer
-    match load_socket_addr("socket.txt") {
-        Ok(socket_addr) => {
-            handle_existing_connection(
-                daemon_port,
-                socket_addr,
-                width,
-                height,
-                &mut msg,
-                &socket,
-                &mut res,
-                &mut logger,
-            )?;
-        }
-        Err(_) => {
-            handle_new_connection(
-                daemon_port,
-                &mut msg,
-                &socket,
-                &mut res,
-                my_machine_addr,
-                my_addr_data,
-                &mut logger,
-            )?;
-        }
+    if res.answer == Answer::Success {
+        handle_existing_connection(
+            daemon_port,
+            width,
+            height,
+            &mut msg,
+            &socket,
+            &mut res,
+            &mut logger,
+            my_addr_data,
+            his_addr_data,
+        )?;
+    } else {
+        handle_new_connection(
+            daemon_port,
+            &mut msg,
+            &socket,
+            &mut res,
+            my_machine_addr,
+            &mut logger,
+        )?;
     }
-
     println!("[Waiting for your party to respond]");
 
     Ok(())
@@ -281,7 +317,7 @@ fn initialize_ctl_msg() -> CtlMsg {
     CtlMsg {
         vers: 1,
         r#type: MessageType::LookUp as u8,
-        answer: Answer::Failed as u8,
+        answer: Answer::Success as u8,
         pad: 0,
         id_num: 131072,
         addr: Osockaddr {
@@ -315,24 +351,29 @@ fn initialize_ctl_res() -> CtlRes {
 
 fn handle_existing_connection(
     daemon_port: u16,
-    socket_addr: SocketAddr,
     width: u16,
     height: u16,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
     res: &mut CtlRes,
     logger: &mut StateLogger,
+    my_addr_data: [u8; 14],
+    his_addr_data: [u8; 14],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let stream = TcpStream::connect(socket_addr)?;
-    fs::remove_file("socket.txt")?;
+    let tcp_addr = res.addr.to_socket_addr_v4().unwrap();
 
+    let stream = TcpStream::connect(tcp_addr)?;
+    msg.addr.sa_data = my_addr_data;
+    send_delete(daemon_port, msg, socket, res);
+
+    msg.addr.sa_data = his_addr_data;
+    send_delete(daemon_port, msg, socket, res);
     let mut write_stream = stream.try_clone()?;
     let read_stream = stream.try_clone()?;
 
     logger.set_state("[Connected to the server!]");
 
     let split_row = height / 2;
-    send_delete(daemon_port, msg, socket, res);
 
     let top_line = Arc::new(Mutex::new(0 as u16));
     let bottom_line = Arc::new(Mutex::new(0 as u16));
@@ -388,17 +429,23 @@ fn handle_new_connection(
     socket: &UdpSocket,
     res: &mut CtlRes,
     my_machine_addr: Ipv4Addr,
-    my_addr_data: [u8; 14],
     logger: &mut StateLogger,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (socket_addr, listener) = open_sockt(my_machine_addr)?;
-    save_socket_addr(&socket_addr, "socket.txt")?;
 
     logger.set_state("[Service connection established.]");
 
-    msg.addr.sa_data = my_addr_data;
-    leave_invite(daemon_port, msg, socket, res);
+    let tcp_data = msg.create_sockaddr_data(&socket_addr.ip().to_string(), socket_addr.port());
+
+    msg.addr.sa_data = tcp_data;
+    //todo: handle delete
+    // msg.id_num = -1;
+    // send_delete(daemon_port, msg, socket, res);
+    logger.set_state("[Trying to connect to your party's talk daemon]");
     announce(daemon_port, msg, socket, res);
+    // *remote_id = res.id_num;
+    leave_invite(daemon_port, msg, socket, res);
+    // *local_id = res.id_num;
 
     for stream in listener.incoming() {
         match stream {
@@ -477,7 +524,6 @@ fn get_names(
     msg.addr.sa_family = AF_INET as sa_family_t;
     msg.ctl_addr.sa_family = AF_INET as sa_family_t;
     //todo: use id_num properly
-    // msg.id_num = 0u32.to_be() as u64;
     msg.l_name = string_to_c_string(&my_name);
     msg.r_name = string_to_c_string(&his_name);
     msg.r_tty = string_to_c_string(&ttyname.unwrap_or_default());
@@ -625,61 +671,18 @@ fn string_to_c_string(s: &str) -> [c_char; BUFFER_SIZE] {
     buffer
 }
 
-fn bytes_to_ctl_res(bytes: &[u8]) -> CtlRes {
-    let id_num = BigEndian::read_u64(&bytes[4..12]);
-
-    let sa_family = bytes[12] as sa_family_t;
-    let addr = Osockaddr {
-        sa_family,
-        sa_data: [0; 14],
-    };
-
-    let r#type = match bytes[1] {
-        0 => MessageType::LeaveInvite,
-        1 => MessageType::LookUp,
-        2 => MessageType::Delete,
-        3 => MessageType::Announce,
-        _ => MessageType::LookUp, // Default or error handling
-    };
-
-    let answer = match bytes[2] {
-        0 => Answer::Success,
-        1 => Answer::NotHere,
-        2 => Answer::Failed,
-        3 => Answer::MachineUnknown,
-        4 => Answer::PermissionDenied,
-        5 => Answer::UnknownRequest,
-        6 => Answer::BadVersion,
-        7 => Answer::BadAddr,
-        8 => Answer::BadCtlAddr,
-        _ => Answer::Failed, // Default or error handling
-    };
-
-    CtlRes {
-        vers: bytes[0],
-        r#type,
-        answer,
-        pad: bytes[3],
-        id_num,
-        addr,
-    }
-}
-
 fn handle_client(stream: TcpStream) -> Result<(), Box<dyn std::error::Error>> {
     let read_stream = stream.try_clone()?;
     let mut write_stream = stream.try_clone()?;
 
     let (width, height) = get_terminal_size();
     let split_row = height / 2;
-    // Wrap top_line and bottom_line in Arc<Mutex<_>> for shared mutable access
     let top_line = Arc::new(Mutex::new(0 as u16));
     let bottom_line = Arc::new(Mutex::new(0 as u16));
 
-    // Clone Arcs for the thread
     let top_line_clone = Arc::clone(&top_line);
     let bottom_line_clone = Arc::clone(&bottom_line);
 
-    // Spawn a thread to handle incoming messages from the server
     thread::spawn(move || {
         let mut handle = draw_terminal(split_row, width).unwrap();
         let reader = BufReader::new(read_stream);
@@ -704,7 +707,6 @@ fn handle_client(stream: TcpStream) -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Main thread handles stdin input
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
         let message = line.unwrap();
@@ -731,14 +733,16 @@ fn handle_user_input(
     let mut bottom_line = bottom_line.lock().unwrap();
 
     if *bottom_line >= split_row - 2 {
-        *bottom_line = 0; // Reset bottom_line if it exceeds split_row
+        *bottom_line = 0;
     }
 
-    write!(handle, "\x1b[{};0H", split_row + *bottom_line + 1)?; // Move cursor to bottom window
+    // Move cursor to bottom window
+    write!(handle, "\x1b[{};0H", split_row + *bottom_line + 1)?;
     writeln!(handle, "{}", input)?;
     write!(handle, "\n")?;
 
-    write!(handle, "\x1b[{};0H", *top_line)?; // Move cursor to top window
+    // Move cursor to top window
+    write!(handle, "\x1b[{};0H", *top_line)?;
     handle.flush()?;
     *bottom_line += 1;
     Ok(())
@@ -770,7 +774,6 @@ fn open_ctl(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, UdpSocket), io::Er
     let socket = UdpSocket::bind((my_machine_addr, 0))?;
 
     let addr = socket.local_addr()?;
-
     Ok((addr, socket))
 }
 
@@ -823,9 +826,8 @@ fn reqwest(
                 let mut buf = [0; 1024];
                 match socket.recv_from(&mut buf) {
                     Ok((amt, _)) => {
-                        let ctl_res = bytes_to_ctl_res(&buf[..amt]);
-                        res.answer = ctl_res.answer;
-                        res.r#type = ctl_res.r#type;
+                        let ctl_res = res.from_bytes(&buf[..amt]).unwrap();
+                        *res = ctl_res;
                         break;
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
