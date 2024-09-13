@@ -160,6 +160,19 @@ impl From<TimeoutError> for i32 {
     }
 }
 
+fn spawn_child(utility: &str, arguments: &[String]) -> Result<Child, TimeoutError> {
+    Command::new(utility)
+        .args(arguments)
+        .spawn()
+        .map_err(|err| match err.kind() {
+            std::io::ErrorKind::NotFound => TimeoutError::UtilityNotFound(utility.to_string()),
+            std::io::ErrorKind::PermissionDenied => {
+                TimeoutError::UnableToRunUtility(utility.to_string())
+            }
+            _ => err.into(),
+        })
+}
+
 fn send_signal(pid: Pid, signal: Signal) -> Result<(), TimeoutError> {
     kill(pid, signal).map_err(Into::into)
 }
@@ -169,16 +182,20 @@ fn wait(child: &mut Child) -> Result<ExitStatus, TimeoutError> {
 }
 
 fn wait_for_duration(child: &mut Child, duration: Duration) -> Result<ExitStatus, TimeoutError> {
-    drop(child.stdin.take());
+    if duration.is_zero() {
+        wait(child).map_err(Into::<TimeoutError>::into)
+    } else {
+        drop(child.stdin.take());
 
-    let start = Instant::now();
-    while start.elapsed() < duration {
-        if let Some(status) = child.try_wait().map_err(Into::<TimeoutError>::into)? {
-            return Ok(status);
+        let start = Instant::now();
+        while start.elapsed() < duration {
+            if let Some(status) = child.try_wait().map_err(Into::<TimeoutError>::into)? {
+                return Ok(status);
+            }
+            thread::sleep(Duration::from_millis(100));
         }
-        thread::sleep(Duration::from_millis(100));
+        Err(TimeoutError::TimeoutReached)
     }
-    Err(TimeoutError::TimeoutReached)
 }
 
 fn resolve_status(status: ExitStatus, preserve_status: bool) -> TimeoutError {
@@ -200,49 +217,38 @@ fn timeout(args: Args) -> Result<ExitStatus, TimeoutError> {
         ..
     } = args;
 
-    let mut child = Command::new(&utility)
-        .args(&arguments)
-        .spawn()
-        .map_err(|err| match err.kind() {
-            std::io::ErrorKind::NotFound => TimeoutError::UtilityNotFound(utility),
-            std::io::ErrorKind::PermissionDenied => TimeoutError::UnableToRunUtility(utility),
-            _ => err.into(),
-        })?;
+    let mut child = spawn_child(&utility, &arguments)?;
     let pid = Pid::from_raw(child.id() as libc::pid_t);
 
-    if duration.is_zero() {
-        wait(&mut child)
-    } else {
-        match wait_for_duration(&mut child, duration) {
-            Ok(status) => Ok(status),
-            Err(TimeoutError::TimeoutReached) => {
-                // Send first signal
-                send_signal(pid, signal)?;
+    match wait_for_duration(&mut child, duration) {
+        Ok(status) => Ok(status),
+        Err(TimeoutError::TimeoutReached) => {
+            // Send first signal
+            send_signal(pid, signal)?;
 
-                match kill_after {
-                    Some(kill_duration) => {
-                        // Attempt to wait for process exit status again
-                        wait_for_duration(&mut child, kill_duration)
-                            .and_then(|status| Err(resolve_status(status, preserve_status)))
-                            .or_else(|err| {
-                                if let TimeoutError::TimeoutReached = err {
-                                    // Send SIGKILL signal
-                                    send_signal(pid, Signal::SIGKILL)?;
-                                    let status = wait(&mut child)?;
-                                    Err(resolve_status(status, preserve_status))
-                                } else {
-                                    Err(err)
-                                }
-                            })
-                    }
-                    None => {
-                        let status = wait(&mut child)?;
-                        Err(resolve_status(status, preserve_status))
-                    }
+            match kill_after {
+                Some(kill_duration) => {
+                    // Attempt to wait for process exit status again
+                    wait_for_duration(&mut child, kill_duration)
+                        .and_then(|status| Err(resolve_status(status, preserve_status)))
+                        .or_else(|err| {
+                            if let TimeoutError::TimeoutReached = err {
+                                // Send SIGKILL signal
+                                send_signal(pid, Signal::SIGKILL)?;
+                                let status = wait(&mut child)?;
+                                Err(resolve_status(status, preserve_status))
+                            } else {
+                                Err(err)
+                            }
+                        })
+                }
+                None => {
+                    let status = wait(&mut child)?;
+                    Err(resolve_status(status, preserve_status))
                 }
             }
-            Err(err) => Err(err),
         }
+        Err(err) => Err(err),
     }
 }
 
