@@ -21,11 +21,13 @@ use libc::{
 };
 use std::{
     ffi::{self, CStr, CString},
-    io::{self, BufRead, BufReader, Cursor, Error, Write},
+    fs::{remove_file, File},
+    io::{self, BufRead, Cursor, Error, ErrorKind, Read, Write},
     mem::{size_of, zeroed},
     net::{self, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream, UdpSocket},
     process::{self, Command},
     ptr,
+    str::from_utf8,
     sync::{Arc, Mutex},
     thread,
     time::Duration,
@@ -114,16 +116,16 @@ pub struct Osockaddr {
 }
 
 impl Osockaddr {
-    pub fn to_socket_addr_v4(&self) -> Option<SocketAddrV4> {
+    pub fn to_socketaddr(&self) -> Option<SocketAddrV4> {
         // Extract the port (first 2 bytes, big-endian)
-        let port = u16::from_be_bytes([self.sa_data[2], self.sa_data[3]]);
+        let port = u16::from_be_bytes([self.sa_data[0], self.sa_data[1]]);
 
         // Extract the IP address (next 4 bytes)
         let ip = Ipv4Addr::new(
+            self.sa_data[2],
+            self.sa_data[3],
             self.sa_data[4],
             self.sa_data[5],
-            self.sa_data[6],
-            self.sa_data[7],
         );
 
         Some(SocketAddrV4::new(ip, port))
@@ -136,13 +138,13 @@ struct CtlMsg {
     r#type: c_uchar,
     answer: c_uchar,
     pad: c_uchar,
-    id_num: u64,
+    id_num: u32,
     addr: Osockaddr,
     ctl_addr: Osockaddr,
     pid: i32,
     l_name: [c_char; 12],
     r_name: [c_char; 12],
-    r_tty: [c_char; 12],
+    r_tty: [c_char; 16],
 }
 
 impl CtlMsg {
@@ -155,7 +157,9 @@ impl CtlMsg {
         cursor.write_all(&self.answer.to_be_bytes())?;
         cursor.write_all(&self.pad.to_be_bytes())?;
         cursor.write_all(&self.id_num.to_be_bytes())?;
+        cursor.write_all(&self.addr.sa_family.to_be_bytes())?;
         cursor.write_all(&self.addr.sa_data)?;
+        cursor.write_all(&self.ctl_addr.sa_family.to_be_bytes())?;
         cursor.write_all(&self.ctl_addr.sa_data)?;
         cursor.write_all(&self.pid.to_be_bytes())?;
         cursor.write_all(&self.l_name.iter().map(|&b| b as u8).collect::<Vec<u8>>())?;
@@ -249,8 +253,6 @@ fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut msg = initialize_ctl_msg();
     let mut res = initialize_ctl_res();
-    let mut local_id = 0;
-    let mut remote_id = 0;
 
     let (width, height) = get_terminal_size();
     let mut logger = StateLogger::new("No connection yet.");
@@ -263,27 +265,18 @@ fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let (ctl_addr, socket) = open_ctl(my_machine_addr)?;
 
     let ctl_addr_data = msg.create_ctl_addr(ctl_addr);
-    let his_addr_data = msg.create_sockaddr_data(&his_machine_addr.to_string(), 0);
-    let my_addr_data = msg.create_sockaddr_data(&my_machine_addr.to_string(), 0);
 
-    msg.addr.sa_data = his_addr_data;
     msg.ctl_addr.sa_data = ctl_addr_data;
 
+    logger.set_state("[Checking for invitation on caller's machine]");
     look_for_invite(daemon_port, &mut msg, &socket, &mut res);
+    msg.id_num = res.id_num.to_be();
+    send_delete(daemon_port, &mut msg, &socket, &mut res);
 
     if res.answer == Answer::Success {
-        handle_existing_connection(
-            daemon_port,
-            width,
-            height,
-            &mut msg,
-            &socket,
-            &mut res,
-            &mut logger,
-            my_addr_data,
-            his_addr_data,
-        )?;
+        handle_existing_connection(width, height, &mut res, daemon_port, &mut msg, &socket)?;
     } else {
+        logger.set_state("[Waiting to connect with caller]");
         handle_new_connection(
             daemon_port,
             &mut msg,
@@ -293,7 +286,6 @@ fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             &mut logger,
         )?;
     }
-    println!("[Waiting for your party to respond]");
 
     Ok(())
 }
@@ -308,7 +300,7 @@ fn validate_args(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
 
 fn check_if_tty() -> Result<(), Box<dyn std::error::Error>> {
     if atty::isnt(atty::Stream::Stdin) {
-        println!("not a tty");
+        // println!("not a tty");
     }
     Ok(())
 }
@@ -319,7 +311,7 @@ fn initialize_ctl_msg() -> CtlMsg {
         r#type: MessageType::LookUp as u8,
         answer: Answer::Success as u8,
         pad: 0,
-        id_num: 131072,
+        id_num: 0,
         addr: Osockaddr {
             sa_family: 0,
             sa_data: [0; 14],
@@ -331,7 +323,7 @@ fn initialize_ctl_msg() -> CtlMsg {
         pid: 0,
         l_name: string_to_c_string(""),
         r_name: string_to_c_string(""),
-        r_tty: [0; 12],
+        r_tty: [0; 16],
     }
 }
 
@@ -350,32 +342,30 @@ fn initialize_ctl_res() -> CtlRes {
 }
 
 fn handle_existing_connection(
-    daemon_port: u16,
     width: u16,
     height: u16,
+    res: &mut CtlRes,
+    daemon_port: u16,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
-    res: &mut CtlRes,
-    logger: &mut StateLogger,
-    my_addr_data: [u8; 14],
-    his_addr_data: [u8; 14],
-) -> Result<(), Box<dyn std::error::Error>> {
-    let tcp_addr = res.addr.to_socket_addr_v4().unwrap();
+) -> Result<(), io::Error> {
+    let tcp_addr = res.addr.to_socketaddr().unwrap();
 
     let stream = TcpStream::connect(tcp_addr)?;
-    msg.addr.sa_data = my_addr_data;
+    let (local_id, remote_id) = read_invite_ids_from_file()?;
+    msg.id_num = local_id;
+    send_delete(daemon_port, msg, socket, res);
+    msg.id_num = remote_id;
     send_delete(daemon_port, msg, socket, res);
 
-    msg.addr.sa_data = his_addr_data;
-    send_delete(daemon_port, msg, socket, res);
+    remove_file("invite_ids.txt")?;
+
     let mut write_stream = stream.try_clone()?;
     let read_stream = stream.try_clone()?;
 
-    logger.set_state("[Connected to the server!]");
-
     let split_row = height / 2;
 
-    let top_line = Arc::new(Mutex::new(0 as u16));
+    let top_line = Arc::new(Mutex::new(2 as u16));
     let bottom_line = Arc::new(Mutex::new(0 as u16));
 
     let top_line_clone = Arc::clone(&top_line);
@@ -383,22 +373,29 @@ fn handle_existing_connection(
 
     thread::spawn(move || {
         let mut handle = draw_terminal(split_row, width).unwrap();
-        let reader = BufReader::new(read_stream);
+        let mut buffer = [0; 128];
+        let mut stream = read_stream;
+        loop {
+            match stream.read(&mut buffer) {
+                Ok(nbytes) => {
+                    if nbytes > 0 {
+                        handle_user_input(
+                            &mut handle,
+                            std::str::from_utf8(&buffer[..nbytes]).unwrap(),
+                            split_row,
+                            Arc::clone(&top_line_clone),
+                            Arc::clone(&bottom_line_clone),
+                        )
+                        .unwrap();
+                    } else {
+                        Command::new("clear").status().unwrap();
 
-        for line in reader.lines() {
-            match line {
-                Ok(message) => {
-                    handle_user_input(
-                        &mut handle,
-                        &message,
-                        split_row,
-                        Arc::clone(&top_line_clone),
-                        Arc::clone(&bottom_line_clone),
-                    )
-                    .unwrap();
+                        eprintln!("Connection closed, exiting...");
+                        process::exit(128);
+                    }
                 }
                 Err(e) => {
-                    eprintln!("Failed to receive message: {}", e);
+                    eprintln!("Error reading from stream: {}", e);
                     break;
                 }
             }
@@ -409,17 +406,29 @@ fn handle_existing_connection(
     let handle = stdin.lock();
 
     for line in handle.lines() {
-        let message = line.unwrap();
-        let mut top_line = top_line.lock().unwrap();
-        *top_line += 1;
-        write_stream.write_all(message.as_bytes())?;
-        write_stream.write_all(b"\n")?;
-        if *top_line >= split_row - 1 {
-            eprint!("\x1B[{};H", 0);
-            *top_line = 0;
+        match line {
+            Ok(message) => {
+                let mut top_line = top_line.lock().unwrap();
+                *top_line += 1;
+                if let Err(e) = write_stream.write_all(message.as_bytes()) {
+                    eprintln!("Failed to send message: {}", e);
+                    break;
+                }
+                if let Err(e) = write_stream.write_all(b"\n") {
+                    eprintln!("Failed to send newline: {}", e);
+                    break;
+                }
+                if *top_line >= split_row.checked_sub(1).unwrap_or(0) {
+                    eprint!("\x1B[{};H", 1);
+                    *top_line = 1;
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read from stdin: {}", e);
+                break;
+            }
         }
     }
-
     Ok(())
 }
 
@@ -438,19 +447,28 @@ fn handle_new_connection(
     let tcp_data = msg.create_sockaddr_data(&socket_addr.ip().to_string(), socket_addr.port());
 
     msg.addr.sa_data = tcp_data;
-    //todo: handle delete
-    // msg.id_num = -1;
-    // send_delete(daemon_port, msg, socket, res);
-    logger.set_state("[Trying to connect to your party's talk daemon]");
+    logger.set_state("[Waiting for your party to respond]");
     announce(daemon_port, msg, socket, res);
-    // *remote_id = res.id_num;
+    let remote_id: u32 = res.id_num;
     leave_invite(daemon_port, msg, socket, res);
-    // *local_id = res.id_num;
+    let local_id: u32 = res.id_num;
+
+    save_invite_ids_to_file(local_id, remote_id)?;
 
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
                 handle_client(stream).unwrap();
+            }
+            Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
+                println!(
+                    ")Connection closed gracefully by peer (reported as ErrorKind::UnexpectedEof)"
+                );
+                break;
+            }
+            Err(e) if e.kind() == ErrorKind::ConnectionAborted => {
+                println!("ErrorKind::ConnectionAborted");
+                break;
             }
             Err(e) => {
                 eprintln!("Failed to accept connection: {}", e);
@@ -486,7 +504,6 @@ fn get_names(
     };
 
     // Get the local machine name
-    // todo: allocate enought sized buffer - safety
     let my_machine_name = {
         let mut buffer = vec![0 as c_char; 256];
         let result = unsafe { gethostname(buffer.as_mut_ptr(), buffer.len()) };
@@ -523,10 +540,10 @@ fn get_names(
     msg.vers = TALK_VERSION;
     msg.addr.sa_family = AF_INET as sa_family_t;
     msg.ctl_addr.sa_family = AF_INET as sa_family_t;
-    //todo: use id_num properly
     msg.l_name = string_to_c_string(&my_name);
     msg.r_name = string_to_c_string(&his_name);
-    msg.r_tty = string_to_c_string(&ttyname.unwrap_or_default());
+    // msg.r_tty = string_to_c_string(&ttyname.unwrap_or_default());
+    msg.r_tty = [0; 16];
 
     Ok((my_machine_name, his_machine_name))
 }
@@ -538,7 +555,6 @@ fn get_addrs(
 ) -> Result<(Ipv4Addr, Ipv4Addr, u16), std::io::Error> {
     let service = CString::new("ntalk")?;
     let protocol = CString::new("udp")?;
-    //todo: add IDN
     let lhost = CString::new(my_machine_name)?;
     let rhost = CString::new(his_machine_name)?;
 
@@ -670,14 +686,13 @@ fn string_to_c_string(s: &str) -> [c_char; BUFFER_SIZE] {
     }
     buffer
 }
-
 fn handle_client(stream: TcpStream) -> Result<(), Box<dyn std::error::Error>> {
     let read_stream = stream.try_clone()?;
     let mut write_stream = stream.try_clone()?;
 
     let (width, height) = get_terminal_size();
     let split_row = height / 2;
-    let top_line = Arc::new(Mutex::new(0 as u16));
+    let top_line = Arc::new(Mutex::new(2 as u16));
     let bottom_line = Arc::new(Mutex::new(0 as u16));
 
     let top_line_clone = Arc::clone(&top_line);
@@ -685,22 +700,29 @@ fn handle_client(stream: TcpStream) -> Result<(), Box<dyn std::error::Error>> {
 
     thread::spawn(move || {
         let mut handle = draw_terminal(split_row, width).unwrap();
-        let reader = BufReader::new(read_stream);
+        let mut buffer = [0; 128];
+        let mut stream = stream;
+        loop {
+            match stream.read(&mut buffer) {
+                Ok(nbytes) => {
+                    if nbytes > 0 {
+                        handle_user_input(
+                            &mut handle,
+                            from_utf8(&buffer[..nbytes]).unwrap(),
+                            split_row,
+                            Arc::clone(&top_line_clone),
+                            Arc::clone(&bottom_line_clone),
+                        )
+                        .unwrap();
+                    } else {
+                        Command::new("clear").status().unwrap();
 
-        for line in reader.lines() {
-            match line {
-                Ok(message) => {
-                    handle_user_input(
-                        &mut handle,
-                        &message,
-                        split_row,
-                        Arc::clone(&top_line_clone),
-                        Arc::clone(&bottom_line_clone),
-                    )
-                    .unwrap();
+                        eprintln!("Connection closed, exiting...");
+                        std::process::exit(128);
+                    }
                 }
                 Err(e) => {
-                    eprintln!("Failed to receive message: {}", e);
+                    println!("ErrorKind: {e}");
                     break;
                 }
             }
@@ -714,9 +736,9 @@ fn handle_client(stream: TcpStream) -> Result<(), Box<dyn std::error::Error>> {
         *top_line += 1;
         write_stream.write_all(message.as_bytes())?;
         write_stream.write_all(b"\n")?;
-        if *top_line >= split_row - 1 {
-            eprint!("\x1B[{};H", 0);
-            *top_line = 0;
+        if *top_line >= split_row.checked_sub(1).unwrap_or(0) {
+            eprint!("\x1B[{};H", 1);
+            *top_line = 1;
         }
     }
     Ok(())
@@ -739,10 +761,9 @@ fn handle_user_input(
     // Move cursor to bottom window
     write!(handle, "\x1b[{};0H", split_row + *bottom_line + 1)?;
     writeln!(handle, "{}", input)?;
-    write!(handle, "\n")?;
 
     // Move cursor to top window
-    write!(handle, "\x1b[{};0H", *top_line)?;
+    write!(handle, "\x1b[{};H", *top_line)?;
     handle.flush()?;
     *bottom_line += 1;
     Ok(())
@@ -751,18 +772,26 @@ fn draw_terminal(split_row: u16, width: u16) -> io::Result<io::StdoutLock<'stati
     let stdout = io::stdout();
     let mut handle = stdout.lock();
 
-    // Clear the terminal
     Command::new("clear").status()?;
+    write!(handle, "[Connection established]")?;
 
     // Draw the split line
     write!(handle, "\x1b[{};0H", split_row)?;
-    writeln!(handle, "└{:─<width$}┘", "", width = (width as usize) - 2)?;
 
-    write!(handle, "\x1b[0;0H")?;
+    writeln!(
+        handle,
+        "└{:─<width$}┘",
+        "",
+        width = (width as usize).checked_sub(2).unwrap_or(0)
+    )?;
+
+    write!(handle, "\x1b[1;H")?;
+    write!(handle, "\x1B[1B")?;
     handle.flush()?;
 
     Ok(handle)
 }
+
 fn open_sockt(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, TcpListener), io::Error> {
     let listener = TcpListener::bind((my_machine_addr, 0))?;
     let addr = listener.local_addr()?;
@@ -848,10 +877,44 @@ fn reqwest(
     }
     Ok(())
 }
-
+fn save_invite_ids_to_file(local_id: u32, remote_id: u32) -> io::Result<()> {
+    let mut file = File::create("invite_ids.txt")?;
+    writeln!(file, "local_id={}", local_id)?;
+    writeln!(file, "remote_id={}", remote_id)?;
+    Ok(())
+}
 /// Handles incoming signals by setting the interrupt flag and exiting the process.
 pub fn handle_signals(signal_code: libc::c_int) {
+    if let Err(e) = Command::new("clear").status() {
+        eprintln!("Failed to clear the terminal: {}", e);
+    }
+    eprintln!("Connection closed, exiting...");
+
     std::process::exit(128 + signal_code);
+}
+
+fn read_invite_ids_from_file() -> io::Result<(u32, u32)> {
+    let file = File::open("invite_ids.txt")?;
+    let reader = io::BufReader::new(file);
+
+    let mut local_id = None;
+    let mut remote_id = None;
+
+    for line in reader.lines() {
+        let line = line?;
+        if let Some((key, value)) = line.split_once('=') {
+            match key {
+                "local_id" => local_id = value.parse().ok(),
+                "remote_id" => remote_id = value.parse().ok(),
+                _ => {}
+            }
+        }
+    }
+
+    Ok((
+        local_id.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "local_id not found"))?,
+        remote_id.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "remote_id not found"))?,
+    ))
 }
 
 pub fn register_signals() {
@@ -865,7 +928,6 @@ pub fn register_signals() {
 fn get_terminal_size() -> (u16, u16) {
     let mut size: winsize = unsafe { zeroed() };
 
-    // Get the terminal size using ioctl
     unsafe {
         ioctl(STDOUT_FILENO, TIOCGWINSZ, &mut size);
     }

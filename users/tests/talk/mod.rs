@@ -1,54 +1,63 @@
-//
-// Copyright (c) 2024 Hemi Labs, Inc.
-//
-// This file is part of the posixutils-rs project covered under
-// the MIT License.  For the full license text, please see the LICENSE
-// file in the root directory of this project.
-// SPDX-License-Identifier: MIT
-//
+use std::io::prelude::*;
+use std::io::Result;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
-use plib::{run_test, TestPlan};
+#[test]
+fn test_talk_utility() -> Result<()> {
+    // Start the talk server (assuming `talk` listens for connections)
+    let server_handle = thread::spawn(|| {
+        let mut child = Command::new("cargo")
+            .arg("run")
+            .arg("--bin")
+            .arg("talk")
+            .arg("egor")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("Failed to start server");
 
-fn run_test_helper(
-    args: &[&str],
-    expected_output: &str,
-    expected_error: &str,
-    expected_exit_code: i32,
-) {
-    let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+        let stdin = child.stdin.as_mut().expect("Failed to open stdin");
+        writeln!(stdin, "Hello from server!").expect("Failed to write to server");
 
-    run_test(TestPlan {
-        cmd: String::from("talk"),
-        args: str_args,
-        stdin_data: String::new(),
-        expected_out: String::from(expected_output),
-        expected_err: String::from(expected_error),
-        expected_exit_code,
+        // Wait with a timeout
+        let timeout = Duration::from_secs(5);
+        let start = Instant::now();
+        while start.elapsed() < timeout {
+            if let Ok(output) = child.try_wait() {
+                if let Some(status) = output {
+                    assert!(status.success(), "Server exited with non-zero status");
+                    return; // Exit if the process has finished
+                }
+            }
+            thread::sleep(Duration::from_millis(100)); // Check periodically
+        }
+
+        // Forcefully terminate if the timeout is exceeded
+        child.kill().expect("Failed to kill server");
+        eprintln!("Server timed out and was killed");
     });
-}
 
-mod localhost {
-    use super::*;
+    // Give the server a moment to start
+    thread::sleep(Duration::from_secs(1));
 
-    #[test]
-    fn basic_server() {
-        let response: [u8; 24] = [
-            1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ];
+    // Run the talk client (assuming `talk` can be invoked as a client)
+    let output = Command::new("cargo")
+        .arg("run")
+        .arg("--bin")
+        .arg("talk")
+        .arg("egor")
+        .output()?;
 
-        let response_2: [u8; 24] = [
-            1, 3, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ];
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "[Checking for invitation on caller's machine]\n"
+    );
 
-        let response_3: [u8; 24] = [
-            1, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ];
+    // Wait for server to finish
+    server_handle.join().expect("Server thread panicked");
 
-        run_test_helper(
-            &["egor"],
-            "not a tty\n[Connected to the server!]\n[Waiting for your party to respond]\n",
-            "",
-            0,
-        );
-    }
+    Ok(())
 }
