@@ -111,6 +111,9 @@ impl StateLogger {
 
 #[repr(C, packed)]
 pub struct Osockaddr {
+    #[cfg(target_os = "macos")]
+    pub sa_family: u8,
+    #[cfg(target_os = "linux")]
     pub sa_family: sa_family_t,
     pub sa_data: [u8; 14],
 }
