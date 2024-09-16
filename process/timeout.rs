@@ -47,7 +47,7 @@ struct Args {
     kill_after: Option<Duration>,
 
     /// Specify the signal to send when the time limit is reached, using one of the symbolic names defined in the <signal.h> header.
-    /// Values of signal_name shall be recognized in a case-independent fashion, without the SIG prefix. By default, SIGTERM shall be sent.
+    /// Values of signal shall be recognized in a case-independent fashion, without the SIG prefix. By default, SIGTERM shall be sent.
     #[arg(short = 's', long, default_value = "TERM", value_parser = parse_signal)]
     signal: Signal,
 
@@ -65,18 +65,6 @@ struct Args {
 }
 
 /// Parses string slice into [Duration].
-///
-/// # Arguments
-///
-/// * s - [str] that represents input duration.
-///
-/// # Errors
-///
-/// Returns an error if passed invalid input.
-///
-/// # Returns
-///
-/// Returns [Duration].
 fn parse_duration(s: &str) -> Result<Duration, String> {
     let (value, suffix) = s.split_at(
         s.find(|c: char| !c.is_ascii_digit() && c != '.')
@@ -98,19 +86,7 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
     Ok(Duration::from_secs_f64(value * multiplier))
 }
 
-/// Parses and validates the signal name, returning its integer value.
-///
-/// # Arguments
-///
-/// * s - [str] that represents the signal name.
-///
-/// # Errors
-///
-/// Returns an error if passed invalid input.
-///
-/// # Returns
-///
-/// Returns the integer value of the signal.
+/// Parses string slice into [Signal].
 fn parse_signal(s: &str) -> Result<Signal, String> {
     let s = s.to_uppercase();
     let signal_name = if s.starts_with("SIG") {
