@@ -14,10 +14,12 @@ use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 
+#[cfg(target_os = "linux")]
+use libc::sa_family_t;
 use libc::{
     addrinfo, c_char, c_uchar, getaddrinfo, gethostname, getpid, getpwuid, getservbyname, getuid,
-    ioctl, sa_family_t, servent, signal, sockaddr_in, winsize, AF_INET, AI_CANONNAME, SIGINT,
-    SIGPIPE, SIGQUIT, SOCK_DGRAM, STDOUT_FILENO, TIOCGWINSZ,
+    ioctl, servent, signal, sockaddr_in, winsize, AF_INET, AI_CANONNAME, SIGINT, SIGPIPE, SIGQUIT,
+    SOCK_DGRAM, STDOUT_FILENO, TIOCGWINSZ,
 };
 use std::{
     ffi::{self, CStr, CString},
@@ -109,12 +111,15 @@ impl StateLogger {
     }
 }
 
+#[cfg(target_os = "macos")]
+type SaFamily = u16;
+
+#[cfg(target_os = "linux")]
+type SaFaily = sa_family_t;
+
 #[repr(C, packed)]
 pub struct Osockaddr {
-    #[cfg(target_os = "macos")]
-    pub sa_family: u8,
-    #[cfg(target_os = "linux")]
-    pub sa_family: sa_family_t,
+    pub sa_family: SaFamily,
     pub sa_data: [u8; 14],
 }
 
@@ -262,7 +267,7 @@ fn talk(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
     let (my_machine_name, his_machine_name) =
         get_names(&mut msg, args.address.as_ref().unwrap(), args.ttyname)?;
-    let (my_machine_addr, his_machine_addr, daemon_port) =
+    let (my_machine_addr, _his_machine_addr, daemon_port) =
         get_addrs(&mut msg, &my_machine_name, &his_machine_name)?;
 
     let (ctl_addr, socket) = open_ctl(my_machine_addr)?;
@@ -541,8 +546,9 @@ fn get_names(
     };
 
     msg.vers = TALK_VERSION;
-    msg.addr.sa_family = AF_INET as sa_family_t;
-    msg.ctl_addr.sa_family = AF_INET as sa_family_t;
+
+    msg.addr.sa_family = AF_INET as SaFamily;
+    msg.ctl_addr.sa_family = AF_INET as SaFamily;
     msg.l_name = string_to_c_string(&my_name);
     msg.r_name = string_to_c_string(&his_name);
     // msg.r_tty = string_to_c_string(&ttyname.unwrap_or_default());
