@@ -1,42 +1,94 @@
-use std::io::prelude::*;
-use std::io::Result;
+use std::ffi::CStr;
+use std::io;
+use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-#[tokio::test]
-async fn test_talk_utility() {
-    // Start the talk server (assuming `talk` listens for connections)
-    let mut server = Command::new("cargo")
+use libc::{getpwuid, getuid};
+
+#[test]
+fn basic_test() -> io::Result<()> {
+    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 518))?;
+
+    socket.set_nonblocking(true)?;
+
+    let username = get_current_user_name()?;
+
+    let process = Command::new("cargo")
         .arg("run")
         .arg("--bin")
         .arg("talk")
-        .arg("egor")
-        .stdin(Stdio::piped())
+        .arg(username)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .expect("Failed to start server");
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let pid = process.id().to_string();
 
-    let stdin = server.stdin.as_mut().expect("Failed to open stdin");
+    thread::sleep(Duration::from_millis(100));
 
-    // Give the server a moment to start
-    thread::sleep(Duration::from_secs(1));
+    // Attempt to terminate the process
+    Command::new("kill").arg("-9").arg(pid).spawn()?.wait()?;
 
-    // Run the talk client (assuming `talk` can be invoked as a client)
-    let client = Command::new("cargo")
-        .arg("run")
-        .arg("--bin")
-        .arg("talk")
-        .arg("egor")
-        .output()
-        .unwrap();
+    let mut buf = [0u8; 128];
+    let start_time = Instant::now();
+    let receive_timeout = Duration::from_millis(100);
+    let mut received_bytes = 0;
+    let expected_length = 84;
+    loop {
+        if start_time.elapsed() > receive_timeout {
+            eprintln!("Timeout waiting for message from `talk` utility.");
+            break;
+        }
 
-    assert_eq!(
-        String::from_utf8_lossy(&client.stdout),
-        "[Checking for invitation on caller's machine]\n"
+        match socket.recv_from(&mut buf[received_bytes..]) {
+            Ok((nbytes, _addr)) => {
+                received_bytes += nbytes;
+                if received_bytes >= expected_length {
+                    break;
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to receive data: {}", e);
+            }
+        }
+    }
+
+    // Ensure we've received the expected amount of data
+    assert!(
+        received_bytes >= expected_length,
+        "Received insufficient data from `talk` utility"
     );
 
-    // Wait for server to finish
-    server.kill().expect("Failed to kill talk daemon");
+    // Print received data for debugging purposes
+    println!(
+        "Received {} bytes: {:?}",
+        received_bytes,
+        &buf[..received_bytes]
+    );
+
+    Ok(())
+}
+
+// getting username
+fn get_current_user_name() -> Result<String, io::Error> {
+    unsafe {
+        let login_name = libc::getlogin();
+
+        if !login_name.is_null() {
+            Ok(CStr::from_ptr(login_name).to_string_lossy().into_owned())
+        } else {
+            let pw = getpwuid(getuid());
+
+            if pw.is_null() {
+                Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "You don't exist. Go away.",
+                ))
+            } else {
+                Ok(CStr::from_ptr((*pw).pw_name).to_string_lossy().into_owned())
+            }
+        }
+    }
 }
