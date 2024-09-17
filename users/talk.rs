@@ -14,10 +14,12 @@ use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 
+#[cfg(target_os = "linux")]
+use libc::sa_family_t;
 use libc::{
-    addrinfo, c_char, c_uchar, gai_strerror, getaddrinfo, gethostname, getpid, getpwuid,
-    getservbyname, getuid, ioctl, sa_family_t, signal, sockaddr_in, winsize, AF_INET, AI_CANONNAME,
-    SIGINT, SIGPIPE, SIGQUIT, SOCK_DGRAM, STDOUT_FILENO, TIOCGWINSZ,
+    addrinfo, c_char, c_uchar, getaddrinfo, gethostname, getpid, getpwuid, getservbyname, getuid,
+    ioctl, signal, sockaddr_in, winsize, AF_INET, AI_CANONNAME, SIGINT, SIGPIPE, SIGQUIT,
+    SOCK_DGRAM, STDOUT_FILENO, TIOCGWINSZ,
 };
 use std::{
     ffi::{CStr, CString},
@@ -144,12 +146,15 @@ impl std::fmt::Display for TalkError {
     }
 }
 
+#[cfg(target_os = "macos")]
+type SaFamily = u16;
+
+#[cfg(target_os = "linux")]
+type SaFamily = sa_family_t;
+
 #[repr(C, packed)]
 pub struct Osockaddr {
-    #[cfg(target_os = "macos")]
-    pub sa_family: u16,
-    #[cfg(target_os = "linux")]
-    pub sa_family: sa_family_t,
+    pub sa_family: SaFamily,
     pub sa_data: [u8; 14],
 }
 
@@ -740,8 +745,8 @@ fn get_names(
 
     let (his_name, his_machine_name) = parse_address(address, &my_machine_name);
     msg.vers = TALK_VERSION;
-    msg.addr.sa_family = AF_INET as sa_family_t;
-    msg.ctl_addr.sa_family = AF_INET as sa_family_t;
+    msg.addr.sa_family = AF_INET as SaFamily;
+    msg.ctl_addr.sa_family = AF_INET as SaFamily;
     msg.l_name = string_to_c_string(&my_name);
     msg.r_name = string_to_c_string(&his_name);
     msg.r_tty = tty_to_c_string(&ttyname.unwrap_or_default());
@@ -829,7 +834,7 @@ fn resolve_address(
             format!(
                 "Error resolving address for {}: {}",
                 host_name,
-                unsafe { CStr::from_ptr(gai_strerror(err)) }.to_string_lossy()
+                unsafe { CStr::from_ptr(libc::gai_strerror(err)) }.to_string_lossy()
             ),
         ));
     }
