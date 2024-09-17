@@ -1,44 +1,51 @@
 use std::ffi::CStr;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
-use std::process::Command;
-use std::thread;
+use std::process::{Command, Output};
+use std::str;
 use std::time::{Duration, Instant};
 
 use libc::{getpwuid, getuid};
+use plib::{run_test_with_checker, TestPlan};
+
+fn talk_test(
+    args: Vec<String>,
+    expected_err: &str,
+    expected_exit_code: i32,
+    checker: impl FnMut(&TestPlan, &Output),
+) {
+    run_test_with_checker(
+        TestPlan {
+            cmd: "talk".to_string(),
+            args,
+            stdin_data: String::new(),
+            expected_out: String::new(),
+            expected_err: expected_err.to_string(),
+            expected_exit_code,
+        },
+        checker,
+    );
+}
 
 #[test]
 fn basic_test() -> io::Result<()> {
-    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8081))?;
-
+    // Create a UDP socket bound to localhost:8081
+    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 8081))?;
     socket.set_nonblocking(true)?;
 
     let username = get_current_user_name()?;
 
-    let process = Command::new("cargo")
-        .arg("run")
-        .arg("--bin")
-        .arg("talk")
-        .arg(username)
-        .spawn()?;
-    let pid = process.id().to_string();
+    // Run the test with the talk utility
+    talk_test(vec![username.to_string()], "", 0, |_, _| {});
 
-    thread::sleep(Duration::from_millis(1000));
-
-    // Attempt to terminate the process
-    Command::new("kill").arg("-15").arg(pid).spawn()?.wait()?;
-
+    // Prepare buffer for receiving data
     let mut buf = [0u8; 128];
     let start_time = Instant::now();
-    let receive_timeout = Duration::from_millis(1000);
+    let receive_timeout = Duration::from_secs(1); // Timeout duration
     let mut received_bytes = 0;
-    let expected_length = 84;
-    loop {
-        if start_time.elapsed() > receive_timeout {
-            eprintln!("Timeout waiting for message from `talk` utility.");
-            break;
-        }
+    let expected_length = 84; // Expected length of received data
 
+    while start_time.elapsed() < receive_timeout {
         match socket.recv_from(&mut buf[received_bytes..]) {
             Ok((nbytes, _addr)) => {
                 received_bytes += nbytes;
@@ -46,13 +53,10 @@ fn basic_test() -> io::Result<()> {
                     break;
                 }
             }
-            Err(_) => {
-                continue;
-            }
+            Err(_) => continue,
         }
     }
 
-    // Ensure we've received the expected amount of data
     assert!(
         received_bytes >= expected_length,
         "Received insufficient data from `talk` utility"
@@ -68,7 +72,7 @@ fn basic_test() -> io::Result<()> {
     Ok(())
 }
 
-// getting username
+// Retrieves the current username
 fn get_current_user_name() -> Result<String, io::Error> {
     unsafe {
         let login_name = libc::getlogin();
@@ -81,7 +85,7 @@ fn get_current_user_name() -> Result<String, io::Error> {
             if pw.is_null() {
                 Err(io::Error::new(
                     io::ErrorKind::NotFound,
-                    "You don't exist. Go away.",
+                    "User information not found",
                 ))
             } else {
                 Ok(CStr::from_ptr((*pw).pw_name).to_string_lossy().into_owned())

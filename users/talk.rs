@@ -32,7 +32,7 @@ use std::{
     process, ptr,
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 // The size of the buffer for control message fields like l_name, r_name, and r_tty in CtlMsg.
@@ -390,7 +390,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn talk(args: Args) -> Result<(), TalkError> {
     validate_args(&args)?;
-    check_if_tty()?;
+    // check_if_tty()?;
 
     let mut msg = CtlMsg::initialize();
     let mut res = CtlRes::initialize();
@@ -430,6 +430,15 @@ fn talk(args: Args) -> Result<(), TalkError> {
 
     if res.answer == Answer::Success {
         handle_existing_invitation(width, height, &mut res, daemon_port, &mut msg, &socket)?;
+    } else if res.answer == Answer::Failed {
+        let msg_bytes = msg
+            .to_bytes()
+            .map_err(|e| TalkError::Other(e.to_string()))?;
+        let talkd_addr: SocketAddr = format!("0.0.0.0:{}", 8081)
+            .parse()
+            .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
+
+        socket.send_to(&msg_bytes, talkd_addr).unwrap();
     } else {
         logger.set_state("[Waiting to connect with caller]");
         handle_new_invitation(
@@ -861,30 +870,6 @@ fn resolve_address(
     Ok(addr)
 }
 
-fn is_service_running(service_name: &str) -> bool {
-    let proc_dir = "/proc";
-
-    // Read the contents of the /proc directory to find running processes
-    if let Ok(entries) = std::fs::read_dir(proc_dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                // Each entry in /proc is a directory named after the PID of the process
-                if let Ok(_pid) = entry.file_name().to_string_lossy().parse::<u32>() {
-                    let cmdline_path = format!("{}/cmdline", entry.path().display());
-                    // Try to read the command line used to launch the process
-                    if let Ok(cmdline) = std::fs::read_to_string(cmdline_path) {
-                        if cmdline.contains(service_name) {
-                            return true; // The service is running if found in cmdline
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    false // Service not found in running processes
-}
-
 fn get_service_port(service: &CString, protocol: &CString) -> Result<u16, io::Error> {
     // Get the service by name
     let talkd_service = unsafe { getservbyname(service.as_ptr(), protocol.as_ptr()) };
@@ -901,13 +886,9 @@ fn get_service_port(service: &CString, protocol: &CString) -> Result<u16, io::Er
         ));
     }
 
-    if is_service_running("talk.socket") {
-        // Safely get the port number from the service
-        let port = unsafe { (*talkd_service).s_port };
-        Ok(u16::from_be(port as u16))
-    } else {
-        Ok(2222)
-    }
+    // Safely get the port number from the service
+    let port = unsafe { (*talkd_service).s_port };
+    Ok(u16::from_be(port as u16))
 }
 
 // Handles the client's connection by spawning a read thread and handling user input.
@@ -1055,6 +1036,7 @@ fn open_sockt(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, TcpListener), io
 // Used for checking properly access to connection.
 fn open_ctl(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, UdpSocket), io::Error> {
     let socket = UdpSocket::bind((my_machine_addr, 0))?;
+    socket.set_nonblocking(true)?;
     let addr = socket.local_addr()?;
 
     Ok((addr, socket))
@@ -1138,37 +1120,54 @@ fn reqwest(
     socket: &UdpSocket,    // UDP socket to send and receive messages
     res: &mut CtlRes,      // Reference to store the received response (CtlRes)
 ) -> Result<(), TalkError> {
-    let talkd_addr: SocketAddr = format!("127.0.0.1:{}", 8081)
+    let talkd_addr: SocketAddr = format!("0.0.0.0:{}", daemon_port)
         .parse()
         .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
+
+    dbg!(talkd_addr);
 
     msg.r#type = msg_type as u8;
     let msg_bytes = msg
         .to_bytes()
         .map_err(|e| TalkError::Other(e.to_string()))?;
 
+    let start_time = Instant::now();
+    let timeout = Duration::from_secs(1);
+
     loop {
         // Try sending the message bytes to the talk daemon
         match socket.send_to(&msg_bytes, talkd_addr) {
             Ok(_) => {
                 let mut buf = [0; 1024];
+
                 // Try to receive a response from the talk daemon
                 match socket.recv_from(&mut buf) {
                     Ok((amt, _)) => {
+                        if start_time.elapsed() >= timeout {
+                            eprintln!("Timeout: No response within 1 second.");
+                            break; // Exit the loop after 1 second without response
+                        }
+
                         let ctl_res = CtlRes::from_bytes(&buf[..amt])
                             .map_err(|e| TalkError::Other(e.to_string()))?;
                         *res = ctl_res;
                         break;
                     }
-                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        // If we would block, check for timeout and continue
+                        if start_time.elapsed() >= timeout {
+                            eprintln!("Timeout: No response within 1 second.");
+                            break; // Exit the loop after timeout
+                        }
+                        // Short sleep to avoid busy-looping
+                        std::thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
                     Err(e) => {
                         eprintln!("Error receiving message: {}", e);
                         return Err(TalkError::IoError(e));
                     }
                 }
-            }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                std::thread::sleep(Duration::from_secs(1));
             }
             Err(e) => {
                 eprintln!("Error sending message: {}", e);
