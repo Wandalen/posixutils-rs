@@ -390,7 +390,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn talk(args: Args) -> Result<(), TalkError> {
     validate_args(&args)?;
-    // check_if_tty()?;
+    check_if_tty()?;
 
     let mut msg = CtlMsg::initialize();
     let mut res = CtlRes::initialize();
@@ -1123,8 +1123,6 @@ fn reqwest(
     let talkd_addr: SocketAddr = format!("0.0.0.0:{}", daemon_port)
         .parse()
         .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
-
-    dbg!(talkd_addr);
 
     msg.r#type = msg_type as u8;
     let msg_bytes = msg

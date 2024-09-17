@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
-use std::process::{Command, Output};
+use std::process::Output;
 use std::str;
 use std::time::{Duration, Instant};
 

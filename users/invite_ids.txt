@@ -1,2 +1,0 @@
-local_id=0
-remote_id=0
