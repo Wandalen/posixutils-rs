@@ -27,15 +27,14 @@ fn talk_test(
     );
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn basic_test() -> io::Result<()> {
-    // Create a UDP socket bound to localhost:8081
     let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 8081))?;
     socket.set_nonblocking(true)?;
 
     let username = get_current_user_name()?;
 
-    // Run the test with the talk utility
     talk_test(vec![username.to_string()], "", 0, |_, _| {});
 
     // Prepare buffer for receiving data
