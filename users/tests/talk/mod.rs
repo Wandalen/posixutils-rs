@@ -9,7 +9,7 @@ use libc::{getpwuid, getuid};
 
 #[test]
 fn basic_test() -> io::Result<()> {
-    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 2222))?;
+    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 2222))?;
 
     socket.set_nonblocking(true)?;
 
@@ -26,11 +26,11 @@ fn basic_test() -> io::Result<()> {
     thread::sleep(Duration::from_millis(1000));
 
     // Attempt to terminate the process
-    Command::new("kill").arg("-9").arg(pid).spawn()?.wait()?;
+    Command::new("kill").arg("-15").arg(pid).spawn()?.wait()?;
 
     let mut buf = [0u8; 128];
     let start_time = Instant::now();
-    let receive_timeout = Duration::from_millis(200);
+    let receive_timeout = Duration::from_millis(1000);
     let mut received_bytes = 0;
     let expected_length = 84;
     loop {

@@ -1138,7 +1138,7 @@ fn reqwest(
     socket: &UdpSocket,    // UDP socket to send and receive messages
     res: &mut CtlRes,      // Reference to store the received response (CtlRes)
 ) -> Result<(), TalkError> {
-    let talkd_addr: SocketAddr = format!("0.0.0.0:{}", 2222)
+    let talkd_addr: SocketAddr = format!("127.0.0.1:{}", 2222)
         .parse()
         .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
 
