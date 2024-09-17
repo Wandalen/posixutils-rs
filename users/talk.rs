@@ -863,13 +863,27 @@ fn resolve_address(
 }
 
 fn is_service_running(service_name: &str) -> bool {
-    let output = Command::new("systemctl")
-        .arg("is-active")
-        .arg(service_name)
-        .output()
-        .expect("Failed to execute command");
+    let proc_dir = "/proc";
 
-    output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "active"
+    // Read the contents of the /proc directory to find running processes
+    if let Ok(entries) = std::fs::read_dir(proc_dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                // Each entry in /proc is a directory named after the PID of the process
+                if let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() {
+                    let cmdline_path = format!("{}/cmdline", entry.path().display());
+                    // Try to read the command line used to launch the process
+                    if let Ok(cmdline) = std::fs::read_to_string(cmdline_path) {
+                        if cmdline.contains(service_name) {
+                            return true; // The service is running if found in cmdline
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    false // Service not found in running processes
 }
 
 fn get_service_port(service: &CString, protocol: &CString) -> Result<u16, io::Error> {
