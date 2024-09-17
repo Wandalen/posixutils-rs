@@ -29,7 +29,8 @@ use std::{
     net::{
         self, AddrParseError, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream, UdpSocket,
     },
-    process, ptr,
+    process::{self, Command},
+    ptr,
     sync::{Arc, Mutex},
     thread,
     time::Duration,
@@ -814,7 +815,7 @@ fn get_addrs(
     };
 
     // Retrieve the service port for the "ntalk" service using the UDP protocol.
-    let daemon_port = get_service_port(&service, &protocol).unwrap_or(2222);
+    let daemon_port = get_service_port(&service, &protocol)?;
 
     Ok((my_machine_addr, his_machine_addr, daemon_port))
 }
@@ -861,6 +862,16 @@ fn resolve_address(
     Ok(addr)
 }
 
+fn is_service_running(service_name: &str) -> bool {
+    let output = Command::new("systemctl")
+        .arg("is-active")
+        .arg(service_name)
+        .output()
+        .expect("Failed to execute command");
+
+    output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "active"
+}
+
 fn get_service_port(service: &CString, protocol: &CString) -> Result<u16, io::Error> {
     // Get the service by name
     let talkd_service = unsafe { getservbyname(service.as_ptr(), protocol.as_ptr()) };
@@ -877,9 +888,13 @@ fn get_service_port(service: &CString, protocol: &CString) -> Result<u16, io::Er
         ));
     }
 
-    // Safely get the port number from the service
-    let port = unsafe { (*talkd_service).s_port };
-    Ok(u16::from_be(port as u16))
+    if is_service_running("talk.socket") {
+        // Safely get the port number from the service
+        let port = unsafe { (*talkd_service).s_port };
+        Ok(u16::from_be(port as u16))
+    } else {
+        Ok(2222)
+    }
 }
 
 // Handles the client's connection by spawning a read thread and handling user input.
