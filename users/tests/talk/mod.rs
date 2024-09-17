@@ -9,7 +9,7 @@ use libc::{getpwuid, getuid};
 
 #[test]
 fn basic_test() -> io::Result<()> {
-    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 2222))?;
+    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8081))?;
 
     socket.set_nonblocking(true)?;
 
