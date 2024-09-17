@@ -46,8 +46,8 @@ fn basic_test() -> io::Result<()> {
                     break;
                 }
             }
-            Err(e) => {
-                eprintln!("Failed to receive data: {}", e);
+            Err(_) => {
+                continue;
             }
         }
     }
