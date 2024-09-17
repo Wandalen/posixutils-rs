@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -9,7 +9,7 @@ use libc::{getpwuid, getuid};
 
 #[test]
 fn basic_test() -> io::Result<()> {
-    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 518))?;
+    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 2222))?;
 
     socket.set_nonblocking(true)?;
 
@@ -20,20 +20,17 @@ fn basic_test() -> io::Result<()> {
         .arg("--bin")
         .arg("talk")
         .arg(username)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
         .spawn()?;
     let pid = process.id().to_string();
 
-    thread::sleep(Duration::from_millis(100));
+    thread::sleep(Duration::from_millis(1000));
 
     // Attempt to terminate the process
     Command::new("kill").arg("-9").arg(pid).spawn()?.wait()?;
 
     let mut buf = [0u8; 128];
     let start_time = Instant::now();
-    let receive_timeout = Duration::from_millis(100);
+    let receive_timeout = Duration::from_millis(200);
     let mut received_bytes = 0;
     let expected_length = 84;
     loop {

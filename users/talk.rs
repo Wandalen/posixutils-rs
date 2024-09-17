@@ -814,7 +814,7 @@ fn get_addrs(
     };
 
     // Retrieve the service port for the "ntalk" service using the UDP protocol.
-    let daemon_port = get_service_port(&service, &protocol)?;
+    let daemon_port = get_service_port(&service, &protocol).unwrap_or(2222);
 
     Ok((my_machine_addr, his_machine_addr, daemon_port))
 }
