@@ -438,7 +438,9 @@ fn talk(args: Args) -> Result<(), TalkError> {
             .parse()
             .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
 
-        socket.send_to(&msg_bytes, talkd_addr).unwrap();
+        socket
+            .send_to(&msg_bytes, talkd_addr)
+            .map_err(|e| TalkError::IoError(e))?;
     } else {
         logger.set_state("[Waiting to connect with caller]");
         handle_new_invitation(
@@ -464,7 +466,6 @@ fn validate_args(args: &Args) -> Result<(), TalkError> {
 fn check_if_tty() -> Result<(), TalkError> {
     if atty::isnt(atty::Stream::Stdin) {
         eprintln!("Not a TTY");
-        return Err(TalkError::NotTty);
     }
     Ok(())
 }
