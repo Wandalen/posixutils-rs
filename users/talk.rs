@@ -409,7 +409,7 @@ fn talk(args: Args) -> Result<(), TalkError> {
     .map_err(|e| TalkError::IoError(e))?;
 
     // Get the local and remote addresses, and the daemon port number
-    let (my_machine_addr, _his_machine_addr, daemon_port) =
+    let (my_machine_addr, his_machine_addr, daemon_port) =
         get_addrs(&mut msg, &my_machine_name, &his_machine_name)
             .map_err(|e| TalkError::IoError(e))?;
 
@@ -422,14 +422,22 @@ fn talk(args: Args) -> Result<(), TalkError> {
     logger.set_state("[Checking for invitation on caller's machine]");
 
     // Look for an invitation from the daemon
-    look_for_invite(daemon_port, &mut msg, &socket, &mut res)?;
+    look_for_invite(daemon_port, his_machine_addr, &mut msg, &socket, &mut res)?;
 
     // Set the invitation ID number and send a delete request for the old invitation
     msg.id_num = res.id_num.to_be();
-    send_delete(daemon_port, &mut msg, &socket, &mut res)?;
+    send_delete(daemon_port, his_machine_addr, &mut msg, &socket, &mut res)?;
 
     if res.answer == Answer::Success {
-        handle_existing_invitation(width, height, &mut res, daemon_port, &mut msg, &socket)?;
+        handle_existing_invitation(
+            width,
+            height,
+            &mut res,
+            daemon_port,
+            his_machine_addr,
+            &mut msg,
+            &socket,
+        )?;
     } else if res.answer == Answer::Failed {
         let msg_bytes = msg
             .to_bytes()
@@ -445,6 +453,7 @@ fn talk(args: Args) -> Result<(), TalkError> {
         logger.set_state("[Waiting to connect with caller]");
         handle_new_invitation(
             daemon_port,
+            his_machine_addr,
             &mut msg,
             &socket,
             &mut res,
@@ -475,6 +484,7 @@ fn handle_existing_invitation(
     height: u16,
     res: &mut CtlRes,
     daemon_port: u16,
+    his_machine_addr: Ipv4Addr,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
 ) -> Result<(), TalkError> {
@@ -488,11 +498,11 @@ fn handle_existing_invitation(
 
     // Update the message ID to `local_id` and send a delete request to the daemon.
     msg.id_num = local_id;
-    send_delete(daemon_port, msg, socket, res)?;
+    send_delete(daemon_port, his_machine_addr, msg, socket, res)?;
 
     // Update the message ID to `remote_id` and send a delete request to the daemon.
     msg.id_num = remote_id;
-    send_delete(daemon_port, msg, socket, res)?;
+    send_delete(daemon_port, his_machine_addr, msg, socket, res)?;
 
     remove_file("invite_ids.txt").map_err(TalkError::IoError)?;
 
@@ -634,6 +644,7 @@ fn handle_stdin_input(
 
 fn handle_new_invitation(
     daemon_port: u16,
+    his_machine_addr: Ipv4Addr,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
     res: &mut CtlRes,
@@ -646,16 +657,16 @@ fn handle_new_invitation(
 
     // Create the socket address data and set it in the `msg`.
     let tcp_data = msg.create_sockaddr_data(&socket_addr.ip().to_string(), socket_addr.port());
-    msg.addr.sa_data = tcp_data;
 
     logger.set_state("[Waiting for your party to respond]");
 
+    msg.addr.sa_data = tcp_data;
     // Send the announce message to the daemon, informing it of the new invitation.
-    announce(daemon_port, msg, socket, res)?;
+    announce(daemon_port, his_machine_addr, msg, socket, res)?;
     let remote_id = res.id_num;
 
     // Send the leave invitation message to clear the previous invite state.
-    leave_invite(daemon_port, msg, socket, res)?;
+    leave_invite(daemon_port, his_machine_addr, msg, socket, res)?;
     let local_id = res.id_num;
 
     save_invite_ids_to_file(local_id, remote_id).map_err(TalkError::IoError)?;
@@ -868,6 +879,8 @@ fn resolve_address(
         ));
     }
 
+    // dbg!(&addr);
+
     Ok(addr)
 }
 
@@ -1056,52 +1069,85 @@ fn handle_connection_close() {
 // Uses the 'reqwest' function to handle the communication.
 fn handle_invite(
     daemon_port: u16,
+    his_machine_addr: Ipv4Addr,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
     res: &mut CtlRes,
     msg_type: MessageType,
 ) -> Result<(), TalkError> {
-    reqwest(daemon_port, msg, msg_type, socket, res)
+    reqwest(daemon_port, his_machine_addr, msg, msg_type, socket, res)
 }
 
 // Looks for an invite by sending a LookUp message to the daemon.
 fn look_for_invite(
     daemon_port: u16,
+    his_machine_addr: Ipv4Addr,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
     res: &mut CtlRes,
 ) -> Result<(), TalkError> {
-    handle_invite(daemon_port, msg, socket, res, MessageType::LookUp)
+    handle_invite(
+        daemon_port,
+        his_machine_addr,
+        msg,
+        socket,
+        res,
+        MessageType::LookUp,
+    )
 }
 
 // Leaves an invite by sending a LeaveInvite message to the daemon.
 fn leave_invite(
     daemon_port: u16,
+    his_machine_addr: Ipv4Addr,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
     res: &mut CtlRes,
 ) -> Result<(), TalkError> {
-    handle_invite(daemon_port, msg, socket, res, MessageType::LeaveInvite)
+    handle_invite(
+        daemon_port,
+        his_machine_addr,
+        msg,
+        socket,
+        res,
+        MessageType::LeaveInvite,
+    )
 }
 
 // Announces an invite by sending an Announce message to the daemon.
 fn announce(
     daemon_port: u16,
+    his_machine_addr: Ipv4Addr,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
     res: &mut CtlRes,
 ) -> Result<(), TalkError> {
-    handle_invite(daemon_port, msg, socket, res, MessageType::Announce)
+    handle_invite(
+        daemon_port,
+        his_machine_addr,
+        msg,
+        socket,
+        res,
+        MessageType::Announce,
+    )
 }
 
 // Sends a delete message to the daemon.
 fn send_delete(
     daemon_port: u16,
+    his_machine_addr: Ipv4Addr,
     msg: &mut CtlMsg,
     socket: &UdpSocket,
     res: &mut CtlRes,
 ) -> Result<(), TalkError> {
-    handle_invite(daemon_port, msg, socket, res, MessageType::Delete)
+    handle_invite(
+        daemon_port,
+        his_machine_addr,
+        msg,
+        socket,
+        res,
+        MessageType::Delete,
+    )
 }
 
 fn save_invite_ids_to_file(local_id: u32, remote_id: u32) -> io::Result<()> {
@@ -1115,13 +1161,14 @@ fn save_invite_ids_to_file(local_id: u32, remote_id: u32) -> io::Result<()> {
 // The function will retry sending if it encounters a WouldBlock error.
 // The response is parsed into a CtlRes struct.
 fn reqwest(
-    daemon_port: u16,      // Port number of the talk daemon
-    msg: &mut CtlMsg,      // The control message (CtlMsg) to be sent
-    msg_type: MessageType, // Type of the message (used to set the message type)
-    socket: &UdpSocket,    // UDP socket to send and receive messages
-    res: &mut CtlRes,      // Reference to store the received response (CtlRes)
+    daemon_port: u16,           // Port number of the talk daemon
+    his_machine_addr: Ipv4Addr, // port of remote user or localhost
+    msg: &mut CtlMsg,           // The control message (CtlMsg) to be sent
+    msg_type: MessageType,      // Type of the message (used to set the message type)
+    socket: &UdpSocket,         // UDP socket to send and receive messages
+    res: &mut CtlRes,           // Reference to store the received response (CtlRes)
 ) -> Result<(), TalkError> {
-    let talkd_addr: SocketAddr = format!("0.0.0.0:{}", daemon_port)
+    let talkd_addr: SocketAddr = format!("{}:{}", his_machine_addr, daemon_port)
         .parse()
         .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
 
@@ -1129,6 +1176,8 @@ fn reqwest(
     let msg_bytes = msg
         .to_bytes()
         .map_err(|e| TalkError::Other(e.to_string()))?;
+
+    // dbg!(&msg_bytes);
 
     let start_time = Instant::now();
     let timeout = Duration::from_secs(1);
@@ -1149,6 +1198,7 @@ fn reqwest(
 
                         let ctl_res = CtlRes::from_bytes(&buf[..amt])
                             .map_err(|e| TalkError::Other(e.to_string()))?;
+                        // dbg!(&ctl_res.answer);
                         *res = ctl_res;
                         break;
                     }
