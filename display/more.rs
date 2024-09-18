@@ -23,10 +23,6 @@ use std::{
     ptr,
 };
 
-/// libmagic database entries
-#[cfg(feature = "magic")]
-type MagicT = *mut libc::c_void;  
-
 const BACKSPACE: &str = "\x08";
 const CARAT: &str = "^";
 
@@ -549,12 +545,15 @@ impl MoreControl{
         Ok(())
     }
 
-    /
+    //
     fn get_line(&mut self, length: &[i32]) -> io::Result<(i32, usize)> {
         let Some(mut p) = self.line_buf else { return; };
         let mut column = 0;
-        let mut c = self.getc();
-        let mut column_wrap = 0;
+        let mut c;
+        if let Some(oc) = self.getc(){
+            c = std::str::from_utf8(&vec![oc]).ok();
+        }
+        let mut column_wrap = false;
     
         /*
         let mut i: size_t = 0;
@@ -570,9 +569,11 @@ impl MoreControl{
         let mut file_position_bak: off_t = self.file_position;
         */
     
-        if column_wrap && c == '\n'{
+        if column_wrap && c == Some("\n"){
             self.current_line += 1;
-            c = self.getc();
+            if let Some(oc) = self.getc(){
+                c = std::str::from_utf8(&vec![oc]).ok();
+            }
         }
     
         let mut pp = 0;        
@@ -634,22 +635,23 @@ impl MoreControl{
                 }
             }
             */
-            if c == EOF{
+            if c == Some(EOF){
                 length[0] = pp - self.line_buf;
                 return Ok(EOF);
             }
     
-            if c == '\n'{
+            if c == Some("\n"){
                 self.current_line += 1;
                 break;
             }
     
             pp += 1;
-            p[pp] = c;
+            if Some(c) = c{
+                p[pp] = c;
+            }
     
-            if c == '\t'{
+            if c == Some(r#"\t"#){
                 if !self.hard_tabs || (column < self.prompt_len && !self.hard_tty) {
-                    // Handle tabs with non-hard terminals
                     if self.hard_tabs && !self.erase_line.is_empty() && !self.dumb_tty {
                         column = 1 + (column | 7);
                         print!("{}", self.erase_line);
@@ -657,7 +659,7 @@ impl MoreControl{
                     } else {
                         while pp < self.line_buf.len() {
                             pp += 1;
-                            p[pp] = ' ';
+                            p[pp] = ' ' as u8;
                             column += 1;
                             if (column & 7) == 0{
                                 break;
@@ -673,11 +675,14 @@ impl MoreControl{
                 } else {
                     column = 1 + (column | 7);
                 }
-            }else if c == '\b' && column > 0{
+            }else if c == Some(r#"\b"#) && column > 0{
                 column -= 1;
-            }else if c == '\r'{
-                let next = self.getc();
-                if next == '\n'{
+            }else if c == Some(r#"\r"#){
+                let mut next;
+                if let Some(oc) = self.getc(){
+                    next = std::str::from_utf8(&vec![oc]).ok();
+                }
+                if next == Some("\n") {
                     pp -= 1;
                     self.current_line += 1;
                     break;
@@ -685,8 +690,8 @@ impl MoreControl{
     
                 self.ungetc(c);
                 column = 0;
-            }else if c == '\f' && self.stop_after_formfeed{
-                p[-1] = '^';
+            }else if c == Some(r#"\f"#) && self.stop_after_formfeed{
+                p[pp-1] = '^';
                 pp += 1;
                 p[pp] = 'L';
                 column += 2;
@@ -720,10 +725,13 @@ impl MoreControl{
                     }
                 }
                 */
-
-                if !(self.fold_long_lines && MB_CUR_MAX > 1) && isprint(c){
-                    column += 1;
-                } 
+                if let Some(c) = c{
+                    if !c.is_empty(){
+                        if !(self.fold_long_lines && MB_CUR_MAX > 1) && isprint(c[0]){
+                            column += 1;
+                        } 
+                    }
+                }
             }
     
             if column >= self.num_columns && self.fold_long_lines{
@@ -737,7 +745,9 @@ impl MoreControl{
                 }
             }
             */
-            c = self.getc();
+            if let Some(oc) = self.getc(){
+                c = std::str::from_utf8(&vec![oc]).ok();
+            }
         }
     
         if column >= self.num_columns && self.num_columns > 0 {
@@ -1383,15 +1393,15 @@ impl MoreControl{
     fn handle_signal_event(&mut self, revents: PollFlags) {
         if revents.contains(PollFlags::POLLIN) {
             let mut info = signalfd_siginfo::default();
-            let sz = read(self.sigfd, &mut info as *mut _ as *mut u8, std::mem::size_of::<signalfd_siginfo>()).unwrap_or(-1);
+            let sz = read(self.sigfd, &mut info, std::mem::size_of::<signalfd_siginfo>()).unwrap_or(-1);
             assert_eq!(sz as usize, std::mem::size_of::<signalfd_siginfo>());
             match info.ssi_signo as i32 {
-                libc::SIGINT => self.exit(),
-                libc::SIGQUIT => self.sigquit_handler(),
-                libc::SIGTSTP => self.sigtstp_handler(),
-                libc::SIGCONT => self.sigcont_handler(),
-                libc::SIGWINCH => self.sigwinch_handler(),
-                _ => abort(),
+                SIGINT => self.exit(),
+                SIGQUIT => self.sigquit_handler(),
+                SIGTSTP => self.sigtstp_handler(),
+                SIGCONT => self.sigcont_handler(),
+                SIGWINCH => self.sigwinch_handler(),
+                _ => self.exit(),
             }
         }
     }
@@ -1419,7 +1429,7 @@ impl MoreControl{
     }
     
     /
-    fn more_poll(&mut self, timeout: i32, stderr_active: Option<&mut i32>) -> Result<i32, String> {
+    fn poll(&mut self, timeout: i32, stderr_active: Option<&mut i32>) -> Result<i32, String> {
         let mut poll_fds = vec![
             PollFd::new(self.sigfd, PollFlags::POLLIN | PollFlags::POLLERR | PollFlags::POLLHUP),
             PollFd::new(libc::STDIN_FILENO, PollFlags::POLLIN | PollFlags::POLLERR | PollFlags::POLLHUP),
@@ -1541,10 +1551,10 @@ impl MoreControl{
                 }
                 break;
             }
-            more_poll(self, 0, None);
+            self.poll(self, 0, None);
         }
     
-        /* Move ctrl+c signal handling back to more_key_command(). */
+        /* Move ctrl+c signal handling back to key_command(). */
         signal(Signal::SIGINT, SigHandler::SigDfl).unwrap();
         self.sigset.add(Signal::SIGINT).unwrap();
         self.sigset.thread_block().unwrap();
@@ -1659,7 +1669,7 @@ impl MoreControl{
      * argument followed by the command character.  Return the number of
      * lines to display in the next screenful.  If there is nothing more to
      * display in the current file, zero is returned. */
-    fn more_key_command(&mut self, filename: &str) -> i32{
+    fn key_command(&mut self, filename: &str) -> i32{
         let mut retval = 0;
         let mut done = false;
         let mut search_again = false;
@@ -1675,7 +1685,7 @@ impl MoreControl{
     
         self.search_called = 0;
         loop {
-            if self.more_poll(-1, &stderr_active) <= 0{
+            if self.poll(-1, &stderr_active) <= 0{
                 continue;
             }else if stderr_active{
                 continue;
@@ -1945,7 +1955,7 @@ impl MoreControl{
             self.ungetc(c);
             self.is_paused = 0;
             loop {
-                if (num_lines = more_key_command(self, NULL)) == 0{
+                if (num_lines = self.key_command(NULL)) == 0{
                     return;
                 }
                 if !(self.search_called && !self.previous_search){
@@ -2169,6 +2179,10 @@ impl NumberCommand {
             number: 0,
         }
     }
+}
+
+fn isprint(c: char) -> bool{
+    0x20 < c as u8 && c as u8 < 0x7E
 }
 
 fn usage(){
