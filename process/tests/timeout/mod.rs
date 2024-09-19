@@ -292,6 +292,21 @@ fn test_preserve_status_cont() {
 }
 
 #[test]
-fn test_foreground() {
-    timeout_test_extended(&["-f", "1", SPAWN_CHILD], "", Some(124), true);
+fn test_not_foreground_timeout() {
+    timeout_test_extended(&["1", SPAWN_CHILD], "", Some(124), true);
+}
+
+#[test]
+fn test_foreground_timeout() {
+    timeout_test_extended(&["-f", "1", SPAWN_CHILD], "", Some(124), false);
+}
+
+#[test]
+fn test_not_foreground_ok() {
+    timeout_test_extended(&["5", SPAWN_CHILD], "", Some(0), true);
+}
+
+#[test]
+fn test_foreground_ok() {
+    timeout_test_extended(&["-f", "5", SPAWN_CHILD], "", Some(0), false);
 }
