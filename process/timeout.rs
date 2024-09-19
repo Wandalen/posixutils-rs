@@ -13,14 +13,12 @@ use nix::{
     errno::Errno,
     sys::{
         signal::{
-            raise, sigaction, signal, sigprocmask, SaFlags, SigAction, SigEvent, SigHandler,
-            SigSet, SigevNotify, SigmaskHow,
+            raise, sigaction, signal, sigprocmask, SaFlags, SigAction, SigHandler, SigSet,
+            SigmaskHow,
             Signal::{self, SIGKILL, SIGTERM, SIGTTIN, SIGTTOU},
         },
-        timer::{Expiration, Timer, TimerSetTimeFlags},
         wait::{waitpid, WaitPidFlag, WaitStatus},
     },
-    time::ClockId,
     unistd::{execvp, fork, setpgid, ForkResult, Pid},
 };
 use plib::PROJECT_NAME;
@@ -115,15 +113,7 @@ fn parse_signal(s: &str) -> Result<Signal, String> {
 
 /// Starts the timeout after which [Signal::SIGALRM] will be send.
 fn set_timeout(duration: Duration) {
-    let sig_event = SigEvent::new(SigevNotify::SigevSignal {
-        signal: Signal::SIGALRM,
-        si_value: 0,
-    });
-
-    let mut timer = Timer::new(ClockId::CLOCK_MONOTONIC, sig_event).unwrap();
-    let expiration = Expiration::OneShot(duration.into());
-    let flags = TimerSetTimeFlags::empty();
-    timer.set(expiration, flags).expect("failed to set timer")
+    unsafe { libc::alarm(duration.as_secs() as u32) };
 }
 
 /// Sends a signal to the process or process group.
@@ -139,10 +129,13 @@ fn send_signal(pid: i32, signal: i32) {
 extern "C" fn chld_handler(_signal: i32) {}
 
 extern "C" fn handler(mut signal: i32) {
+    // println!("Received signal: {signal}");
     if signal == libc::SIGALRM {
         TIMED_OUT.store(true, Ordering::SeqCst);
         signal = FIRST_SIGNAL.load(Ordering::SeqCst);
+        // println!("First signal now: {signal}");
     }
+    // println!("Monitored pid: {}", MONITORED_PID.load(Ordering::SeqCst));
     if 0 < MONITORED_PID.load(Ordering::SeqCst) {
         if let Some(duration) = *KILL_AFTER.lock().unwrap() {
             FIRST_SIGNAL.store(libc::SIGKILL, Ordering::SeqCst);
@@ -160,6 +153,7 @@ extern "C" fn handler(mut signal: i32) {
             }
         }
     } else if 0 == MONITORED_PID.load(Ordering::SeqCst) {
+        // println!("Signal: {signal}");
         std::process::exit(128 + signal);
     }
 }
@@ -294,7 +288,10 @@ fn timeout(args: Args) -> i32 {
                 .collect();
             arguments_c.insert(0, utility_c.clone());
             match execvp(&utility_c, &arguments_c) {
-                Ok(_) => 0,
+                Ok(_) => {
+                    // println!("Ok");
+                    0
+                }
                 Err(Errno::ENOENT) => {
                     eprintln!("timeout: utility '{utility}' not found");
                     127
