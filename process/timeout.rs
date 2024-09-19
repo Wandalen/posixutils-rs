@@ -12,6 +12,8 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use nix::{
     errno::Errno,
     sys::{
+        prctl,
+        resource::{setrlimit, Resource},
         signal::{
             raise, sigaction, signal, sigprocmask, SaFlags, SigAction, SigHandler, SigSet,
             SigmaskHow,
@@ -221,8 +223,14 @@ fn block_handler_and_chld(signal: Signal, old_set: &mut SigSet) {
 }
 
 fn disable_core_dumps() -> bool {
-    // TODO
-    true
+    #[cfg(target_os = "linux")]
+    if prctl::set_dumpable(false).is_ok() {
+        return true;
+    }
+    if setrlimit(Resource::RLIMIT_CORE, 0, 0).is_ok() {
+        return true;
+    }
+    false
 }
 
 fn timeout(args: Args) -> i32 {
@@ -319,11 +327,24 @@ fn timeout(args: Args) -> i32 {
 
             let mut wait_status: WaitStatus;
             loop {
-                wait_status = waitpid(child, Some(WaitPidFlag::WNOHANG)).unwrap();
-                if wait_status == WaitStatus::StillAlive {
-                    let _ = sig_set.suspend();
-                } else {
-                    break;
+                wait_status = waitpid(
+                    child,
+                    Some(WaitPidFlag::WNOHANG | WaitPidFlag::WCONTINUED | WaitPidFlag::WUNTRACED),
+                )
+                .unwrap();
+                println!("Wait status: {wait_status:?}");
+                match wait_status {
+                    WaitStatus::StillAlive | WaitStatus::Continued(_) => {
+                        let _ = sig_set.suspend();
+                    }
+                    WaitStatus::Stopped(_, _s) => {
+                        println!("Catched stop signal: {_s}");
+                        send_signal(MONITORED_PID.load(Ordering::SeqCst), libc::SIGCONT);
+                        TIMED_OUT.store(true, Ordering::SeqCst);
+                    }
+                    _ => {
+                        break;
+                    }
                 }
             }
             let status = match wait_status {

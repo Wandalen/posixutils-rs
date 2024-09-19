@@ -12,6 +12,9 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use nix::unistd::{getpgid, Pid};
+use sysinfo::System;
+
 pub struct TestPlan {
     pub cmd: String,
     pub args: Vec<String>,
@@ -19,9 +22,10 @@ pub struct TestPlan {
     pub expected_out: String,
     pub expected_err: String,
     pub expected_exit_code: Option<i32>,
+    pub has_subprocesses: bool,
 }
 
-fn run_test_base(cmd: &str, args: &Vec<String>, stdin_data: &[u8]) -> Output {
+fn run_test_base(cmd: &str, args: &Vec<String>, stdin_data: &[u8]) -> (Output, Pid) {
     let relpath = if cfg!(debug_assertions) {
         format!("target/debug/{}", cmd)
     } else {
@@ -42,17 +46,19 @@ fn run_test_base(cmd: &str, args: &Vec<String>, stdin_data: &[u8]) -> Output {
         .spawn()
         .expect("failed to spawn head");
 
+    let pgid = getpgid(Some(Pid::from_raw(child.id() as i32))).unwrap();
+
     let stdin = child.stdin.as_mut().expect("failed to get stdin");
     stdin
         .write_all(stdin_data)
         .expect("failed to write to stdin");
 
     let output = child.wait_with_output().expect("failed to wait for child");
-    output
+    (output, pgid)
 }
 
 pub fn run_test(plan: TestPlan) {
-    let output = run_test_base(&plan.cmd, &plan.args, plan.stdin_data.as_bytes());
+    let (output, pgid) = run_test_base(&plan.cmd, &plan.args, plan.stdin_data.as_bytes());
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout, plan.expected_out);
@@ -64,6 +70,16 @@ pub fn run_test(plan: TestPlan) {
     if let Some(0) = plan.expected_exit_code {
         assert!(output.status.success());
     }
+
+    let mut system = System::new_all();
+    system.refresh_all();
+    for (_, process) in system.processes() {
+        if let Some(gid) = process.group_id() {
+            if *gid == pgid.as_raw() as u32 {
+                assert!(plan.has_subprocesses)
+            }
+        }
+    }
 }
 
 fn timeout_test(args: &[&str], expected_err: &str, expected_exit_code: i32) {
@@ -74,10 +90,16 @@ fn timeout_test(args: &[&str], expected_err: &str, expected_exit_code: i32) {
         expected_out: String::from(""),
         expected_err: String::from(expected_err),
         expected_exit_code: Some(expected_exit_code),
+        has_subprocesses: false,
     });
 }
 
-fn test_with_option_code(args: &[&str], expected_err: &str, expected_exit_code: Option<i32>) {
+fn timeout_test_extended(
+    args: &[&str],
+    expected_err: &str,
+    expected_exit_code: Option<i32>,
+    has_subprocesses: bool,
+) {
     run_test(TestPlan {
         cmd: String::from("timeout"),
         args: args.iter().map(|s| String::from(*s)).collect(),
@@ -85,12 +107,14 @@ fn test_with_option_code(args: &[&str], expected_err: &str, expected_exit_code: 
         expected_out: String::from(""),
         expected_err: String::from(expected_err),
         expected_exit_code,
+        has_subprocesses,
     });
 }
 
 const TRUE: &'static str = "true";
 const SLEEP: &'static str = "sleep";
 const NON_EXECUTABLE: &'static str = "tests/timeout/non_executable.sh";
+const SPAWN_CHILD: &'static str = "tests/timeout/spawn_child.sh";
 
 #[test]
 fn test_absent_duration() {
@@ -226,7 +250,7 @@ fn test_basic() {
 
 #[test]
 fn test_send_kill() {
-    test_with_option_code(&["-s", "KILL", "1", SLEEP, "2"], "", None);
+    timeout_test_extended(&["-s", "KILL", "1", SLEEP, "2"], "", None, false);
 }
 
 #[test]
@@ -253,11 +277,21 @@ fn test_preserve_status_with_sigterm() {
 #[test]
 fn test_preserve_status_sigcont_with_sigkill() {
     // 137 = 128 + 9 (SIGKILL after second timeout)
-    test_with_option_code(&["-p", "-s", "CONT", "-k", "1", "1", SLEEP, "3"], "", None);
+    timeout_test_extended(
+        &["-p", "-s", "CONT", "-k", "1", "1", SLEEP, "3"],
+        "",
+        None,
+        false,
+    );
 }
 
 #[test]
 fn test_preserve_status_cont() {
     // First duration is 0, so sending SIGCONT and second timeout won't happen
     timeout_test(&["-p", "-s", "CONT", "-k", "1", "0", SLEEP, "3"], "", 0);
+}
+
+#[test]
+fn test_foreground() {
+    timeout_test_extended(&["-f", "1", SPAWN_CHILD], "", Some(124), true);
 }
