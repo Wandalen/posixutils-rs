@@ -33,6 +33,5 @@ clap = { version = "4", default-features = false, features = ["std", "derive", "
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 libc = "0.2"
 regex = "1.10"
-thiserror = "1.0"
 gettext-rs = { path = "./gettext-rs" }
 errno = "0.3"

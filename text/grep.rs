@@ -123,7 +123,7 @@ impl Args {
                 Err(err) => {
                     self.any_errors = true;
                     if !self.no_messages {
-                        eprintln!("{}: {}", path_buf.display(), err);
+                        eprintln!("{}: {err}", path_buf.display());
                     }
                 }
             }

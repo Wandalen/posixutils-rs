@@ -1343,7 +1343,6 @@ dependencies = [
  "nix 0.29.0",
  "plib",
  "sysinfo",
- "thiserror",
 ]
 
 [[package]]
