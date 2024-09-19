@@ -130,6 +130,9 @@ extern "C" fn chld_handler(_signal: i32) {}
 
 extern "C" fn handler(mut signal: i32) {
     // println!("Received signal: {signal}");
+    if signal == libc::SIGTTIN || signal == libc::SIGTTOU {
+        println!("Catched SIGTTIN/SIGTTOU");
+    }
     if signal == libc::SIGALRM {
         TIMED_OUT.store(true, Ordering::SeqCst);
         signal = FIRST_SIGNAL.load(Ordering::SeqCst);
@@ -137,10 +140,13 @@ extern "C" fn handler(mut signal: i32) {
     }
     // println!("Monitored pid: {}", MONITORED_PID.load(Ordering::SeqCst));
     if 0 < MONITORED_PID.load(Ordering::SeqCst) {
-        if let Some(duration) = *KILL_AFTER.lock().unwrap() {
+        let mut kill_after = KILL_AFTER.lock().unwrap();
+        if let Some(duration) = *kill_after {
             FIRST_SIGNAL.store(libc::SIGKILL, Ordering::SeqCst);
             set_timeout(duration);
-            *KILL_AFTER.lock().unwrap() = Some(Duration::from_secs(0));
+            // println!("Set timeout");
+            *kill_after = Some(Duration::from_secs(0));
+            // println!("Set timeout");
         }
 
         send_signal(MONITORED_PID.load(Ordering::SeqCst), signal);
@@ -271,11 +277,11 @@ fn timeout(args: Args) -> i32 {
             }
 
             unsafe {
-                if signal(SIGTTIN, SigHandler::SigIgn).is_err() {
+                if signal(SIGTTIN, SigHandler::SigDfl).is_err() {
                     eprintln!("timeout: failed to set SIGTTIN handler");
                     return 125;
                 }
-                if signal(SIGTTOU, SigHandler::SigIgn).is_err() {
+                if signal(SIGTTOU, SigHandler::SigDfl).is_err() {
                     eprintln!("timeout: failed to set SIGTTOU handler");
                     return 125;
                 }
