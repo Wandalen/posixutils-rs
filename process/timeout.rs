@@ -131,38 +131,31 @@ fn send_signal(pid: i32, signal: i32) {
 extern "C" fn chld_handler(_signal: i32) {}
 
 extern "C" fn handler(mut signal: i32) {
-    // println!("Received signal: {signal}");
-    if signal == libc::SIGTTIN || signal == libc::SIGTTOU {
-        println!("Catched SIGTTIN/SIGTTOU");
-    }
     if signal == libc::SIGALRM {
         TIMED_OUT.store(true, Ordering::SeqCst);
         signal = FIRST_SIGNAL.load(Ordering::SeqCst);
-        // println!("First signal now: {signal}");
     }
-    // println!("Monitored pid: {}", MONITORED_PID.load(Ordering::SeqCst));
-    if 0 < MONITORED_PID.load(Ordering::SeqCst) {
-        let mut kill_after = KILL_AFTER.lock().unwrap();
-        if let Some(duration) = *kill_after {
-            FIRST_SIGNAL.store(libc::SIGKILL, Ordering::SeqCst);
-            set_timeout(duration);
-            // println!("Set timeout");
-            *kill_after = Some(Duration::from_secs(0));
-            // println!("Set timeout");
-        }
+    match MONITORED_PID.load(Ordering::SeqCst).cmp(&0) {
+        std::cmp::Ordering::Less => {}
+        std::cmp::Ordering::Equal => std::process::exit(128 + signal),
+        std::cmp::Ordering::Greater => {
+            let mut kill_after = KILL_AFTER.lock().unwrap();
+            if let Some(duration) = *kill_after {
+                FIRST_SIGNAL.store(libc::SIGKILL, Ordering::SeqCst);
+                set_timeout(duration);
+                *kill_after = None;
+            }
 
-        send_signal(MONITORED_PID.load(Ordering::SeqCst), signal);
+            send_signal(MONITORED_PID.load(Ordering::SeqCst), signal);
 
-        if !FOREGROUND.load(Ordering::SeqCst) {
-            send_signal(0, signal);
-            if signal != libc::SIGKILL && signal != libc::SIGCONT {
-                send_signal(MONITORED_PID.load(Ordering::SeqCst), libc::SIGCONT);
-                send_signal(0, libc::SIGCONT);
+            if !FOREGROUND.load(Ordering::SeqCst) {
+                send_signal(0, signal);
+                if signal != libc::SIGKILL && signal != libc::SIGCONT {
+                    send_signal(MONITORED_PID.load(Ordering::SeqCst), libc::SIGCONT);
+                    send_signal(0, libc::SIGCONT);
+                }
             }
         }
-    } else if 0 == MONITORED_PID.load(Ordering::SeqCst) {
-        // println!("Signal: {signal}");
-        std::process::exit(128 + signal);
     }
 }
 
@@ -249,22 +242,13 @@ fn timeout(args: Args) -> i32 {
     *KILL_AFTER.lock().unwrap() = kill_after;
 
     if !foreground {
-        if setpgid(Pid::from_raw(0), Pid::from_raw(0)).is_err() {
-            eprintln!("timeout: failed to set PGID");
-            return 125;
-        }
+        let _ = setpgid(Pid::from_raw(0), Pid::from_raw(0));
     }
 
     install_handler(signal_name);
     unsafe {
-        if signal(SIGTTIN, SigHandler::SigIgn).is_err() {
-            eprintln!("timeout: failed to set SIGTTIN handler");
-            return 125;
-        }
-        if signal(SIGTTOU, SigHandler::SigIgn).is_err() {
-            eprintln!("timeout: failed to set SIGTTOU handler");
-            return 125;
-        }
+        let _ = signal(SIGTTIN, SigHandler::SigIgn);
+        let _ = signal(SIGTTOU, SigHandler::SigIgn);
     }
     install_chld();
 
@@ -275,24 +259,11 @@ fn timeout(args: Args) -> i32 {
 
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
-            // ============
-            // println!("CHILD!!!");
-            // ============
-
-            if sigprocmask(SigmaskHow::SIG_SETMASK, Some(&sig_set), None).is_err() {
-                eprintln!("timeout: failed to reset signal mask");
-                return 125;
-            }
+            let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&sig_set), None);
 
             unsafe {
-                if signal(SIGTTIN, SigHandler::SigDfl).is_err() {
-                    eprintln!("timeout: failed to set SIGTTIN handler");
-                    return 125;
-                }
-                if signal(SIGTTOU, SigHandler::SigDfl).is_err() {
-                    eprintln!("timeout: failed to set SIGTTOU handler");
-                    return 125;
-                }
+                let _ = signal(SIGTTIN, SigHandler::SigDfl);
+                let _ = signal(SIGTTOU, SigHandler::SigDfl);
             }
 
             let utility_c = CString::new(utility.clone()).unwrap();
@@ -302,10 +273,7 @@ fn timeout(args: Args) -> i32 {
                 .collect();
             arguments_c.insert(0, utility_c.clone());
             match execvp(&utility_c, &arguments_c) {
-                Ok(_) => {
-                    // println!("Ok");
-                    0
-                }
+                Ok(_) => 0,
                 Err(Errno::ENOENT) => {
                     eprintln!("timeout: utility '{utility}' not found");
                     127
@@ -317,10 +285,6 @@ fn timeout(args: Args) -> i32 {
             }
         }
         Ok(ForkResult::Parent { child }) => {
-            // ============
-            // println!("PARENT!!!");
-            // ============
-
             MONITORED_PID.store(child.as_raw(), Ordering::SeqCst);
 
             set_timeout(duration);
@@ -332,13 +296,11 @@ fn timeout(args: Args) -> i32 {
                     Some(WaitPidFlag::WNOHANG | WaitPidFlag::WCONTINUED | WaitPidFlag::WUNTRACED),
                 )
                 .unwrap();
-                println!("Wait status: {wait_status:?}");
                 match wait_status {
                     WaitStatus::StillAlive | WaitStatus::Continued(_) => {
                         let _ = sig_set.suspend();
                     }
                     WaitStatus::Stopped(_, _s) => {
-                        println!("Catched stop signal: {_s}");
                         send_signal(MONITORED_PID.load(Ordering::SeqCst), libc::SIGCONT);
                         TIMED_OUT.store(true, Ordering::SeqCst);
                     }
