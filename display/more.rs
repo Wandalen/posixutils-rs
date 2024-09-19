@@ -162,22 +162,22 @@ struct MoreControl {
     current_file: Option<&dyn Read>,  
 
     /// file position
-    file_position: off_t,         
+    file_position: usize,         
 
     /// file size
-    file_size: off_t,            
+    file_size: usize,            
 
     /// argv[] position
-    argv_position: i32,                
+    argv_position: usize,                
 
     /// number of lines scrolled by 'd'
-    d_scroll_len: i32,           
+    d_scroll_len: usize,           
 
     /// message prompt length
-    prompt_len: i32,             
+    prompt_len: usize,             
 
     /// line we are currently at
-    current_line: i32,           
+    current_line: usize,           
 
     /// number of lines to skip ahead
     next_jump: i32,                           
@@ -186,19 +186,16 @@ struct MoreControl {
     shell: Option<CString>,      
 
     /// signalfd() file descriptor
-    sigfd: raw_fd,                
+    sigfd: RawFd,                
 
     /// signal operations
     sigset: sigset_t,            
 
     /// line buffer
-    line_buf: Option<Vec<u8>>,   
-
-    /// size of line_buf buffer
-    line_sz: usize,              
+    line_buf: Option<&str>,             
 
     /// lines per page
-    lines_per_page: i32,         
+    lines_per_page: usize,         
 
     /// clear screen
     clear: Option<CString>,      
@@ -225,7 +222,7 @@ struct MoreControl {
     clear_rest: Option<CString>, 
 
     /// number of columns
-    num_columns: i32,            
+    num_columns: usize,            
 
     /// file beginning search string
     next_search: Option<CString>, 
@@ -778,7 +775,7 @@ impl MoreControl{
         }else if self.hard_tty{
             println!();
         }else {
-            if col == 0{ print!("\r"); }
+            if col == 0 { print!("\r"); }
             if !self.dumb_tty && self.erase_line{
                 print!("{}", self.erase_line);
             }else {
@@ -854,7 +851,7 @@ impl MoreControl{
     }
     
     /// 
-    fn exit(&mut self) -> !{
+    fn exit(&mut self, code: i32) -> !{
         reset_tty(self);
         if (self.clear_line_ends) {
             print!("\r{}", self.erase_line);
@@ -862,7 +859,7 @@ impl MoreControl{
             erase_to_col(self, 0);
         }
     
-        std::process::exit(EXIT_SUCCESS);
+        std::process::exit(code);
     }
     
     ///
@@ -871,7 +868,7 @@ impl MoreControl{
     
         if io::stdin().lock().read(input).is_err(){
             if Error::last_os_error().raw_os_error() != Some(EINTR) {
-                self.exit(); 
+                self.exit(EXIT_SUCCESS); 
             } else {
                 c = self.output_tty.c_cc[VKILL];
             }
@@ -1241,7 +1238,7 @@ impl MoreControl{
             eprintln!("{prompt}");
             self.no_quit_dialog = false;
         } else {
-            self.exit();
+            self.exit(EXIT_SUCCESS);
         }
     }
     
@@ -1284,7 +1281,7 @@ impl MoreControl{
                     close(STDIN_FILENO);
                     if open("/dev/tty", O_RDONLY) < 0 {
                         eprintln!("Failed to open /dev/tty");
-                        std::process::exit(libc::EXIT_FAILURE);
+                        self.exit(EXIT_FAILURE);
                     }
                 }
 
@@ -1297,14 +1294,14 @@ impl MoreControl{
 
                 if (geteuid() != getuid() || getegid() != getgid()) && drop_permissions() != 0 {
                     eprintln!("drop permissions failed");
-                    std::process::exit(libc::EXIT_FAILURE);
+                    self.exit(EXIT_FAILURE);
                 }
 
                 let c_cmd = CString::new(cmd).expect("CString::new failed");
                 execvp(c_cmd.as_ptr(), c_args.as_ptr());
                 let errsv = Error::last_os_error().raw_os_error();
                 eprintln!("exec failed");
-                std::process::exit(if errsv == ENOENT { 127 } else { 126 });
+                exit(if errsv == ENOENT { 127 } else { 126 });
             }
 
             Ok(nix::unistd::ForkResult::Parent { child }) => {
@@ -1396,12 +1393,12 @@ impl MoreControl{
             let sz = read(self.sigfd, &mut info, std::mem::size_of::<signalfd_siginfo>()).unwrap_or(-1);
             assert_eq!(sz as usize, std::mem::size_of::<signalfd_siginfo>());
             match info.ssi_signo as i32 {
-                SIGINT => self.exit(),
+                SIGINT => self.exit(EXIT_SUCCESS),
                 SIGQUIT => self.sigquit_handler(),
                 SIGTSTP => self.sigtstp_handler(),
                 SIGCONT => self.sigcont_handler(),
                 SIGWINCH => self.sigwinch_handler(),
-                _ => self.exit(),
+                _ => exit(EXIT_SUCCESS),
             }
         }
     }
@@ -1409,7 +1406,7 @@ impl MoreControl{
     //
     fn handle_stdin_event(&mut self, revents: PollFlags, has_data: &mut i32) {
         if revents.contains(PollFlags::POLLERR) && revents.contains(PollFlags::POLLHUP) {
-            self.exit();
+            self.exit(EXIT_SUCCESS);
         }
         if revents.contains(PollFlags::POLLHUP) || revents.contains(PollFlags::POLLNVAL) {
             self.ignore_stdin = true;
@@ -1513,7 +1510,7 @@ impl MoreControl{
             line2 = line1;
             line1 = self.file_position;
             
-            read_line(self);
+            self.read_line();
             lncount += 1;
     
             n -= 1;
@@ -1528,23 +1525,23 @@ impl MoreControl{
     
                 if !self.no_tty_in {
                     self.current_line -= if lncount < 3 { lncount } else { 3 };
-                    more_fseek(self, line3);
+                    self.seek(line3);
                     if self.no_scroll {
                         if self.clear_line_ends {
                             print!("{}", self.go_home);
                             print!("{}", self.erase_line);
                         } else {
-                            more_clear_screen(self);
+                            self.clear_screen();
                         }
                     }
                 } else {
-                    erase_to_col(self, 0);
+                    self.erase_to_col(0);
                     if self.no_scroll {
                         if self.clear_line_ends {
                             print!("{}", self.go_home);
                             print!("{}", self.erase_line);
                         } else {
-                            more_clear_screen(self);
+                            self.clear_screen();
                         }
                     }
                     println!("{}", "{}", self.line_buf);
@@ -1562,13 +1559,13 @@ impl MoreControl{
         if self.current_file.metadata().unwrap().len() == self.file_position {
             if !self.no_tty_in {
                 self.current_line = saveln;
-                more_fseek(self, startline);
+                self.seek(startline);
             } else {
                 println!("\nPattern not found");
-                more_exit(self);
+                self.exit(EXIT_FAILURE);
             }
         } else {
-            more_error(self, "Pattern not found");
+            self.error("Pattern not found");
         }
     }
 
@@ -1725,7 +1722,7 @@ impl MoreControl{
                     retval = self.d_scroll_len;
                     done = true;
                 },
-                MoreKeyCommands::Quit => self.exit(),
+                MoreKeyCommands::Quit => self.exit(EXIT_SUCCESS),
                 MoreKeyCommands::SkipForwardScreen => {
                     if self.skip_forwards(cmd.number, 'f'){
                         retval = self.lines_per_screen;
@@ -1833,7 +1830,7 @@ impl MoreControl{
                     }
     
                     if self.argv_position + cmd.number >= self.num_files as u32{
-                        self.exit();
+                        self.exit(EXIT_SUCCESS);
                     }
     
                     self.change_file(cmd.number);
@@ -1890,9 +1887,8 @@ impl MoreControl{
     
     /// Print out the contents of the file f, one screenful at a time.
     fn screen(&mut self, num_lines: i32){
-        let mut c;
         let mut nchars;
-        let mut length: = vec![];			/* length of current line */
+        let mut length;			/* length of current line */
         let mut prev_len = 1;	    /* length of previous line */
     
         loop {
@@ -1914,31 +1910,26 @@ impl MoreControl{
                 if self.bad_stdout || 
                     ((self.enter_std && self.enter_std == ' ') && 
                     (self.prompt_len > 0)){
-                    erase_to_col(self, 0);
+                    self.erase_to_col(0);
                 }
                     
-                /* must clear before drawing line since tabs on
-                 * some terminals do not erase what they tab
-                 * over. */
                 if self.clear_line_ends {
                     print!("{}", self.erase_line);
                 }
-                fwrite(self.line_buf, length, 1, stdout);
+                print!(self.line_buf);
                 if nchars < self.prompt_len{
-                    erase_to_col(self, nchars);
+                    self.erase_to_col(nchars);
                 }
     
                 self.prompt_len = 0;
                 if nchars < self.num_columns || !self.fold_long_lines{
-                    putchar('\n');
+                    println!();
                 }
     
                 num_lines -= 1;
             }
     
-            unsafe { fflush(ptr::null_mut()) };
-    
-            c = self.getc();
+            let c = self.getc();
             self.is_eof = c == EOF;
     
             if self.is_eof && self.exit_on_eof {
@@ -1955,7 +1946,8 @@ impl MoreControl{
             self.ungetc(c);
             self.is_paused = 0;
             loop {
-                if (num_lines = self.key_command(NULL)) == 0{
+                num_lines = self.key_command("");
+                if num_lines == 0{
                     return;
                 }
                 if !(self.search_called && !self.previous_search){
@@ -1964,14 +1956,14 @@ impl MoreControl{
             }
     
             if self.hard_tty && self.prompt_len > 0{
-                erase_to_col(self, 0);
+                self.erase_to_col(0);
             }
     
             if self.no_scroll && num_lines >= self.lines_per_screen {
                 if self.clear_line_ends{
                     print!("{}", self.go_home);
                 }else{
-                    more_clear_screen(self);
+                    self.clear_screen();
                 }
             }
     
@@ -2182,9 +2174,10 @@ impl NumberCommand {
 }
 
 fn isprint(c: char) -> bool{
-    0x20 < c as u8 && c as u8 < 0x7E
+    0x20 < (c as u8) && (c as u8) < 0x7E
 }
 
+//
 fn usage(){
     println!("{}", USAGE_HEADER);
     println!(" {} [options] <file>...\n", PROGRAM_INVOCATION_SHORT_NAME);
@@ -2207,12 +2200,13 @@ fn usage(){
     println!(" {}", " +/<pattern>           display file beginning from pattern match");
     println!("{}", USAGE_SEPARATOR);
 
-    println!("{}", usage_help_options(23));  // Assume this is a function that returns a &str or String
-    println!("{}", usage_man_tail("more(1)")); // Assume this is a function that returns a &str or String
+    println!("{}", usage_help_options(23));  
+    println!("{}", usage_man_tail("more(1)")); 
 
-    std::process::exit(EXIT_SUCCESS);
+    exit(EXIT_SUCCESS);
 }
 
+///
 fn find_editor() -> &'static str {
     // Check the `VISUAL` environment variable first
     if let Ok(editor) = env::var("VISUAL") {
@@ -2232,6 +2226,7 @@ fn find_editor() -> &'static str {
     DEFAULT_EDITOR
 }
 
+///
 fn runtime_usage() {
     let stdout = io::stdout();
     let mut handle = stdout.lock();
@@ -2273,62 +2268,66 @@ fn runtime_usage() {
     print!('-'.repeat(79));
 }
 
+fn exit(code: i32){
+    std::process::exit(code);
+}
+
 fn main() {
     let mut s: &str;
 
-    let self = MoreControl::new()?;
+    let ctl = MoreControl::new()?;
 
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
     setlocale(LocaleCategory::LcAll, "");
 
-	initterm(&mut self);
+	ctl.initterm();
     
-    if !self.no_tty_out {
+    if !ctl.no_tty_out {
 		/*if signal(SIGTSTP, SIG_IGN) == SIG_DFL {
 			self.catch_suspend += 1;
 		}*/
 
-		tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, &self.output_tty);
+		tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, &ctl.output_tty);
 	}
 
     /*
     {
-        sigemptyset(&self.sigset);
-        sigaddset(&self.sigset, SIGINT);
-        sigaddset(&self.sigset, SIGQUIT);
-        sigaddset(&self.sigset, SIGTSTP);
-        sigaddset(&self.sigset, SIGCONT);
-        sigaddset(&self.sigset, SIGWINCH);
-        sigprocmask(SIG_BLOCK, &self.sigset, NULL);
-        self.sigfd = signalfd(-1, &self.sigset, SFD_CLOEXEC);
+        sigemptyset(&ctl.sigset);
+        sigaddset(&ctl.sigset, SIGINT);
+        sigaddset(&ctl.sigset, SIGQUIT);
+        sigaddset(&ctl.sigset, SIGTSTP);
+        sigaddset(&ctl.sigset, SIGCONT);
+        sigaddset(&ctl.sigset, SIGWINCH);
+        sigprocmask(SIG_BLOCK, &ctl.sigset, NULL);
+        self.sigfd = signalfd(-1, &ctl.sigset, SFD_CLOEXEC);
     }
     */
 
-	if self.no_tty_in {
+	if ctl.no_tty_in {
         if let Some(stdin) = std::io::stdin().ok(){
             if self.no_tty_out{
                 copy_file(stdin);
             } else {
-                display_file(&self, stdin);
+                ctl.display_file(stdin);
             }
         }
 
-		self.no_tty_in = false;
-		self.print_banner = true;
-		self.first_file = false;
+		ctl.no_tty_in = false;
+		ctl.print_banner = true;
+		ctl.first_file = false;
 	}
 
-	for filename in self.input_files{
-		checkf(&self, filename);
-		display_file(&self, filename);
-		self.first_file = false;
-        self.argv_position += 1;
+	for filename in ctl.input_files.iter(){
+		ctl.checkf(filename);
+		ctl.display_file(filename);
+		ctl.first_file = false;
+        ctl.argv_position += 1;
     }
 
-	self.clear_line_ends = false;
-	self.prompt_len = false;
+	ctl.clear_line_ends = false;
+	ctl.prompt_len = false;
 	
-    more_exit(&self);
+    exit(EXIT_SUCCESS);
 }
