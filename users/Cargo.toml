@@ -14,6 +14,7 @@ libc.workspace = true
 atty.workspace = true
 chrono.workspace = true
 syslog = "6.1"
+thiserror = "1.0.63"
 
 [[bin]]
 name = "id"

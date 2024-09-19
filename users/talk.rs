@@ -6,6 +6,10 @@
 // SPDX-License-Identifier: MIT
 //
 
+// todo:
+// - change timeout to re-connect in send_to
+// - check remote connection
+
 extern crate clap;
 extern crate gettextrs;
 extern crate plib;
@@ -13,13 +17,15 @@ extern crate plib;
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
+use thiserror::Error;
 
 #[cfg(target_os = "linux")]
 use libc::sa_family_t;
 use libc::{
     addrinfo, c_char, c_uchar, getaddrinfo, gethostname, getpid, getpwuid, getservbyname, getuid,
-    ioctl, signal, sockaddr_in, winsize, AF_INET, AI_CANONNAME, SIGINT, SIGPIPE, SIGQUIT,
-    SOCK_DGRAM, STDOUT_FILENO, TIOCGWINSZ,
+    ioctl, signal, sockaddr_in, tcgetattr, tcsetattr, termios, winsize, AF_INET, AI_CANONNAME,
+    ECHO, ICANON, IEXTEN, ISIG, SIGINT, SIGPIPE, SIGQUIT, SOCK_DGRAM, STDIN_FILENO, STDOUT_FILENO,
+    TCSAFLUSH, TCSANOW, TIOCGWINSZ,
 };
 use std::{
     ffi::{CStr, CString},
@@ -29,6 +35,7 @@ use std::{
     net::{
         self, AddrParseError, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream, UdpSocket,
     },
+    os::fd::AsRawFd,
     process, ptr,
     sync::{Arc, Mutex},
     thread,
@@ -54,7 +61,7 @@ enum MessageType {
 }
 
 impl TryFrom<u8> for MessageType {
-    type Error = ();
+    type Error = TalkError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -62,7 +69,9 @@ impl TryFrom<u8> for MessageType {
             1 => Ok(MessageType::LookUp),
             2 => Ok(MessageType::Delete),
             3 => Ok(MessageType::Announce),
-            _ => Err(()),
+            _ => Err(TalkError::Other(
+                "Not existing MessageType provided".to_string(),
+            )),
         }
     }
 }
@@ -81,7 +90,7 @@ enum Answer {
 }
 
 impl TryFrom<u8> for Answer {
-    type Error = ();
+    type Error = TalkError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -94,7 +103,9 @@ impl TryFrom<u8> for Answer {
             6 => Ok(Answer::BadVersion),
             7 => Ok(Answer::BadAddr),
             8 => Ok(Answer::BadCtlAddr),
-            _ => Err(()),
+            _ => Err(TalkError::Other(
+                "Not existingi Answer provided".to_string(),
+            )),
         }
     }
 }
@@ -118,32 +129,18 @@ impl StateLogger {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TalkError {
+    #[error("Usage: talk user [ttyname]")]
     InvalidArguments,
+    #[error("Not a TTY")]
     NotTty,
+    #[error("Failed to resolve addresses: {0}")]
     AddressResolutionFailed(String),
-    IoError(io::Error),
+    #[error("I/O error: {0}")]
+    IoError(#[from] io::Error),
+    #[error("An error occurred: {0}")]
     Other(String),
-}
-
-impl std::error::Error for TalkError {}
-
-impl std::fmt::Display for TalkError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TalkError::InvalidArguments => {
-                write!(f, "Usage: talk user [ttyname]")?;
-                process::exit(-1)
-            }
-            TalkError::NotTty => write!(f, "Not a TTY"),
-            TalkError::AddressResolutionFailed(msg) => {
-                write!(f, "Failed to resolve addresses: {}", msg)
-            }
-            TalkError::IoError(e) => write!(f, "I/O error: {}", e),
-            TalkError::Other(msg) => write!(f, "An error occurred: {}", msg),
-        }
-    }
 }
 
 #[cfg(target_os = "macos")]
@@ -176,6 +173,15 @@ impl Osockaddr {
     }
 }
 
+impl Default for Osockaddr {
+    fn default() -> Self {
+        Osockaddr {
+            sa_family: 0,
+            sa_data: [0; 14],
+        }
+    }
+}
+
 #[repr(C, packed)]
 struct CtlMsg {
     vers: c_uchar,
@@ -191,29 +197,25 @@ struct CtlMsg {
     r_tty: [c_char; 16],
 }
 
-impl CtlMsg {
-    pub fn initialize() -> Self {
+impl Default for CtlMsg {
+    fn default() -> Self {
         CtlMsg {
             vers: 1,
             r#type: MessageType::LookUp as u8,
             answer: Answer::Success as u8,
             pad: 0,
             id_num: 0,
-            addr: Osockaddr {
-                sa_family: 0,
-                sa_data: [0; 14],
-            },
-            ctl_addr: Osockaddr {
-                sa_family: 0,
-                sa_data: [0; 14],
-            },
+            addr: Osockaddr::default(),
+            ctl_addr: Osockaddr::default(),
             pid: 0,
             l_name: string_to_c_string(""),
             r_name: string_to_c_string(""),
             r_tty: [0; 16],
         }
     }
+}
 
+impl CtlMsg {
     // Converts the CtlMsg structure into a vector of bytes for network transmission
     fn to_bytes(&self) -> Result<Vec<u8>, io::Error> {
         let mut bytes = vec![0u8; size_of::<CtlMsg>()];
@@ -280,8 +282,8 @@ pub struct CtlRes {
     pub addr: Osockaddr,
 }
 
-impl CtlRes {
-    pub fn initialize() -> Self {
+impl Default for CtlRes {
+    fn default() -> Self {
         CtlRes {
             vers: 0,
             r#type: MessageType::LookUp,
@@ -294,7 +296,9 @@ impl CtlRes {
             },
         }
     }
+}
 
+impl CtlRes {
     // Converts a byte slice into a CtlRes struct, ensuring correct parsing of each field.
     fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
         use std::convert::TryInto;
@@ -392,8 +396,8 @@ fn talk(args: Args) -> Result<(), TalkError> {
     validate_args(&args)?;
     check_if_tty()?;
 
-    let mut msg = CtlMsg::initialize();
-    let mut res = CtlRes::initialize();
+    let mut msg = CtlMsg::default();
+    let mut res = CtlRes::default();
     let (width, height) = get_terminal_size();
 
     let mut logger = StateLogger::new("No connection yet.");
@@ -442,6 +446,7 @@ fn talk(args: Args) -> Result<(), TalkError> {
         let msg_bytes = msg
             .to_bytes()
             .map_err(|e| TalkError::Other(e.to_string()))?;
+
         let talkd_addr: SocketAddr = format!("0.0.0.0:{}", 8081)
             .parse()
             .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
@@ -475,6 +480,7 @@ fn validate_args(args: &Args) -> Result<(), TalkError> {
 fn check_if_tty() -> Result<(), TalkError> {
     if atty::isnt(atty::Stream::Stdin) {
         eprintln!("Not a TTY");
+        return Err(TalkError::NotTty);
     }
     Ok(())
 }
@@ -914,66 +920,18 @@ fn handle_client(stream: TcpStream) -> Result<(), io::Error> {
     let top_line = Arc::new(Mutex::new(2));
     let bottom_line = Arc::new(Mutex::new(0));
 
-    let top_line_clone = Arc::clone(&top_line);
-    let bottom_line_clone = Arc::clone(&bottom_line);
-
     // Spawn a separate thread to handle reading from the stream.
-    spawn_read_thread(stream, split_row, width, top_line_clone, bottom_line_clone)?;
+    spawn_input_thread(
+        stream,
+        height / 2,               // Set split row at half of the terminal height
+        width,                    // Set terminal width
+        Arc::clone(&top_line),    // Clone the top line reference for thread-safe use
+        Arc::clone(&bottom_line), // Clone the bottom line reference for thread-safe use
+    )
+    .unwrap();
+
     // Handle user input from stdin and send it to the write stream.
     handle_stdin_input(write_stream, split_row, top_line)?;
-
-    Ok(())
-}
-
-// Spawns a new thread to read data from the TCP stream and display it on the terminal.
-fn spawn_read_thread(
-    stream: TcpStream,
-    split_row: u16,
-    width: u16,
-    top_line: Arc<Mutex<u16>>,
-    bottom_line: Arc<Mutex<u16>>,
-) -> Result<(), io::Error> {
-    thread::spawn(move || {
-        // Attempt to draw the terminal and handle any errors
-        let mut handle = match draw_terminal(split_row, width) {
-            Ok(handle) => handle,
-            Err(e) => {
-                eprintln!("Failed to draw terminal: {}", e);
-                return;
-            }
-        };
-
-        let mut buffer = [0; 128];
-        let mut stream = stream;
-
-        loop {
-            match stream.read(&mut buffer) {
-                Ok(nbytes) => {
-                    if nbytes > 0 {
-                        // Handle user input and manage potential errors
-                        if let Err(e) = handle_user_input(
-                            &mut handle,
-                            std::str::from_utf8(&buffer[..nbytes]).unwrap_or(""),
-                            split_row,
-                            Arc::clone(&top_line),
-                            Arc::clone(&bottom_line),
-                        ) {
-                            eprintln!("Error handling user input: {}", e);
-                            break;
-                        }
-                    } else {
-                        // Handle connection closure
-                        handle_connection_close();
-                        break;
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error reading from stream: {}", e);
-                    break;
-                }
-            }
-        }
-    });
 
     Ok(())
 }
