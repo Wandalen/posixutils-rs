@@ -12,7 +12,6 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use nix::{
     errno::Errno,
     sys::{
-        prctl,
         resource::{setrlimit, Resource},
         signal::{
             raise, sigaction, signal, sigprocmask, SaFlags, SigAction, SigHandler, SigSet,
@@ -279,7 +278,7 @@ fn block_handler_and_chld(signal: Signal, old_set: &mut SigSet) {
 /// `true` is successfull, `false` otherwise.
 fn disable_core_dumps() -> bool {
     #[cfg(target_os = "linux")]
-    if prctl::set_dumpable(false).is_ok() {
+    if nix::sys::prctl::set_dumpable(false).is_ok() {
         return true;
     }
     if setrlimit(Resource::RLIMIT_CORE, 0, 0).is_ok() {
