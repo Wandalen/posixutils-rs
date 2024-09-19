@@ -21,7 +21,7 @@ use nix::{
         },
         wait::{waitpid, WaitPidFlag, WaitStatus},
     },
-    unistd::{execvp, fork, setpgid, ForkResult, Pid},
+    unistd::{alarm, execvp, fork, setpgid, ForkResult, Pid},
 };
 use plib::PROJECT_NAME;
 use std::{
@@ -80,6 +80,18 @@ struct Args {
 }
 
 /// Parses string slice into [Duration].
+///
+/// # Arguments
+///
+/// * `s` - [str] that represents duration.
+///
+/// # Errors
+///
+/// Returns an error if passed invalid input.
+///
+/// # Returns
+///
+/// Returns the parsed [Duration] value.
 fn parse_duration(s: &str) -> Result<Duration, String> {
     let (value, suffix) = s.split_at(
         s.find(|c: char| !c.is_ascii_digit() && c != '.')
@@ -101,7 +113,19 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
     Ok(Duration::from_secs_f64(value * multiplier))
 }
 
-/// Parses string slice into [Signal].
+/// Parses [str] into [Signal].
+///
+/// # Arguments
+///
+/// * `s` - [str] that represents the signal name.
+///
+/// # Errors
+///
+/// Returns an error if passed invalid input.
+///
+/// # Returns
+///
+/// Returns the parsed [Signal] value.
 fn parse_signal(s: &str) -> Result<Signal, String> {
     let s = s.to_uppercase();
     let signal_name = if s.starts_with("SIG") {
@@ -114,8 +138,14 @@ fn parse_signal(s: &str) -> Result<Signal, String> {
 }
 
 /// Starts the timeout after which [Signal::SIGALRM] will be send.
+///
+/// # Arguments
+///
+/// * `duration` - [Duration] value of
 fn set_timeout(duration: Duration) {
-    unsafe { libc::alarm(duration.as_secs() as u32) };
+    if !duration.is_zero() {
+        alarm::set(duration.as_secs() as libc::c_uint);
+    }
 }
 
 /// Sends a signal to the process or process group.
@@ -128,9 +158,17 @@ fn send_signal(pid: i32, signal: i32) {
     }
 }
 
+/// Signal [Signal::SIGCHLD] handler.
 extern "C" fn chld_handler(_signal: i32) {}
 
+/// Timeout signal handler.
+///
+/// # Arguments
+///
+/// * `signal` - integer value of incoming signal.
 extern "C" fn handler(mut signal: i32) {
+    // When timeout receives [libc::SIGALRM], this will be considered as timeout reached and
+    // timeout will send prepared signal
     if signal == libc::SIGALRM {
         TIMED_OUT.store(true, Ordering::SeqCst);
         signal = FIRST_SIGNAL.load(Ordering::SeqCst);
@@ -146,6 +184,7 @@ extern "C" fn handler(mut signal: i32) {
                 *kill_after = None;
             }
 
+            // Propagating incoming signal
             send_signal(MONITORED_PID.load(Ordering::SeqCst), signal);
 
             if !FOREGROUND.load(Ordering::SeqCst) {
@@ -159,6 +198,11 @@ extern "C" fn handler(mut signal: i32) {
     }
 }
 
+/// Unblocks incoming signal by adding it to empty signals mask.
+///
+/// # Arguments
+///
+/// `signal` - signal of type [Signal] that needs to be unblocked.
 fn unblock_signal(signal: Signal) {
     let mut sig_set = SigSet::empty();
     sig_set.add(signal);
@@ -168,7 +212,8 @@ fn unblock_signal(signal: Signal) {
     }
 }
 
-fn install_chld() {
+/// Installs handler for [Signal::SIGCHLD] signal to receive child's exit status code from parent (timeout).
+fn set_chld() {
     let handler = SigHandler::Handler(chld_handler);
     let flags = SaFlags::SA_RESTART;
     let mask = SigSet::empty();
@@ -181,7 +226,12 @@ fn install_chld() {
     unblock_signal(Signal::SIGCHLD);
 }
 
-fn install_handler(signal: Signal) {
+/// Installs handler ([handler]) for incoming [Signal] and other signals.
+///
+/// # Arguments
+///
+/// `signal` - signal of type [Signal] that needs to be handled.
+fn set_handler(signal: Signal) {
     let handler = SigHandler::Handler(handler);
     let flags = SaFlags::SA_RESTART;
     let mask = SigSet::empty();
@@ -197,6 +247,13 @@ fn install_handler(signal: Signal) {
     }
 }
 
+/// Blocks incoming signal and stores previous signals mask.
+///
+/// # Arguments
+///
+/// `signal` - signal of type [Signal] that needs to be handled.
+///
+/// `old_set` - mutable reference to set of gidnals of type [SigSet] into which will be placed previous mask.
 fn block_handler_and_chld(signal: Signal, old_set: &mut SigSet) {
     let mut block_set = SigSet::empty();
 
@@ -215,6 +272,11 @@ fn block_handler_and_chld(signal: Signal, old_set: &mut SigSet) {
     }
 }
 
+/// Tries to disable core dumps for current process.
+///
+/// # Returns
+///
+/// `true` is successfull, `false` otherwise.
 fn disable_core_dumps() -> bool {
     #[cfg(target_os = "linux")]
     if prctl::set_dumpable(false).is_ok() {
@@ -226,6 +288,15 @@ fn disable_core_dumps() -> bool {
     false
 }
 
+/// Main timeout function that creates child and processes its return exit status.
+///
+/// # Arguments
+///
+/// `args` - structure of timeout options and operands.
+///
+/// # Return
+///
+/// [i32] - exit status code of child process.
 fn timeout(args: Args) -> i32 {
     let Args {
         foreground,
@@ -241,17 +312,20 @@ fn timeout(args: Args) -> i32 {
     FIRST_SIGNAL.store(signal_name as i32, Ordering::SeqCst);
     *KILL_AFTER.lock().unwrap() = kill_after;
 
+    // Ensures, this process is process leader so all subprocesses can be killed.s
     if !foreground {
         let _ = setpgid(Pid::from_raw(0), Pid::from_raw(0));
     }
 
-    install_handler(signal_name);
+    // Setup handlers before to catch signals before fork()
+    set_handler(signal_name);
     unsafe {
         let _ = signal(SIGTTIN, SigHandler::SigIgn);
         let _ = signal(SIGTTOU, SigHandler::SigIgn);
     }
-    install_chld();
+    set_chld();
 
+    // To be able to handle SIGALRM (will be send after timeout)
     unblock_signal(Signal::SIGALRM);
 
     let mut sig_set = SigSet::empty();
@@ -259,6 +333,7 @@ fn timeout(args: Args) -> i32 {
 
     match unsafe { fork() } {
         Ok(ForkResult::Child) => {
+            // Restore original mask for child.= process.
             let _ = sigprocmask(SigmaskHow::SIG_SETMASK, Some(&sig_set), None);
 
             unsafe {
@@ -311,10 +386,7 @@ fn timeout(args: Args) -> i32 {
             }
             let status = match wait_status {
                 WaitStatus::Exited(_, status) => status,
-                WaitStatus::Signaled(_, rec_signal, core_dumped) => {
-                    if core_dumped {
-                        eprintln!("timeout: child has dumper the core")
-                    }
+                WaitStatus::Signaled(_, rec_signal, _) => {
                     if !TIMED_OUT.load(Ordering::SeqCst) && disable_core_dumps() {
                         let _ = unsafe { signal(rec_signal, SigHandler::SigDfl) };
                         unblock_signal(rec_signal);
