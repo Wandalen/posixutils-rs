@@ -123,11 +123,13 @@ fn test_absent_duration() {
 
 #[test]
 fn test_absent_utility() {
-    timeout_test(
-        &["5"],
-        "timeout: one or more required arguments were not provided\n",
-        125,
-    );
+    let message: String = if cfg!(target_os = "macos") {
+        String::from("usage: sleep seconds\n")
+    } else {
+        String::from("timeout: one or more required arguments were not provided\n")
+    };
+
+    timeout_test(&["5"], &message, 125);
 }
 
 #[test]
