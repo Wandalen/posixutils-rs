@@ -1,5 +1,11 @@
-extern crate clap;
-extern crate plib;
+//
+// Copyright (c) 2024 Hemi Labs, Inc.
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
 
 use clap::Parser;
 use flate2::read::GzDecoder;
@@ -42,10 +48,23 @@ impl Display for ManError {
 
 impl Error for ManError {}
 
+/// Gets manpage content from plain file or .gz archieve
+///
+/// # Arguments
+///
+/// `name` - [str] name of necessary system documentation.
+///
+/// # Returns
+///
+/// Tuple of documentation content and section number.
+///
+/// # Errors
+///
+/// Returns [std::io::Error] if file not found or reading to [String] failed.
 fn get_map_page(name: &str) -> Result<(String, i32), io::Error> {
     let (man_page_path, section) = (1..=9)
         .flat_map(|section| {
-            let plain_path = format!("/{MAN_PATH}/man{section}/{name}.{section}");
+            let plain_path = format!("{MAN_PATH}/man{section}/{name}.{section}");
             let gz_path = format!("{plain_path}.gz");
             vec![(gz_path, section), (plain_path, section)]
         })
@@ -66,43 +85,37 @@ fn get_map_page(name: &str) -> Result<(String, i32), io::Error> {
     Ok((man_page, section))
 }
 
-/// Formats `roff` markup (used in man pages)
-/// to display in the console, translating formatting tags like bold,
-/// italics, and others into terminal escape codes.
-fn format_roff_to_console(input: &str) -> String {
-    let mut output = input.to_string();
-
-    output = output.replace(r"\fB", "\x1b[1m"); // Bold font
-    output = output.replace(r"\fI", "\x1b[3m"); // Italics
-    output = output.replace(r"\fR", "\x1b[0m"); // Reset formatting
-
-    output = output.replace(r"\-", "-");
-    output = output.replace(r"\,", ",");
-
-    output = output
-        .lines()
-        .filter(|line| !line.starts_with(r#".\""#))
-        .collect::<Vec<&str>>()
-        .join("\n");
-
-    output = output.replace(r".SH", "\n\x1b[1m"); // Title
-    output = output.replace(r".TP", "\n\x1b[4m"); // Paragraph
-    output = output.replace(".BR", "\x1b[1m"); // Bold and italic
-    output = output.replace(r".PP", "\n\n"); // New paragraph
-    output = output.replace(r".SS", "\n\x1b[4m"); // Subtitle
-    output = output.replace(r".TH", "\x1b[1m"); // Page title
-    output = output.replace(r".br", ""); // Moving a line
-    output = output.replace(r".B", "\x1b[1m\n\x1b[0m"); // Half bold
-
-    output + "\x1b[0m"
+/// Formats man page content into apporpriate format
+///
+/// # Arguments
+///
+/// `man_page` - [str] content of man page.
+///
+/// # Returns
+///
+/// Formated [String] content of man page.
+fn format_man_page(man_page: &str) -> String {
+    // TODO: implement formatting
+    String::from(man_page)
 }
 
-/// Searches for and displays a man page for the provided utility name.
-/// Handles both plain text and compressed (`.gz`) man pages.
+/// Displays man page
+///
+/// # Arguments
+///
+/// `name` - [str] name of system documentation.
+///
+/// # Returns
+///
+/// Nothing.
+///
+/// # Errors
+///
+/// Returns [std::io::Error] if man page not found, or any display error happened.
 fn display_man_page(name: &str) -> io::Result<()> {
-    let (man_page, section) = get_map_page(name)?;
+    let (man_page_path, section) = get_map_page(name)?;
 
-    // TODO: format man_page
+    let man_page = format_man_page(&man_page_path);
 
     let status_bar = StatusBar::new(format!(
         "Manual page {name}({section}) (press h for help or q to quit)"
@@ -118,8 +131,19 @@ fn display_man_page(name: &str) -> io::Result<()> {
     Ok(())
 }
 
-/// Uses the `apropos` command to search the
-/// man page summaries for the given keyword for -k option.
+/// Displays man page summaries for the given keyword
+///
+/// # Arguments
+///
+/// `keyword` - [str] name of keyword.
+///
+/// # Returns
+///
+/// Nothing
+///
+/// # Errors
+///
+/// Returns [std::io::Error] if call of `apropros` utility failed.
 fn display_summary_database(keyword: &str) -> io::Result<()> {
     let output: Output = Command::new("apropos").arg(keyword).output()?;
 
@@ -137,8 +161,20 @@ fn display_summary_database(keyword: &str) -> io::Result<()> {
     Ok(())
 }
 
-/// The main function that handles the program logic. It processes the input
+/// Main function that handles the program logic. It processes the input
 /// arguments, and either displays man pages or searches the summary database.
+///
+/// # Arguments
+///
+/// `args` - [Args] set of incoming arguments.
+///
+/// # Returns
+///
+/// Nothing.
+///
+/// # Errors
+///
+/// Returns [ManError] wrapper of program error.
 fn man(args: Args) -> Result<(), ManError> {
     if !PathBuf::from(MAN_PATH).exists() {
         return Err(ManError(format!(
@@ -165,13 +201,16 @@ fn man(args: Args) -> Result<(), ManError> {
     Ok(())
 }
 
+// Exit code:
+//     0 - Successful completion.
+//     >0 - An error occurred.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // parse command line arguments
-    let args = Args::parse();
-
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+
+    // parse command line arguments
+    let args = Args::parse();
 
     let mut exit_code = 0;
 
