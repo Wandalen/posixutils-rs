@@ -29,18 +29,16 @@ use std::{
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicI32, Ordering},
-        Arc, LazyLock, Mutex,
+        Mutex,
     },
     time::Duration,
 };
 
-static FOREGROUND: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| Arc::new(AtomicBool::new(false)));
-static FIRST_SIGNAL: LazyLock<Arc<AtomicI32>> =
-    LazyLock::new(|| Arc::new(AtomicI32::new(SIGTERM as i32)));
-static KILL_AFTER: LazyLock<Arc<Mutex<Option<Duration>>>> =
-    LazyLock::new(|| Arc::new(Mutex::new(None)));
-static MONITORED_PID: LazyLock<Arc<AtomicI32>> = LazyLock::new(|| Arc::new(AtomicI32::new(0)));
-static TIMED_OUT: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| Arc::new(AtomicBool::new(false)));
+static FOREGROUND: AtomicBool = AtomicBool::new(false);
+static FIRST_SIGNAL: AtomicI32 = AtomicI32::new(SIGTERM as i32);
+static KILL_AFTER: Mutex<Option<Duration>> = Mutex::new(None);
+static MONITORED_PID: AtomicI32 = AtomicI32::new(0);
+static TIMED_OUT: AtomicBool = AtomicBool::new(false);
 
 /// timeout — execute a utility with a time limit
 #[derive(Parser, Debug)]
