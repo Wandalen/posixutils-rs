@@ -26,6 +26,8 @@ use plib::PROJECT_NAME;
 use std::{
     error::Error,
     ffi::CString,
+    os::unix::fs::PermissionsExt,
+    path::Path,
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicI32, Ordering},
@@ -285,6 +287,32 @@ fn disable_core_dumps() -> bool {
     false
 }
 
+/// Searches for the executable utility in the directories specified by the `PATH` environment variable.
+///
+/// # Arguments
+///
+/// * `utility` - name of the utility to search for.
+///
+/// # Returns
+///
+/// `Option<String>` - full path to the utility if found, or `None` if not found.
+fn search_in_path(utility: &str) -> Option<String> {
+    if let Ok(paths) = std::env::var("PATH") {
+        for path in paths.split(':') {
+            let full_path = std::path::Path::new(path).join(utility);
+            if full_path.is_file() {
+                if let Ok(metadata) = std::fs::metadata(&full_path) {
+                    // Check if the file is executable
+                    if metadata.permissions().mode() & 0o111 != 0 {
+                        return Some(full_path.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Main timeout function that creates child and processes its return exit status.
 ///
 /// # Arguments
@@ -338,7 +366,19 @@ fn timeout(args: Args) -> i32 {
                 let _ = signal(SIGTTOU, SigHandler::SigDfl);
             }
 
-            let utility_c = CString::new(utility.clone()).unwrap();
+            let utility_path = if Path::new(&utility).is_file() {
+                utility.clone()
+            } else {
+                match search_in_path(&utility) {
+                    Some(path) => path,
+                    None => {
+                        eprintln!("timeout: utility '{utility}' not found");
+                        return 127;
+                    }
+                }
+            };
+
+            let utility_c = CString::new(utility_path.clone()).unwrap();
             let mut arguments_c: Vec<CString> = arguments
                 .drain(..)
                 .map(|arg| CString::new(arg).unwrap())

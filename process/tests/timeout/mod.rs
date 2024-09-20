@@ -239,7 +239,7 @@ fn test_utility_error() {
     let message: String = if cfg!(target_os = "macos") {
         String::from("usage: sleep seconds\n")
     } else {
-        String::from("sleep: invalid time interval ‘invalid_value’\nTry 'sleep --help' for more information.\n")
+        String::from("/usr/bin/sleep: invalid time interval ‘invalid_value’\nTry '/usr/bin/sleep --help' for more information.\n")
     };
 
     timeout_test(&["1", SLEEP, "invalid_value"], &message, 1);
