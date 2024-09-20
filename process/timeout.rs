@@ -295,7 +295,7 @@ fn disable_core_dumps() -> bool {
 ///
 /// # Return
 ///
-/// [i32] - exit status code of child process.
+/// [i32] - exit status code of timeout utility.
 fn timeout(args: Args) -> i32 {
     let Args {
         foreground,
