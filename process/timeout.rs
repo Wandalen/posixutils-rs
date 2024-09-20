@@ -365,11 +365,16 @@ fn timeout(args: Args) -> i32 {
 
             let mut wait_status: WaitStatus;
             loop {
-                wait_status = waitpid(
+                match waitpid(
                     child,
                     Some(WaitPidFlag::WNOHANG | WaitPidFlag::WCONTINUED | WaitPidFlag::WUNTRACED),
-                )
-                .unwrap();
+                ) {
+                    Ok(ws) => wait_status = ws,
+                    Err(_) => {
+                        eprintln!("timeout: failed to wait for child");
+                        return 125;
+                    }
+                }
                 match wait_status {
                     WaitStatus::StillAlive | WaitStatus::Continued(_) => {
                         let _ = sig_set.suspend();
