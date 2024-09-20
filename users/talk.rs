@@ -8,13 +8,13 @@
 
 // todo:
 // - change timeout to re-connect in send_to
-// - check remote connection
+// - check remote connection (in progress)
 
 extern crate clap;
 extern crate gettextrs;
 extern crate plib;
 
-use clap::Parser;
+use clap::{error::ErrorKind, Parser};
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use thiserror::Error;
@@ -23,41 +23,48 @@ use thiserror::Error;
 use libc::sa_family_t;
 use libc::{
     addrinfo, c_char, c_uchar, getaddrinfo, gethostname, getpid, getpwuid, getservbyname, getuid,
-    ioctl, signal, sockaddr_in, tcgetattr, tcsetattr, termios, winsize, AF_INET, AI_CANONNAME,
-    ECHO, ICANON, IEXTEN, ISIG, SIGINT, SIGPIPE, SIGQUIT, SOCK_DGRAM, STDIN_FILENO, STDOUT_FILENO,
-    TCSAFLUSH, TCSANOW, TIOCGWINSZ,
+    ioctl, signal, sockaddr_in, winsize, AF_INET, AI_CANONNAME, SIGINT, SIGPIPE, SIGQUIT,
+    SOCK_DGRAM, STDOUT_FILENO, TIOCGWINSZ,
 };
 use std::{
     ffi::{CStr, CString},
-    fs::{remove_file, File},
     io::{self, BufRead, Cursor, Error, Read, Write},
     mem::{size_of, zeroed},
     net::{
         self, AddrParseError, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream, UdpSocket,
     },
-    os::fd::AsRawFd,
     process, ptr,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
     thread,
     time::{Duration, Instant},
 };
 
-// The size of the buffer for control message fields like l_name, r_name, and r_tty in CtlMsg.
+/// A static variable to hold the state of delete invitations on SIGINT signal.
+static DELETE_INVITATIONS: LazyLock<Arc<Mutex<Option<(Vec<u8>, Arc<UdpSocket>, SocketAddr)>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
+
+/// The size of the buffer for control message fields like l_name, r_name, and r_tty in CtlMsg.
 const BUFFER_SIZE: usize = 12;
 
-// The maximum size for the buffer to store the hostname, based on typical hostname lengths.
+//i The maximum size for the buffer to store the hostname, based on typical hostname lengths.
 const HOSTNAME_BUFFER_SIZE: usize = 256;
 
-// The maximum number of characters allowed for user input in a single operation.
+/// The maximum number of characters allowed for user input in a single operation.
 const MAX_USER_INPUT_LENGTH: usize = 128;
+/// The version number for the talk protocol.
 const TALK_VERSION: u8 = 1;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+/// Represents the types of messages exchanged in the communication.
 enum MessageType {
-    LeaveInvite, // leave invitation with server
-    LookUp,      // check for invitation by callee
-    Delete,      // delete invitation by caller
-    Announce,    // announce invitation by caller
+    /// Leave invitation with server.
+    LeaveInvite,
+    /// Check for invitation by callee.
+    LookUp,
+    /// Delete invitation by caller.
+    Delete,
+    /// Announce invitation by caller.
+    Announce,
 }
 
 impl TryFrom<u8> for MessageType {
@@ -77,16 +84,26 @@ impl TryFrom<u8> for MessageType {
 }
 
 #[derive(Debug, PartialEq)]
+/// Represents the possible responses from a request.
 enum Answer {
-    Success,          // operation completed properly
-    NotHere,          // callee not logged in
-    Failed,           // operation failed for unexplained reason
-    MachineUnknown,   // caller's machine name unknown
-    PermissionDenied, // callee's tty doesn't permit announce
-    UnknownRequest,   // request has invalid type value
-    BadVersion,       // request has invalid protocol version
-    BadAddr,          // request has invalid addr value
-    BadCtlAddr,       // request has invalid ctl_addr value
+    /// Operation completed properly.
+    Success,
+    /// Callee not logged in.
+    NotHere,
+    /// Operation failed for unexplained reason.
+    Failed,
+    /// Caller’s machine name is unknown.
+    MachineUnknown,
+    /// Callee’s TTY doesn’t permit announce.
+    PermissionDenied,
+    /// Request has an invalid type value.
+    UnknownRequest,
+    /// Request has an invalid protocol version.
+    BadVersion,
+    /// Request has an invalid address value.
+    BadAddr,
+    /// Request has an invalid control address value.
+    BadCtlAddr,
 }
 
 impl TryFrom<u8> for Answer {
@@ -150,11 +167,13 @@ type SaFamily = u16;
 type SaFamily = sa_family_t;
 
 #[repr(C, packed)]
+/// Socket address structure representing a network address.
 pub struct Osockaddr {
+    /// Address family (e.g., IPv4, IPv6).
     pub sa_family: SaFamily,
+    /// Address data, including the port and IP address.
     pub sa_data: [u8; 14],
 }
-
 impl Osockaddr {
     // Converts the packed address structure into a SocketAddrV4
     pub fn to_socketaddr(&self) -> Option<SocketAddrV4> {
@@ -183,17 +202,29 @@ impl Default for Osockaddr {
 }
 
 #[repr(C, packed)]
+/// Control message structure used for communication in the talk protocol.
 struct CtlMsg {
+    /// Version of the message.
     vers: c_uchar,
+    /// Type of the message.
     r#type: c_uchar,
+    /// Answer code (success or failure).
     answer: c_uchar,
+    /// Padding for alignment.
     pad: c_uchar,
+    /// Identifier number for the message.
     id_num: u32,
+    /// Socket address of the recipient.
     addr: Osockaddr,
+    /// Control socket address.
     ctl_addr: Osockaddr,
+    /// Process ID of the sender.
     pid: i32,
+    /// Local user name.
     l_name: [c_char; 12],
+    /// Remote user name.
     r_name: [c_char; 12],
+    /// Remote terminal name.
     r_tty: [c_char; 16],
 }
 
@@ -273,12 +304,24 @@ impl CtlMsg {
 }
 
 #[repr(C, packed)]
+/// Control response structure used for communication with the daemon.
 pub struct CtlRes {
+    /// Version of the control protocol.
     pub vers: c_uchar,
+
+    /// Type of message being sent/received.
     r#type: MessageType,
+
+    /// Response to the control message.
     answer: Answer,
+
+    /// Padding byte to maintain alignment.
     pub pad: c_uchar,
+
+    /// Unique identifier number for the invitation.
     pub id_num: u32,
+
+    /// Socket address associated with the response.
     pub addr: Osockaddr,
 }
 
@@ -287,7 +330,7 @@ impl Default for CtlRes {
         CtlRes {
             vers: 0,
             r#type: MessageType::LookUp,
-            answer: Answer::Failed,
+            answer: Answer::UnknownRequest,
             pad: 0,
             id_num: 0,
             addr: Osockaddr {
@@ -367,15 +410,92 @@ impl CtlRes {
 #[command(author, version, about, long_about)]
 struct Args {
     /// Address to connect or listen to
-    address: Option<String>,
+    address: String,
 
     /// Terminal name to use (optional)
     ttyname: Option<String>,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+fn talk(args: Args) -> Result<(), TalkError> {
+    check_if_tty()?;
 
+    let mut msg = CtlMsg::default();
+    let mut res = CtlRes::default();
+    let (width, height) = get_terminal_size();
+
+    let mut logger = StateLogger::new("No connection yet.");
+
+    // Retrieve the local and remote machine names
+    let (my_machine_name, his_machine_name) =
+        get_names(&mut msg, &args.address, args.ttyname).map_err(|e| TalkError::IoError(e))?;
+
+    // Get the local and remote addresses, and the daemon port number
+    let (my_machine_addr, his_machine_addr, daemon_port) =
+        get_addrs(&mut msg, &my_machine_name, &his_machine_name)
+            .map_err(|e| TalkError::IoError(e))?;
+
+    // Open control socket
+    let (ctl_addr, socket) = open_ctl(my_machine_addr).map_err(|e| TalkError::IoError(e))?;
+
+    let ctl_addr_data = msg.create_ctl_addr(ctl_addr);
+    msg.ctl_addr.sa_data = ctl_addr_data;
+
+    logger.set_state("[Checking for invitation on caller's machine]");
+
+    let talkd_addr: SocketAddr = format!("{}:{}", his_machine_addr, daemon_port)
+        .parse()
+        .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
+
+    // Look for an invitation from the daemon
+    look_for_invite(daemon_port, his_machine_addr, &mut msg, &socket, &mut res)?;
+    // msg.id_num = res.id_num.to_be();
+    // send_delete(daemon_port, his_machine_addr, &mut msg, &socket, &mut res)?;
+
+    // Set the invitation ID number and send a delete request for the old invitation
+    if res.answer == Answer::Success {
+        handle_existing_invitation(width, height, &mut res)?;
+    } else if res.answer == Answer::UnknownRequest {
+        let msg_bytes = msg
+            .to_bytes()
+            .map_err(|e| TalkError::Other(e.to_string()))?;
+
+        let talkd_addr: SocketAddr = format!("0.0.0.0:{}", 8081)
+            .parse()
+            .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
+
+        socket
+            .send_to(&msg_bytes, talkd_addr)
+            .map_err(|e| TalkError::IoError(e))?;
+    } else {
+        logger.set_state("[Waiting to connect with caller]");
+        handle_new_invitation(
+            talkd_addr,
+            daemon_port,
+            his_machine_addr,
+            &mut msg,
+            socket,
+            &mut res,
+            my_machine_addr,
+            &mut logger,
+        )?;
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::try_parse().unwrap_or_else(|err| {
+        if err.kind() == ErrorKind::DisplayHelp || err.kind() == ErrorKind::DisplayVersion {
+            // Print help or version message
+            eprintln!("{}", err);
+        } else {
+            // Print custom error message
+            eprintln!("Error parsing arguments: {}", err);
+        }
+
+        // Exit with a non-zero status code
+        std::process::exit(1);
+    });
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
@@ -392,91 +512,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     process::exit(exit_code)
 }
 
-fn talk(args: Args) -> Result<(), TalkError> {
-    validate_args(&args)?;
-    check_if_tty()?;
-
-    let mut msg = CtlMsg::default();
-    let mut res = CtlRes::default();
-    let (width, height) = get_terminal_size();
-
-    let mut logger = StateLogger::new("No connection yet.");
-
-    // Retrieve the local and remote machine names
-    let (my_machine_name, his_machine_name) = get_names(
-        &mut msg,
-        args.address
-            .as_ref()
-            .ok_or_else(|| TalkError::InvalidArguments)?,
-        args.ttyname,
-    )
-    .map_err(|e| TalkError::IoError(e))?;
-
-    // Get the local and remote addresses, and the daemon port number
-    let (my_machine_addr, his_machine_addr, daemon_port) =
-        get_addrs(&mut msg, &my_machine_name, &his_machine_name)
-            .map_err(|e| TalkError::IoError(e))?;
-
-    // Open control socket
-    let (ctl_addr, socket) = open_ctl(my_machine_addr).map_err(|e| TalkError::IoError(e))?;
-
-    let ctl_addr_data = msg.create_ctl_addr(ctl_addr);
-    msg.ctl_addr.sa_data = ctl_addr_data;
-
-    logger.set_state("[Checking for invitation on caller's machine]");
-
-    // Look for an invitation from the daemon
-    look_for_invite(daemon_port, his_machine_addr, &mut msg, &socket, &mut res)?;
-
-    // Set the invitation ID number and send a delete request for the old invitation
-    msg.id_num = res.id_num.to_be();
-    send_delete(daemon_port, his_machine_addr, &mut msg, &socket, &mut res)?;
-
-    if res.answer == Answer::Success {
-        handle_existing_invitation(
-            width,
-            height,
-            &mut res,
-            daemon_port,
-            his_machine_addr,
-            &mut msg,
-            &socket,
-        )?;
-    } else if res.answer == Answer::Failed {
-        let msg_bytes = msg
-            .to_bytes()
-            .map_err(|e| TalkError::Other(e.to_string()))?;
-
-        let talkd_addr: SocketAddr = format!("0.0.0.0:{}", 8081)
-            .parse()
-            .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
-
-        socket
-            .send_to(&msg_bytes, talkd_addr)
-            .map_err(|e| TalkError::IoError(e))?;
-    } else {
-        logger.set_state("[Waiting to connect with caller]");
-        handle_new_invitation(
-            daemon_port,
-            his_machine_addr,
-            &mut msg,
-            &socket,
-            &mut res,
-            my_machine_addr,
-            &mut logger,
-        )?;
-    }
-
-    Ok(())
-}
-
-fn validate_args(args: &Args) -> Result<(), TalkError> {
-    if args.address.is_none() {
-        return Err(TalkError::InvalidArguments);
-    }
-    Ok(())
-}
-
+/// Checks if the standard input is a TTY (terminal).
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `TalkError` if the input is not a TTY.
 fn check_if_tty() -> Result<(), TalkError> {
     if atty::isnt(atty::Stream::Stdin) {
         eprintln!("Not a TTY");
@@ -485,32 +525,24 @@ fn check_if_tty() -> Result<(), TalkError> {
     Ok(())
 }
 
-fn handle_existing_invitation(
-    width: u16,
-    height: u16,
-    res: &mut CtlRes,
-    daemon_port: u16,
-    his_machine_addr: Ipv4Addr,
-    msg: &mut CtlMsg,
-    socket: &UdpSocket,
-) -> Result<(), TalkError> {
+/// Handles an existing invitation by establishing a TCP connection and managing user input.
+///
+/// # Arguments
+///
+/// * `width` - The width of the terminal for drawing purposes.
+/// * `height` - The height of the terminal for positioning.
+/// * `res` - A mutable reference to the control response containing the address.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `TalkError`.
+fn handle_existing_invitation(width: u16, height: u16, res: &mut CtlRes) -> Result<(), TalkError> {
     let tcp_addr = res.addr.to_socketaddr().ok_or_else(|| {
         TalkError::AddressResolutionFailed("Failed to convert address to socket address.".into())
     })?;
 
     // Establish a TCP connection to the `tcp_addr`. Map any IO errors to `TalkError::IoError`.
     let stream = TcpStream::connect(tcp_addr).map_err(TalkError::IoError)?;
-    let (local_id, remote_id) = read_invite_ids_from_file().map_err(TalkError::IoError)?;
-
-    // Update the message ID to `local_id` and send a delete request to the daemon.
-    msg.id_num = local_id;
-    send_delete(daemon_port, his_machine_addr, msg, socket, res)?;
-
-    // Update the message ID to `remote_id` and send a delete request to the daemon.
-    msg.id_num = remote_id;
-    send_delete(daemon_port, his_machine_addr, msg, socket, res)?;
-
-    remove_file("invite_ids.txt").map_err(TalkError::IoError)?;
 
     let write_stream = stream.try_clone().map_err(TalkError::IoError)?;
     let read_stream = stream.try_clone().map_err(TalkError::IoError)?;
@@ -521,10 +553,10 @@ fn handle_existing_invitation(
     // Spawn a thread to handle incoming data from the TCP read stream and update the terminal accordingly.
     spawn_input_thread(
         read_stream,
-        height / 2,               // Set split row at half of the terminal height
-        width,                    // Set terminal width
-        Arc::clone(&top_line),    // Clone the top line reference for thread-safe use
-        Arc::clone(&bottom_line), // Clone the bottom line reference for thread-safe use
+        height / 2,
+        width,
+        Arc::clone(&top_line),
+        Arc::clone(&bottom_line),
     )?;
 
     // Handle user input from stdin, writing it to the TCP write stream and updating the terminal's top line.
@@ -533,6 +565,20 @@ fn handle_existing_invitation(
 
     Ok(())
 }
+
+/// Spawns a thread to handle input from a TCP stream and update the terminal interface.
+///
+/// # Arguments
+///
+/// * `read_stream` - The TCP stream to read input from.
+/// * `split_row` - The row in the terminal where the split occurs.
+/// * `width` - The width of the terminal for drawing purposes.
+/// * `top_line` - An `Arc` of a `Mutex` that tracks the top line position in the terminal.
+/// * `bottom_line` - An `Arc` of a `Mutex` that tracks the bottom line position in the terminal.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `TalkError`.
 fn spawn_input_thread(
     read_stream: TcpStream,
     split_row: u16,
@@ -580,7 +626,6 @@ fn spawn_input_thread(
                     } else {
                         // Handle connection closure if no bytes are received
                         handle_connection_close();
-                        break;
                     }
                 }
                 Err(e) => {
@@ -594,6 +639,18 @@ fn spawn_input_thread(
     Ok(())
 }
 
+/// Writes a message to a TCP stream and updates the top line position in the terminal.
+///
+/// # Arguments
+///
+/// * `write_stream` - A mutable reference to the TCP stream where the message will be sent.
+/// * `message` - The message string to be sent.
+/// * `top_line` - An `Arc` of a `Mutex` that tracks the top line position in the terminal.
+/// * `split_row` - The row in the terminal where the split occurs.
+///
+/// # Returns
+///
+/// A `Result` indicating success or an `io::Error`.
 fn write_message(
     write_stream: &mut TcpStream,
     message: String,
@@ -602,6 +659,8 @@ fn write_message(
 ) -> Result<(), io::Error> {
     let mut top_line = top_line.lock().unwrap();
     *top_line += 1;
+
+    // Write the message to the TCP stream
     write_stream.write_all(message.as_bytes())?;
     write_stream.write_all(b"\n")?;
 
@@ -612,6 +671,17 @@ fn write_message(
 
     Ok(())
 }
+/// Handles user input from stdin, sending it over a TCP stream.
+///
+/// # Arguments
+///
+/// * `write_stream` - The TCP stream to send user input to.
+/// * `split_row` - The row in the terminal where the input area begins.
+/// * `top_line` - An `Arc` of a `Mutex` that tracks the top line position in the terminal.
+///
+/// # Returns
+///
+/// A `Result` indicating success or an `io::Error`.
 fn handle_stdin_input(
     mut write_stream: TcpStream,
     split_row: u16,
@@ -648,11 +718,29 @@ fn handle_stdin_input(
     Ok(())
 }
 
+/// Handles a new invitation by setting up a TCP socket, notifying the daemon,
+/// and managing incoming connections.
+///
+/// # Arguments
+///
+/// * `talkd_addr` - The socket address of the talk daemon.
+/// * `daemon_port` - The port number for the talk daemon.
+/// * `his_machine_addr` - The IPv4 address of the remote machine.
+/// * `msg` - A mutable reference to the control message (`CtlMsg`).
+/// * `socket` - An `Arc` of the UDP socket used for communication.
+/// * `res` - A mutable reference to the control response (`CtlRes`).
+/// * `my_machine_addr` - The IPv4 address of the local machine.
+/// * `logger` - A mutable reference to the state logger for logging state changes.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `TalkError`.
 fn handle_new_invitation(
+    talkd_addr: SocketAddr,
     daemon_port: u16,
     his_machine_addr: Ipv4Addr,
     msg: &mut CtlMsg,
-    socket: &UdpSocket,
+    socket: Arc<UdpSocket>,
     res: &mut CtlRes,
     my_machine_addr: Ipv4Addr,
     logger: &mut StateLogger,
@@ -667,20 +755,37 @@ fn handle_new_invitation(
     logger.set_state("[Waiting for your party to respond]");
 
     msg.addr.sa_data = tcp_data;
-    // Send the announce message to the daemon, informing it of the new invitation.
-    announce(daemon_port, his_machine_addr, msg, socket, res)?;
-    let remote_id = res.id_num;
 
     // Send the leave invitation message to clear the previous invite state.
-    leave_invite(daemon_port, his_machine_addr, msg, socket, res)?;
-    let local_id = res.id_num;
+    leave_invite(daemon_port, my_machine_addr, msg, &socket, res)?;
+    let local_id = res.id_num.to_be();
+    msg.r#type = MessageType::Delete as u8;
+    msg.id_num = local_id;
 
-    save_invite_ids_to_file(local_id, remote_id).map_err(TalkError::IoError)?;
+    // Send the announce message to the daemon, informing it of the new invitation.
+    announce(daemon_port, his_machine_addr, msg, &socket, res)?;
+    let remote_id = res.id_num.to_be();
 
+    send_delete(daemon_port, his_machine_addr, msg, &socket, res)?;
+    let local_id = res.id_num.to_be();
+    msg.r#type = MessageType::Delete as u8;
+    msg.id_num = local_id;
+
+    let msg_bytes = msg
+        .to_bytes()
+        .map_err(|e| TalkError::Other(e.to_string()))?;
+
+    let clone_socket = Arc::clone(&socket);
+    *DELETE_INVITATIONS.lock().unwrap() = Some((msg_bytes, clone_socket, talkd_addr));
     // Start listening for incoming TCP connections.
     for stream in listener.incoming() {
         match stream {
             Ok(client_stream) => {
+                msg.id_num = local_id;
+                send_delete(daemon_port, his_machine_addr, msg, &socket, res)?;
+                msg.id_num = remote_id;
+                send_delete(daemon_port, his_machine_addr, msg, &socket, res)?;
+
                 if let Err(e) = handle_client(client_stream) {
                     eprintln!("Failed to handle client: {}", e);
                 }
@@ -692,7 +797,12 @@ fn handle_new_invitation(
     Ok(())
 }
 
-// Retrieves the current user's login name.
+/// Retrieves the current user's login name.
+///
+/// # Returns
+///
+/// A `Result` containing the login name as a `String` on success,
+/// or an `io::Error` if the user cannot be found.
 fn get_current_user_name() -> Result<String, io::Error> {
     unsafe {
         let login_name = libc::getlogin();
@@ -714,7 +824,11 @@ fn get_current_user_name() -> Result<String, io::Error> {
     }
 }
 
-// Retrieves the local machine's hostname.
+/// Retrieves the local machine's hostname.
+///
+/// # Returns
+///
+/// A `Result` containing the hostname as a `String` on success, or an `io::Error` on failure.
 fn get_local_machine_name() -> Result<String, io::Error> {
     let mut buffer = vec![0 as c_char; HOSTNAME_BUFFER_SIZE];
     let result = unsafe { gethostname(buffer.as_mut_ptr(), buffer.len()) };
@@ -730,8 +844,17 @@ fn get_local_machine_name() -> Result<String, io::Error> {
     }
 }
 
-// Parses a user-provided address, which could be in the form "user@host" or "host:user".
-// If no delimiter is found in the address, it returns the address as the user and the local machine name as the host.
+/// Parses a user-provided address, which can be in the format "user@host" or "host:user".
+/// If no delimiter is found, returns the address as the user and the local machine name as the host.
+///
+/// # Arguments
+///
+/// * `address` - A string slice representing the user-provided address.
+/// * `my_machine_name` - A string slice representing the local machine name.
+///
+/// # Returns
+///
+/// A tuple containing the user name and the host name.
 fn parse_address(address: &str, my_machine_name: &str) -> (String, String) {
     // Look for the first occurrence of any delimiter character ('@', ':', '!', '.').
     let at_index = address.find(|c| "@:!.".contains(c));
@@ -761,7 +884,21 @@ fn parse_address(address: &str, my_machine_name: &str) -> (String, String) {
     }
 }
 
-// Retrieves and sets the names for both local and remote users, then updates the control message.
+/// Retrieves and sets the names for both local and remote users, updating the control message accordingly.
+///
+/// # Arguments
+///
+/// * `msg` - A mutable reference to a `CtlMsg` structure that will be updated with user and machine names.
+/// * `address` - A string representing the remote user's address.
+/// * `ttyname` - An optional string containing the terminal name.
+///
+/// # Returns
+///
+/// Returns a tuple containing the local machine name and the remote machine name.
+///
+/// # Errors
+///
+/// Returns an error if retrieving user or machine names fails.
 fn get_names(
     msg: &mut CtlMsg,
     address: &str,
@@ -781,7 +918,7 @@ fn get_names(
     Ok((my_machine_name, his_machine_name))
 }
 
-// Converts a Rust string to a C-style string and stores it in a fixed-size buffer.
+/// Converts a Rust string to a C-style string and stores it in a fixed-size buffer.
 fn string_to_c_string(s: &str) -> [c_char; BUFFER_SIZE] {
     let mut buffer: [c_char; BUFFER_SIZE] = [0; BUFFER_SIZE];
     let c_string = CString::new(s).expect("CString::new failed");
@@ -794,7 +931,7 @@ fn string_to_c_string(s: &str) -> [c_char; BUFFER_SIZE] {
     buffer
 }
 
-// Converts a Rust string to a C-style string for terminal names.
+/// Converts a Rust string to a C-style string for terminal names.
 fn tty_to_c_string(s: &str) -> [c_char; 16] {
     let mut buffer: [c_char; 16] = [0; 16];
     let c_string = CString::new(s).expect("CString::new failed");
@@ -807,7 +944,21 @@ fn tty_to_c_string(s: &str) -> [c_char; 16] {
     buffer
 }
 
-// Resolves the IP addresses for both local and remote machines, and retrieves the service port.
+/// Resolves the IP addresses for both the local and remote machines, and retrieves the service port for communication.
+///
+/// # Arguments
+///
+/// * `msg` - A mutable reference to a `CtlMsg` structure, which will have its `pid` field set.
+/// * `my_machine_name` - A string representing the local machine's hostname.
+/// * `his_machine_name` - A string representing the remote machine's hostname.
+///
+/// # Returns
+///
+/// Returns a tuple containing the local machine's IP address, the remote machine's IP address, and the service port for the "ntalk" service.
+///
+/// # Errors
+///
+/// Returns an error if address resolution or service lookup fails.
 fn get_addrs(
     msg: &mut CtlMsg,
     my_machine_name: &str,
@@ -846,7 +997,17 @@ fn get_addrs(
     Ok((my_machine_addr, his_machine_addr, daemon_port))
 }
 
-// Resolves the IP address for the given host.
+/// Resolves the IP address for a given host using the specified hints for address resolution.
+///
+/// # Arguments
+///
+/// * `host` - A `CString` representing the hostname to resolve.
+/// * `hints` - A reference to an `addrinfo` structure providing hints for the resolution process.
+/// * `host_name` - A string representing the hostname (for error reporting).
+///
+/// # Returns
+///
+/// Returns `Result<Ipv4Addr, io::Error>` containing the resolved IPv4 address on success, or an error if resolution fails.
 fn resolve_address(
     host: &CString,
     hints: &addrinfo,
@@ -885,11 +1046,19 @@ fn resolve_address(
         ));
     }
 
-    // dbg!(&addr);
-
     Ok(addr)
 }
 
+/// Retrieves the port number for a given service and protocol by querying the system's service database.
+///
+/// # Arguments
+///
+/// * `service` - A `CString` representing the name of the service (e.g., "talk").
+/// * `protocol` - A `CString` representing the protocol (e.g., "udp" or "tcp").
+///
+/// # Returns
+///
+/// Returns `Result<u16, io::Error>` containing the port number on success, or an error if the service is not found.
 fn get_service_port(service: &CString, protocol: &CString) -> Result<u16, io::Error> {
     // Get the service by name
     let talkd_service = unsafe { getservbyname(service.as_ptr(), protocol.as_ptr()) };
@@ -911,7 +1080,15 @@ fn get_service_port(service: &CString, protocol: &CString) -> Result<u16, io::Er
     Ok(u16::from_be(port as u16))
 }
 
-// Handles the client's connection by spawning a read thread and handling user input.
+/// Handles the client's connection by spawning a read thread and managing user input from stdin.
+///
+/// # Arguments
+///
+/// * `stream` - The `TcpStream` representing the client's connection.
+///
+/// # Returns
+///
+/// Returns `Result<(), io::Error>` if the operation completes successfully or an error occurs during execution.
 fn handle_client(stream: TcpStream) -> Result<(), io::Error> {
     let write_stream = stream.try_clone()?;
 
@@ -923,10 +1100,10 @@ fn handle_client(stream: TcpStream) -> Result<(), io::Error> {
     // Spawn a separate thread to handle reading from the stream.
     spawn_input_thread(
         stream,
-        height / 2,               // Set split row at half of the terminal height
-        width,                    // Set terminal width
-        Arc::clone(&top_line),    // Clone the top line reference for thread-safe use
-        Arc::clone(&bottom_line), // Clone the bottom line reference for thread-safe use
+        height / 2,
+        width,
+        Arc::clone(&top_line),
+        Arc::clone(&bottom_line),
     )
     .unwrap();
 
@@ -936,7 +1113,19 @@ fn handle_client(stream: TcpStream) -> Result<(), io::Error> {
     Ok(())
 }
 
-// Handles user input and displays it in the bottom section of the terminal.
+/// Handles user input by writing it to the terminal's bottom section and managing the cursor position.
+///
+/// # Arguments
+///
+/// * `handle` - A mutable reference to a locked `StdoutLock`, used to write to the terminal.
+/// * `input` - The user input string to be displayed.
+/// * `split_row` - The row number where the terminal splits between top and bottom sections.
+/// * `top_line` - A shared (Arc<Mutex>) reference to the current top line position.
+/// * `bottom_line` - A shared (Arc<Mutex>) reference to the current bottom line position.
+///
+/// # Returns
+///
+/// Returns `io::Result<()>` if the operation completes successfully.
 fn handle_user_input(
     handle: &mut io::StdoutLock,
     input: &str,
@@ -966,7 +1155,21 @@ fn handle_user_input(
     Ok(())
 }
 
-// Draws the terminal interface with a split line separating the top and bottom sections.
+/// Draws the terminal interface with a split line separating the top and bottom sections.
+///
+/// # Arguments
+///
+/// * `split_row` - The row number where the split line will be drawn.
+/// * `width` - The width of the terminal in characters.
+///
+/// # Returns
+///
+/// Returns a `StdoutLock` wrapped in a `Result` if successful.
+/// Any `io::Error` encountered during drawing will be returned.
+///
+/// # Errors
+///
+/// Returns an `io::Error` if there is an issue with writing to the terminal or flushing output.
 fn draw_terminal(split_row: u16, width: u16) -> io::Result<io::StdoutLock<'static>> {
     let stdout = io::stdout();
     let mut handle = stdout.lock();
@@ -995,8 +1198,17 @@ fn draw_terminal(split_row: u16, width: u16) -> io::Result<io::StdoutLock<'stati
     Ok(handle)
 }
 
-// Opens a TCP socket bound to the provided IPv4 address.
-// Used for talk users sending and receiving messages.
+/// Opens a TCP socket bound to the provided IPv4 address.
+/// This socket is used for sending and receiving messages between talk users.
+///
+/// # Arguments
+///
+/// * `my_machine_addr` - The IPv4 address of the machine where the socket will be bound.
+///
+/// # Returns
+///
+/// Returns a tuple containing the `SocketAddr` and the `TcpListener` on success.
+/// Returns an `io::Error` if there is an error in binding the socket.
 fn open_sockt(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, TcpListener), io::Error> {
     let listener = TcpListener::bind((my_machine_addr, 0))?;
     let addr = listener.local_addr()?;
@@ -1004,27 +1216,37 @@ fn open_sockt(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, TcpListener), io
     Ok((addr, listener))
 }
 
-// Opens a UDP socket bound to the provided IPv4 address.
-// Used for checking properly access to connection.
-fn open_ctl(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, UdpSocket), io::Error> {
+/// Opens a UDP socket bound to the provided IPv4 address.
+/// The socket is used for checking access to the connection.
+///
+/// # Arguments
+///
+/// * `my_machine_addr` - The IPv4 address of the machine where the socket will be bound.
+///
+/// # Returns
+///
+/// Returns a tuple containing the `SocketAddr` and a reference-counted `UdpSocket` on success.
+/// Returns an `io::Error` if there is an error in binding the socket or setting non-blocking mode.
+fn open_ctl(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, Arc<UdpSocket>), io::Error> {
     let socket = UdpSocket::bind((my_machine_addr, 0))?;
     socket.set_nonblocking(true)?;
     let addr = socket.local_addr()?;
 
-    Ok((addr, socket))
+    Ok((addr, Arc::new(socket)))
 }
 
-fn handle_connection_close() {
-    //clear terminal screen
-    print!("\x1B[2J\x1B[H");
-    io::stdout().flush().ok();
-    eprintln!("Connection closed, exiting...");
-
-    process::exit(3);
-}
-
-// Handles sending a message (CtlMsg) to the daemon and receiving a response.
-// Uses the 'reqwest' function to handle the communication.
+/// Handles sending a message (`CtlMsg`) to the daemon and receiving a response.
+/// Internally calls the `request` function for communication.
+///
+/// # Arguments
+///
+/// * `daemon_port` - The port number of the talk daemon.
+/// * `his_machine_addr` - The IPv4 address of the remote user or localhost.
+/// * `msg` - A mutable reference to the control message (`CtlMsg`) to be sent.
+/// * `socket` - The UDP socket used to send and receive messages.
+/// * `res` - A mutable reference where the received response (`CtlRes`) will be stored.
+/// * `msg_type` - The type of message being sent (e.g., Delete, LookUp).
+///
 fn handle_invite(
     daemon_port: u16,
     his_machine_addr: Ipv4Addr,
@@ -1033,10 +1255,19 @@ fn handle_invite(
     res: &mut CtlRes,
     msg_type: MessageType,
 ) -> Result<(), TalkError> {
-    reqwest(daemon_port, his_machine_addr, msg, msg_type, socket, res)
+    request(daemon_port, his_machine_addr, msg, msg_type, socket, res)
 }
 
-// Looks for an invite by sending a LookUp message to the daemon.
+/// Sends a LookUp message to the talk daemon to search for an invite.
+///
+/// # Arguments
+///
+/// * `daemon_port` - The port number of the talk daemon.
+/// * `his_machine_addr` - The IPv4 address of the remote user or localhost.
+/// * `msg` - A mutable reference to the control message (`CtlMsg`) to be sent.
+/// * `socket` - The UDP socket used to send and receive messages.
+/// * `res` - A mutable reference where the received response (`CtlRes`) will be stored.
+///
 fn look_for_invite(
     daemon_port: u16,
     his_machine_addr: Ipv4Addr,
@@ -1054,7 +1285,16 @@ fn look_for_invite(
     )
 }
 
-// Leaves an invite by sending a LeaveInvite message to the daemon.
+/// Sends a LeaveInvite message to the talk daemon, indicating that the user is leaving the invite.
+///
+/// # Arguments
+///
+/// * `daemon_port` - The port number of the talk daemon.
+/// * `his_machine_addr` - The IPv4 address of the remote user or localhost.
+/// * `msg` - A mutable reference to the control message (`CtlMsg`) to be sent.
+/// * `socket` - The UDP socket used to send and receive messages.
+/// * `res` - A mutable reference where the received response (`CtlRes`) will be stored.
+///
 fn leave_invite(
     daemon_port: u16,
     his_machine_addr: Ipv4Addr,
@@ -1072,7 +1312,16 @@ fn leave_invite(
     )
 }
 
-// Announces an invite by sending an Announce message to the daemon.
+/// Sends an Announce message to the talk daemon, announcing an invite.
+///
+/// # Arguments
+///
+/// * `daemon_port` - The port number of the talk daemon.
+/// * `his_machine_addr` - The IPv4 address of the remote user or localhost.
+/// * `msg` - A mutable reference to the control message (`CtlMsg`) to be sent.
+/// * `socket` - The UDP socket used to send and receive messages.
+/// * `res` - A mutable reference where the received response (`CtlRes`) will be stored.
+///
 fn announce(
     daemon_port: u16,
     his_machine_addr: Ipv4Addr,
@@ -1090,7 +1339,17 @@ fn announce(
     )
 }
 
-// Sends a delete message to the daemon.
+/// Sends a delete request (`CtlMsg`) to the talk daemon over a UDP socket and waits for a response.
+/// This function is a wrapper around `handle_invite`, specifically for handling delete messages.
+///
+/// # Arguments
+///
+/// * `daemon_port` - The port number of the talk daemon.
+/// * `his_machine_addr` - The IPv4 address of the remote user or localhost.
+/// * `msg` - A mutable reference to the control message (`CtlMsg`) to be sent.
+/// * `socket` - The UDP socket used to send and receive messages.
+/// * `res` - A mutable reference where the received response (`CtlRes`) will be stored.
+///
 fn send_delete(
     daemon_port: u16,
     his_machine_addr: Ipv4Addr,
@@ -1108,23 +1367,37 @@ fn send_delete(
     )
 }
 
-fn save_invite_ids_to_file(local_id: u32, remote_id: u32) -> io::Result<()> {
-    let mut file = File::create("invite_ids.txt")?;
-    writeln!(file, "local_id={}", local_id)?;
-    writeln!(file, "remote_id={}", remote_id)?;
-    Ok(())
-}
-
-// Sends a message (CtlMsg) to the talk daemon over a UDP socket and waits for a response.
-// The function will retry sending if it encounters a WouldBlock error.
-// The response is parsed into a CtlRes struct.
-fn reqwest(
-    daemon_port: u16,           // Port number of the talk daemon
-    his_machine_addr: Ipv4Addr, // port of remote user or localhost
-    msg: &mut CtlMsg,           // The control message (CtlMsg) to be sent
-    msg_type: MessageType,      // Type of the message (used to set the message type)
-    socket: &UdpSocket,         // UDP socket to send and receive messages
-    res: &mut CtlRes,           // Reference to store the received response (CtlRes)
+/// Sends a control message (`CtlMsg`) to the talk daemon over a UDP socket and waits for a response.
+///
+/// This function retries sending the message if it encounters a `WouldBlock` error and will continue
+/// trying until a response is received or an error occurs.
+///
+/// # Arguments
+///
+/// * `daemon_port` - The port number of the talk daemon.
+/// * `his_machine_addr` - The IPv4 address of the remote user or localhost.
+/// * `msg` - A mutable reference to the control message (`CtlMsg`) to be sent.
+/// * `msg_type` - The type of the message, used to set the message type in `msg`.
+/// * `socket` - The UDP socket used to send and receive messages.
+/// * `res` - A mutable reference where the received response (`CtlRes`) will be stored.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the message is successfully sent and a valid response is received.
+/// Returns a `TalkError` if an error occurs during sending, receiving, or message parsing.
+///
+/// # Errors
+///
+/// * `TalkError::AddressResolutionFailed` - If the talk daemon's address cannot be resolved.
+/// * `TalkError::Other` - If the message serialization or response deserialization fails.
+/// * `TalkError::IoError` - If a network I/O error occurs.
+fn request(
+    daemon_port: u16,
+    his_machine_addr: Ipv4Addr,
+    msg: &mut CtlMsg,
+    msg_type: MessageType,
+    socket: &UdpSocket,
+    res: &mut CtlRes,
 ) -> Result<(), TalkError> {
     let talkd_addr: SocketAddr = format!("{}:{}", his_machine_addr, daemon_port)
         .parse()
@@ -1135,39 +1408,30 @@ fn reqwest(
         .to_bytes()
         .map_err(|e| TalkError::Other(e.to_string()))?;
 
-    // dbg!(&msg_bytes);
-
     let start_time = Instant::now();
-    let timeout = Duration::from_secs(1);
+    let timeout = Duration::from_secs(5);
 
     loop {
         // Try sending the message bytes to the talk daemon
         match socket.send_to(&msg_bytes, talkd_addr) {
             Ok(_) => {
                 let mut buf = [0; 1024];
-
                 // Try to receive a response from the talk daemon
                 match socket.recv_from(&mut buf) {
                     Ok((amt, _)) => {
-                        if start_time.elapsed() >= timeout {
-                            eprintln!("Timeout: No response within 1 second.");
-                            break; // Exit the loop after 1 second without response
-                        }
-
                         let ctl_res = CtlRes::from_bytes(&buf[..amt])
                             .map_err(|e| TalkError::Other(e.to_string()))?;
-                        // dbg!(&ctl_res.answer);
                         *res = ctl_res;
                         break;
                     }
                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                         // If we would block, check for timeout and continue
                         if start_time.elapsed() >= timeout {
-                            eprintln!("Timeout: No response within 1 second.");
-                            break; // Exit the loop after timeout
+                            eprintln!("Please check talk daemon status. Cannot connect to it!");
+                            process::exit(128);
                         }
-                        // Short sleep to avoid busy-looping
-                        std::thread::sleep(Duration::from_millis(10));
+
+                        std::thread::sleep(Duration::from_millis(100));
                         continue;
                     }
                     Err(e) => {
@@ -1185,35 +1449,18 @@ fn reqwest(
     Ok(())
 }
 
-fn read_invite_ids_from_file() -> io::Result<(u32, u32)> {
-    let file = File::open("invite_ids.txt")?;
-    let reader = io::BufReader::new(file);
-
-    let mut local_id = None;
-    let mut remote_id = None;
-
-    for line in reader.lines() {
-        let line = line?;
-        if let Some((key, value)) = line.split_once('=') {
-            match key {
-                "local_id" => local_id = value.parse().ok(),
-                "remote_id" => remote_id = value.parse().ok(),
-                _ => {}
-            }
-        }
-    }
-
-    Ok((
-        local_id.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "local_id not found"))?,
-        remote_id.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "remote_id not found"))?,
-    ))
-}
-
-// Registers signal handlers for specific signals (SIGINT, SIGQUIT, SIGPIPE).
-// The signal handler function is `handle_signals`.
+/// Registers signal handlers for specific signals (SIGINT, SIGQUIT, SIGPIPE).
+/// The signal handler function is `handle_signals`.
+///
+/// # Errors
+///
+/// Logs an error message if registering a signal handler fails.
 pub fn register_signals() {
     unsafe {
+        // List of signals to register handlers for
         let signals = &[SIGINT, SIGQUIT, SIGPIPE];
+
+        // Register the `handle_signals` function for each signal
         for &sig in signals {
             if signal(sig, handle_signals as usize) == libc::SIG_ERR {
                 eprintln!("Failed to register signal handler for signal {}", sig);
@@ -1223,16 +1470,99 @@ pub fn register_signals() {
 }
 
 /// Handles incoming signals by setting the interrupt flag and exiting the process.
+///
+/// # Arguments
+///
+/// * `signal_code` - The signal code received (e.g., from `SIGINT`).
+///
+/// # Errors
+///
+/// Logs an error message if sending or receiving messages fails.
 pub fn handle_signals(signal_code: libc::c_int) {
-    //clear terminal screen
-    eprint!("\x1B[2J\x1B[H");
-
+    // Clear the terminal screen
+    clear_terminal();
     eprintln!("Connection closed, exiting...");
 
+    // Lock the DELETE_INVITATIONS mutex and check for an existing invitation
+    if let Some((msg_bytes, socket, talkd_addr)) = DELETE_INVITATIONS.lock().unwrap().as_ref() {
+        // Handle the deletion of invitations
+        handle_delete_invitations(socket, msg_bytes, talkd_addr);
+    }
+
+    // Exit the process with a code indicating the signal received
     std::process::exit(128 + signal_code);
 }
 
-// Retrieves the terminal size (width and height in characters) using an ioctl system call.
+/// Clears the terminal screen by sending escape sequences.
+///
+/// # Errors
+///
+/// This function does not return errors, but prints to standard error if the terminal cannot be cleared.
+fn clear_terminal() {
+    // clear screeen
+    eprint!("\x1B[2J\x1B[H");
+}
+
+/// Handles sending a delete request and waiting for the response from the talk daemon.
+///
+/// # Arguments
+///
+/// * `socket` - A reference to the socket used for communication.
+/// * `msg_bytes` - The bytes of the message to send.
+/// * `talkd_addr` - The address of the talk daemon to which the message is sent.
+///
+/// # Errors
+///
+/// Logs an error message if sending or receiving messages fails.
+fn handle_delete_invitations(socket: &UdpSocket, msg_bytes: &[u8], talkd_addr: &SocketAddr) {
+    loop {
+        if let Err(e) = socket.send_to(msg_bytes, talkd_addr) {
+            eprintln!("Error sending message: {}", e);
+            break;
+        }
+
+        let mut buf = [0; 1024];
+        match socket.recv_from(&mut buf) {
+            Ok((amt, _)) => {
+                if let Ok(ctl_res) =
+                    CtlRes::from_bytes(&buf[..amt]).map_err(|e| TalkError::Other(e.to_string()))
+                {
+                    if ctl_res.r#type == MessageType::Delete {
+                        break;
+                    }
+                }
+            }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(e) => {
+                eprintln!("Error receiving message: {}", e);
+                break;
+            }
+        }
+    }
+}
+
+/// Clears the terminal screen and exits the program.
+///
+/// This function prints a message indicating that the connection is closed,
+/// clears the terminal, and terminates the process with exit code `3`.
+fn handle_connection_close() {
+    clear_terminal();
+    io::stdout().flush().ok();
+    eprintln!("Connection closed, exiting...");
+    process::exit(130);
+}
+
+/// Retrieves the terminal size (width and height in characters) via an `ioctl` system call.
+///
+/// # Returns
+///
+/// A tuple `(width, height)`. Defaults to `(80, 24)` if the size cannot be retrieved.
+///
+/// # Errors
+///
+/// Prints an error message if the `ioctl` call fails.
 fn get_terminal_size() -> (u16, u16) {
     let mut size: winsize = unsafe { zeroed() };
 
