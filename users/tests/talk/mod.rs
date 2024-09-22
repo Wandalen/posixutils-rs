@@ -44,7 +44,7 @@ fn talk_test(
 /// Returns an `io::Result<()>`, which indicates success or failure of the operation.
 #[test]
 fn basic_test() -> io::Result<()> {
-    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 8081))?;
+    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8081))?;
     socket.set_nonblocking(true)?;
 
     let username = get_current_user_name()?;

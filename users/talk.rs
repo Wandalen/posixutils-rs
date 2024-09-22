@@ -1701,7 +1701,7 @@ fn send_test_connection_message(msg: &CtlMsg) -> Result<(), TalkError> {
         .to_bytes()
         .map_err(|e| TalkError::Other(e.to_string()))?;
 
-    let talkd_addr: SocketAddr = format!("0.0.0.0:{}", 8081)
+    let talkd_addr: SocketAddr = format!("127.0.0.1:{}", 8081)
         .parse()
         .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
 
