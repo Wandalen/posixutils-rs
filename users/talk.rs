@@ -6,10 +6,6 @@
 // SPDX-License-Identifier: MIT
 //
 
-// todo:
-// - change timeout to re-connect in send_to
-// - check remote connection (in progress)
-
 extern crate clap;
 extern crate gettextrs;
 extern crate plib;
@@ -19,20 +15,24 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use thiserror::Error;
 
+use binrw::{binrw, BinReaderExt, BinWrite, Endian};
 #[cfg(target_os = "linux")]
 use libc::sa_family_t;
 use libc::{
-    addrinfo, c_char, c_uchar, getaddrinfo, gethostname, getpid, getpwuid, getservbyname, getuid,
-    ioctl, signal, sockaddr_in, winsize, AF_INET, AI_CANONNAME, SIGINT, SIGPIPE, SIGQUIT,
-    SOCK_DGRAM, STDOUT_FILENO, TIOCGWINSZ,
+    addrinfo, getaddrinfo, gethostname, getpid, getpwuid, getservbyname, getuid, ioctl, signal,
+    sockaddr_in, winsize, AF_INET, AI_CANONNAME, SIGINT, SIGPIPE, SIGQUIT, SOCK_DGRAM,
+    STDIN_FILENO, STDOUT_FILENO, TIOCGWINSZ,
 };
+
 use std::{
+    char,
     ffi::{CStr, CString},
-    io::{self, BufRead, Cursor, Error, Read, Write},
+    io::{self, Cursor, Error, Write},
     mem::{size_of, zeroed},
     net::{
         self, AddrParseError, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream, UdpSocket,
     },
+    os::fd::AsRawFd,
     process, ptr,
     sync::{Arc, LazyLock, Mutex},
     thread,
@@ -40,8 +40,9 @@ use std::{
 };
 
 /// A static variable to hold the state of delete invitations on SIGINT signal.
-static DELETE_INVITATIONS: LazyLock<Arc<Mutex<Option<(Vec<u8>, Arc<UdpSocket>, SocketAddr)>>>> =
-    LazyLock::new(|| Arc::new(Mutex::new(None)));
+static DELETE_INVITATIONS: LazyLock<
+    Arc<Mutex<Option<(Vec<u8>, Vec<u8>, Arc<UdpSocket>, SocketAddr)>>>,
+> = LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// The size of the buffer for control message fields like l_name, r_name, and r_tty in CtlMsg.
 const BUFFER_SIZE: usize = 12;
@@ -55,6 +56,8 @@ const MAX_USER_INPUT_LENGTH: usize = 128;
 const TALK_VERSION: u8 = 1;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[binrw]
+#[brw(repr(u8))]
 /// Represents the types of messages exchanged in the communication.
 enum MessageType {
     /// Leave invitation with server.
@@ -84,6 +87,8 @@ impl TryFrom<u8> for MessageType {
 }
 
 #[derive(Debug, PartialEq)]
+#[binrw]
+#[brw(repr(u8))]
 /// Represents the possible responses from a request.
 enum Answer {
     /// Operation completed properly.
@@ -166,7 +171,7 @@ type SaFamily = u16;
 #[cfg(target_os = "linux")]
 type SaFamily = sa_family_t;
 
-#[repr(C, packed)]
+#[binrw]
 /// Socket address structure representing a network address.
 pub struct Osockaddr {
     /// Address family (e.g., IPv4, IPv6).
@@ -174,6 +179,7 @@ pub struct Osockaddr {
     /// Address data, including the port and IP address.
     pub sa_data: [u8; 14],
 }
+
 impl Osockaddr {
     // Converts the packed address structure into a SocketAddrV4
     pub fn to_socketaddr(&self) -> Option<SocketAddrV4> {
@@ -190,6 +196,36 @@ impl Osockaddr {
 
         Some(SocketAddrV4::new(ip, port))
     }
+
+    /// Creates a new `sa_data` array from the given IP address and port.
+    ///
+    /// # Arguments
+    ///
+    /// * `ip` - A string slice representing the IP address (e.g., "192.168.1.1").
+    /// * `port` - A u16 representing the port number.
+    ///
+    /// # Returns
+    ///
+    /// Returns an `Option<[u8; 14]>` containing the packed address if successful,
+    /// or `None` if the IP address format is invalid.
+    fn new(ip: &str, port: u16) -> [u8; 14] {
+        let mut sa_data: [u8; 14] = [0; 14];
+
+        let ip_segments: Result<Vec<u8>, _> = ip.split('.').map(|s| s.parse::<u8>()).collect();
+
+        match ip_segments {
+            Ok(ip_bytes) if ip_bytes.len() == 4 => {
+                sa_data[0..2].copy_from_slice(&port.to_be_bytes());
+                sa_data[2..6].copy_from_slice(&ip_bytes);
+                sa_data[12..14].copy_from_slice(&[0, 2]);
+            }
+            _ => {
+                eprint!("Invalid IP address format: {}", ip);
+            }
+        }
+
+        sa_data
+    }
 }
 
 impl Default for Osockaddr {
@@ -201,17 +237,17 @@ impl Default for Osockaddr {
     }
 }
 
-#[repr(C, packed)]
+#[binrw]
 /// Control message structure used for communication in the talk protocol.
 struct CtlMsg {
     /// Version of the message.
-    vers: c_uchar,
+    vers: u8,
     /// Type of the message.
-    r#type: c_uchar,
+    r#type: u8,
     /// Answer code (success or failure).
-    answer: c_uchar,
+    answer: u8,
     /// Padding for alignment.
-    pad: c_uchar,
+    pad: u8,
     /// Identifier number for the message.
     id_num: u32,
     /// Socket address of the recipient.
@@ -221,11 +257,11 @@ struct CtlMsg {
     /// Process ID of the sender.
     pid: i32,
     /// Local user name.
-    l_name: [c_char; 12],
+    l_name: [i8; 12],
     /// Remote user name.
-    r_name: [c_char; 12],
+    r_name: [i8; 12],
     /// Remote terminal name.
-    r_tty: [c_char; 16],
+    r_tty: [i8; 16],
 }
 
 impl Default for CtlMsg {
@@ -248,45 +284,13 @@ impl Default for CtlMsg {
 
 impl CtlMsg {
     // Converts the CtlMsg structure into a vector of bytes for network transmission
-    fn to_bytes(&self) -> Result<Vec<u8>, io::Error> {
+    fn to_bytes(&self) -> io::Result<Vec<u8>> {
         let mut bytes = vec![0u8; size_of::<CtlMsg>()];
         let mut cursor = Cursor::new(&mut bytes[..]);
-
-        cursor.write_all(&self.vers.to_be_bytes())?;
-        cursor.write_all(&self.r#type.to_be_bytes())?;
-        cursor.write_all(&self.answer.to_be_bytes())?;
-        cursor.write_all(&self.pad.to_be_bytes())?;
-        cursor.write_all(&self.id_num.to_be_bytes())?;
-        cursor.write_all(&self.addr.sa_family.to_be_bytes())?;
-        cursor.write_all(&self.addr.sa_data)?;
-        cursor.write_all(&self.ctl_addr.sa_family.to_be_bytes())?;
-        cursor.write_all(&self.ctl_addr.sa_data)?;
-        cursor.write_all(&self.pid.to_be_bytes())?;
-        cursor.write_all(&self.l_name.iter().map(|&b| b as u8).collect::<Vec<u8>>())?;
-        cursor.write_all(&self.r_name.iter().map(|&b| b as u8).collect::<Vec<u8>>())?;
-        cursor.write_all(&self.r_tty.iter().map(|&b| b as u8).collect::<Vec<u8>>())?;
-
+        self.write_options(&mut cursor, Endian::Big, ()).unwrap();
         Ok(bytes)
     }
-    // create sockaddr data from IP and port
-    fn create_sockaddr_data(&self, ip: &str, port: u16) -> [u8; 14] {
-        let mut sa_data: [u8; 14] = [0; 14];
 
-        let ip_segments: Result<Vec<u8>, _> = ip.split('.').map(|s| s.parse::<u8>()).collect();
-
-        match ip_segments {
-            Ok(ip_bytes) if ip_bytes.len() == 4 => {
-                sa_data[0..2].copy_from_slice(&port.to_be_bytes());
-                sa_data[2..6].copy_from_slice(&ip_bytes);
-                sa_data[12..14].copy_from_slice(&[0, 2]);
-            }
-            _ => {
-                eprint!("Invalid IP address format: {}", ip);
-            }
-        }
-
-        sa_data
-    }
     // create control sockaddr data from a SocketAddr
     pub fn create_ctl_addr(&self, addr: SocketAddr) -> [u8; 14] {
         let mut ctl_addr: [u8; 14] = [0; 14];
@@ -303,11 +307,12 @@ impl CtlMsg {
     }
 }
 
-#[repr(C, packed)]
+#[binrw]
+#[br(big)]
 /// Control response structure used for communication with the daemon.
 pub struct CtlRes {
     /// Version of the control protocol.
-    pub vers: c_uchar,
+    pub vers: u8,
 
     /// Type of message being sent/received.
     r#type: MessageType,
@@ -316,8 +321,7 @@ pub struct CtlRes {
     answer: Answer,
 
     /// Padding byte to maintain alignment.
-    pub pad: c_uchar,
-
+    pub pad: u8,
     /// Unique identifier number for the invitation.
     pub id_num: u32,
 
@@ -330,7 +334,7 @@ impl Default for CtlRes {
         CtlRes {
             vers: 0,
             r#type: MessageType::LookUp,
-            answer: Answer::UnknownRequest,
+            answer: Answer::Failed,
             pad: 0,
             id_num: 0,
             addr: Osockaddr {
@@ -343,65 +347,9 @@ impl Default for CtlRes {
 
 impl CtlRes {
     // Converts a byte slice into a CtlRes struct, ensuring correct parsing of each field.
-    fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
-        use std::convert::TryInto;
-        use std::mem::size_of;
-
-        // Check if the input data has enough bytes to form a valid CtlRes
-        if bytes.len() < size_of::<CtlRes>() {
-            return Err("Not enough data to form CtlRes");
-        }
-
-        // Extract version byte
-        let vers = *bytes.get(0).ok_or("Missing version byte")?;
-
-        // Extract and validate MessageType
-        let r#type = MessageType::try_from(*bytes.get(1).ok_or("Missing MessageType byte")?)
-            .map_err(|_| "Invalid MessageType")?;
-
-        // Extract and validate Answer
-        let answer = Answer::try_from(*bytes.get(2).ok_or("Missing Answer byte")?)
-            .map_err(|_| "Invalid Answer")?;
-
-        // Extract padding byte
-        let pad = *bytes.get(3).ok_or("Missing padding byte")?;
-
-        // Extract id_num (4 bytes)
-        let id_num = bytes
-            .get(4..8)
-            .ok_or("Missing id_num bytes")?
-            .try_into()
-            .map(u32::from_le_bytes)
-            .map_err(|_| "Failed to parse id_num")?;
-
-        // Extract sa_family (2 bytes)
-        let sa_family = bytes
-            .get(8..10)
-            .ok_or("Missing sa_family bytes")?
-            .try_into()
-            .map(u16::from_le_bytes)
-            .map_err(|_| "Failed to parse sa_family")?;
-
-        // Extract and copy sa_data (14 bytes)
-        let mut sa_data = [0u8; 14];
-        bytes
-            .get(10..24)
-            .ok_or("Missing sa_data bytes")?
-            .try_into()
-            .map(|slice: &[u8; 14]| sa_data.copy_from_slice(slice))
-            .map_err(|_| "Failed to copy sa_data")?;
-
-        // Create Osockaddr with extracted sa_family and sa_data
-        let addr = Osockaddr { sa_family, sa_data };
-
-        Ok(CtlRes {
-            vers,
-            r#type,
-            answer,
-            pad,
-            id_num,
-            addr,
-        })
+    fn from_bytes(bytes: &[u8]) -> Result<Self, binrw::Error> {
+        let mut cursor = Cursor::new(bytes);
+        cursor.read_be()
     }
 }
 
@@ -417,23 +365,29 @@ struct Args {
 }
 
 fn talk(args: Args) -> Result<(), TalkError> {
-    check_if_tty()?;
-
     let mut msg = CtlMsg::default();
     let mut res = CtlRes::default();
-    let (width, height) = get_terminal_size();
-
-    let mut logger = StateLogger::new("No connection yet.");
-
     // Retrieve the local and remote machine names
     let (my_machine_name, his_machine_name) =
-        get_names(&mut msg, &args.address, args.ttyname).map_err(|e| TalkError::IoError(e))?;
+        get_names(&mut msg, &args.address, &args.ttyname).map_err(|e| TalkError::IoError(e))?;
 
     // Get the local and remote addresses, and the daemon port number
     let (my_machine_addr, his_machine_addr, daemon_port) =
         get_addrs(&mut msg, &my_machine_name, &his_machine_name)
             .map_err(|e| TalkError::IoError(e))?;
 
+    if let Some(tty_name) = args.ttyname.as_ref() {
+        if tty_name == "test_connection" {
+            send_test_connection_message(&msg)?;
+            process::exit(128);
+        }
+    }
+
+    let (width, height) = get_terminal_size();
+
+    let mut logger = StateLogger::new("No connection yet.");
+
+    check_if_tty()?;
     // Open control socket
     let (ctl_addr, socket) = open_ctl(my_machine_addr).map_err(|e| TalkError::IoError(e))?;
 
@@ -448,24 +402,10 @@ fn talk(args: Args) -> Result<(), TalkError> {
 
     // Look for an invitation from the daemon
     look_for_invite(daemon_port, his_machine_addr, &mut msg, &socket, &mut res)?;
-    // msg.id_num = res.id_num.to_be();
-    // send_delete(daemon_port, his_machine_addr, &mut msg, &socket, &mut res)?;
 
     // Set the invitation ID number and send a delete request for the old invitation
     if res.answer == Answer::Success {
         handle_existing_invitation(width, height, &mut res)?;
-    } else if res.answer == Answer::UnknownRequest {
-        let msg_bytes = msg
-            .to_bytes()
-            .map_err(|e| TalkError::Other(e.to_string()))?;
-
-        let talkd_addr: SocketAddr = format!("0.0.0.0:{}", 8081)
-            .parse()
-            .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
-
-        socket
-            .send_to(&msg_bytes, talkd_addr)
-            .map_err(|e| TalkError::IoError(e))?;
     } else {
         logger.set_state("[Waiting to connect with caller]");
         handle_new_invitation(
@@ -592,83 +532,193 @@ fn spawn_input_thread(
             Ok(handle) => handle,
             Err(e) => {
                 eprintln!("Failed to draw terminal: {}", e);
-                return;
+                return; // Exit thread on failure
             }
         };
 
         let mut buffer = [0; 128];
-        let mut stream = read_stream;
+        let mut line_buffer = String::new();
 
         loop {
-            match stream.read(&mut buffer) {
-                Ok(nbytes) => {
-                    if nbytes > 0 {
-                        // Convert buffer data to UTF-8 and process input
-                        let input = match std::str::from_utf8(&buffer[..nbytes]) {
-                            Ok(input) => input,
-                            Err(e) => {
-                                eprintln!("Failed to convert buffer to UTF-8 string: {}", e);
-                                continue;
-                            }
-                        };
+            // Receive data from the TCP stream
+            let result = unsafe {
+                libc::recv(
+                    read_stream.as_raw_fd(),
+                    buffer.as_mut_ptr() as *mut libc::c_void,
+                    buffer.len(),
+                    0,
+                )
+            };
 
-                        // Call handle_user_input to display the input on the terminal
-                        if let Err(e) = handle_user_input(
-                            &mut handle,
-                            input,
-                            split_row,
-                            Arc::clone(&top_line),
-                            Arc::clone(&bottom_line),
-                        ) {
-                            eprintln!("Failed to handle user input: {}", e);
-                            continue;
-                        }
-                    } else {
-                        // Handle connection closure if no bytes are received
-                        handle_connection_close();
-                    }
+            match result {
+                r if r < 0 => {
+                    eprintln!("Error reading from stream: {}", io::Error::last_os_error());
+                    break; // Exit loop on error
                 }
-                Err(e) => {
-                    eprintln!("Error reading from stream: {}", e);
-                    break;
+                0 => {
+                    handle_connection_close();
+                    break; // Connection closed
+                }
+                nbytes => {
+                    // Process the received data
+                    let nbytes = nbytes as usize;
+                    let input = match std::str::from_utf8(&buffer[..nbytes]) {
+                        Ok(input) => input,
+                        Err(e) => {
+                            eprintln!("Failed to convert buffer to UTF-8 string: {}", e);
+                            continue; // Continue on invalid UTF-8
+                        }
+                    };
+
+                    let top_line = top_line.lock().unwrap();
+                    let mut bottom_line = bottom_line.lock().unwrap();
+                    for c in input.chars() {
+                        match c {
+                            '\n' => {
+                                if let Err(e) = handle_newline(
+                                    &mut line_buffer,
+                                    &mut *bottom_line,
+                                    split_row,
+                                    &mut handle,
+                                ) {
+                                    eprintln!("Error handling newline: {}", e);
+                                }
+                            }
+                            '\x08' | '\x7f' => {
+                                if let Err(e) = handle_backspace(
+                                    &mut line_buffer,
+                                    split_row,
+                                    *bottom_line,
+                                    &mut handle,
+                                    *top_line,
+                                ) {
+                                    eprintln!("Error handling backspace: {}", e);
+                                }
+                            }
+                            _ => {
+                                if let Err(e) = handle_character(
+                                    c,
+                                    &mut line_buffer,
+                                    split_row,
+                                    *bottom_line,
+                                    *top_line,
+                                    &mut handle,
+                                ) {
+                                    eprintln!("Error handling character '{}': {}", c, e);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     });
-
     Ok(())
 }
-
-/// Writes a message to a TCP stream and updates the top line position in the terminal.
+/// Handles the newline character input by processing the current line buffer.
+///
+/// Clears the line buffer after processing and increments the bottom line position.
+/// If the bottom line exceeds the available space in the terminal, it resets to 0.
 ///
 /// # Arguments
 ///
-/// * `write_stream` - A mutable reference to the TCP stream where the message will be sent.
-/// * `message` - The message string to be sent.
-/// * `top_line` - An `Arc` of a `Mutex` that tracks the top line position in the terminal.
-/// * `split_row` - The row in the terminal where the split occurs.
+/// * `line_buffer` - A mutable reference to the string containing the current line input.
+/// * `bottom_line` - A mutable reference to the bottom line position in the terminal.
+/// * `split_row` - The row in the terminal where the input area begins.
+/// * `handle` - A mutable reference to the output stream to write to.
 ///
 /// # Returns
 ///
-/// A `Result` indicating success or an `io::Error`.
-fn write_message(
-    write_stream: &mut TcpStream,
-    message: String,
-    top_line: Arc<Mutex<u16>>,
+/// A `Result` indicating success or a `TalkError` on failure.
+fn handle_newline<W: Write>(
+    line_buffer: &mut String,
+    bottom_line: &mut u16,
     split_row: u16,
-) -> Result<(), io::Error> {
-    let mut top_line = top_line.lock().unwrap();
-    *top_line += 1;
+    handle: &mut W,
+) -> Result<(), TalkError> {
+    if !line_buffer.is_empty() {
+        line_buffer.clear(); // Clear the line buffer after handling
+    }
+    if *bottom_line >= split_row - 2 {
+        *bottom_line = 0; // Reset bottom line position if it exceeds available space
+    }
+    *bottom_line += 1; // Move to the next line
+    handle.flush().unwrap(); // Ensure output is flushed
+    Ok(())
+}
 
-    // Write the message to the TCP stream
-    write_stream.write_all(message.as_bytes())?;
-    write_stream.write_all(b"\n")?;
+/// Handles the backspace character input by removing the last character from the line buffer.
+///
+/// Clears the current input line in the terminal and redraws the remaining characters.
+/// The cursor is moved back to the input position.
+///
+/// # Arguments
+///
+/// * `line_buffer` - A mutable reference to the string containing the current line input.
+/// * `split_row` - The row in the terminal where the input area begins.
+/// * `bottom_line` - The current bottom line position in the terminal.
+/// * `handle` - A mutable reference to the output stream to write to.
+/// * `top_line` - The current top line position in the terminal.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `TalkError` on failure.
+fn handle_backspace<W: Write>(
+    line_buffer: &mut String,
+    split_row: u16,
+    bottom_line: u16,
+    handle: &mut W,
+    top_line: u16,
+) -> Result<(), TalkError> {
+    if !line_buffer.is_empty() {
+        line_buffer.pop(); // Remove the last character from the line buffer
 
-    if *top_line >= split_row.checked_sub(1).unwrap_or(0) {
-        eprint!("\x1B[{};H", 2);
-        *top_line = 2;
+        write!(handle, "\x1b[{};0H\x1b[K", split_row + bottom_line + 1).unwrap(); // Clear the line
+        writeln!(handle, "{}", line_buffer).unwrap(); // Redraw the remaining characters
+
+        write!(handle, "\x1b[{};H", top_line).unwrap(); // Move cursor back to the input position
+        handle.flush().unwrap();
+    }
+    Ok(())
+}
+
+/// Handles a character input by adding it to the line buffer and updating the terminal display.
+///
+/// If the line buffer exceeds the maximum allowed length, it removes the oldest character.
+/// The cursor is moved to the bottom of the terminal to display the updated line.
+///
+/// # Arguments
+///
+/// * `c` - The character to handle.
+/// * `line_buffer` - A mutable reference to the string containing the current line input.
+/// * `split_row` - The row in the terminal where the input area begins.
+/// * `bottom_line` - The current bottom line position in the terminal.
+/// * `top_line` - The current top line position in the terminal.
+/// * `handle` - A mutable reference to the output stream to write to.
+///
+/// # Returns
+///
+/// A `Result` indicating success or a `TalkError` on failure.
+fn handle_character<W: Write>(
+    c: char,
+    line_buffer: &mut String,
+    split_row: u16,
+    bottom_line: u16,
+    top_line: u16,
+    handle: &mut W,
+) -> Result<(), TalkError> {
+    if line_buffer.len() < MAX_USER_INPUT_LENGTH {
+        line_buffer.push(c);
+    } else {
+        eprintln!("Line buffer exceeded max size. Truncating input.");
+        line_buffer.remove(0); // Remove the first character
+        line_buffer.push(c); // Add the new character
     }
 
+    write!(handle, "\x1b[{};0H", split_row + bottom_line + 1).unwrap(); // Move cursor to the bottom window
+    writeln!(handle, "{}", line_buffer).unwrap(); // Write the line
+    write!(handle, "\x1b[{};H", top_line).unwrap(); // Move cursor back to the top window
+    handle.flush().unwrap();
     Ok(())
 }
 /// Handles user input from stdin, sending it over a TCP stream.
@@ -683,38 +733,129 @@ fn write_message(
 ///
 /// A `Result` indicating success or an `io::Error`.
 fn handle_stdin_input(
-    mut write_stream: TcpStream,
+    write_stream: TcpStream,
     split_row: u16,
     top_line: Arc<Mutex<u16>>,
 ) -> Result<(), io::Error> {
-    let stdin = io::stdin();
-    let handle = stdin.lock();
-    let mut input_buffer = String::new();
-    for line in handle.lines() {
-        match line {
-            Ok(message) => {
-                input_buffer.push_str(&message);
+    let mut buffer: [u8; 1] = [0; 1]; // Buffer for raw input
+    let mut line_buffer = String::new();
+    loop {
+        // Read one byte from stdin
+        let result =
+            unsafe { libc::read(STDIN_FILENO, buffer.as_mut_ptr() as *mut libc::c_void, 1) };
+        if result < 0 {
+            eprintln!("Error reading from stdin: {}", io::Error::last_os_error());
+            break;
+        } else if result == 0 {
+            // EOF reached
+            break;
+        }
 
-                if input_buffer.len() > MAX_USER_INPUT_LENGTH {
-                    eprintln!("Warning: You are inputting a large amount of data!");
-                    input_buffer.truncate(MAX_USER_INPUT_LENGTH);
-                }
+        let input_char = char::from(buffer[0]);
 
-                write_message(
-                    &mut write_stream,
-                    input_buffer.clone(),
-                    Arc::clone(&top_line),
-                    split_row,
-                )?;
+        process_input_char(
+            input_char,
+            &mut line_buffer,
+            &write_stream,
+            split_row,
+            &top_line,
+        )?;
+    }
 
-                input_buffer.clear();
+    Ok(())
+}
+
+/// Processes a single character input from stdin, including newline and backspace handling.
+///
+/// # Arguments
+///
+/// * `input_char` - The character read from stdin.
+/// * `line_buffer` - A mutable reference to the line buffer storing user input.
+/// * `write_stream` - The TCP stream to send user input to.
+/// * `split_row` - The row in the terminal where the input area begins.
+/// * `top_line` - An `Arc` of a `Mutex` that tracks the top line position in the terminal.
+///
+/// # Returns
+///
+/// A `Result` indicating success or an `io::Error` on failure.
+fn process_input_char(
+    input_char: char,
+    line_buffer: &mut String,
+    write_stream: &TcpStream,
+    split_row: u16,
+    top_line: &Arc<Mutex<u16>>,
+) -> Result<(), io::Error> {
+    let mut top_line = top_line.lock().unwrap();
+
+    match input_char {
+        '\n' => {
+            if !line_buffer.is_empty() {
+                // Clear the line buffer after handling
+                line_buffer.clear();
             }
-            Err(e) => {
-                eprintln!("Failed to read from stdin: {}", e);
-                break;
+
+            eprint!("\x1B[{};H\x1B[K", *top_line + 1);
+            *top_line += 1;
+
+            if *top_line >= split_row.checked_sub(1).unwrap_or(0) {
+                eprint!("\x1B[{};H", 2);
+                *top_line = 2;
+            }
+            // Send newline byte
+            send_byte(write_stream, b'\n')?;
+        }
+        '\x08' | '\x7f' => {
+            // Handle backspace (ASCII 8 or 127)
+            if !line_buffer.is_empty() {
+                line_buffer.pop();
+
+                // Clear the current line and redraw it
+                // Move cursor to the line below and clear it
+                eprint!("\x1B[{};H\x1B[K", *top_line);
+
+                // Redraw the remaining characters
+                eprint!("{}", line_buffer);
+
+                // Send backspace character
+                send_byte(write_stream, b'\x08')?;
             }
         }
+        _ => {
+            line_buffer.push(input_char);
+            // Send the character as a byte
+            send_byte(write_stream, input_char as u8)?;
+        }
     }
+
+    Ok(())
+}
+
+/// Sends a single byte over the specified TCP stream.
+///
+/// # Arguments
+///
+/// * `write_stream` - A reference to the TCP stream to send the byte through.
+/// * `byte` - The byte to be sent.
+///
+/// # Returns
+///
+/// A `Result` indicating success or an `io::Error` if sending the byte fails.
+fn send_byte(write_stream: &TcpStream, byte: u8) -> Result<(), io::Error> {
+    let buffer = [byte];
+
+    let result = unsafe {
+        libc::send(
+            write_stream.as_raw_fd(),
+            buffer.as_ptr() as *const libc::c_void,
+            1,
+            0,
+        )
+    };
+
+    if result < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
     Ok(())
 }
 
@@ -750,33 +891,35 @@ fn handle_new_invitation(
     logger.set_state("[Service connection established.]");
 
     // Create the socket address data and set it in the `msg`.
-    let tcp_data = msg.create_sockaddr_data(&socket_addr.ip().to_string(), socket_addr.port());
+    let tcp_data = Osockaddr::new(&socket_addr.ip().to_string(), socket_addr.port());
 
     logger.set_state("[Waiting for your party to respond]");
 
     msg.addr.sa_data = tcp_data;
 
-    // Send the leave invitation message to clear the previous invite state.
-    leave_invite(daemon_port, my_machine_addr, msg, &socket, res)?;
-    let local_id = res.id_num.to_be();
-    msg.r#type = MessageType::Delete as u8;
-    msg.id_num = local_id;
-
     // Send the announce message to the daemon, informing it of the new invitation.
     announce(daemon_port, his_machine_addr, msg, &socket, res)?;
-    let remote_id = res.id_num.to_be();
+    let remote_id = res.id_num;
 
-    send_delete(daemon_port, his_machine_addr, msg, &socket, res)?;
-    let local_id = res.id_num.to_be();
+    // Send the leave invitation message to clear the previous invite state.
+    leave_invite(daemon_port, my_machine_addr, msg, &socket, res)?;
+    let local_id = res.id_num;
+
     msg.r#type = MessageType::Delete as u8;
     msg.id_num = local_id;
+    let msg_bytes1 = msg
+        .to_bytes()
+        .map_err(|e| TalkError::Other(e.to_string()))?;
 
-    let msg_bytes = msg
+    msg.r#type = MessageType::Delete as u8;
+    msg.id_num = remote_id;
+    let msg_bytes2 = msg
         .to_bytes()
         .map_err(|e| TalkError::Other(e.to_string()))?;
 
     let clone_socket = Arc::clone(&socket);
-    *DELETE_INVITATIONS.lock().unwrap() = Some((msg_bytes, clone_socket, talkd_addr));
+
+    *DELETE_INVITATIONS.lock().unwrap() = Some((msg_bytes1, msg_bytes2, clone_socket, talkd_addr));
     // Start listening for incoming TCP connections.
     for stream in listener.incoming() {
         match stream {
@@ -830,7 +973,7 @@ fn get_current_user_name() -> Result<String, io::Error> {
 ///
 /// A `Result` containing the hostname as a `String` on success, or an `io::Error` on failure.
 fn get_local_machine_name() -> Result<String, io::Error> {
-    let mut buffer = vec![0 as c_char; HOSTNAME_BUFFER_SIZE];
+    let mut buffer = vec![0; HOSTNAME_BUFFER_SIZE];
     let result = unsafe { gethostname(buffer.as_mut_ptr(), buffer.len()) };
 
     if result == 0 {
@@ -902,7 +1045,7 @@ fn parse_address(address: &str, my_machine_name: &str) -> (String, String) {
 fn get_names(
     msg: &mut CtlMsg,
     address: &str,
-    ttyname: Option<String>,
+    ttyname: &Option<String>,
 ) -> Result<(String, String), io::Error> {
     let my_name = get_current_user_name()?;
     let my_machine_name = get_local_machine_name()?;
@@ -913,33 +1056,33 @@ fn get_names(
     msg.ctl_addr.sa_family = AF_INET as SaFamily;
     msg.l_name = string_to_c_string(&my_name);
     msg.r_name = string_to_c_string(&his_name);
-    msg.r_tty = tty_to_c_string(&ttyname.unwrap_or_default());
+    msg.r_tty = tty_to_c_string(ttyname.as_ref().unwrap_or(&"".to_string()));
 
     Ok((my_machine_name, his_machine_name))
 }
 
 /// Converts a Rust string to a C-style string and stores it in a fixed-size buffer.
-fn string_to_c_string(s: &str) -> [c_char; BUFFER_SIZE] {
-    let mut buffer: [c_char; BUFFER_SIZE] = [0; BUFFER_SIZE];
+fn string_to_c_string(s: &str) -> [i8; BUFFER_SIZE] {
+    let mut buffer: [i8; BUFFER_SIZE] = [0; BUFFER_SIZE];
     let c_string = CString::new(s).expect("CString::new failed");
     let bytes = c_string.to_bytes();
 
     // Copy the bytes into the buffer, leaving space for the null terminator.
     for (i, &byte) in bytes.iter().take(BUFFER_SIZE - 1).enumerate() {
-        buffer[i] = byte as c_char;
+        buffer[i] = byte as i8;
     }
     buffer
 }
 
 /// Converts a Rust string to a C-style string for terminal names.
-fn tty_to_c_string(s: &str) -> [c_char; 16] {
-    let mut buffer: [c_char; 16] = [0; 16];
+fn tty_to_c_string(s: &str) -> [i8; 16] {
+    let mut buffer: [i8; 16] = [0; 16];
     let c_string = CString::new(s).expect("CString::new failed");
     let bytes = c_string.to_bytes();
 
     // Copy the bytes into the buffer, leaving space for the null terminator.
     for (i, &byte) in bytes.iter().take(16 - 1).enumerate() {
-        buffer[i] = byte as c_char;
+        buffer[i] = byte as i8;
     }
     buffer
 }
@@ -1113,48 +1256,6 @@ fn handle_client(stream: TcpStream) -> Result<(), io::Error> {
     Ok(())
 }
 
-/// Handles user input by writing it to the terminal's bottom section and managing the cursor position.
-///
-/// # Arguments
-///
-/// * `handle` - A mutable reference to a locked `StdoutLock`, used to write to the terminal.
-/// * `input` - The user input string to be displayed.
-/// * `split_row` - The row number where the terminal splits between top and bottom sections.
-/// * `top_line` - A shared (Arc<Mutex>) reference to the current top line position.
-/// * `bottom_line` - A shared (Arc<Mutex>) reference to the current bottom line position.
-///
-/// # Returns
-///
-/// Returns `io::Result<()>` if the operation completes successfully.
-fn handle_user_input(
-    handle: &mut io::StdoutLock,
-    input: &str,
-    split_row: u16,
-    top_line: Arc<Mutex<u16>>,
-    bottom_line: Arc<Mutex<u16>>,
-) -> io::Result<()> {
-    let top_line = top_line.lock().unwrap();
-    let mut bottom_line = bottom_line.lock().unwrap();
-
-    // Reset bottom line position if it exceeds the available space.
-    if *bottom_line >= split_row - 2 {
-        *bottom_line = 0;
-    }
-
-    // Move cursor to bottom window
-    write!(handle, "\x1b[{};0H", split_row + *bottom_line + 1)?;
-    writeln!(handle, "{}", input)?;
-
-    // Move cursor to top window
-    write!(handle, "\x1b[{};H", *top_line)?;
-
-    handle.flush()?;
-
-    *bottom_line += 1;
-
-    Ok(())
-}
-
 /// Draws the terminal interface with a split line separating the top and bottom sections.
 ///
 /// # Arguments
@@ -1229,7 +1330,7 @@ fn open_sockt(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, TcpListener), io
 /// Returns an `io::Error` if there is an error in binding the socket or setting non-blocking mode.
 fn open_ctl(my_machine_addr: Ipv4Addr) -> Result<(SocketAddr, Arc<UdpSocket>), io::Error> {
     let socket = UdpSocket::bind((my_machine_addr, 0))?;
-    socket.set_nonblocking(true)?;
+    // socket.set_nonblocking(true)?;
     let addr = socket.local_addr()?;
 
     Ok((addr, Arc::new(socket)))
@@ -1402,7 +1503,6 @@ fn request(
     let talkd_addr: SocketAddr = format!("{}:{}", his_machine_addr, daemon_port)
         .parse()
         .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
-
     msg.r#type = msg_type as u8;
     let msg_bytes = msg
         .to_bytes()
@@ -1431,7 +1531,7 @@ fn request(
                             process::exit(128);
                         }
 
-                        std::thread::sleep(Duration::from_millis(100));
+                        std::thread::sleep(Duration::from_millis(10));
                         continue;
                     }
                     Err(e) => {
@@ -1484,9 +1584,12 @@ pub fn handle_signals(signal_code: libc::c_int) {
     eprintln!("Connection closed, exiting...");
 
     // Lock the DELETE_INVITATIONS mutex and check for an existing invitation
-    if let Some((msg_bytes, socket, talkd_addr)) = DELETE_INVITATIONS.lock().unwrap().as_ref() {
+    if let Some((msg_bytes1, msg_bytes2, socket, talkd_addr)) =
+        DELETE_INVITATIONS.lock().unwrap().as_ref()
+    {
         // Handle the deletion of invitations
-        handle_delete_invitations(socket, msg_bytes, talkd_addr);
+        handle_delete_invitations(socket, msg_bytes1, talkd_addr);
+        handle_delete_invitations(socket, msg_bytes2, talkd_addr);
     }
 
     // Exit the process with a code indicating the signal received
@@ -1575,4 +1678,36 @@ fn get_terminal_size() -> (u16, u16) {
     }
 
     (size.ws_col, size.ws_row)
+}
+
+/// Sends a test connection message to the specified talk daemon.
+///
+/// # Parameters
+///
+/// - `msg`: A reference to the `CtlMsg` structure that contains the message to be sent.
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the message is sent successfully.
+///
+/// # Errors
+///
+/// Returns a `TalkError` if any error occurs during socket creation, message conversion,
+/// or sending the message.
+fn send_test_connection_message(msg: &CtlMsg) -> Result<(), TalkError> {
+    let socket = UdpSocket::bind(("127.0.0.1", 0))?;
+
+    let msg_bytes = msg
+        .to_bytes()
+        .map_err(|e| TalkError::Other(e.to_string()))?;
+
+    let talkd_addr: SocketAddr = format!("0.0.0.0:{}", 8081)
+        .parse()
+        .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
+
+    socket
+        .send_to(&msg_bytes, talkd_addr)
+        .map_err(TalkError::IoError)?;
+
+    Ok(())
 }

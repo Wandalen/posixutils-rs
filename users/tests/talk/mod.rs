@@ -8,6 +8,15 @@ use std::time::{Duration, Instant};
 use libc::{getpwuid, getuid};
 use plib::{run_test_with_checker, TestPlan};
 
+/// Runs a test for the `talk` command with specified arguments, expected error messages,
+/// and exit codes. Uses a checker function to validate the output.
+///
+/// # Parameters
+///
+/// - `args`: The command-line arguments to pass to the `talk` command.
+/// - `expected_err`: The expected error output from the command.
+/// - `expected_exit_code`: The expected exit code from the command.
+/// - `checker`: A function that checks the test results against the expected criteria.
 fn talk_test(
     args: Vec<String>,
     expected_err: &str,
@@ -27,7 +36,12 @@ fn talk_test(
     );
 }
 
-#[cfg(target_os = "linux")]
+/// Basic test for the `talk` command, which checks that a message can be sent and
+/// received correctly.
+///
+/// # Returns
+///
+/// Returns an `io::Result<()>`, which indicates success or failure of the operation.
 #[test]
 fn basic_test() -> io::Result<()> {
     let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 8081))?;
@@ -35,14 +49,18 @@ fn basic_test() -> io::Result<()> {
 
     let username = get_current_user_name()?;
 
-    talk_test(vec![username.to_string()], "", 0, |_, _| {});
+    talk_test(
+        vec![username.to_string(), "test_connection".to_string()],
+        "",
+        0,
+        |_, _| {},
+    );
 
-    // Prepare buffer for receiving data
     let mut buf = [0u8; 128];
     let start_time = Instant::now();
-    let receive_timeout = Duration::from_secs(1); // Timeout duration
+    let receive_timeout = Duration::from_secs(1);
     let mut received_bytes = 0;
-    let expected_length = 84; // Expected length of received data
+    let expected_length = 84;
 
     while start_time.elapsed() < receive_timeout {
         match socket.recv_from(&mut buf[received_bytes..]) {
@@ -61,7 +79,6 @@ fn basic_test() -> io::Result<()> {
         "Received insufficient data from `talk` utility"
     );
 
-    // Print received data for debugging purposes
     println!(
         "Received {} bytes: {:?}",
         received_bytes,
@@ -71,7 +88,15 @@ fn basic_test() -> io::Result<()> {
     Ok(())
 }
 
-// Retrieves the current username
+/// Retrieves the current username from the system.
+///
+/// This function attempts to get the username using the `getlogin` function, and
+/// falls back to using `getpwuid` if that fails.
+///
+/// # Returns
+///
+/// Returns a `Result<String, io::Error>` containing the username or an error if
+/// the username cannot be retrieved.
 fn get_current_user_name() -> Result<String, io::Error> {
     unsafe {
         let login_name = libc::getlogin();
