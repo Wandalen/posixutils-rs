@@ -151,6 +151,19 @@ impl StateLogger {
     }
 }
 
+struct RestoreTermOnDrop {
+    original_termios: libc::termios,
+}
+
+impl Drop for RestoreTermOnDrop {
+    fn drop(&mut self) {
+        // Restore the original terminal attributes
+        unsafe {
+            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.original_termios);
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum TalkError {
     #[error("Usage: talk user [ttyname]")]
@@ -367,6 +380,8 @@ struct Args {
 fn talk(args: Args) -> Result<(), TalkError> {
     let mut msg = CtlMsg::default();
     let mut res = CtlRes::default();
+    let mut output_buffer = String::new();
+
     // Retrieve the local and remote machine names
     let (my_machine_name, his_machine_name) =
         get_names(&mut msg, &args.address, &args.ttyname).map_err(|e| TalkError::IoError(e))?;
@@ -405,7 +420,7 @@ fn talk(args: Args) -> Result<(), TalkError> {
 
     // Set the invitation ID number and send a delete request for the old invitation
     if res.answer == Answer::Success {
-        handle_existing_invitation(width, height, &mut res)?;
+        handle_existing_invitation(width, height, &mut output_buffer, &mut res)?;
     } else {
         logger.set_state("[Waiting to connect with caller]");
         handle_new_invitation(
@@ -417,6 +432,7 @@ fn talk(args: Args) -> Result<(), TalkError> {
             &mut res,
             my_machine_addr,
             &mut logger,
+            &mut output_buffer,
         )?;
     }
 
@@ -476,7 +492,12 @@ fn check_if_tty() -> Result<(), TalkError> {
 /// # Returns
 ///
 /// A `Result` indicating success or a `TalkError`.
-fn handle_existing_invitation(width: u16, height: u16, res: &mut CtlRes) -> Result<(), TalkError> {
+fn handle_existing_invitation(
+    width: u16,
+    height: u16,
+    output_buffer: &mut String,
+    res: &mut CtlRes,
+) -> Result<(), TalkError> {
     let tcp_addr = res.addr.to_socketaddr().ok_or_else(|| {
         TalkError::AddressResolutionFailed("Failed to convert address to socket address.".into())
     })?;
@@ -497,11 +518,17 @@ fn handle_existing_invitation(width: u16, height: u16, res: &mut CtlRes) -> Resu
         width,
         Arc::clone(&top_line),
         Arc::clone(&bottom_line),
+        &mut output_buffer.clone(),
     )?;
 
     // Handle user input from stdin, writing it to the TCP write stream and updating the terminal's top line.
-    handle_stdin_input(write_stream, height / 2, Arc::clone(&top_line))
-        .map_err(TalkError::IoError)?;
+    handle_stdin_input(
+        write_stream,
+        height / 2,
+        Arc::clone(&top_line),
+        output_buffer,
+    )
+    .map_err(TalkError::IoError)?;
 
     Ok(())
 }
@@ -525,8 +552,35 @@ fn spawn_input_thread(
     width: u16,
     top_line: Arc<Mutex<u16>>,
     bottom_line: Arc<Mutex<u16>>,
+    output_buffer: &mut String,
 ) -> Result<(), TalkError> {
+    let mut output = output_buffer.clone();
     thread::spawn(move || {
+        // Set terminal to raw mode
+        let stdin_fd = libc::STDIN_FILENO;
+        let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+
+        // Get the current terminal attributes
+        if unsafe { libc::tcgetattr(stdin_fd, termios.as_mut_ptr()) } != 0 {
+            eprintln!("Failed to get terminal attributes");
+            return;
+        }
+        let mut termios = unsafe { termios.assume_init() };
+
+        // Save the original terminal attributes to restore later
+        let original_termios = termios;
+
+        // Set raw mode flags
+        termios.c_lflag &= !(libc::ICANON); // Disable canonical mode and echo
+        termios.c_cc[libc::VMIN] = 1; // Minimum number of characters to read
+        termios.c_cc[libc::VTIME] = 0; // No timeout, read immediately
+
+        // Apply the raw mode settings
+        if unsafe { libc::tcsetattr(stdin_fd, libc::TCSANOW, &termios) } != 0 {
+            eprintln!("Failed to set terminal to raw mode");
+            return;
+        }
+
         // Initialize terminal drawing
         let mut handle = match draw_terminal(split_row, width) {
             Ok(handle) => handle,
@@ -538,6 +592,8 @@ fn spawn_input_thread(
 
         let mut buffer = [0; 128];
         let mut line_buffer = String::new();
+
+        let _restore = RestoreTermOnDrop { original_termios };
 
         loop {
             // Receive data from the TCP stream
@@ -553,11 +609,11 @@ fn spawn_input_thread(
             match result {
                 r if r < 0 => {
                     eprintln!("Error reading from stream: {}", io::Error::last_os_error());
-                    break; // Exit loop on error
+                    break;
                 }
                 0 => {
                     handle_connection_close();
-                    break; // Connection closed
+                    break;
                 }
                 nbytes => {
                     // Process the received data
@@ -599,6 +655,7 @@ fn spawn_input_thread(
                                 if let Err(e) = handle_character(
                                     c,
                                     &mut line_buffer,
+                                    &mut output,
                                     split_row,
                                     *bottom_line,
                                     *top_line,
@@ -615,6 +672,7 @@ fn spawn_input_thread(
     });
     Ok(())
 }
+
 /// Handles the newline character input by processing the current line buffer.
 ///
 /// Clears the line buffer after processing and increments the bottom line position.
@@ -671,12 +729,15 @@ fn handle_backspace<W: Write>(
     top_line: u16,
 ) -> Result<(), TalkError> {
     if !line_buffer.is_empty() {
-        line_buffer.pop(); // Remove the last character from the line buffer
+        // Remove the last character from the line buffer
+        line_buffer.pop();
+        // Clear the line
+        write!(handle, "\x1b[{};0H\x1b[K", split_row + bottom_line + 1).unwrap();
+        // Redraw the remaining characters
+        writeln!(handle, "{}", line_buffer).unwrap();
+        // Move cursor back to the input position
+        write!(handle, "\x1b[{};H", top_line).unwrap();
 
-        write!(handle, "\x1b[{};0H\x1b[K", split_row + bottom_line + 1).unwrap(); // Clear the line
-        writeln!(handle, "{}", line_buffer).unwrap(); // Redraw the remaining characters
-
-        write!(handle, "\x1b[{};H", top_line).unwrap(); // Move cursor back to the input position
         handle.flush().unwrap();
     }
     Ok(())
@@ -702,11 +763,13 @@ fn handle_backspace<W: Write>(
 fn handle_character<W: Write>(
     c: char,
     line_buffer: &mut String,
+    output_buffer: &mut String,
     split_row: u16,
     bottom_line: u16,
     top_line: u16,
     handle: &mut W,
 ) -> Result<(), TalkError> {
+    eprintln!("{}", output_buffer.len());
     if line_buffer.len() < MAX_USER_INPUT_LENGTH {
         line_buffer.push(c);
     } else {
@@ -717,7 +780,8 @@ fn handle_character<W: Write>(
 
     write!(handle, "\x1b[{};0H", split_row + bottom_line + 1).unwrap(); // Move cursor to the bottom window
     writeln!(handle, "{}", line_buffer).unwrap(); // Write the line
-    write!(handle, "\x1b[{};H", top_line).unwrap(); // Move cursor back to the top window
+    write!(handle, "\x1b[{};{}H", top_line, output_buffer.len()).unwrap();
+    // Move cursor to top line and to the right by buffer length
     handle.flush().unwrap();
     Ok(())
 }
@@ -736,6 +800,7 @@ fn handle_stdin_input(
     write_stream: TcpStream,
     split_row: u16,
     top_line: Arc<Mutex<u16>>,
+    output_buffer: &mut String,
 ) -> Result<(), io::Error> {
     let mut buffer: [u8; 1] = [0; 1]; // Buffer for raw input
     let mut line_buffer = String::new();
@@ -752,13 +817,13 @@ fn handle_stdin_input(
         }
 
         let input_char = char::from(buffer[0]);
-
         process_input_char(
             input_char,
             &mut line_buffer,
             &write_stream,
             split_row,
             &top_line,
+            output_buffer,
         )?;
     }
 
@@ -784,6 +849,7 @@ fn process_input_char(
     write_stream: &TcpStream,
     split_row: u16,
     top_line: &Arc<Mutex<u16>>,
+    output_buffer: &mut String,
 ) -> Result<(), io::Error> {
     let mut top_line = top_line.lock().unwrap();
 
@@ -793,7 +859,7 @@ fn process_input_char(
                 // Clear the line buffer after handling
                 line_buffer.clear();
             }
-
+            // Move the cursor to the start of the next line and clear it
             eprint!("\x1B[{};H\x1B[K", *top_line + 1);
             *top_line += 1;
 
@@ -822,6 +888,7 @@ fn process_input_char(
         }
         _ => {
             line_buffer.push(input_char);
+            output_buffer.push(input_char);
             // Send the character as a byte
             send_byte(write_stream, input_char as u8)?;
         }
@@ -885,6 +952,7 @@ fn handle_new_invitation(
     res: &mut CtlRes,
     my_machine_addr: Ipv4Addr,
     logger: &mut StateLogger,
+    output_buffer: &mut String,
 ) -> Result<(), TalkError> {
     let (socket_addr, listener) = open_sockt(my_machine_addr).map_err(TalkError::IoError)?;
 
@@ -929,7 +997,7 @@ fn handle_new_invitation(
                 msg.id_num = remote_id;
                 send_delete(daemon_port, his_machine_addr, msg, &socket, res)?;
 
-                if let Err(e) = handle_client(client_stream) {
+                if let Err(e) = handle_client(client_stream, output_buffer) {
                     eprintln!("Failed to handle client: {}", e);
                 }
             }
@@ -1232,7 +1300,7 @@ fn get_service_port(service: &CString, protocol: &CString) -> Result<u16, io::Er
 /// # Returns
 ///
 /// Returns `Result<(), io::Error>` if the operation completes successfully or an error occurs during execution.
-fn handle_client(stream: TcpStream) -> Result<(), io::Error> {
+fn handle_client(stream: TcpStream, output_buffer: &mut String) -> Result<(), io::Error> {
     let write_stream = stream.try_clone()?;
 
     let (width, height) = get_terminal_size();
@@ -1247,11 +1315,12 @@ fn handle_client(stream: TcpStream) -> Result<(), io::Error> {
         width,
         Arc::clone(&top_line),
         Arc::clone(&bottom_line),
+        &mut output_buffer.clone(),
     )
     .unwrap();
 
     // Handle user input from stdin and send it to the write stream.
-    handle_stdin_input(write_stream, split_row, top_line)?;
+    handle_stdin_input(write_stream, split_row, top_line, output_buffer)?;
 
     Ok(())
 }
