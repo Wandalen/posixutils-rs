@@ -150,7 +150,14 @@ fn display_man_page(name: &str) -> io::Result<()> {
 
     let man_page = format_man_page(man_page);
 
-    let mut pager_process = Command::new(get_pager())
+    let pager = get_pager();
+    let mut pager_process = Command::new(&pager);
+
+    if pager.ends_with("more") {
+        pager_process.arg("-s");
+    };
+
+    let mut pager_process = pager_process
         .stdin(File::open(man_page.path()).expect("failed to open temp stdin file"))
         .spawn()?;
 
