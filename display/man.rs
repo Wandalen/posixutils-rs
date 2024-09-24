@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output};
+use tempfile::NamedTempFile;
 
 #[cfg(target_os = "macos")]
 const MAN_PATH: &str = "/usr/local/share/man";
@@ -48,15 +49,30 @@ impl Display for ManError {
 impl Error for ManError {}
 
 /// Gets name of pager to be used from [PAGER], or default [more] pager.
-/// 
+///
 /// # Returns
-/// 
+///
 /// [String] value of pager to be used.
 fn get_pager() -> String {
     std::env::var("PAGER").unwrap_or("more".to_string())
 }
 
-/// Gets manpage content from plain file or .gz archieve
+/// Writes content from buffer reader to temporary file.
+///
+/// # Arguments
+///
+/// `reader` - [BufReader] reader that will used as resource for temporary file.
+///
+/// # Returns
+///
+/// [NamedTempFile] temporary file.
+fn write_to_tmp_file<R: Read>(mut reader: BufReader<R>) -> NamedTempFile {
+    let mut temp_file = NamedTempFile::new().expect("failed to create temp file");
+    io::copy(&mut reader, &mut temp_file).expect("failed to write to temp stdin file");
+    temp_file
+}
+
+/// Gets manpage content from plain file or .gz archieve.
 ///
 /// # Arguments
 ///
@@ -64,12 +80,12 @@ fn get_pager() -> String {
 ///
 /// # Returns
 ///
-/// Tuple of documentation content and section number.
+/// Tuple of [NamedTempFile] temporary file with documentation content and section number.
 ///
 /// # Errors
 ///
 /// Returns [std::io::Error] if file not found or reading to [String] failed.
-fn get_map_page(name: &str) -> Result<(String, i32), io::Error> {
+fn get_map_page(name: &str) -> Result<(NamedTempFile, i32), io::Error> {
     let (man_page_path, section) = (1..=9)
         .flat_map(|section| {
             let plain_path = format!("{MAN_PATH}/man{section}/{name}.{section}");
@@ -86,25 +102,24 @@ fn get_map_page(name: &str) -> Result<(String, i32), io::Error> {
         Box::new(File::open(man_page_path)?)
     };
 
-    let mut reader = BufReader::new(source);
-    let mut man_page = String::new();
-    reader.read_to_string(&mut man_page)?;
+    let reader = BufReader::new(source);
+    let tmp_file = write_to_tmp_file(reader);
 
-    Ok((man_page, section))
+    Ok((tmp_file, section))
 }
 
-/// Formats man page content into apporpriate format
+/// Formats man page content into apporpriate format.
 ///
 /// # Arguments
 ///
-/// `man_page` - [str] content of man page.
+/// `man_page` - [NamedTempFile] temporary file with content of man page.
 ///
 /// # Returns
 ///
-/// Formated [String] content of man page.
-fn format_man_page(man_page: &str) -> String {
+/// [NamedTempFile] temporary file with formated content of man page.
+fn format_man_page(man_page: NamedTempFile) -> NamedTempFile {
     // TODO: implement formatting
-    String::from(man_page)
+    man_page
 }
 
 /// Displays man page
@@ -123,16 +138,10 @@ fn format_man_page(man_page: &str) -> String {
 fn display_man_page(name: &str) -> io::Result<()> {
     let (man_page, section) = get_map_page(name)?;
 
-    let man_page = format_man_page(&man_page);
-
-    let mut temp_stdin = tempfile::NamedTempFile::new().expect("failed to create temp file");
-    temp_stdin
-        .write_all(man_page.as_bytes())
-        .expect("failed to write to temp stdin file");
-    let temp_stdin_path: PathBuf = temp_stdin.path().to_path_buf();
+    let man_page = format_man_page(man_page);
 
     let mut pager_process = Command::new(get_pager())
-        .stdin(File::open(temp_stdin_path).expect("failed to open temp stdin file"))
+        .stdin(File::open(man_page.path()).expect("failed to open temp stdin file"))
         .spawn()?;
 
     pager_process.wait()?;
@@ -140,7 +149,7 @@ fn display_man_page(name: &str) -> io::Result<()> {
     Ok(())
 }
 
-/// Displays man page summaries for the given keyword
+/// Displays man page summaries for the given keyword.
 ///
 /// # Arguments
 ///
