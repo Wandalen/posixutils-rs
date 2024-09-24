@@ -14,7 +14,7 @@ use plib::PROJECT_NAME;
 use std::error::Error;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use tempfile::NamedTempFile;
@@ -108,7 +108,7 @@ fn get_map_page(name: &str) -> Result<(NamedTempFile, i32), io::Error> {
     Ok((tmp_file, section))
 }
 
-/// Formats man page content into apporpriate format.
+/// Formats man page content into appropriate format.
 ///
 /// # Arguments
 ///
@@ -118,8 +118,18 @@ fn get_map_page(name: &str) -> Result<(NamedTempFile, i32), io::Error> {
 ///
 /// [NamedTempFile] temporary file with formated content of man page.
 fn format_man_page(man_page: NamedTempFile) -> NamedTempFile {
-    // TODO: implement formatting
-    man_page
+    let groff_output = Command::new("groff")
+        .args(["-Tutf8", "-mandoc"])
+        .stdin(File::open(man_page.path()).expect("failed to open temp stdin file"))
+        .output()
+        .expect("failed to run groff");
+
+    if !groff_output.status.success() {
+        panic!("groff process failed");
+    }
+
+    let reader = BufReader::new(groff_output.stdout.as_slice());
+    write_to_tmp_file(reader)
 }
 
 /// Displays man page
