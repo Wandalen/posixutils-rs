@@ -10,12 +10,11 @@
 use clap::Parser;
 use flate2::read::GzDecoder;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
-use pager_rs::{CommandList, State, StatusBar};
 use plib::PROJECT_NAME;
 use std::error::Error;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, BufReader, Read};
+use std::io::{self, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
@@ -47,6 +46,15 @@ impl Display for ManError {
 }
 
 impl Error for ManError {}
+
+/// Gets name of pager to be used from [PAGER], or default [more] pager.
+/// 
+/// # Returns
+/// 
+/// [String] value of pager to be used.
+fn get_pager() -> String {
+    std::env::var("PAGER").unwrap_or("more".to_string())
+}
 
 /// Gets manpage content from plain file or .gz archieve
 ///
@@ -113,20 +121,21 @@ fn format_man_page(man_page: &str) -> String {
 ///
 /// Returns [std::io::Error] if man page not found, or any display error happened.
 fn display_man_page(name: &str) -> io::Result<()> {
-    let (man_page_path, section) = get_map_page(name)?;
+    let (man_page, section) = get_map_page(name)?;
 
-    let man_page = format_man_page(&man_page_path);
+    let man_page = format_man_page(&man_page);
 
-    let status_bar = StatusBar::new(format!(
-        "Manual page {name}({section}) (press h for help or q to quit)"
-    ));
-    let mut state = State::new(man_page, status_bar, CommandList::default())?;
-    state.show_line_numbers = false;
-    state.word_wrap = false;
+    let mut temp_stdin = tempfile::NamedTempFile::new().expect("failed to create temp file");
+    temp_stdin
+        .write_all(man_page.as_bytes())
+        .expect("failed to write to temp stdin file");
+    let temp_stdin_path: PathBuf = temp_stdin.path().to_path_buf();
 
-    pager_rs::init()?;
-    pager_rs::run(&mut state)?;
-    pager_rs::finish()?;
+    let mut pager_process = Command::new(get_pager())
+        .stdin(File::open(temp_stdin_path).expect("failed to open temp stdin file"))
+        .spawn()?;
+
+    pager_process.wait()?;
 
     Ok(())
 }
