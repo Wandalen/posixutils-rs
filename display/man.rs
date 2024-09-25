@@ -45,16 +45,7 @@ impl Display for ManError {
 
 impl Error for ManError {}
 
-/// Gets name of pager to be used from [PAGER], or default [more] pager.
-///
-/// # Returns
-///
-/// [String] value of pager to be used.
-fn get_pager() -> String {
-    std::env::var("PAGER").unwrap_or("more".to_string())
-}
-
-/// Gets manpage content from plain file or .gz archieve.
+/// Gets manpage content from plain file or `.gz` archieve.
 ///
 /// # Arguments
 ///
@@ -62,11 +53,11 @@ fn get_pager() -> String {
 ///
 /// # Returns
 ///
-/// [ChildStdout] of called *cat command.
+/// [ChildStdout] of called `*cat` command.
 ///
 /// # Errors
 ///
-/// Returns [std::io::Error] if file not found or failed to execute *cat command.
+/// Returns [std::io::Error] if file not found or failed to execute `*cat` command.
 fn get_map_page(name: &str) -> Result<ChildStdout, io::Error> {
     let man_page_path = (1..=9)
         .flat_map(|section| {
@@ -138,7 +129,7 @@ fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, io::Error> 
 ///
 /// Returns [std::io::Error] if failed to execute pager.
 fn display_pager(child_stdout: ChildStdout) -> Result<Child, io::Error> {
-    let pager = get_pager();
+    let pager = std::env::var("PAGER").unwrap_or("more".to_string());
     let mut pager_process = Command::new(&pager);
 
     if pager.ends_with("more") {
