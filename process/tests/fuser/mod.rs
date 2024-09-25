@@ -2,7 +2,8 @@ use libc::uid_t;
 use plib::{run_test_with_checker, TestPlan};
 use std::{
     ffi::CStr,
-    fs, io,
+    fs::File,
+    io,
     process::{Command, Output},
     str, thread,
     time::Duration,
@@ -10,7 +11,7 @@ use std::{
 
 #[cfg(target_os = "linux")]
 use std::{
-    fs::File,
+    fs,
     io::Read,
     net::{TcpListener, TcpStream, UdpSocket},
     os::unix::net::{UnixListener, UnixStream},
