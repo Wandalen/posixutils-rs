@@ -1,6 +1,5 @@
 mod unix {
     use crate::fuser::fuser_test;
-
     use std::{
         fs,
         os::unix::net::{UnixListener, UnixStream},
