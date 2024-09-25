@@ -15,6 +15,7 @@ use std::fmt::Display;
 use std::io;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdout, Command, Output, Stdio};
+use terminal_size::terminal_size;
 
 #[cfg(target_os = "macos")]
 const MAN_PATH: &str = "/usr/local/share/man";
@@ -101,8 +102,16 @@ fn get_map_page(name: &str) -> Result<ChildStdout, io::Error> {
 ///
 /// Returns [std::io::Error] if failed to execute formatter command.
 fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, io::Error> {
+    let (width, _) = terminal_size().ok_or({
+        io::Error::new(
+            io::ErrorKind::Other,
+            "failed to get terminal size".to_string(),
+        )
+    })?;
+    let width = width.0;
+
     Command::new("groff")
-        .args(["-Tutf8", "-mandoc"])
+        .args(["-Tutf8", "-mandoc", &format!("-rLL={width}n")]) // Width causes test failure
         .stdin(Stdio::from(child_stdout))
         .stdout(Stdio::piped())
         .spawn()?
