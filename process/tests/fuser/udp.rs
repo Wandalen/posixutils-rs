@@ -1,13 +1,14 @@
+#[cfg(test)]
 mod udp {
     use crate::fuser::fuser_test;
-    use std::{io, net::UdpSocket, process::Command, thread};
+    use std::{io, net::UdpSocket, process::Command};
 
     /// Waits for a UDP server to become available by sending a dummy message to the specified port.
     ///
     /// **Arguments:**
     /// - `port`: The port number where the UDP server is expected to be listening.
     fn wait_for_udp_server(port: u16) {
-        let socket = UdpSocket::bind("127.0.0.0:0").expect("Failed to bind dummy UDP socket");
+        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind dummy UDP socket");
         let dummy_message = b"ping";
 
         loop {
@@ -38,18 +39,16 @@ mod udp {
         let port = server.local_addr().unwrap().port();
         wait_for_udp_server(port);
 
-        let handle = thread::spawn(move || {
-            fuser_test(vec![format!("{}/udp", port)], "", 0, |_, output| {
-                let manual_output = Command::new("fuser")
-                    .arg(format!("{}/udp", port))
-                    .output()
-                    .unwrap();
-                assert_eq!(output.status.code(), Some(0));
-                assert_eq!(output.stdout, manual_output.stdout);
-                assert_eq!(output.stderr, manual_output.stderr);
-            });
+        fuser_test(vec![format!("{}/udp", port)], "", 0, |_, output| {
+            let manual_output = Command::new("fuser")
+                .arg(format!("{}/udp", port))
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(0));
+            assert_eq!(output.stdout, manual_output.stdout);
+            assert_eq!(output.stderr, manual_output.stderr);
         });
 
-        handle.join().expect("Thread panicked");
+        drop(server);
     }
 }
