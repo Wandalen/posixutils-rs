@@ -1,6 +1,11 @@
-extern crate clap;
-extern crate libc;
-extern crate plib;
+//
+// Copyright (c) 2024 Hemi Labs, Inc.
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
 
 use clap::{CommandFactory, Parser};
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
@@ -1303,8 +1308,8 @@ mod macos {
 }
 
 /// fuser - list process IDs of all processes that have one or more files open
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
     /// The file is treated as a mount point and the utility shall report on any files open in the file system.
     #[arg(short = 'c')]
