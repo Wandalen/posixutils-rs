@@ -2,8 +2,11 @@ use plib::{run_test_with_checker, TestPlan};
 use std::process::Output;
 
 mod basic;
+#[cfg(target_os = "linux")]
 mod tcp;
+#[cfg(target_os = "linux")]
 mod udp;
+#[cfg(target_os = "linux")]
 mod unix;
 mod with_user;
 
