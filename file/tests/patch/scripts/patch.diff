@@ -1,0 +1,5 @@
+--- original.txt
++++ modified.txt
+@@ -1 +1 @@
+-Original content
++Modified content

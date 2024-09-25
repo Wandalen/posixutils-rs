@@ -56,7 +56,7 @@ struct Args {
 
     /// Remove `num` pathname components from each file in the patch.
     #[arg(short = 'p', value_name = "NUM", default_value = "0")]
-    strip_components: usize,
+    num: usize,
 
     /// Reverse the sense of the patch, assuming the diff is from new to old.
     #[arg(short = 'R')]
@@ -87,16 +87,15 @@ fn patch(args: Args) -> Result<(), PatchError> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::try_parse().unwrap_or_else(|err| {
-        if err.kind() == ErrorKind::DisplayHelp || err.kind() == ErrorKind::DisplayVersion {
-            // Print help or version message
-            eprintln!("{}", err);
-        } else {
-            // Print custom error message
-            eprintln!("Error parsing arguments: {}", err);
+        match err.kind() {
+            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
+                eprintln!("{}", err);
+            }
+            _ => {
+                eprintln!("Error parsing arguments: {}", err);
+            }
         }
-
-        // Exit with a non-zero status code
-        std::process::exit(1);
+        process::exit(1);
     });
 
     setlocale(LocaleCategory::LcAll, "");
