@@ -1,11 +1,10 @@
+#[cfg(test)]
 mod tcp {
     use crate::fuser::fuser_test;
-
     use std::{
         io,
         net::{TcpListener, TcpStream},
         process::Command,
-        thread,
     };
 
     /// Starts a TCP server on a predefined local address and port.
@@ -13,7 +12,7 @@ mod tcp {
     /// **Returns:**
     /// - An `io::Result` containing the bound `TcpListener` if successful.
     fn start_tcp_server() -> io::Result<TcpListener> {
-        TcpListener::bind("127.0.0.1:0") // Bind to any available port
+        TcpListener::bind("127.0.0.1:0")
     }
 
     /// Waits for the TCP server to be ready by attempting to connect to it.
@@ -22,16 +21,19 @@ mod tcp {
     /// - `port`: The port number where the TCP server is expected to be listening.
     fn wait_for_tcp_server(port: u16) {
         let address = format!("127.0.0.1:{}", port);
+
         loop {
             if let Ok(stream) = TcpStream::connect(&address) {
                 stream
                     .shutdown(std::net::Shutdown::Both)
                     .expect("Failed to close the connection");
+
                 break;
             }
+
+            std::thread::yield_now();
         }
     }
-
     /// Tests `fuser` with the TCP server to ensure it can find the process associated with the server.
     ///
     /// **Setup:**
@@ -45,18 +47,16 @@ mod tcp {
         let port = server.local_addr().unwrap().port();
         wait_for_tcp_server(port);
 
-        let handle = thread::spawn(move || {
-            fuser_test(vec![format!("{}/tcp", port)], "", 0, |_, output| {
-                let manual_output = Command::new("fuser")
-                    .arg(format!("{}/tcp", port))
-                    .output()
-                    .unwrap();
-                assert_eq!(output.status.code(), Some(0));
-                assert_eq!(output.stdout, manual_output.stdout);
-                assert_eq!(output.stderr, manual_output.stderr);
-            });
+        fuser_test(vec![format!("{}/tcp", port)], "", 0, |_, output| {
+            let manual_output = Command::new("fuser")
+                .arg(format!("{}/tcp", port))
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(0));
+            assert_eq!(output.stdout, manual_output.stdout);
+            assert_eq!(output.stderr, manual_output.stderr);
         });
 
-        handle.join().expect("Thread panicked");
+        drop(server);
     }
 }
