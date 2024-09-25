@@ -1,5 +1,6 @@
+use std::process::Output;
+
 use plib::{run_test_with_checker, TestPlan};
-use std::{process::Output, str};
 
 mod basic;
 mod tcp;
