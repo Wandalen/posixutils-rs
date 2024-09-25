@@ -13,7 +13,7 @@ mod tcp {
     /// **Returns:**
     /// - An `io::Result` containing the bound `TcpListener` if successful.
     fn start_tcp_server() -> io::Result<TcpListener> {
-        TcpListener::bind("127.0.0.1:9090") // Bind to any available port
+        TcpListener::bind("127.0.0.1:0") // Bind to any available port
     }
 
     /// Waits for the TCP server to be ready by attempting to connect to it.
