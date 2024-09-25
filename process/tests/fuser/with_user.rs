@@ -4,7 +4,7 @@ mod with_user {
     use std::{
         ffi::CStr,
         fs::File,
-        io::{self, Read, Write},
+        io::{self, Write},
         process::Command,
         str,
         sync::{Arc, Mutex},
