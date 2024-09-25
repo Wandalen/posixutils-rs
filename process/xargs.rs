@@ -14,9 +14,6 @@
 // - write tests
 //
 
-extern crate clap;
-extern crate plib;
-
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
@@ -27,8 +24,8 @@ const ARG_MAX: i32 = 131072; // arbitrary.  todo: discover actual value
 const MAX_ARGS_BYTES: usize = ARG_MAX as usize - 2048;
 
 /// xargs - construct argument lists and invoke utility
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
     /// The utility shall be executed for each non-empty number lines of arguments from standard input.
     #[arg(short = 'L', long)]

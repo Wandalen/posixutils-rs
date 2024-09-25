@@ -1,1 +1,2 @@
+mod fuser;
 mod xargs;

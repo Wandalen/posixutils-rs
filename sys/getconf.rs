@@ -12,10 +12,6 @@
 // - Proper -v specification support.  is it even necessary?
 //
 
-extern crate clap;
-extern crate libc;
-extern crate plib;
-
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use libc::{pathconf, sysconf};
@@ -23,8 +19,8 @@ use plib::PROJECT_NAME;
 use std::collections::HashMap;
 use std::ffi::CString;
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
     /// Variable to get the value of
     var: String,

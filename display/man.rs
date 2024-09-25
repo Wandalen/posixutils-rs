@@ -23,8 +23,8 @@ const MAN_PATH: &str = "/usr/local/share/man";
 const MAN_PATH: &str = "/usr/share/man";
 
 /// man - display system documentation
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
     /// Interpret name operands as keywords for searching the summary database.
     #[arg(short)]
