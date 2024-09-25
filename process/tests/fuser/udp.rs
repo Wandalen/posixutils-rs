@@ -7,7 +7,7 @@ mod udp {
     /// **Arguments:**
     /// - `port`: The port number where the UDP server is expected to be listening.
     fn wait_for_udp_server(port: u16) {
-        let socket = UdpSocket::bind("127.0.0.0:9092").expect("Failed to bind dummy UDP socket");
+        let socket = UdpSocket::bind("127.0.0.0:0").expect("Failed to bind dummy UDP socket");
         let dummy_message = b"ping";
 
         loop {
@@ -22,7 +22,7 @@ mod udp {
     /// **Returns:**
     /// - An `io::Result` containing the bound `UdpSocket` if successful.
     fn start_udp_server() -> io::Result<UdpSocket> {
-        UdpSocket::bind("127.0.0.1:9091")
+        UdpSocket::bind("127.0.0.1:0")
     }
 
     /// Tests `fuser` with the `-u` flag to ensure it outputs the process owner for the UDP server.
