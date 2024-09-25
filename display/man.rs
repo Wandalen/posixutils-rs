@@ -110,8 +110,10 @@ fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, io::Error> 
     })?;
     let width = width.0;
 
-    Command::new("groff")
-        .args(["-Tutf8", "-mandoc", &format!("-rLL={width}n")]) // Width causes test failure
+    // Command::new("groff")
+    //     .args(["-Tutf8", "-mandoc", &format!("-rLL={width}n")]) // Width causes test failure
+    Command::new("mandoc")
+        .args(["-mandoc", "-O", &format!("width={width}")])
         .stdin(Stdio::from(child_stdout))
         .stdout(Stdio::piped())
         .spawn()?
