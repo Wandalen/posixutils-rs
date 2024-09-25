@@ -113,6 +113,7 @@ fn timeout_test_extended(
 const TRUE: &'static str = "true";
 const SLEEP: &'static str = "sleep";
 const NON_EXECUTABLE: &'static str = "tests/timeout/non_executable.sh";
+const WITH_ARGUMENT: &'static str = "tests/timeout/with_argument.sh";
 const SPAWN_CHILD: &'static str = "tests/timeout/spawn_child.sh";
 
 #[test]
@@ -235,13 +236,7 @@ fn test_utility_not_found() {
 
 #[test]
 fn test_utility_error() {
-    let message: String = if cfg!(target_os = "macos") {
-        String::from("usage: sleep seconds\n")
-    } else {
-        String::from("/usr/bin/sleep: invalid time interval ‘invalid_value’\nTry '/usr/bin/sleep --help' for more information.\n")
-    };
-
-    timeout_test(&["1", SLEEP, "invalid_value"], &message, 1);
+    timeout_test(&["1", WITH_ARGUMENT], "error: enter some argument\n", 1);
 }
 
 #[test]
