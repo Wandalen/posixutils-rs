@@ -8,16 +8,13 @@
 //
 
 use clap::Parser;
-use flate2::read::GzDecoder;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::error::Error;
 use std::fmt::Display;
-use std::fs::File;
-use std::io::{self, BufReader, Read};
+use std::io;
 use std::path::PathBuf;
-use std::process::{Command, Output};
-use tempfile::NamedTempFile;
+use std::process::{Child, ChildStdout, Command, Output, Stdio};
 
 #[cfg(target_os = "macos")]
 const MAN_PATH: &str = "/usr/local/share/man";
@@ -57,21 +54,6 @@ fn get_pager() -> String {
     std::env::var("PAGER").unwrap_or("more".to_string())
 }
 
-/// Writes content from buffer reader to temporary file.
-///
-/// # Arguments
-///
-/// `reader` - [BufReader] reader that will used as resource for temporary file.
-///
-/// # Returns
-///
-/// [NamedTempFile] temporary file.
-fn write_to_tmp_file<R: Read>(mut reader: BufReader<R>) -> NamedTempFile {
-    let mut temp_file = NamedTempFile::new().expect("failed to create temp file");
-    io::copy(&mut reader, &mut temp_file).expect("failed to write to temp stdin file");
-    temp_file
-}
-
 /// Gets manpage content from plain file or .gz archieve.
 ///
 /// # Arguments
@@ -80,56 +62,90 @@ fn write_to_tmp_file<R: Read>(mut reader: BufReader<R>) -> NamedTempFile {
 ///
 /// # Returns
 ///
-/// Tuple of [NamedTempFile] temporary file with documentation content and section number.
+/// [ChildStdout] of called *cat command.
 ///
 /// # Errors
 ///
-/// Returns [std::io::Error] if file not found or reading to [String] failed.
-fn get_map_page(name: &str) -> Result<(NamedTempFile, i32), io::Error> {
-    let (man_page_path, section) = (1..=9)
+/// Returns [std::io::Error] if file not found or failed to execute *cat command.
+fn get_map_page(name: &str) -> Result<ChildStdout, io::Error> {
+    let man_page_path = (1..=9)
         .flat_map(|section| {
             let plain_path = format!("{MAN_PATH}/man{section}/{name}.{section}");
             let gz_path = format!("{plain_path}.gz");
-            vec![(gz_path, section), (plain_path, section)]
+            vec![gz_path, plain_path]
         })
-        .find(|(path, _)| PathBuf::from(path).exists())
+        .find(|path| PathBuf::from(path).exists())
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "man page not found"))?;
 
-    let source: Box<dyn Read> = if man_page_path.ends_with(".gz") {
-        let file = File::open(man_page_path)?;
-        Box::new(GzDecoder::new(file))
+    let cat_process_name = if man_page_path.ends_with(".gz") {
+        "zcat"
     } else {
-        Box::new(File::open(man_page_path)?)
+        "cat"
     };
 
-    let reader = BufReader::new(source);
-    let tmp_file = write_to_tmp_file(reader);
-
-    Ok((tmp_file, section))
+    Command::new(cat_process_name)
+        .arg(man_page_path)
+        .stdout(Stdio::piped())
+        .spawn()?
+        .stdout
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("failed to get {cat_process_name} output"),
+            )
+        })
 }
 
 /// Formats man page content into appropriate format.
 ///
 /// # Arguments
 ///
-/// `man_page` - [NamedTempFile] temporary file with content of man page.
+/// `child_stdout` - [ChildStdout] with content that needs to be formatted.
 ///
 /// # Returns
 ///
-/// [NamedTempFile] temporary file with formated content of man page.
-fn format_man_page(man_page: NamedTempFile) -> NamedTempFile {
-    let groff_output = Command::new("groff")
+/// [ChildStdout] of called formatter command.
+///
+/// # Errors
+///
+/// Returns [std::io::Error] if failed to execute formatter command.
+fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, io::Error> {
+    Command::new("groff")
         .args(["-Tutf8", "-mandoc"])
-        .stdin(File::open(man_page.path()).expect("failed to open temp stdin file"))
-        .output()
-        .expect("failed to run groff");
+        .stdin(Stdio::from(child_stdout))
+        .stdout(Stdio::piped())
+        .spawn()?
+        .stdout
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                "failed to get formatter output".to_string(),
+            )
+        })
+}
 
-    if !groff_output.status.success() {
-        panic!("groff process failed");
-    }
+/// Formats man page content into appropriate format.
+///
+/// # Arguments
+///
+/// `child_stdout` - [ChildStdout] with content that needs to displayed.
+///
+/// # Returns
+///
+/// [Child] of called pager.
+///
+/// # Errors
+///
+/// Returns [std::io::Error] if failed to execute pager.
+fn display_pager(child_stdout: ChildStdout) -> Result<Child, io::Error> {
+    let pager = get_pager();
+    let mut pager_process = Command::new(&pager);
 
-    let reader = BufReader::new(groff_output.stdout.as_slice());
-    write_to_tmp_file(reader)
+    if pager.ends_with("more") {
+        pager_process.arg("-s");
+    };
+
+    pager_process.stdin(Stdio::from(child_stdout)).spawn()
 }
 
 /// Displays man page
@@ -145,23 +161,14 @@ fn format_man_page(man_page: NamedTempFile) -> NamedTempFile {
 /// # Errors
 ///
 /// Returns [std::io::Error] if man page not found, or any display error happened.
-fn display_man_page(name: &str) -> io::Result<()> {
-    let (man_page, section) = get_map_page(name)?;
+fn display_man_page(name: &str) -> Result<(), io::Error> {
+    let cat_output = get_map_page(name)?;
 
-    let man_page = format_man_page(man_page);
+    let formatter_output = format_man_page(cat_output)?;
 
-    let pager = get_pager();
-    let mut pager_process = Command::new(&pager);
+    let mut pager = display_pager(formatter_output)?;
 
-    if pager.ends_with("more") {
-        pager_process.arg("-s");
-    };
-
-    let mut pager_process = pager_process
-        .stdin(File::open(man_page.path()).expect("failed to open temp stdin file"))
-        .spawn()?;
-
-    pager_process.wait()?;
+    pager.wait()?;
 
     Ok(())
 }

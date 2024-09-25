@@ -1103,10 +1103,8 @@ name = "posixutils-display"
 version = "0.2.0"
 dependencies = [
  "clap",
- "flate2",
  "gettext-rs",
  "plib",
- "tempfile",
 ]
 
 [[package]]
