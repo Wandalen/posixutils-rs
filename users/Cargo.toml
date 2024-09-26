@@ -41,3 +41,7 @@ path = "./tty.rs"
 [[bin]]
 name = "write"
 path = "./write.rs"
+
+[[bin]]
+name = "newgrp"
+path = "./newgrp.rs"
