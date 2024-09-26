@@ -27,7 +27,7 @@ use libc::{
 use std::{
     char,
     ffi::{CStr, CString},
-    io::{self, Cursor, Error, Write},
+    io::{self, Cursor, Error, IsTerminal, Write},
     mem::{size_of, zeroed},
     net::{
         self, AddrParseError, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream, UdpSocket,
@@ -467,7 +467,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// A `Result` indicating success or a `TalkError` if the input is not a TTY.
 fn check_if_tty() -> Result<(), TalkError> {
-    if atty::isnt(atty::Stream::Stdin) {
+    let is_tty = io::stdin().is_terminal();
+    if !is_tty {
         eprintln!("Not a TTY");
         return Err(TalkError::NotTty);
     }
