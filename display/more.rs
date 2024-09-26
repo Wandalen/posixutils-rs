@@ -1386,90 +1386,70 @@ impl MoreControl{
         STDERR = 2
     }
     
-    /
-    fn handle_signal_event(&mut self, revents: PollFlags) {
-        if revents.contains(PollFlags::POLLIN) {
-            let mut info = signalfd_siginfo::default();
-            let sz = read(self.sigfd, &mut info, std::mem::size_of::<signalfd_siginfo>()).unwrap_or(-1);
-            assert_eq!(sz as usize, std::mem::size_of::<signalfd_siginfo>());
-            match info.ssi_signo as i32 {
-                SIGINT => self.exit(EXIT_SUCCESS),
-                SIGQUIT => self.sigquit_handler(),
-                SIGTSTP => self.sigtstp_handler(),
-                SIGCONT => self.sigcont_handler(),
-                SIGWINCH => self.sigwinch_handler(),
-                _ => exit(EXIT_SUCCESS),
-            }
-        }
-    }
-    
-    //
-    fn handle_stdin_event(&mut self, revents: PollFlags, has_data: &mut i32) {
-        if revents.contains(PollFlags::POLLERR) && revents.contains(PollFlags::POLLHUP) {
-            self.exit(EXIT_SUCCESS);
-        }
-        if revents.contains(PollFlags::POLLHUP) || revents.contains(PollFlags::POLLNVAL) {
-            self.ignore_stdin = true;
-        } else {
-            *has_data += 1;
-        }
-    }
-    
-    //
-    fn handle_stderr_event(revents: PollFlags, has_data: &mut i32, stderr_active: Option<&mut i32>) {
-        if revents.contains(PollFlags::POLLIN) {
-            *has_data += 1;
-            if let Some(active) = stderr_active {
-                *active = 1;
-            }
-        }
-    }
-    
-    /
-    fn poll(&mut self, timeout: i32, stderr_active: Option<&mut i32>) -> Result<i32, String> {
-        let mut poll_fds = vec![
-            PollFd::new(self.sigfd, PollFlags::POLLIN | PollFlags::POLLERR | PollFlags::POLLHUP),
-            PollFd::new(libc::STDIN_FILENO, PollFlags::POLLIN | PollFlags::POLLERR | PollFlags::POLLHUP),
-            PollFd::new(libc::STDERR_FILENO, PollFlags::POLLIN | PollFlags::POLLERR | PollFlags::POLLHUP),
-        ];
-    
+    ///
+    fn poll(&mut self, timeout: i32, stderr_active: Option<&mut bool>) -> Result<i32, String> {
         let mut has_data = 0;
-    
-        if let Some(active) = stderr_active {
-            *active = 0;
+        *stderr_active = false;
+        let events: c_short = POLLIN | POLLERR | POLLHUP;
+        let mut poll_fds = vec![];
+        for raw_fd in [self.sigfd, stdin().as_raw_fd(), stderr().as_raw_fd()]{
+            poll_fds.push(pollfd{ 
+                fd: raw_fd, 
+                events,
+                revents: 0 as c_short
+            });
         }
     
         while has_data == 0 {
             if self.ignore_stdin {
-                poll_fds[PollFdId::STDIN].set_fd(-1); // Ignore stdin if it is closed
+                poll_fds[PollFdId::STDIN].fd = -1; // Ignore stdin if it is closed
             }
     
-            match poll(&mut poll_fds, timeout) {
-                Ok(rc) if rc < 0 => {
-                    if Errno::last() == Errno::EAGAIN {
-                        continue;
+            let rc = unsafe{ 
+                poll(poll_fds.as_mut_ptr(), poll_fds.len() as u64, timeout) 
+            };
+
+            if rc < 0{
+                if unsafe{ &__errno_location() } == EAGAIN { continue; }
+                self.error("poll failed");
+                return Err(rc);
+            }else if rc == 0{
+                return Ok(0);
+            }
+            
+            if poll_fds[PollFdId::SIGNAL].revents != 0 {
+                if revents & POLLIN {
+                    let mut info: signalfd_siginfo;
+                    let sz = unsafe{
+                        read(self.sigfd, info as *mut c_void, std::mem::size_of::<signalfd_siginfo>())
+                    };
+                    assert_eq!(sz as isize, std::mem::size_of::<signalfd_siginfo>() as isize);
+                    match info.ssi_signo as u32 {
+                        SIGINT => self.exit(EXIT_SUCCESS),
+                        SIGQUIT => self.sigquit_handler(),
+                        SIGTSTP => self.sigtstp_handler(),
+                        SIGCONT => self.sigcont_handler(),
+                        SIGWINCH => self.sigwinch_handler(),
+                        _ => exit(EXIT_SUCCESS),
                     }
-                    self.error("Poll failed");
-                    return Err(rc);
                 }
-                Ok(rc) if rc == 0 => {
-                    return Ok(0);
+            }
+
+            if poll_fds[PollFdId::STDIN].revents != 0 {
+                if revents & (POLLERR | POLLHUP) {
+                    self.exit(EXIT_SUCCESS);
                 }
-                Ok(_) => {
-                    if let Some(revents) = poll_fds[PollFdId::SIGNAL].revents() {
-                        self.handle_signal_event(revents);
-                    }
-    
-                    if let Some(revents) = poll_fds[PollFdId::STDIN].revents() {
-                        self.handle_stdin_event(revents, &mut has_data);
-                    }
-    
-                    if let Some(revents) = poll_fds[PollFdId::STDERR].revents() {
-                        handle_stderr_event(revents, &mut has_data, stderr_active);
-                    }
+                if revents & (POLLHUP | POLLNVAL) {
+                    self.ignore_stdin = true;
+                } else {
+                    has_data += 1;
                 }
-                Err(err) => {
-                    return Err(format!("Poll failed: {}", err));
+            }
+
+            if poll_fds[PollFdId::STDERR].revents != 0 {
+                if revents & POLLIN {
+                    has_data += 1;
+                    *stderr_active = true;
                 }
             }
         }
@@ -2273,9 +2253,7 @@ fn exit(code: i32){
 }
 
 fn main() {
-    let mut s: &str;
-
-    let ctl = MoreControl::new()?;
+    let mut ctl = MoreControl::new()?;
 
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
@@ -2285,22 +2263,24 @@ fn main() {
 	ctl.initterm();
     
     if !ctl.no_tty_out {
-		/*if signal(SIGTSTP, SIG_IGN) == SIG_DFL {
+		if unsafe{ signal(SIGTSTP, SIG_IGN) } == SIG_DFL {
 			self.catch_suspend += 1;
-		}*/
+		}
 
-		tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, &ctl.output_tty);
+        unsafe{
+		    tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, ctl.output_tty as *const termios);
+        }
 	}
 
     /*
-    {
-        sigemptyset(&ctl.sigset);
-        sigaddset(&ctl.sigset, SIGINT);
-        sigaddset(&ctl.sigset, SIGQUIT);
-        sigaddset(&ctl.sigset, SIGTSTP);
-        sigaddset(&ctl.sigset, SIGCONT);
-        sigaddset(&ctl.sigset, SIGWINCH);
-        sigprocmask(SIG_BLOCK, &ctl.sigset, NULL);
+    unsafe{
+        sigemptyset(ctl.sigset as *mut sigset_t);
+        sigaddset(ctl.sigset as *mut sigset_t, SIGINT);
+        sigaddset(ctl.sigset as *mut sigset_t, SIGQUIT);
+        sigaddset(ctl.sigset as *mut sigset_t, SIGTSTP);
+        sigaddset(ctl.sigset as *mut sigset_t, SIGCONT);
+        sigaddset(ctl.sigset as *mut sigset_t, SIGWINCH);
+        sigprocmask(SIG_BLOCK, ctl.sigset as *const sigset_t, std::ptr::null() as *mut sigset_t);
         self.sigfd = signalfd(-1, &ctl.sigset, SFD_CLOEXEC);
     }
     */
