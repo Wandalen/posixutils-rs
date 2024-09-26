@@ -165,6 +165,8 @@ fn is_utility_installed(name: &str) -> bool {
 /// Returns [ManError] if failed to execute formatter command.
 fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, ManError> {
     let width = get_terminal_width()?;
+    // Necessary for correct syllable transfers.
+    let width = if width >= 80 { width - 2 } else { width };
 
     let (formatter, args) = if is_utility_installed("mandoc") {
         (
