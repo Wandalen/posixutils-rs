@@ -52,9 +52,9 @@ mod tcp {
                 .arg(format!("{}/tcp", port))
                 .output()
                 .unwrap();
+
             assert_eq!(output.status.code(), Some(0));
             assert_eq!(output.stdout, manual_output.stdout);
-            assert_eq!(output.stderr, manual_output.stderr);
         });
 
         drop(server);

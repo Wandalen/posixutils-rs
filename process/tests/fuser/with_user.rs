@@ -4,11 +4,9 @@ mod with_user {
     use std::{
         ffi::CStr,
         fs::File,
-        io::{self, Read, Write},
+        io::{self, Read},
         process::Command,
         str,
-        sync::{Arc, Mutex},
-        thread,
     };
 
     /// Retrieves the user name of the process owner by process ID on Linux.
@@ -21,7 +19,10 @@ mod with_user {
     #[cfg(target_os = "linux")]
     fn get_process_user(pid: u32) -> io::Result<String> {
         let status_path = format!("/proc/{}/status", pid);
-        let mut file = File::open(&status_path)?;
+        let mut file = File::open(&status_path).map_err(|e| {
+            eprintln!("Failed to open {}: {}", status_path, e);
+            e
+        })?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
 
@@ -34,13 +35,13 @@ mod with_user {
             .split_whitespace()
             .nth(1)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "UID not found"))?;
+
         let uid: uid_t = uid_str
             .parse()
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid UID"))?;
 
         get_username_by_uid(uid)
     }
-
     /// Retrieves the user name of the process owner by process ID on macOS.
     ///
     /// **Arguments:**
@@ -78,63 +79,38 @@ mod with_user {
     #[test]
     fn test_fuser_with_user() {
         let temp_file_path = std::env::temp_dir().join("test_file_with_user");
-        let file_ready = Arc::new(Mutex::new(false));
-
-        let file_ready_clone = Arc::clone(&file_ready);
         let temp_file_path_clone = temp_file_path.clone();
 
-        let handle = thread::spawn(move || {
-            let mut file =
-                File::create(&temp_file_path_clone).expect("Failed to create temporary file");
-            writeln!(file, "").expect("Failed to write to file");
-            *file_ready_clone.lock().unwrap() = true;
-        });
-        handle.join().expect("Failed to join thread");
+        File::create(&temp_file_path_clone).expect("Failed to create temporary file");
 
-        while !*file_ready.lock().unwrap() {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
+        let mut process = Command::new("tail")
+            .arg("-f")
+            .arg(&temp_file_path_clone)
+            .spawn()
+            .expect("Failed to start process");
 
-        let mutex = Arc::new(Mutex::new(()));
-        let mutex_clone = Arc::clone(&mutex);
+        let pid = process.id();
+        let owner = get_process_user(pid).expect("Failed to get owner of process");
 
-        let temp_file_path_clone = temp_file_path.clone();
-        let handle = thread::spawn(move || {
-            let _lock = mutex_clone.lock().unwrap();
+        fuser_test(
+            vec![
+                temp_file_path_clone.to_str().unwrap().to_string(),
+                "-u".to_string(),
+            ],
+            "",
+            0,
+            |_, output| {
+                let stderr_str = str::from_utf8(&output.stderr).expect("Invalid UTF-8 in stderr");
 
-            let mut process = Command::new("tail")
-                .arg("-f")
-                .arg(&temp_file_path_clone)
-                .spawn()
-                .expect("Failed to start process");
+                assert!(
+                    stderr_str.contains(&owner),
+                    "Owner {} not found in the fuser output.",
+                    owner
+                );
+            },
+        );
 
-            let pid = process.id();
-            let owner = get_process_user(pid).expect("Failed to get owner of process");
-
-            fuser_test(
-                vec![
-                    temp_file_path_clone.to_str().unwrap().to_string(),
-                    "-u".to_string(),
-                ],
-                "",
-                0,
-                |_, output| {
-                    let stderr_str =
-                        str::from_utf8(&output.stderr).expect("Invalid UTF-8 in stderr");
-
-                    dbg!(stderr_str);
-                    assert!(
-                        stderr_str.contains(&owner),
-                        "Owner {} not found in the fuser output.",
-                        owner
-                    );
-                },
-            );
-
-            process.kill().expect("Failed to kill the process");
-        });
-
-        handle.join().expect("Failed to join thread");
+        process.kill().expect("Failed to kill the process");
         std::fs::remove_file(temp_file_path).expect("Failed to remove temporary file");
     }
 }
