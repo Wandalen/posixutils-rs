@@ -391,13 +391,6 @@ fn talk(args: Args) -> Result<(), TalkError> {
         get_addrs(&mut msg, &my_machine_name, &his_machine_name)
             .map_err(|e| TalkError::IoError(e))?;
 
-    if let Some(tty_name) = args.ttyname.as_ref() {
-        if tty_name == "test_connection" {
-            send_test_connection_message(&msg)?;
-            process::exit(128);
-        }
-    }
-
     let (width, height) = get_terminal_size();
 
     let mut logger = StateLogger::new("No connection yet.");
@@ -1747,36 +1740,4 @@ fn get_terminal_size() -> (u16, u16) {
     }
 
     (size.ws_col, size.ws_row)
-}
-
-/// Sends a test connection message to the specified talk daemon.
-///
-/// # Parameters
-///
-/// - `msg`: A reference to the `CtlMsg` structure that contains the message to be sent.
-///
-/// # Returns
-///
-/// Returns `Ok(())` if the message is sent successfully.
-///
-/// # Errors
-///
-/// Returns a `TalkError` if any error occurs during socket creation, message conversion,
-/// or sending the message.
-fn send_test_connection_message(msg: &CtlMsg) -> Result<(), TalkError> {
-    let socket = UdpSocket::bind(("127.0.0.1", 0))?;
-
-    let msg_bytes = msg
-        .to_bytes()
-        .map_err(|e| TalkError::Other(e.to_string()))?;
-
-    let talkd_addr: SocketAddr = format!("127.0.0.1:{}", 8081)
-        .parse()
-        .map_err(|e: AddrParseError| TalkError::AddressResolutionFailed(e.to_string()))?;
-
-    socket
-        .send_to(&msg_bytes, talkd_addr)
-        .map_err(TalkError::IoError)?;
-
-    Ok(())
 }
