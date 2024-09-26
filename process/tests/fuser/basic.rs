@@ -1,6 +1,6 @@
 mod basic {
     use crate::fuser::fuser_test;
-    use std::{fs::File, io::Write, path::PathBuf, process::Command, str};
+    use std::{fs::File, path::PathBuf, process::Command, str};
 
     /// Tests the basic functionality of `fuser` by ensuring it can find the PID of a process.
     ///
@@ -20,7 +20,7 @@ mod basic {
         }
         let binding = get_temp_file_path();
         let temp_file_path = binding.to_str().unwrap();
-        let mut file = File::create(temp_file_path).expect("Failed to create temporary file");
+        File::create(temp_file_path).expect("Failed to create temporary file");
 
         let mut process = Command::new("tail")
             .arg("-f")
@@ -29,8 +29,6 @@ mod basic {
             .expect("Failed to start process");
 
         let pid = process.id();
-
-        writeln!(file, "").expect("Failed to write to file");
 
         fuser_test(vec![temp_file_path.to_string()], "", 0, |_, output| {
             let stdout_str = str::from_utf8(&output.stdout).expect("Invalid UTF-8 in stdout");
