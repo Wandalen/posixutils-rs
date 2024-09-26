@@ -132,6 +132,24 @@ fn get_map_page(name: &str) -> Result<ChildStdout, ManError> {
         .ok_or_else(|| ManError("failed to get *cat command output".to_string()))
 }
 
+/// Checks whether utility is installed on the system.
+///
+/// # Arguments
+///
+/// `name` - [str] name of necessary utility to be checked.
+///
+/// # Returns
+///
+/// `true` if utility is installed, `false` otherwise.
+fn is_utility_installed(name: &str) -> bool {
+    // Better to find any alternatives
+    Command::new("which")
+        .arg(name)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 /// Formats man page content into appropriate format.
 ///
 /// # Arguments
@@ -148,10 +166,33 @@ fn get_map_page(name: &str) -> Result<ChildStdout, ManError> {
 fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, ManError> {
     let width = get_terminal_width()?;
 
-    // Command::new("groff")
-    //     .args(["-Tutf8", "-mandoc", &format!("-rLL={width}n")]) // Width causes test failure
-    Command::new("mandoc")
-        .args(["-mandoc", "-O", &format!("width={width}")])
+    let (formatter, args) = if is_utility_installed("mandoc") {
+        (
+            "mandoc",
+            vec![
+                "-man".to_string(),
+                "-O".to_string(),
+                format!("width={width}"),
+            ],
+        )
+    } else if is_utility_installed("groff") {
+        (
+            "groff",
+            vec![
+                "-Tutf8".to_string(),
+                "-man".to_string(),
+                format!("-rLL={width}n"),
+                format!("-rLR={width}n"),
+            ],
+        )
+    } else {
+        return Err(ManError(
+            "groff(1) is not installed. Further formatting is impossible".to_string(),
+        ));
+    };
+
+    Command::new(formatter)
+        .args(args)
         .stdin(Stdio::from(child_stdout))
         .stdout(Stdio::piped())
         .spawn()?
