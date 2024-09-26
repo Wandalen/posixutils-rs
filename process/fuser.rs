@@ -18,6 +18,7 @@ use std::time::Duration;
 use std::{
     collections::BTreeMap,
     ffi::CStr,
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
 };
 
@@ -150,7 +151,6 @@ mod linux {
         fs::{self, File},
         io::{BufRead, Error, ErrorKind},
         net::{IpAddr, Ipv4Addr, UdpSocket},
-        os::unix::fs::MetadataExt,
         os::unix::io::AsRawFd,
         path::Component,
     };
