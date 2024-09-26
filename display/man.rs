@@ -14,7 +14,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::io;
 use std::path::PathBuf;
-use std::process::{Child, ChildStdout, Command, Output, Stdio};
+use std::process::{ChildStdout, Command, Output, Stdio};
 use terminal_size::terminal_size;
 
 #[cfg(target_os = "macos")]
@@ -143,12 +143,12 @@ fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, ManError> {
 ///
 /// # Returns
 ///
-/// [Child] of called pager.
+/// Nothing.
 ///
 /// # Errors
 ///
 /// Returns [ManError] if failed to execute pager.
-fn display_pager(child_stdout: ChildStdout) -> Result<Child, ManError> {
+fn display_pager(child_stdout: ChildStdout) -> Result<(), ManError> {
     let pager = std::env::var("PAGER").unwrap_or_else(|_| "more".to_string());
     let mut pager_process = Command::new(&pager);
 
@@ -156,10 +156,16 @@ fn display_pager(child_stdout: ChildStdout) -> Result<Child, ManError> {
         pager_process.arg("-s");
     }
 
-    pager_process
+    let exit_status = pager_process
         .stdin(Stdio::from(child_stdout))
-        .spawn()
-        .map_err(Into::into)
+        .spawn()?
+        .wait()?;
+
+    if !exit_status.success() {
+        Err(ManError("failed to use pager".to_string()))
+    } else {
+        Ok(())
+    }
 }
 
 /// Displays man page
@@ -178,9 +184,8 @@ fn display_pager(child_stdout: ChildStdout) -> Result<Child, ManError> {
 fn display_man_page(name: &str) -> Result<(), ManError> {
     let cat_output = get_map_page(name)?;
     let formatter_output = format_man_page(cat_output)?;
-    let mut pager = display_pager(formatter_output)?;
+    display_pager(formatter_output)?;
 
-    pager.wait()?;
     Ok(())
 }
 
