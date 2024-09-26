@@ -1,6 +1,6 @@
 [package]
 name = "posixutils-tree"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Jeff Garzik"]
 license = "MIT"
@@ -8,12 +8,13 @@ repository = "https://github.com/rustcoreutils/posixutils-rs.git"
 
 [dependencies]
 plib = { path = "../plib" }
+ftw = { path = "../ftw" }
 clap.workspace = true
 gettext-rs.workspace = true
 libc.workspace = true
 regex.workspace = true
 chrono.workspace = true
-atty.workspace = true
+errno.workspace = true
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -85,4 +86,3 @@ path = "./touch.rs"
 [[bin]]
 name = "unlink"
 path = "./unlink.rs"
-

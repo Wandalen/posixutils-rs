@@ -11,9 +11,6 @@
 // - double-check that Rust stftime() is POSIX compliant
 //
 
-extern crate clap;
-extern crate plib;
-
 use chrono::{DateTime, Datelike, Local, LocalResult, TimeZone, Utc};
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
@@ -22,8 +19,8 @@ use plib::PROJECT_NAME;
 const DEF_TIMESTR: &str = "%a %b %e %H:%M:%S %Z %Y";
 
 /// date - write the date and time
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
     /// Perform operations as if the TZ env var was set to the string "UTC0"
     #[arg(short, long)]
@@ -152,10 +149,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match &args.timestr {
         None => show_time(args.utc, DEF_TIMESTR),
         Some(timestr) => {
-            if timestr.starts_with("+") {
-                show_time(args.utc, &timestr[1..]);
+            if let Some(st) = timestr.strip_prefix("+") {
+                show_time(args.utc, st);
             } else {
-                set_time(args.utc, &timestr)?;
+                set_time(args.utc, timestr)?;
             }
         }
     }

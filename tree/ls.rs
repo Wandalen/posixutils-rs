@@ -11,7 +11,7 @@ mod ls_util;
 
 use clap::{CommandFactory, FromArgMatches, Parser};
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
-use plib::PROJECT_NAME;
+use plib::{platform::P_WINSIZE_REQUEST_CODE, PROJECT_NAME};
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs;
@@ -24,8 +24,8 @@ use std::process::ExitCode;
 use self::ls_util::{ls_from_utf8_lossy, Entry, LongFormatPadding, MultiColumnPadding};
 
 /// ls - list directory contents
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
     /// Write out all directory entries, including those whose names begin with
     /// a <period> ( '.' ).
@@ -551,26 +551,6 @@ impl Config {
 }
 
 fn get_terminal_width() -> usize {
-    // Constants taken from:
-    // https://docs.rs/term_size/0.3.2/src/term_size/platform/unix.rs.html#5-19
-    const fn winsize_request_code() -> std::ffi::c_ulong {
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        return 0x5413;
-
-        #[cfg(any(
-            target_os = "macos",
-            target_os = "ios",
-            target_os = "dragonfly",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "openbsd"
-        ))]
-        return 0x40087468;
-
-        #[cfg(target_os = "solaris")]
-        0x5468
-    }
-
     // COLUMNS is usually automatically set and it even changes when the
     // terminal window is resized.
     if let Ok(s) = std::env::var("COLUMNS") {
@@ -584,7 +564,7 @@ fn get_terminal_width() -> usize {
         let mut winsize: MaybeUninit<libc::winsize> = MaybeUninit::zeroed();
         let ret = libc::ioctl(
             libc::STDOUT_FILENO,
-            winsize_request_code(),
+            P_WINSIZE_REQUEST_CODE,
             winsize.as_mut_ptr(),
         );
 
@@ -752,7 +732,7 @@ fn get_file_names_in_directory_order(directory: &str) -> io::Result<Vec<OsString
                     dirent_ref.d_name.as_ptr() as *const u8,
                     dirent_ref.d_name.len(),
                 );
-                let cstr = CStr::from_bytes_until_nul(bytes).map_err(|e| io::Error::other(e))?;
+                let cstr = CStr::from_bytes_until_nul(bytes).map_err(io::Error::other)?;
 
                 // Using an `OsString` because `to_string_lossy()` could
                 // possibly cause a name collision:
@@ -772,9 +752,7 @@ fn get_file_names_in_directory_order(directory: &str) -> io::Result<Vec<OsString
             return Err(io::Error::last_os_error());
         }
 
-        if let Err(e) = loop_result {
-            return Err(e);
-        }
+        loop_result?;
 
         Ok(filenames)
     }
@@ -787,7 +765,7 @@ fn display_entries(entries: &mut [Entry], config: &Config, dir_path: Option<&str
                 // Only considering the no-error case since the sorting
                 // order will get messed up anyway if even one entry in the
                 // `libc::readdir` call fails.
-                if let Ok(mut file_names) = get_file_names_in_directory_order(&dir_path) {
+                if let Ok(mut file_names) = get_file_names_in_directory_order(dir_path) {
                     if config.reverse_sorting {
                         file_names.reverse();
                     }
@@ -898,7 +876,7 @@ fn display_entries(entries: &mut [Entry], config: &Config, dir_path: Option<&str
                         }
                     }
                 }
-                println!("");
+                println!();
             }
         }
         OutputFormat::MultiColumnAcross => {
@@ -924,7 +902,7 @@ fn display_entries(entries: &mut [Entry], config: &Config, dir_path: Option<&str
             {
                 if col_idx == last_col_idx {
                     entry.print_multi_column(padding);
-                    println!("");
+                    println!();
                 } else {
                     entry.print_multi_column(padding);
                     print!("{:COLUMN_SPACING$}", "");
@@ -934,7 +912,7 @@ fn display_entries(entries: &mut [Entry], config: &Config, dir_path: Option<&str
             // If the last entry does not end up on the bottom right of
             // the grid
             if entries.len() % num_columns != 0 {
-                println!("");
+                println!();
             }
         }
         OutputFormat::StreamOutputFormat => {
@@ -1006,7 +984,7 @@ fn display_entries(entries: &mut [Entry], config: &Config, dir_path: Option<&str
 
             for entry in entries.iter() {
                 entry.print_multi_column(padding);
-                println!("");
+                println!();
             }
         }
     }
