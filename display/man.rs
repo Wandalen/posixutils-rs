@@ -150,6 +150,70 @@ fn is_utility_installed(name: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Gets formated by `mandoc(1)` system documentation.
+///
+/// # Arguments
+///
+/// `child_stdout` - [ChildStdout] with content that needs to be formatted.
+/// `width` - [u16] width value of current terminal.
+///
+/// # Returns
+///
+/// [ChildStdout] of called `mandoc(1)` formatter.
+///
+/// # Errors
+///
+/// Returns [ManError] if file failed to execute `mandoc(1)` formatter.
+fn format_with_mandoc(child_stdout: ChildStdout, width: u16) -> Result<ChildStdout, ManError> {
+    Command::new("mandoc")
+        .args(["-man", "-O", &format!("width={width}")])
+        .stdin(Stdio::from(child_stdout))
+        .stdout(Stdio::piped())
+        .spawn()?
+        .stdout
+        .ok_or_else(|| ManError("failed to get mandoc(1) output".to_string()))
+}
+
+/// Gets formated by `groff(1)` system documentation.
+///
+/// # Arguments
+///
+/// `child_stdout` - [ChildStdout] with content that needs to be formatted.
+/// `width` - [u16] width value of current terminal.
+///
+/// # Returns
+///
+/// [ChildStdout] of called `groff(1)` formatter.
+///
+/// # Errors
+///
+/// Returns [ManError] if file failed to execute `groff(1)` formatter.
+fn format_with_groff(child_stdout: ChildStdout, width: u16) -> Result<ChildStdout, ManError> {
+    let tbl_output = Command::new("tbl")
+        .stdin(Stdio::from(child_stdout))
+        .stdout(Stdio::piped())
+        .spawn()?
+        .stdout
+        .ok_or_else(|| ManError("failed to get groff(1) output".to_string()))?;
+
+    Command::new("groff")
+        .args([
+            "-Tutf8",
+            "-S",
+            "-P-h",
+            "-Wall",
+            "-mtty-char",
+            "-mandoc",
+            &format!("-rLL={width}n"),
+            &format!("-rLR={width}n"),
+        ])
+        .stdin(Stdio::from(tbl_output))
+        .stdout(Stdio::piped())
+        .spawn()?
+        .stdout
+        .ok_or_else(|| ManError("failed to get groff(1) output".to_string()))
+}
+
 /// Formats man page content into appropriate format.
 ///
 /// # Arguments
@@ -165,41 +229,19 @@ fn is_utility_installed(name: &str) -> bool {
 /// Returns [ManError] if failed to execute formatter command.
 fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, ManError> {
     let width = get_terminal_width()?;
-    // Necessary for correct syllable transfers.
     let width = if width >= 80 { width - 2 } else { width };
 
-    let (formatter, args) = if is_utility_installed("mandoc") {
-        (
-            "mandoc",
-            vec![
-                "-man".to_string(),
-                "-O".to_string(),
-                format!("width={width}"),
-            ],
-        )
+    if is_utility_installed("mandoc") {
+        println!("USING mandoc");
+        format_with_mandoc(child_stdout, width)
     } else if is_utility_installed("groff") {
-        (
-            "groff",
-            vec![
-                "-Tutf8".to_string(),
-                "-man".to_string(),
-                format!("-rLL={width}n"),
-                format!("-rLR={width}n"),
-            ],
-        )
+        println!("USING groff");
+        format_with_groff(child_stdout, width)
     } else {
-        return Err(ManError(
-            "groff(1) is not installed. Further formatting is impossible".to_string(),
-        ));
-    };
-
-    Command::new(formatter)
-        .args(args)
-        .stdin(Stdio::from(child_stdout))
-        .stdout(Stdio::piped())
-        .spawn()?
-        .stdout
-        .ok_or_else(|| ManError("failed to get formatter output".to_string()))
+        Err(ManError(
+            "groff(1) is not installed. Further formatting is impossible.".to_string(),
+        ))
+    }
 }
 
 /// Formats man page content into appropriate format.
