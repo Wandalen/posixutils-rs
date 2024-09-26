@@ -12,10 +12,9 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::error::Error;
 use std::fmt::Display;
-use std::io;
+use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::{ChildStdout, Command, Output, Stdio};
-use terminal_size::terminal_size;
 
 #[cfg(target_os = "macos")]
 const MAN_PATH: &str = "/usr/local/share/man";
@@ -49,6 +48,33 @@ impl Error for ManError {}
 impl From<io::Error> for ManError {
     fn from(error: io::Error) -> Self {
         ManError(error.to_string())
+    }
+}
+
+/// Gets terminal width.
+///
+/// # Returns
+///
+/// [u16] width value of current terminal.
+///
+/// # Errors
+///
+/// Returns [ManError] if working not on terminal or failed to get terminal size.
+fn get_terminal_width() -> Result<u16, ManError> {
+    if !std::io::stdout().is_terminal() {
+        return Err(ManError("not a terminal".to_string()));
+    }
+    let mut winsize = libc::winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) };
+    if result == 0 {
+        Ok(winsize.ws_col)
+    } else {
+        Err(ManError("failed to get terminal width".to_string()))
     }
 }
 
@@ -103,7 +129,7 @@ fn get_map_page(name: &str) -> Result<ChildStdout, ManError> {
         .stdout(Stdio::piped())
         .spawn()?
         .stdout
-        .ok_or_else(|| ManError("Failed to get *cat command output".to_string()))
+        .ok_or_else(|| ManError("failed to get *cat command output".to_string()))
 }
 
 /// Formats man page content into appropriate format.
@@ -120,9 +146,7 @@ fn get_map_page(name: &str) -> Result<ChildStdout, ManError> {
 ///
 /// Returns [ManError] if failed to execute formatter command.
 fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, ManError> {
-    let (width, _) =
-        terminal_size().ok_or_else(|| ManError("Failed to get terminal size".to_string()))?;
-    let width = width.0;
+    let width = get_terminal_width()?;
 
     // Command::new("groff")
     //     .args(["-Tutf8", "-mandoc", &format!("-rLL={width}n")]) // Width causes test failure
@@ -132,7 +156,7 @@ fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, ManError> {
         .stdout(Stdio::piped())
         .spawn()?
         .stdout
-        .ok_or_else(|| ManError("Failed to get formatter output".to_string()))
+        .ok_or_else(|| ManError("failed to get formatter output".to_string()))
 }
 
 /// Formats man page content into appropriate format.

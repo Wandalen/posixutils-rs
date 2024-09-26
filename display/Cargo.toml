@@ -10,7 +10,7 @@ repository = "https://github.com/rustcoreutils/posixutils-rs.git"
 plib = { path = "../plib" }
 clap.workspace = true
 gettext-rs.workspace = true
-terminal_size = "0.4"
+libc.workspace = true
 
 [[bin]]
 name = "echo"
