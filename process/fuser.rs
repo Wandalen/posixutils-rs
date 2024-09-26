@@ -18,7 +18,6 @@ use std::time::Duration;
 use std::{
     collections::BTreeMap,
     ffi::CStr,
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
 };
 
@@ -151,6 +150,7 @@ mod linux {
         fs::{self, File},
         io::{BufRead, Error, ErrorKind},
         net::{IpAddr, Ipv4Addr, UdpSocket},
+        os::unix::fs::MetadataExt,
         os::unix::io::AsRawFd,
         path::Component,
     };
@@ -1224,7 +1224,10 @@ mod macos {
         include!(concat!(env!("OUT_DIR"), "/osx_libproc_bindings.rs"));
     }
     use libc::{c_char, c_int, c_void};
-    use std::{os::unix::ffi::OsStrExt, ptr};
+    use std::{
+        os::unix::ffi::{CString, OsStrExt},
+        ptr,
+    };
 
     // similar to list_pids_ret() below, there are two cases when 0 is returned, one when there are
     // no pids, and the other when there is an error
@@ -1313,7 +1316,7 @@ mod macos {
 
         for name in names.iter_mut() {
             let st = timeout(&name.filename.to_string_lossy(), 5)?;
-            let uid = st.st_uid;
+            let uid = st.uid();
 
             let pids = listpidspath(
                 osx_libproc_bindings::PROC_ALL_PIDS,
