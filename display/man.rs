@@ -46,7 +46,37 @@ impl Display for ManError {
 
 impl Error for ManError {}
 
-/// Gets manpage content from plain file or `.gz` archieve.
+impl From<io::Error> for ManError {
+    fn from(error: io::Error) -> Self {
+        ManError(error.to_string())
+    }
+}
+
+/// Gets system documentaton path by passed name.
+///
+/// # Arguments
+///
+/// `name` - [str] name of necessary system documentation.
+///
+/// # Returns
+///
+/// [PathBuf] of found sustem documentation.
+///
+/// # Errors
+///
+/// Returns [ManError] if file not found.
+fn get_man_page_path(name: &str) -> Result<PathBuf, ManError> {
+    (1..=9)
+        .flat_map(|section| {
+            let base_path = format!("{MAN_PATH}/man{section}/{name}.{section}");
+            vec![format!("{base_path}.gz"), base_path]
+        })
+        .find(|path| PathBuf::from(path).exists())
+        .map(PathBuf::from)
+        .ok_or_else(|| ManError("man page not found".to_string()))
+}
+
+/// Gets system documentation content by passed name.
 ///
 /// # Arguments
 ///
@@ -58,34 +88,22 @@ impl Error for ManError {}
 ///
 /// # Errors
 ///
-/// Returns [std::io::Error] if file not found or failed to execute `*cat` command.
-fn get_map_page(name: &str) -> Result<ChildStdout, io::Error> {
-    let man_page_path = (1..=9)
-        .flat_map(|section| {
-            let plain_path = format!("{MAN_PATH}/man{section}/{name}.{section}");
-            let gz_path = format!("{plain_path}.gz");
-            vec![gz_path, plain_path]
-        })
-        .find(|path| PathBuf::from(path).exists())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "man page not found"))?;
+/// Returns [ManError] if file not found or failed to execute `*cat` command.
+fn get_map_page(name: &str) -> Result<ChildStdout, ManError> {
+    let man_page_path = get_man_page_path(name)?;
 
-    let cat_process_name = if man_page_path.ends_with(".gz") {
+    let cat_process_name = if man_page_path.extension().and_then(|ext| ext.to_str()) == Some("gz") {
         "zcat"
     } else {
         "cat"
     };
 
     Command::new(cat_process_name)
-        .arg(man_page_path)
+        .arg(&man_page_path)
         .stdout(Stdio::piped())
         .spawn()?
         .stdout
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("failed to get {cat_process_name} output"),
-            )
-        })
+        .ok_or_else(|| ManError("Failed to get *cat command output".to_string()))
 }
 
 /// Formats man page content into appropriate format.
@@ -100,14 +118,10 @@ fn get_map_page(name: &str) -> Result<ChildStdout, io::Error> {
 ///
 /// # Errors
 ///
-/// Returns [std::io::Error] if failed to execute formatter command.
-fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, io::Error> {
-    let (width, _) = terminal_size().ok_or({
-        io::Error::new(
-            io::ErrorKind::Other,
-            "failed to get terminal size".to_string(),
-        )
-    })?;
+/// Returns [ManError] if failed to execute formatter command.
+fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, ManError> {
+    let (width, _) =
+        terminal_size().ok_or_else(|| ManError("Failed to get terminal size".to_string()))?;
     let width = width.0;
 
     // Command::new("groff")
@@ -118,12 +132,7 @@ fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, io::Error> 
         .stdout(Stdio::piped())
         .spawn()?
         .stdout
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                "failed to get formatter output".to_string(),
-            )
-        })
+        .ok_or_else(|| ManError("Failed to get formatter output".to_string()))
 }
 
 /// Formats man page content into appropriate format.
@@ -138,16 +147,19 @@ fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, io::Error> 
 ///
 /// # Errors
 ///
-/// Returns [std::io::Error] if failed to execute pager.
-fn display_pager(child_stdout: ChildStdout) -> Result<Child, io::Error> {
-    let pager = std::env::var("PAGER").unwrap_or("more".to_string());
+/// Returns [ManError] if failed to execute pager.
+fn display_pager(child_stdout: ChildStdout) -> Result<Child, ManError> {
+    let pager = std::env::var("PAGER").unwrap_or_else(|_| "more".to_string());
     let mut pager_process = Command::new(&pager);
 
     if pager.ends_with("more") {
         pager_process.arg("-s");
-    };
+    }
 
-    pager_process.stdin(Stdio::from(child_stdout)).spawn()
+    pager_process
+        .stdin(Stdio::from(child_stdout))
+        .spawn()
+        .map_err(Into::into)
 }
 
 /// Displays man page
@@ -162,16 +174,13 @@ fn display_pager(child_stdout: ChildStdout) -> Result<Child, io::Error> {
 ///
 /// # Errors
 ///
-/// Returns [std::io::Error] if man page not found, or any display error happened.
-fn display_man_page(name: &str) -> Result<(), io::Error> {
+/// Returns [ManError] if man page not found, or any display error happened.
+fn display_man_page(name: &str) -> Result<(), ManError> {
     let cat_output = get_map_page(name)?;
-
     let formatter_output = format_man_page(cat_output)?;
-
     let mut pager = display_pager(formatter_output)?;
 
     pager.wait()?;
-
     Ok(())
 }
 
@@ -187,19 +196,15 @@ fn display_man_page(name: &str) -> Result<(), io::Error> {
 ///
 /// # Errors
 ///
-/// Returns [std::io::Error] if call of `apropros` utility failed.
-fn display_summary_database(keyword: &str) -> io::Result<()> {
+/// Returns [ManError] if call of `apropros` utility failed.
+fn display_summary_database(keyword: &str) -> Result<(), ManError> {
     let output: Output = Command::new("apropos").arg(keyword).output()?;
 
     if !output.status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "apropos command failed",
-        ));
+        return Err(ManError("apropos command failed".to_string()));
     }
 
     let result = String::from_utf8_lossy(&output.stdout);
-
     print!("{result}");
 
     Ok(())
@@ -237,7 +242,7 @@ fn man(args: Args) -> Result<(), ManError> {
     };
 
     for name in &args.names {
-        if let Err(err) = display(name).map_err(|err| ManError(format!("{name}: {err}"))) {
+        if let Err(err) = display(name) {
             eprintln!("{err}");
         }
     }
