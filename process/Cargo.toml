@@ -15,6 +15,7 @@ dirs = "5.0"
 
 [build-dependencies]
 bindgen = { version = "0.70.0", features = ["runtime"] }
+sysinfo = "0.31"
 
 [[bin]]
 name = "fuser"
@@ -39,6 +40,10 @@ path = "./nohup.rs"
 [[bin]]
 name = "renice"
 path = "./renice.rs"
+
+[[bin]]
+name = "timeout"
+path = "./timeout.rs"
 
 [[bin]]
 name = "xargs"
