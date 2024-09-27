@@ -16,11 +16,7 @@ use gettextrs::{bind_textdomain_codeset, textdomain};
 use libc::{regcomp, regex_t, regexec, regfree, REG_EXTENDED, REG_ICASE, REG_NOMATCH};
 use plib::PROJECT_NAME;
 use std::{
-    ffi::CString,
-    fs::File,
-    io::{self, BufRead, BufReader, Read, SeekFrom},
-    path::{Path, PathBuf},
-    ptr,
+    ffi::CString, fs::File, io::{self, BufRead, BufReader, Read, SeekFrom}, os::windows::io::AsRawHandle, path::{Path, PathBuf}, ptr
 };
 
 const BACKSPACE: &str = "\x08";
@@ -846,7 +842,7 @@ impl MoreControl{
             self.output_tty.c_lflag |= ICANON | ECHO;
             self.output_tty.c_cc[VMIN] = self.original_tty.c_cc[VMIN];
             self.output_tty.c_cc[VTIME] = self.original_tty.c_cc[VTIME];
-            tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, &self.original_tty);
+            tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, self.original_tty as *const termios);
         }
     }
     
@@ -903,7 +899,7 @@ impl MoreControl{
         }
     
         for i in input {
-            let ch = i as char;
+            let ch = *i as char;
             if ch.is_digit(10) {
                 if self.reading_num {
                     self.leading_number = self.leading_number * 10 + ch.to_digit(10).unwrap() as i32;
@@ -1040,24 +1036,24 @@ impl MoreControl{
         eprint!("{}", self.backspace_ch);
     }
     
-    fn ttyin(&mut self, buf: &str, nmax: i32, pchar: char){
+    fn ttyin(&mut self, buf: &mut str, nmax: i32, pchar: char){
         let mut sp = buf;
         let mut spp = 0;
         let mut c: cc_t;
         let mut slash = 0;
         let mut maxlen = 0;
     
-        while (spp - buf < nmax) {
+        while (spp - buf.len() < nmax) {
             if self.prompt_len > maxlen{
                 maxlen = self.prompt_len;
             }
     
-            c = read_user_input(self);
+            c = self.read_user_input();
             if c == '\\' {
-                slash += 1;
+                slash = true;
             } else if c == self.output_tty.c_cc[VERASE] && !slash {
-                if (spp > buf) {
-                    if HAVE_WIDECHAR{
+                if (spp > buf.len()) {
+                    /*if HAVE_WIDECHAR{
                         if MB_CUR_MAX > 1 {
                             let mut wc: wchar_t;
                             let mut pos: size_t = 0;
@@ -1107,17 +1103,17 @@ impl MoreControl{
                                 mblength -= 1;
                             }
                         }
-                    } 
+                    }*/
                     
                     if !(MB_CUR_MAX > 1){
                         self.prompt_len -= 1;
-                        erase_one_column(self);
+                        self.erase_one_column();
                         spp -= 1;
                     }
     
                     if (sp[spp] < ' ' && sp[spp] != '\n') || sp[spp] == CERASE {
                         self.prompt_len -= 1;
-                        erase_one_column(self);
+                        self.erase_one_column();
                     }
     
                     continue;
@@ -1128,41 +1124,35 @@ impl MoreControl{
                 }
             } else if c == self.output_tty.c_cc[VKILL] && !slash {
                 if self.hard_tty {
-                    show(self, c);
-                    putchar('\n');
-                    putchar(pchar);
+                    self.show(c);
+                    print!("\n{pchar}");
                 } else {
-                    putchar('\r');
-                    putchar(pchar);
+                    print!("\r{pchar}");
                     if self.erase_line{
-                        erase_to_col(self, 1);
+                        self.erase_to_col(1);
                     } else if self.erase_input_ok{
-                        while self.prompt_len > 1{
-                            eprint!("{} {}", self.backspace_ch, self.backspace_ch);
-                            self.prompt_len -= 1;
-                        }
+                        eprint!(
+                            format!("{} {}", self.backspace_ch, self.backspace_ch)
+                                .repeat(self.prompt_len - 1)
+                        );
+                        self.prompt_len = 1;
                     }
                     
                     self.prompt_len = 1;
                 }
     
                 sp = buf;
-    
-                unsafe {
-                    libc::fflush(ptr::null_mut());
-                }
-    
                 continue;
             }
     
             if slash && (c == self.output_tty.c_cc[VKILL] ||
                       c == self.output_tty.c_cc[VERASE]) {
-                erase_one_column(self);
+                self.erase_one_column();
                 spp -= 1;
             }
     
             if (c != '\\'){
-                slash = 0;
+                slash = false;
             }
             
             spp += 1;
@@ -1175,13 +1165,12 @@ impl MoreControl{
                     0100
                 };
     
-                fputs(CARAT, stderr);
+                eprint!("{CARAT}");
                 self.prompt_len += 1;
             }
     
             if (c != '\n' && c != ESC) {
-                fputc(c, stderr);
-    
+                eprint!("{c}");
                 self.prompt_len += 1;
             } else{
                 break;
@@ -1195,8 +1184,8 @@ impl MoreControl{
             self.prompt_len = maxlen;
         }
         
-        if spp - buf >= nmax - 1{
-            more_error(self, "Line too long");
+        if spp - buf.len() >= nmax - 1{
+            self.error("Line too long");
         }
     }
     
@@ -1227,7 +1216,9 @@ impl MoreControl{
         self.output_tty.c_lflag &= !(ICANON | ECHO);
         self.output_tty.c_cc[VMIN] = 1;
         self.output_tty.c_cc[VTIME] = 0;
-        tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, &self.output_tty);
+        unsafe{
+            tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, self.output_tty as *mut );
+        }
     }
     
     /// 
@@ -1255,9 +1246,9 @@ impl MoreControl{
     }
     
     fn sigwinch_handler(&mut self) {
-        let mut win: winsize = unsafe { std::mem::zeroed() };
+        let mut win: winsize;
     
-        if unsafe { ioself(STDOUT_FILENO, TIOCGWINSZ, &mut win) } != -1 {
+        if unsafe { ioctl(std::io::stdout().as_raw_fd(), TIOCGWINSZ, &mut win) } != -1 {
             if win.ws_row != 0 {
                 self.lines_per_page = win.ws_row as usize;
                 self.d_scroll_len = self.lines_per_page / 2 - 1;
@@ -1273,56 +1264,51 @@ impl MoreControl{
         unsafe { prepare_line_buffer(self) };
     }
     
-    /
+    //
     fn execute(&mut self, filename: &str, cmd: &str, args: &[&str]) {
-        match nix::unistd::fork() {
-            Ok(nix::unistd::ForkResult::Child) => {
-                if !isatty(STDIN_FILENO) {
-                    close(STDIN_FILENO);
-                    if open("/dev/tty", O_RDONLY) < 0 {
-                        eprintln!("Failed to open /dev/tty");
-                        self.exit(EXIT_FAILURE);
-                    }
-                }
-
-                self.reset_tty();
-
-                let mut c_args: Vec<CString> = args.iter()
-                    .map(|&arg| CString::new(arg).expect("CString::new failed"))
-                    .collect();
-                c_args.push(ptr::null());
-
-                if (geteuid() != getuid() || getegid() != getgid()) && drop_permissions() != 0 {
-                    eprintln!("drop permissions failed");
+        let pid = unsafe{ fork() }; 
+        if id == 0 {
+            if unsafe{ !isatty(std::io::stdin().as_raw_fd()) } {
+                unsafe{ close(std::io::stdin().as_raw_fd()); }
+                if unsafe{ open("/dev/tty".as_ptr(), O_RDONLY) } < 0 {
+                    eprintln!("Failed to open /dev/tty");
                     self.exit(EXIT_FAILURE);
                 }
-
-                let c_cmd = CString::new(cmd).expect("CString::new failed");
-                execvp(c_cmd.as_ptr(), c_args.as_ptr());
-                let errsv = Error::last_os_error().raw_os_error();
-                eprintln!("exec failed");
-                exit(if errsv == ENOENT { 127 } else { 126 });
             }
 
-            Ok(nix::unistd::ForkResult::Parent { child }) => {
-                loop {
-                    if wait(ptr::null_mut()) < 0 {
-                        if Error::last_os_error().raw_os_error() == EINTR {
-                            continue;
-                        } else {
-                            break;
-                        }
+            self.reset_tty();
+            let mut c_args: Vec<CString> = args.iter()
+                .filter_map(|&arg| CString::new(arg).ok())
+                .collect();
+
+            if unsafe{ getegid() != getuid() || getegid() != getgid() } && drop_permissions() != 0 {
+                eprintln!("drop permissions failed");
+                self.exit(EXIT_FAILURE);
+            }
+
+            if let Ok(c_cmd) = CString::new(cmd){
+                unsafe{ execvp(c_cmd.as_ptr(), c_args.as_ptr()); }
+            }
+            let errsv = Error::last_os_error().raw_os_error();
+            eprintln!("exec failed");
+            exit(if errsv == ENOENT { 127 } else { 126 });
+        }else if id > 0 {
+            loop {
+                if unsafe{ wait(PT_NULL) } < 0 {
+                    if Error::last_os_error().raw_os_error() == EINTR {
+                        continue;
+                    } else {
+                        break;
                     }
                 }
             }
-
-            Err(_) => {
-                eprintln!("can't fork");
-                self.set_tty();
-                println!('-'.repeat(24));
-                self.output_prompt(CString::new(filename).unwrap().as_ptr());
-            }
+        }else{
+            eprintln!("can't fork");
         }
+
+        self.set_tty();
+        println!('-'.repeat(24));
+        self.output_prompt(CString::new(filename).unwrap().as_ptr());
     }
     
     //
@@ -1410,7 +1396,7 @@ impl MoreControl{
             };
 
             if rc < 0{
-                if unsafe{ &__errno_location() } == EAGAIN { continue; }
+                if Error::last_os_error().raw_os_error() == EAGAIN { continue; }
                 self.error("poll failed");
                 return Err(rc);
             }else if rc == 0{
@@ -2034,21 +2020,21 @@ impl MoreControl{
     //
     fn initterm(&mut self) -> Result<(), >{
         let ret = 0;
-        let Ok(term) = std::env::var("TERM") else{
+        let term = std::env::var("TERM").unwrap_or_else(||{
             self.dumb_tty = true;
-        };
-        let win: winsize;
+
+        });
     
         let stdout = std::io::stdout().as_raw_fd();
         let stdin = std::io::stdin().as_raw_fd();
         let stderr = std::io::stderr().as_raw_fd();
     
-        if NON_INTERACTIVE_MORE{
-            self.no_tty_out = tcgetattr(stdout, &self.output_tty);
+        if !NON_INTERACTIVE_MORE{
+            self.no_tty_out = unsafe{ tcgetattr(stdout, self.output_tty as *mut termios) };
         }
     
-        self.no_tty_in = tcgetattr(stdin, &self.output_tty);
-        self.no_tty_err = tcgetattr(stderr, &self.output_tty);
+        self.no_tty_in = unsafe{ tcgetattr(stdin, self.output_tty as *mut termios) };
+        self.no_tty_err = unsafe{ tcgetattr(stderr, self.output_tty as *mut termios) };
         self.original_tty = self.output_tty;
     
         self.hard_tabs = (self.output_tty.c_oflag & TABDLY) != TAB3;
@@ -2062,34 +2048,37 @@ impl MoreControl{
         self.erase_previous_ok = (self.output_tty.c_cc[VERASE] != 255);
         self.erase_input_ok = (self.output_tty.c_cc[VKILL] != 255);
     
-        setupterm(term, 1, &ret);
-        if ret <= 0 {
-            self.dumb_tty = true;
-            return Ok(());
+        if let Ok(screen) = new_prescr(){
+            if set_term(screen).is_err(){
+                self.dumb_tty = true;
+                return Ok(());
+            }
         }
     
-        if /*ioself(stdout, TIOCGWINSZ, &win)*/ < 0 {
-            if let Ok(lines) = tigetnum(TERM_LINES){
+        let win: winsize;
+        if unsafe{ ioctl(stdout, TIOCGWINSZ, win as *mut winsize) } < 0 {
+            if let Ok(Some(lines)) = tigetnum(TERM_LINES){
                 self.lines_per_page = lines;
             }
-            if let Ok(cols) = tigetnum(TERM_COLS){
+            if let Ok(Some(cols)) = tigetnum(TERM_COLS){
                 self.num_columns = cols;
             }
         } else {
             self.lines_per_page = win.ws_row;
             if self.lines_per_page == 0{
-                if let Ok(lines) = tigetnum(TERM_LINES){
+                if let Ok(Some(lines)) = tigetnum(TERM_LINES){
                     self.lines_per_page = lines;
                 }
             }
             if (self.num_columns = win.ws_col) == 0{
-                if let Ok(cols) = tigetnum(TERM_COLS){
+                if let Ok(Some(cols)) = tigetnum(TERM_COLS){
                     self.num_columns = cols;
                 }
             }
         }
     
-        if (self.lines_per_page <= 0) || tigetflag(TERM_HARD_COPY)? {
+        if (self.lines_per_page <= 0) 
+            || tigetflag(TERM_HARD_COPY).uwrap_or_else(false) {
             self.hard_tty = 1;
             self.lines_per_page = LINES_PER_PAGE;
         }
@@ -2102,20 +2091,22 @@ impl MoreControl{
             self.num_columns = NUM_COLUMNS;
         }
     
-        self.wrap_margin = tigetflag(TERM_AUTO_RIGHT_MARGIN)?;
-        self.bad_stdout = tigetflag(TERM_CEOL)?;
-        self.erase_line = tigetstr(TERM_CLEAR_TO_LINE_END)?;
-        self.clear = tigetstr(TERM_CLEAR)?;
-        self.enter_std = tigetstr(TERM_STANDARD_MODE)?;
+        self.wrap_margin = tigetflag(TERM_AUTO_RIGHT_MARGIN).uwrap_or(false);
+        self.bad_stdout = tigetflag(TERM_CEOL).uwrap_or(false);
+        self.erase_line = tigetstr(TERM_CLEAR_TO_LINE_END).ok();
+        self.clear = tigetstr(TERM_CLEAR).ok();
+        self.enter_std = tigetstr(TERM_STANDARD_MODE).ok();
         self.move_line_down = tigetstr(TERM_LINE_DOWN).unwrap_or(BACKSPACE);
         self.clear_rest = tigetstr(TERM_CLEAR_TO_SCREEN_END).ok();
         self.backspace_ch = tigetstr(TERM_BACKSPACE).unwrap_or(BACKSPACE);
         self.shell = std::env::var("SHELL").unwrap_or(_PATH_BSHELL.to_string());
     
         if self.enter_std.is_some() {
-            self.exit_std = tigetstr(TERM_EXIT_STANDARD_MODE)?;
-            if (0 < tigetnum(TERM_STD_MODE_GLITCH)?){
-                self.stdout_glitch = true;
+            self.exit_std = tigetstr(TERM_EXIT_STANDARD_MODE).ok();
+            if let Ok(Some(mode_glitch)) = tigetnum(TERM_STD_MODE_GLITCH){
+                if  (0 < mode_glitch){
+                    self.stdout_glitch = true;
+                }
             }
         }
     
@@ -2123,7 +2114,7 @@ impl MoreControl{
         if (cursor_addr.is_none() || cursor_addr == Some("\0")) {
             cursor_addr = tigetstr(TERM_CURSOR_ADDRESS).ok();
             if cursor_addr.is_some(){
-                cursor_addr = tparm(cursor_addr, 0, 0);
+                unsafe{ cursor_addr = tiparm(cursor_addr, 0, 0); };
             }
         }
     
@@ -2248,6 +2239,7 @@ fn runtime_usage() {
     print!('-'.repeat(79));
 }
 
+///
 fn exit(code: i32){
     std::process::exit(code);
 }
@@ -2272,7 +2264,6 @@ fn main() {
         }
 	}
 
-    /*
     unsafe{
         sigemptyset(ctl.sigset as *mut sigset_t);
         sigaddset(ctl.sigset as *mut sigset_t, SIGINT);
@@ -2280,10 +2271,9 @@ fn main() {
         sigaddset(ctl.sigset as *mut sigset_t, SIGTSTP);
         sigaddset(ctl.sigset as *mut sigset_t, SIGCONT);
         sigaddset(ctl.sigset as *mut sigset_t, SIGWINCH);
-        sigprocmask(SIG_BLOCK, ctl.sigset as *const sigset_t, std::ptr::null() as *mut sigset_t);
-        self.sigfd = signalfd(-1, &ctl.sigset, SFD_CLOEXEC);
+        sigprocmask(SIG_BLOCK, ctl.sigset as *const sigset_t, std::ptr::null::<*mut sigset_t>());
+        self.sigfd = signalfd(-1, ctl.sigset as *const sigset_t, SFD_CLOEXEC);
     }
-    */
 
 	if ctl.no_tty_in {
         if let Some(stdin) = std::io::stdin().ok(){
