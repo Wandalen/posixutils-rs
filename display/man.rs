@@ -16,10 +16,6 @@ use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::{ChildStdout, Command, Output, Stdio};
 
-#[cfg(target_os = "macos")]
-const MAN_PATH: &str = "/usr/local/share/man";
-
-#[cfg(all(target_family = "unix", not(target_os = "macos")))]
 const MAN_PATH: &str = "/usr/share/man";
 
 /// man - display system documentation
@@ -174,7 +170,7 @@ fn format_with_mandoc(
     child_stdout: ChildStdout,
     width: Option<u16>,
 ) -> Result<ChildStdout, ManError> {
-    let mut args = vec!["-man".to_string()];
+    let mut args = vec![];
     if let Some(width) = width {
         args.push("-O".to_string());
         args.push(format!("width={width}"));
