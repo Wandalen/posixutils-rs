@@ -51,33 +51,6 @@ impl From<io::Error> for ManError {
     }
 }
 
-/// Gets terminal width.
-///
-/// # Returns
-///
-/// [u16] width value of current terminal.
-///
-/// # Errors
-///
-/// Returns [ManError] if working not on terminal or failed to get terminal size.
-fn get_terminal_width() -> Result<u16, ManError> {
-    if !std::io::stdout().is_terminal() {
-        return Err(ManError("not a terminal".to_string()));
-    }
-    let mut winsize = libc::winsize {
-        ws_row: 0,
-        ws_col: 0,
-        ws_xpixel: 0,
-        ws_ypixel: 0,
-    };
-    let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) };
-    if result == 0 {
-        Ok(winsize.ws_col)
-    } else {
-        Err(ManError("failed to get terminal width".to_string()))
-    }
-}
-
 /// Gets system documentaton path by passed name.
 ///
 /// # Arguments
@@ -150,12 +123,45 @@ fn is_utility_installed(name: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Gets page width.
+///
+/// # Returns
+///
+/// [Option<u16>] width value of current terminal. [Option::Some] if working on terminal and receiving terminal size was succesfull. [Option::None] if working not on terminal.
+///
+/// # Errors
+///
+/// Returns [ManError] if working on terminal and failed to get terminal size.
+fn get_page_width() -> Result<Option<u16>, ManError> {
+    if std::io::stdout().is_terminal() {
+        let mut winsize = libc::winsize {
+            ws_row: 0,
+            ws_col: 0,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) };
+        if result == 0 {
+            let result_width = if winsize.ws_col >= 80 {
+                winsize.ws_col - 2
+            } else {
+                winsize.ws_col
+            };
+            Ok(Some(result_width))
+        } else {
+            Err(ManError("failed to get terminal width".to_string()))
+        }
+    } else {
+        Ok(None)
+    }
+}
+
 /// Gets formated by `mandoc(1)` system documentation.
 ///
 /// # Arguments
 ///
 /// `child_stdout` - [ChildStdout] with content that needs to be formatted.
-/// `width` - [u16] width value of current terminal.
+/// `width` - [Option<u16>] width value of current terminal.
 ///
 /// # Returns
 ///
@@ -164,9 +170,17 @@ fn is_utility_installed(name: &str) -> bool {
 /// # Errors
 ///
 /// Returns [ManError] if file failed to execute `mandoc(1)` formatter.
-fn format_with_mandoc(child_stdout: ChildStdout, width: u16) -> Result<ChildStdout, ManError> {
+fn format_with_mandoc(
+    child_stdout: ChildStdout,
+    width: Option<u16>,
+) -> Result<ChildStdout, ManError> {
+    let mut args = vec!["-man".to_string()];
+    if let Some(width) = width {
+        args.push("-O".to_string());
+        args.push(format!("width={width}"));
+    }
     Command::new("mandoc")
-        .args(["-man", "-O", &format!("width={width}")])
+        .args(args)
         .stdin(Stdio::from(child_stdout))
         .stdout(Stdio::piped())
         .spawn()?
@@ -179,7 +193,7 @@ fn format_with_mandoc(child_stdout: ChildStdout, width: u16) -> Result<ChildStdo
 /// # Arguments
 ///
 /// `child_stdout` - [ChildStdout] with content that needs to be formatted.
-/// `width` - [u16] width value of current terminal.
+/// `width` - [Option<u16>] width value of current terminal.
 ///
 /// # Returns
 ///
@@ -188,7 +202,10 @@ fn format_with_mandoc(child_stdout: ChildStdout, width: u16) -> Result<ChildStdo
 /// # Errors
 ///
 /// Returns [ManError] if file failed to execute `groff(1)` formatter.
-fn format_with_groff(child_stdout: ChildStdout, width: u16) -> Result<ChildStdout, ManError> {
+fn format_with_groff(
+    child_stdout: ChildStdout,
+    width: Option<u16>,
+) -> Result<ChildStdout, ManError> {
     let tbl_output = Command::new("tbl")
         .stdin(Stdio::from(child_stdout))
         .stdout(Stdio::piped())
@@ -196,17 +213,20 @@ fn format_with_groff(child_stdout: ChildStdout, width: u16) -> Result<ChildStdou
         .stdout
         .ok_or_else(|| ManError("failed to get groff(1) output".to_string()))?;
 
+    let mut args = vec![
+        "-Tutf8".to_string(),
+        "-S".to_string(),
+        "-P-h".to_string(),
+        "-Wall".to_string(),
+        "-mtty-char".to_string(),
+        "-mandoc".to_string(),
+    ];
+    if let Some(width) = width {
+        args.push(format!("-rLL={width}n").to_string());
+        args.push(format!("-rLR={width}n").to_string());
+    }
     Command::new("groff")
-        .args([
-            "-Tutf8",
-            "-S",
-            "-P-h",
-            "-Wall",
-            "-mtty-char",
-            "-mandoc",
-            &format!("-rLL={width}n"),
-            &format!("-rLR={width}n"),
-        ])
+        .args(args)
         .stdin(Stdio::from(tbl_output))
         .stdout(Stdio::piped())
         .spawn()?
@@ -228,14 +248,11 @@ fn format_with_groff(child_stdout: ChildStdout, width: u16) -> Result<ChildStdou
 ///
 /// Returns [ManError] if failed to execute formatter command.
 fn format_man_page(child_stdout: ChildStdout) -> Result<ChildStdout, ManError> {
-    let width = get_terminal_width()?;
-    let width = if width >= 80 { width - 2 } else { width };
+    let width = get_page_width()?;
 
     if is_utility_installed("mandoc") {
-        println!("USING mandoc");
         format_with_mandoc(child_stdout, width)
     } else if is_utility_installed("groff") {
-        println!("USING groff");
         format_with_groff(child_stdout, width)
     } else {
         Err(ManError(

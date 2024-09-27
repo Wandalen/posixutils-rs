@@ -42,8 +42,8 @@ fn run_test_man(args: &[&str], expected_out: &str, expected_err: &str, expected_
 
 #[test]
 fn simple_test() {
-    // Runs in interactive mode
-    run_test_man(&["ls"], "ls - list directory contents", "", 0);
+    // "LS(1)" must be present in header
+    run_test_man(&["ls"], "LS(1)", "", 0);
 }
 
 #[test]
