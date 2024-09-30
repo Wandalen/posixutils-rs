@@ -41,21 +41,27 @@ fn run_test_man(args: &[&str], expected_out: &str, expected_err: &str, expected_
 }
 
 #[test]
-fn simple_test() {
+fn test_one_manpage() {
     run_test_man(&["ls"], "LS(1)", "", 0);
 }
 
 #[test]
-fn simple_empty_names_test() {
+fn test_multiple_nampages() {
+    run_test_man(&["ls", "man"], "LS(1)", "", 0);
+    run_test_man(&["ls", "man"], "MAN(1)", "", 0);
+}
+
+#[test]
+fn test_empty_names() {
     run_test_man(&[], "", "man: no names specified\n", 1);
 }
 
 #[test]
-fn k_test() {
+fn test_k() {
     run_test_man(&["-k", "user"], "fuser", "", 0);
 }
 
 #[test]
-fn k_empty_names_test() {
+fn test_k_empty_names() {
     run_test_man(&["-k"], "", "man: no names specified\n", 1);
 }
