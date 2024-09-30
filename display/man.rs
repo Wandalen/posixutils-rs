@@ -16,7 +16,13 @@ use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::process::{ChildStdout, Command, Output, Stdio};
 
-const MAN_PATH: &str = "/usr/share/man";
+// `/usr/share/man` - system provided directory with system documentation
+// `/usr/local/share/man` - user pragrams provided directory with system documentation
+const MAN_PATHS: [&str; 2] = ["/usr/share/man", "/usr/local/share/man"];
+// Some of section are used on *BSD and OSX systems (`3lua`, `n`, `l`). They will be skipped on other systems.
+const MAN_SECTIONS: [&str; 12] = [
+    "1", "8", "2", "3", "3lua", "n", "4", "5", "6", "7", "9", "l",
+];
 
 /// man - display system documentation
 #[derive(Parser)]
@@ -61,10 +67,13 @@ impl From<io::Error> for ManError {
 ///
 /// Returns [ManError] if file not found.
 fn get_man_page_path(name: &str) -> Result<PathBuf, ManError> {
-    (1..=9)
-        .flat_map(|section| {
-            let base_path = format!("{MAN_PATH}/man{section}/{name}.{section}");
-            vec![format!("{base_path}.gz"), base_path]
+    MAN_PATHS
+        .iter()
+        .flat_map(|path| {
+            MAN_SECTIONS.iter().flat_map(move |section| {
+                let base_path = format!("{path}/man{section}/{name}.{section}");
+                vec![format!("{base_path}.gz"), base_path]
+            })
         })
         .find(|path| PathBuf::from(path).exists())
         .map(PathBuf::from)
@@ -352,10 +361,10 @@ fn display_summary_database(keyword: &str) -> Result<(), ManError> {
 ///
 /// Returns [ManError] wrapper of program error.
 fn man(args: Args) -> Result<(), ManError> {
-    if !PathBuf::from(MAN_PATH).exists() {
-        return Err(ManError(format!(
-            "{MAN_PATH} path to man pages doesn't exist"
-        )));
+    let any_path_exists = MAN_PATHS.iter().any(|path| PathBuf::from(path).exists());
+
+    if !any_path_exists {
+        return Err(ManError(format!("man paths to man pages doesn't exist")));
     }
 
     if args.names.is_empty() {
