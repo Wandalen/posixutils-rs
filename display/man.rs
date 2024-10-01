@@ -123,9 +123,18 @@ where
         }
     }
 
-    process
-        .wait_with_output()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, format!("failed to get {name} stdout")))
+    let output = process.wait_with_output().map_err(|_| {
+        io::Error::new(io::ErrorKind::Other, format!("failed to get {name} stdout"))
+    })?;
+
+    if !output.status.success() {
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("{name} failed"),
+        ))
+    } else {
+        Ok(output)
+    }
 }
 
 /// Gets system documentation content by passed name.
@@ -324,10 +333,11 @@ fn format_man_page(raw_man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
 fn display_pager(man_page: Vec<u8>) -> Result<(), io::Error> {
     let pager = std::env::var("PAGER").unwrap_or_else(|_| "more".to_string());
 
-    let mut args = vec![];
-    if pager.ends_with("more") {
-        args.push("-s");
-    }
+    let args = if pager.ends_with("more") {
+        vec!["-s"]
+    } else {
+        vec![]
+    };
 
     spawn(&pager, args, Some(&man_page), Stdio::inherit())?;
 
