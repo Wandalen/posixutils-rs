@@ -150,7 +150,7 @@ where
 /// # Errors
 ///
 /// [std::io::Error] if file not found or failed to execute `*cat` command.
-fn get_map_page(name: &str) -> Result<Vec<u8>, io::Error> {
+fn get_man_page(name: &str) -> Result<Vec<u8>, io::Error> {
     let man_page_path = get_man_page_path(name)?;
 
     let cat_process_name = if man_page_path.extension().and_then(|ext| ext.to_str()) == Some("gz") {
@@ -358,7 +358,7 @@ fn display_pager(man_page: Vec<u8>) -> Result<(), io::Error> {
 ///
 /// Returns [ManError] if man page not found, or any display error happened.
 fn display_man_page(name: &str) -> Result<(), ManError> {
-    let cat_output = get_map_page(name)?;
+    let cat_output = get_man_page(name)?;
     let formatter_output = format_man_page(cat_output)?;
     display_pager(formatter_output)?;
 
