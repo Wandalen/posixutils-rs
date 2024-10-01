@@ -8,7 +8,7 @@
 //
 
 use clap::Parser;
-use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -25,15 +25,13 @@ const MAN_SECTIONS: [&str; 12] = [
     "1", "8", "2", "3", "3lua", "n", "4", "5", "6", "7", "9", "l",
 ];
 
-/// man - display system documentation
 #[derive(Parser)]
-#[command(version, about)]
+#[command(version, about = gettext("man - display system documentation"))]
 struct Args {
-    /// Interpret name operands as keywords for searching the summary database.
-    #[arg(short)]
+    #[arg(short, help = gettext("Interpret name operands as keywords for searching the summary database."))]
     keyword: bool,
 
-    /// Names of the utilities or keywords to display documentation for.
+    #[arg(help = gettext("Names of the utilities or keywords to display documentation for."))]
     names: Vec<String>,
 }
 
