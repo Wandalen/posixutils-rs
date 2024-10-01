@@ -220,6 +220,39 @@ fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Erro
     spawn("groff", &args, Some(&tbl_output), Stdio::piped()).map(|output| output.stdout)
 }
 
+/// Gets formated by `nroff(1)` system documentation.
+///
+/// # Arguments
+///
+/// `man_page` - [Vec<u8>] with content that needs to be formatted.
+/// `width` - [Option<u16>] width value of current terminal.
+///
+/// # Returns
+///
+/// [ChildStdout] of called `nroff(1)` formatter.
+///
+/// # Errors
+///
+/// Returns [ManError] if file failed to execute `nroff(1)` formatter.
+fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
+    let tbl_output =
+        spawn("tbl", &[] as &[&str], Some(man_page), Stdio::piped()).map(|output| output.stdout)?;
+
+    let mut args = vec![
+        "-Tutf8".to_string(),
+        "-S".to_string(),
+        "-Wall".to_string(),
+        "-mtty-char".to_string(),
+        "-mandoc".to_string(),
+    ];
+    if let Some(width) = width {
+        args.push(format!("-rLL={width}n").to_string());
+        args.push(format!("-rLR={width}n").to_string());
+    }
+
+    spawn("nroff", &args, Some(&tbl_output), Stdio::piped()).map(|output| output.stdout)
+}
+
 /// Gets formatted by `mandoc(1)` system documentation.
 ///
 /// # Arguments
@@ -260,7 +293,7 @@ fn mandoc_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Err
 fn format_man_page(raw_man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
     let width = get_page_width()?;
 
-    let formatters = [groff_format, mandoc_format];
+    let formatters = [groff_format, nroff_format, mandoc_format];
 
     for formatter in &formatters {
         match formatter(&raw_man_page, width) {
@@ -271,7 +304,7 @@ fn format_man_page(raw_man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
     }
 
     Err(ManError(
-        "Neither groff(1) nor mandoc(1) are installed".to_string(),
+        "neither groff(1), nor nroff(1), nor mandoc(1) are installed".to_string(),
     ))
 }
 
