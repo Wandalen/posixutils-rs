@@ -87,11 +87,11 @@ fn get_man_page_path(name: &str) -> Result<PathBuf, io::Error> {
 ///
 /// `name` - [str] name of process.
 /// `args` - [Option<&[String]>] arguments of process.
-/// `stdin` - [Option<&[u8]>] stdin of process.
+/// `stdin` - [Option<&[u8]>] STDIN content of process.
 ///
 /// # Returns
 ///
-/// [Vec<u8>] output of spawned process.
+/// [Output] of spawned process.
 ///
 /// # Errors
 ///
@@ -199,16 +199,16 @@ fn get_page_width() -> Result<Option<u16>, ManError> {
 ///
 /// # Arguments
 ///
-/// `man_page` - [Vec<u8>] with content that needs to be formatted.
+/// `man_page` - [&[u8]] with content that needs to be formatted.
 /// `width` - [Option<u16>] width value of current terminal.
 ///
 /// # Returns
 ///
-/// [ChildStdout] of called `groff(1)` formatter.
+/// [Vec<u8>] STDOUT of called `groff(1)` formatter.
 ///
 /// # Errors
 ///
-/// Returns [ManError] if file failed to execute `groff(1)` formatter.
+/// [std::io::Error] if file failed to execute `groff(1)` formatter.
 fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
     let tbl_output =
         spawn("tbl", &[] as &[&str], Some(man_page), Stdio::piped()).map(|output| output.stdout)?;
@@ -233,16 +233,16 @@ fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Erro
 ///
 /// # Arguments
 ///
-/// `man_page` - [Vec<u8>] with content that needs to be formatted.
+/// `man_page` - [&[u8]] with content that needs to be formatted.
 /// `width` - [Option<u16>] width value of current terminal.
 ///
 /// # Returns
 ///
-/// [ChildStdout] of called `nroff(1)` formatter.
+/// [Vec<u8>] STDOUT of called `nroff(1)` formatter.
 ///
 /// # Errors
 ///
-/// Returns [ManError] if file failed to execute `nroff(1)` formatter.
+/// [std::io::Error] if file failed to execute `nroff(1)` formatter.
 fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
     let tbl_output =
         spawn("tbl", &[] as &[&str], Some(man_page), Stdio::piped()).map(|output| output.stdout)?;
@@ -271,11 +271,11 @@ fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Erro
 ///
 /// # Returns
 ///
-/// [ChildStdout] of called `mandoc(1)` formatter.
+/// [Vec<u8>] STDOUT of called `mandoc(1)` formatter.
 ///
 /// # Errors
 ///
-/// Returns [ManError] if file failed to execute `mandoc(1)` formatter.
+/// [std::io::Error] if file failed to execute `mandoc(1)` formatter.
 fn mandoc_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
     let mut args = vec![];
     if let Some(width) = width {
@@ -290,22 +290,22 @@ fn mandoc_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Err
 ///
 /// # Arguments
 ///
-/// `raw_man_page` - [Vec<u8>] with content that needs to be formatted.
+/// `man_page` - [Vec<u8>] with content that needs to be formatted.
 ///
 /// # Returns
 ///
-/// [ChildStdout] of called formatter command.
+/// [Vec<u8>] STDOUT of called formatter.
 ///
 /// # Errors
 ///
-/// Returns [ManError] if failed to execute formatter command.
-fn format_man_page(raw_man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
+/// [ManError] if failed to execute formatter.
+fn format_man_page(man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
     let width = get_page_width()?;
 
     let formatters = [groff_format, nroff_format, mandoc_format];
 
     for formatter in &formatters {
-        match formatter(&raw_man_page, width) {
+        match formatter(&man_page, width) {
             Ok(formatted_man_page) => return Ok(formatted_man_page),
             Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
             Err(err) => return Err(err.into()),
@@ -377,7 +377,7 @@ fn display_man_page(name: &str) -> Result<(), ManError> {
 ///
 /// # Errors
 ///
-/// Returns [ManError] if call of `apropros` utility failed.
+/// [ManError] if call of `apropros` utility failed.
 fn display_summary_database(keyword: &str) -> Result<(), ManError> {
     let output: Output = Command::new("apropos").arg(keyword).output()?;
 
@@ -404,7 +404,7 @@ fn display_summary_database(keyword: &str) -> Result<(), ManError> {
 ///
 /// # Errors
 ///
-/// Returns [ManError] wrapper of program error.
+/// [ManError] wrapper of program error.
 fn man(args: Args) -> Result<(), ManError> {
     let any_path_exists = MAN_PATHS.iter().any(|path| PathBuf::from(path).exists());
 
