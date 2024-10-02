@@ -74,7 +74,12 @@ fn get_man_page_path(name: &str) -> Result<PathBuf, io::Error> {
         })
         .find(|path| PathBuf::from(path).exists())
         .map(PathBuf::from)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "man page not found"))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("system documentation for \"{name}\" not found"),
+            )
+        })
 }
 
 /// Spawns process with arguments and STDIN if present.
@@ -348,20 +353,21 @@ fn display_man_page(name: &str) -> Result<(), ManError> {
 ///
 /// `keyword` - [str] name of keyword.
 ///
+/// # Returns
+///
+/// [true] if `apropos` finished successfully, otherwise [false].
+///
 /// # Errors
 ///
 /// [ManError] if call of `apropros` utility failed.
-fn display_summary_database(keyword: &str) -> Result<(), ManError> {
-    let output: Output = Command::new("apropos").arg(keyword).output()?;
+fn display_summary_database(keyword: &str) -> Result<bool, ManError> {
+    let exit_status = Command::new("apropos").arg(keyword).spawn()?.wait()?;
 
-    if !output.status.success() {
-        return Err(ManError("apropos command failed".to_string()));
+    if exit_status.success() {
+        Ok(true)
+    } else {
+        Ok(false)
     }
-
-    let result = String::from_utf8_lossy(&output.stdout);
-    print!("{result}");
-
-    Ok(())
 }
 
 /// Main function that handles the program logic. It processes the input
@@ -371,10 +377,14 @@ fn display_summary_database(keyword: &str) -> Result<(), ManError> {
 ///
 /// `args` - [Args] set of incoming arguments.
 ///
+/// # Returns
+///
+/// [true] if no non-critical error happend, otherwise [false].
+///
 /// # Errors
 ///
 /// [ManError] wrapper of program error.
-fn man(args: Args) -> Result<(), ManError> {
+fn man(args: Args) -> Result<bool, ManError> {
     let any_path_exists = MAN_PATHS.iter().any(|path| PathBuf::from(path).exists());
 
     if !any_path_exists {
@@ -385,19 +395,23 @@ fn man(args: Args) -> Result<(), ManError> {
         return Err(ManError("no names specified".to_string()));
     }
 
-    let display = if args.keyword {
-        display_summary_database
+    let mut no_errors = true;
+    if args.keyword {
+        for name in &args.names {
+            if !display_summary_database(name)? {
+                no_errors = false;
+            }
+        }
     } else {
-        display_man_page
+        for name in &args.names {
+            if let Err(err) = display_man_page(name) {
+                no_errors = false;
+                eprintln!("{err}");
+            }
+        }
     };
 
-    for name in &args.names {
-        if let Err(err) = display(name) {
-            eprintln!("{err}");
-        }
-    }
-
-    Ok(())
+    Ok(no_errors)
 }
 
 // Exit code:
@@ -411,12 +425,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // parse command line arguments
     let args = Args::parse();
 
-    let mut exit_code = 0;
-
-    if let Err(err) = man(args) {
-        exit_code = 1;
-        eprintln!("{err}");
-    }
+    let exit_code = match man(args) {
+        Ok(true) => 0,
+        // Some error for specific `name`
+        Ok(false) => 1,
+        // Any critical error happened
+        Err(err) => {
+            eprintln!("{err}");
+            1
+        }
+    };
 
     std::process::exit(exit_code)
 }

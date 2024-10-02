@@ -40,15 +40,32 @@ fn run_test_man(args: &[&str], expected_out: &str, expected_err: &str, expected_
     );
 }
 
+const LS: &'static str = "ls";
+const MAN: &'static str = "man";
+const INVALID_NAME: &'static str = "invalid_name";
+const INVALID_NAME_MAN_ERROR: &'static str =
+    "man: system documentation for \"invalid_name\" not found\n";
+const INVALID_NAME_APROPOS_ERROR: &'static str = "invalid_name: nothing appropriate.\n";
+
 #[test]
 fn test_one_manpage() {
-    run_test_man(&["ls"], "LS(1)", "", 0);
+    run_test_man(&[LS], "LS(1)", "", 0);
+}
+
+#[test]
+fn test_one_page_not_found() {
+    run_test_man(&[INVALID_NAME], "", INVALID_NAME_MAN_ERROR, 1);
 }
 
 #[test]
 fn test_multiple_nampages() {
-    run_test_man(&["ls", "man"], "LS(1)", "", 0);
-    run_test_man(&["ls", "man"], "MAN(1)", "", 0);
+    run_test_man(&[LS, MAN], "LS(1)", "", 0);
+    run_test_man(&[LS, MAN], "MAN(1)", "", 0);
+}
+
+#[test]
+fn test_multiple_nampages_one_not_found() {
+    run_test_man(&[LS, INVALID_NAME], "LS(1)", INVALID_NAME_MAN_ERROR, 1);
 }
 
 #[test]
@@ -58,7 +75,28 @@ fn test_empty_names() {
 
 #[test]
 fn test_k() {
-    run_test_man(&["-k", "user"], "fuser", "", 0);
+    run_test_man(&["-k", "user"], "ls", "", 0);
+}
+
+#[test]
+fn test_k_invalid_name() {
+    run_test_man(&["-k", "invalid_name"], "", &INVALID_NAME_APROPOS_ERROR, 1);
+}
+
+#[test]
+fn test_k_multiple_nampages() {
+    run_test_man(&["-k", LS, MAN], "ls", "", 0);
+    run_test_man(&["-k", LS, MAN], "man", "", 0);
+}
+
+#[test]
+fn test_k_multiple_nampages_one_not_found() {
+    run_test_man(
+        &["-k", LS, INVALID_NAME],
+        "ls",
+        INVALID_NAME_APROPOS_ERROR,
+        1,
+    );
 }
 
 #[test]
