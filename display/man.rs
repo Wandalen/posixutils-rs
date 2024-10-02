@@ -17,13 +17,11 @@ use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 
-// `/usr/share/man` - system provided directory with system documentation
-// `/usr/local/share/man` - user programs provided directory with system documentation
+// `/usr/share/man` - system provided directory with system documentation.
+// `/usr/local/share/man` - user programs provided directory with system documentation.
 const MAN_PATHS: [&str; 2] = ["/usr/share/man", "/usr/local/share/man"];
-// Some of section are used on *BSD and OSX systems (`3lua`, `n`, `l`). They will be skipped on other systems.
-const MAN_SECTIONS: [&str; 12] = [
-    "1", "8", "2", "3", "3lua", "n", "4", "5", "6", "7", "9", "l",
-];
+// Prioritized order of sections.
+const MAN_SECTIONS: [i8; 9] = [1, 8, 2, 3, 4, 5, 6, 7, 9];
 
 #[derive(Parser)]
 #[command(version, about = gettext("man - display system documentation"))]
@@ -84,7 +82,7 @@ fn get_man_page_path(name: &str) -> Result<PathBuf, io::Error> {
 /// # Arguments
 ///
 /// `name` - [str] name of process.
-/// `args` - [Option<&[String]>] arguments of process.
+/// `args` - [IntoIterator<Item = AsRef<OsStr>>] arguments of process.
 /// `stdin` - [Option<&[u8]>] STDIN content of process.
 ///
 /// # Returns
@@ -222,7 +220,7 @@ fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Erro
         args.push(format!("-rLR={width}n").to_string());
     }
 
-    spawn("groff", &args, Some(&man_page), Stdio::piped()).map(|output| output.stdout)
+    spawn("groff", &args, Some(man_page), Stdio::piped()).map(|output| output.stdout)
 }
 
 /// Gets formated by `nroff(1)` system documentation.
@@ -253,7 +251,7 @@ fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Erro
         args.push(format!("-rLR={width}n").to_string());
     }
 
-    spawn("nroff", &args, Some(&man_page), Stdio::piped()).map(|output| output.stdout)
+    spawn("nroff", &args, Some(man_page), Stdio::piped()).map(|output| output.stdout)
 }
 
 /// Gets formatted by `mandoc(1)` system documentation.
@@ -315,7 +313,7 @@ fn format_man_page(man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
 ///
 /// # Arguments
 ///
-/// `child_stdout` - [ChildStdout] with content that needs to displayed.
+/// `man_page` - [Vec<u8>] with content that needs to displayed.
 ///
 /// # Returns
 ///
@@ -350,7 +348,7 @@ fn display_pager(man_page: Vec<u8>) -> Result<(), io::Error> {
 ///
 /// # Errors
 ///
-/// Returns [ManError] if man page not found, or any display error happened.
+/// [ManError] if man page not found, or any display error happened.
 fn display_man_page(name: &str) -> Result<(), ManError> {
     let cat_output = get_man_page(name)?;
     let formatter_output = format_man_page(cat_output)?;
