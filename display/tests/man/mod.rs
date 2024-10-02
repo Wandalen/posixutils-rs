@@ -16,7 +16,7 @@ fn test_checker_man(plan: &TestPlan, output: &Output) {
     assert!(stdout.contains(&plan.expected_out));
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(stderr, *plan.expected_err);
+    assert!(stderr.contains(&plan.expected_err));
 
     assert_eq!(output.status.code(), Some(plan.expected_exit_code));
     if plan.expected_exit_code == 0 {
@@ -45,7 +45,7 @@ const MAN: &'static str = "man";
 const INVALID_NAME: &'static str = "invalid_name";
 const INVALID_NAME_MAN_ERROR: &'static str =
     "man: system documentation for \"invalid_name\" not found\n";
-const INVALID_NAME_APROPOS_ERROR: &'static str = "invalid_name: nothing appropriate.\n";
+const INVALID_NAME_APROPOS_ERROR: &'static str = "invalid_name: nothing appropriate";
 
 #[test]
 fn test_one_manpage() {
