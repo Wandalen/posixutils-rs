@@ -315,10 +315,6 @@ fn format_man_page(man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
 ///
 /// `man_page` - [Vec<u8>] with content that needs to displayed.
 ///
-/// # Returns
-///
-/// Nothing.
-///
 /// # Errors
 ///
 /// [std::io::Error] if failed to execute pager or failed write to its STDIN.
@@ -342,10 +338,6 @@ fn display_pager(man_page: Vec<u8>) -> Result<(), io::Error> {
 ///
 /// `name` - [str] name of system documentation.
 ///
-/// # Returns
-///
-/// Nothing.
-///
 /// # Errors
 ///
 /// [ManError] if man page not found, or any display error happened.
@@ -362,10 +354,6 @@ fn display_man_page(name: &str) -> Result<(), ManError> {
 /// # Arguments
 ///
 /// `keyword` - [str] name of keyword.
-///
-/// # Returns
-///
-/// Nothing
 ///
 /// # Errors
 ///
@@ -389,10 +377,6 @@ fn display_summary_database(keyword: &str) -> Result<(), ManError> {
 /// # Arguments
 ///
 /// `args` - [Args] set of incoming arguments.
-///
-/// # Returns
-///
-/// Nothing.
 ///
 /// # Errors
 ///
