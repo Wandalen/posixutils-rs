@@ -168,27 +168,25 @@ fn get_man_page(name: &str) -> Result<Vec<u8>, io::Error> {
 ///
 /// Returns [ManError] if working on terminal and failed to get terminal size.
 fn get_page_width() -> Result<Option<u16>, ManError> {
-    if std::io::stdout().is_terminal() {
-        let mut winsize = libc::winsize {
-            ws_row: 0,
-            ws_col: 0,
-            ws_xpixel: 0,
-            ws_ypixel: 0,
-        };
-        let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) };
-        if result == 0 {
-            let result_width = if winsize.ws_col >= 80 {
-                winsize.ws_col - 2
-            } else {
-                winsize.ws_col
-            };
-            Ok(Some(result_width))
-        } else {
-            Err(ManError("failed to get terminal width".to_string()))
-        }
-    } else {
-        Ok(None)
+    if !std::io::stdout().is_terminal() {
+        return Ok(None);
     }
+    let mut winsize = libc::winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) };
+    if result != 0 {
+        return Err(ManError("failed to get terminal width".to_string()));
+    }
+    let result_width = if winsize.ws_col >= 80 {
+        winsize.ws_col - 2
+    } else {
+        winsize.ws_col
+    };
+    Ok(Some(result_width))
 }
 
 /// Gets formated by `groff(1)` system documentation.
