@@ -263,9 +263,10 @@ fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError
 /// [ManError] if file failed to execute `mandoc(1)` formatter.
 fn mandoc_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
     let mut args = vec![];
-    if let Some(width) = width {
-        args.push("-O".to_string());
-        args.push(format!("width={width}"));
+    let width = width.map(|w| format!("width={w}"));
+    if let Some(width) = width.as_ref() {
+        args.push("-O");
+        args.push(width);
     }
 
     spawn("mandoc", &args, Some(man_page), Stdio::piped()).map(|output| output.stdout)
