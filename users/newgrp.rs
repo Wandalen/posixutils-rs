@@ -25,7 +25,7 @@ use std::{
 };
 
 #[cfg(target_os = "linux")]
-const MAX_GROUPS: usize = libc::NGROUPS_MAX as usize;
+const MAX_GROUPS: usize = libc::KERN_NGROUPS_MAX as usize;
 
 #[cfg(target_os = "macos")]
 const MAX_GROUPS: usize = 16;
@@ -193,7 +193,7 @@ fn get_current_supplementary_groups() -> Vec<gid_t> {
     #[cfg(target_os = "macos")]
     let max_groups: i32 = 16;
     #[cfg(target_os = "linux")]
-    const max_groups: usize = libc::NGROUPS_MAX as usize;
+    let max_groups = libc::KERN_NGROUPS_MAX;
 
     let num_groups = unsafe { libc::getgroups(max_groups, groups.as_mut_ptr()) };
     groups.truncate(num_groups as usize);
