@@ -11,6 +11,7 @@ plib = { path = "../plib" }
 clap.workspace = true
 gettext-rs.workspace = true
 libc.workspace = true
+thiserror = "1.0"
 
 [[bin]]
 name = "echo"

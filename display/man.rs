@@ -10,12 +10,11 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
-use std::error::Error;
 use std::ffi::OsStr;
-use std::fmt::Display;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
+use thiserror::Error;
 
 // `/usr/share/man` - system provided directory with system documentation.
 // `/usr/local/share/man` - user programs provided directory with system documentation.
@@ -33,21 +32,22 @@ struct Args {
     names: Vec<String>,
 }
 
-#[derive(Debug)]
-struct ManError(String);
-
-impl Display for ManError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "man: {}", self.0)
-    }
-}
-
-impl Error for ManError {}
-
-impl From<io::Error> for ManError {
-    fn from(error: io::Error) -> Self {
-        ManError(error.to_string())
-    }
+#[derive(Error, Debug)]
+enum ManError {
+    #[error("man paths to man pages doesn't exist")]
+    ManPaths,
+    #[error("no names specified")]
+    NoNames,
+    #[error("system documentation for \"{0}\" not found")]
+    PageNotFound(String),
+    #[error("failed to get terminal size")]
+    GetTerminalSize,
+    #[error("neither groff(1), nor nroff(1), nor mandoc(1) are installed")]
+    NoFormatters,
+    #[error("{0} command not found")]
+    CommandNotFound(String),
+    #[error("failed to execute command: {0}")]
+    Io(#[from] io::Error),
 }
 
 /// Gets system documentation path by passed name.
@@ -62,8 +62,8 @@ impl From<io::Error> for ManError {
 ///
 /// # Errors
 ///
-/// Returns [std::io::Error] if file not found.
-fn get_man_page_path(name: &str) -> Result<PathBuf, io::Error> {
+/// [ManError] if file not found.
+fn get_man_page_path(name: &str) -> Result<PathBuf, ManError> {
     MAN_PATHS
         .iter()
         .flat_map(|path| {
@@ -74,12 +74,7 @@ fn get_man_page_path(name: &str) -> Result<PathBuf, io::Error> {
         })
         .find(|path| PathBuf::from(path).exists())
         .map(PathBuf::from)
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("system documentation for \"{name}\" not found"),
-            )
-        })
+        .ok_or_else(|| ManError::PageNotFound(name.to_string()))
 }
 
 /// Spawns process with arguments and STDIN if present.
@@ -96,13 +91,8 @@ fn get_man_page_path(name: &str) -> Result<PathBuf, io::Error> {
 ///
 /// # Errors
 ///
-/// [std::io::Error] if process spawn failed or failed to get its output.
-fn spawn<I, S>(
-    name: &str,
-    args: I,
-    stdin: Option<&[u8]>,
-    stdout: Stdio,
-) -> Result<Output, io::Error>
+/// [ManError] if process spawn failed or failed to get its output.
+fn spawn<I, S>(name: &str, args: I, stdin: Option<&[u8]>, stdout: Stdio) -> Result<Output, ManError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -111,16 +101,20 @@ where
         .args(args)
         .stdin(Stdio::piped())
         .stdout(stdout)
-        .spawn()?;
+        .spawn()
+        .map_err(|err| match err.kind() {
+            io::ErrorKind::NotFound => ManError::CommandNotFound(name.to_string()),
+            _ => ManError::Io(err),
+        })?;
 
     if let Some(stdin) = stdin {
         if let Some(mut process_stdin) = process.stdin.take() {
             process_stdin.write_all(stdin)?;
         } else {
-            return Err(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!("failed to open stdin for {name}"),
-            ));
+            ))?;
         }
     }
 
@@ -132,7 +126,7 @@ where
         Err(io::Error::new(
             io::ErrorKind::Other,
             format!("{name} failed"),
-        ))
+        ))?
     } else {
         Ok(output)
     }
@@ -150,8 +144,8 @@ where
 ///
 /// # Errors
 ///
-/// [std::io::Error] if file not found or failed to execute `*cat` command.
-fn get_man_page(name: &str) -> Result<Vec<u8>, io::Error> {
+/// [ManError] if file not found or failed to execute `*cat` command.
+fn get_man_page(name: &str) -> Result<Vec<u8>, ManError> {
     let man_page_path = get_man_page_path(name)?;
 
     let cat_process_name = if man_page_path.extension().and_then(|ext| ext.to_str()) == Some("gz") {
@@ -160,7 +154,8 @@ fn get_man_page(name: &str) -> Result<Vec<u8>, io::Error> {
         "cat"
     };
 
-    spawn(cat_process_name, &[man_page_path], None, Stdio::piped()).map(|output| output.stdout)
+    let output = spawn(cat_process_name, &[man_page_path], None, Stdio::piped())?;
+    Ok(output.stdout)
 }
 
 /// Gets page width.
@@ -184,7 +179,7 @@ fn get_page_width() -> Result<Option<u16>, ManError> {
     };
     let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) };
     if result != 0 {
-        return Err(ManError("failed to get terminal width".to_string()));
+        return Err(ManError::GetTerminalSize);
     }
     let result_width = if winsize.ws_col >= 80 {
         winsize.ws_col - 2
@@ -207,8 +202,8 @@ fn get_page_width() -> Result<Option<u16>, ManError> {
 ///
 /// # Errors
 ///
-/// [std::io::Error] if file failed to execute `groff(1)` formatter.
-fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
+/// [ManError] if file failed to execute `groff(1)` formatter.
+fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
     let mut args = vec![
         "-Tutf8",
         "-S",
@@ -240,8 +235,8 @@ fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Erro
 ///
 /// # Errors
 ///
-/// [std::io::Error] if file failed to execute `nroff(1)` formatter.
-fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
+/// [ManError] if file failed to execute `nroff(1)` formatter.
+fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
     let mut args = vec!["-Tutf8", "-S", "-Wall", "-mtty-char", "-t", "-mandoc"];
     let width = width.map(|w| (format!("-rLL={w}n"), format!("-rLR={w}n")));
     if let Some((rll, rlr)) = width.as_ref() {
@@ -265,8 +260,8 @@ fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Erro
 ///
 /// # Errors
 ///
-/// [std::io::Error] if file failed to execute `mandoc(1)` formatter.
-fn mandoc_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
+/// [ManError] if file failed to execute `mandoc(1)` formatter.
+fn mandoc_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
     let mut args = vec![];
     if let Some(width) = width {
         args.push("-O".to_string());
@@ -297,14 +292,12 @@ fn format_man_page(man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
     for formatter in &formatters {
         match formatter(&man_page, width) {
             Ok(formatted_man_page) => return Ok(formatted_man_page),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-            Err(err) => return Err(err.into()),
+            Err(ManError::CommandNotFound(_)) => continue,
+            Err(err) => return Err(err),
         }
     }
 
-    Err(ManError(
-        "neither groff(1), nor nroff(1), nor mandoc(1) are installed".to_string(),
-    ))
+    Err(ManError::NoFormatters)
 }
 
 /// Formats man page content into appropriate format.
@@ -315,8 +308,8 @@ fn format_man_page(man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
 ///
 /// # Errors
 ///
-/// [std::io::Error] if failed to execute pager or failed write to its STDIN.
-fn display_pager(man_page: Vec<u8>) -> Result<(), io::Error> {
+/// [ManError] if failed to execute pager or failed write to its STDIN.
+fn display_pager(man_page: Vec<u8>) -> Result<(), ManError> {
     let pager = std::env::var("PAGER").unwrap_or_else(|_| "more".to_string());
 
     let args = if pager.ends_with("more") {
@@ -383,16 +376,16 @@ fn display_summary_database(keyword: &str) -> Result<bool, ManError> {
 ///
 /// # Errors
 ///
-/// [ManError] wrapper of program error.
+/// [ManError] if critical error happened.
 fn man(args: Args) -> Result<bool, ManError> {
     let any_path_exists = MAN_PATHS.iter().any(|path| PathBuf::from(path).exists());
 
     if !any_path_exists {
-        return Err(ManError("man paths to man pages doesn't exist".to_string()));
+        return Err(ManError::ManPaths);
     }
 
     if args.names.is_empty() {
-        return Err(ManError("no names specified".to_string()));
+        return Err(ManError::NoNames);
     }
 
     let mut no_errors = true;
@@ -406,7 +399,7 @@ fn man(args: Args) -> Result<bool, ManError> {
         for name in &args.names {
             if let Err(err) = display_man_page(name) {
                 no_errors = false;
-                eprintln!("{err}");
+                eprintln!("man: {err}");
             }
         }
     };
@@ -431,7 +424,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(false) => 1,
         // Any critical error happened
         Err(err) => {
-            eprintln!("{err}");
+            eprintln!("man: {err}");
             1
         }
     };
