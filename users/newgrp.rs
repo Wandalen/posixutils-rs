@@ -24,8 +24,11 @@ use std::{
     process::{self, Command},
 };
 
-// todo: create shell environment with -l option
-// todo: fix GROUp gid parsing
+#[cfg(target_os = "linux")]
+const MAX_GROUPS: usize = libc::NGROUPS_MAX as usize;
+
+#[cfg(target_os = "macos")]
+const MAX_GROUPS: usize = 16;
 
 /// newgrp — change to a new group
 #[derive(Parser, Debug)]
@@ -139,13 +142,16 @@ fn newgrp(args: Args) -> Result<(), io::Error> {
 /// * `gid`: The group ID to add to the supplementary group list.
 fn add_gid_to_groups(gid: gid_t) {
     let mut supplementary_groups = get_current_supplementary_groups();
-    if supplementary_groups.len() < libc::KERN_NGROUPS_MAX as usize {
+    if supplementary_groups.len() < MAX_GROUPS {
         supplementary_groups.push(gid);
+
+        #[cfg(target_os = "macos")]
+        let supplementary_groups_len = supplementary_groups.len() as i32;
+        #[cfg(target_os = "linux")]
+        let supplementary_groups_len = supplementary_groups.len();
+
         unsafe {
-            setgroups(
-                supplementary_groups.len() as usize,
-                supplementary_groups.as_ptr(),
-            );
+            setgroups(supplementary_groups_len, supplementary_groups.as_ptr());
         }
     } else {
         eprintln!("Error: No room to add GID {}", gid);
@@ -163,11 +169,14 @@ fn remove_gid_from_groups(gid: gid_t) {
     let mut supplementary_groups = get_current_supplementary_groups();
     if let Some(pos) = supplementary_groups.iter().position(|&x| x == gid) {
         supplementary_groups.remove(pos);
+
+        #[cfg(target_os = "macos")]
+        let supplementary_groups_len = supplementary_groups.len() as i32;
+        #[cfg(target_os = "linux")]
+        let supplementary_groups_len = supplementary_groups.len();
+
         unsafe {
-            setgroups(
-                supplementary_groups.len() as usize,
-                supplementary_groups.as_ptr(),
-            );
+            setgroups(supplementary_groups_len, supplementary_groups.as_ptr());
         }
     }
 }
@@ -179,8 +188,14 @@ fn remove_gid_from_groups(gid: gid_t) {
 /// # Returns
 /// Returns a vector of GIDs representing the current supplementary groups.
 fn get_current_supplementary_groups() -> Vec<gid_t> {
-    let mut groups = vec![0; libc::KERN_NGROUPS_MAX as usize];
-    let num_groups = unsafe { libc::getgroups(libc::KERN_NGROUPS_MAX, groups.as_mut_ptr()) };
+    let mut groups = vec![0; MAX_GROUPS];
+
+    #[cfg(target_os = "macos")]
+    let max_groups: i32 = 16;
+    #[cfg(target_os = "linux")]
+    const max_groups: usize = libc::NGROUPS_MAX as usize;
+
+    let num_groups = unsafe { libc::getgroups(max_groups, groups.as_mut_ptr()) };
     groups.truncate(num_groups as usize);
     groups
 }
@@ -237,7 +252,13 @@ fn get_current_supplementary_gids() -> Result<Vec<gid_t>, io::Error> {
 /// Returns `Ok(())` if the supplementary GIDs were successfully set. If an error occurs,
 /// it returns an `Err` containing the last OS error.
 fn set_supplementary_gids(gids: &[gid_t]) -> Result<(), io::Error> {
-    if unsafe { setgroups(gids.len() as usize, gids.as_ptr()) } != 0 {
+    #[cfg(target_os = "macos")]
+    let gids_len = gids.len() as i32;
+
+    #[cfg(target_os = "linux")]
+    let gids_len = gids.len() as usize;
+
+    if unsafe { setgroups(gids_len, gids.as_ptr()) } != 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(())
