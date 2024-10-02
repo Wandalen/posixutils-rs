@@ -205,17 +205,18 @@ fn get_page_width() -> Result<Option<u16>, ManError> {
 /// [std::io::Error] if file failed to execute `groff(1)` formatter.
 fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
     let mut args = vec![
-        "-Tutf8".to_string(),
-        "-S".to_string(),
-        "-P-h".to_string(),
-        "-Wall".to_string(),
-        "-mtty-char".to_string(),
-        "-t".to_string(),
-        "-mandoc".to_string(),
+        "-Tutf8",
+        "-S",
+        "-P-h",
+        "-Wall",
+        "-mtty-char",
+        "-t",
+        "-mandoc",
     ];
-    if let Some(width) = width {
-        args.push(format!("-rLL={width}n").to_string());
-        args.push(format!("-rLR={width}n").to_string());
+    let width = width.map(|w| (format!("-rLL={w}n"), format!("-rLR={w}n")));
+    if let Some((rll, rlr)) = width.as_ref() {
+        args.push(rll);
+        args.push(rlr);
     }
 
     spawn("groff", &args, Some(man_page), Stdio::piped()).map(|output| output.stdout)
@@ -236,17 +237,11 @@ fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Erro
 ///
 /// [std::io::Error] if file failed to execute `nroff(1)` formatter.
 fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, io::Error> {
-    let mut args = vec![
-        "-Tutf8".to_string(),
-        "-S".to_string(),
-        "-Wall".to_string(),
-        "-mtty-char".to_string(),
-        "-t".to_string(),
-        "-mandoc".to_string(),
-    ];
-    if let Some(width) = width {
-        args.push(format!("-rLL={width}n").to_string());
-        args.push(format!("-rLR={width}n").to_string());
+    let mut args = vec!["-Tutf8", "-S", "-Wall", "-mtty-char", "-t", "-mandoc"];
+    let width = width.map(|w| (format!("-rLL={w}n"), format!("-rLR={w}n")));
+    if let Some((rll, rlr)) = width.as_ref() {
+        args.push(rll);
+        args.push(rlr);
     }
 
     spawn("nroff", &args, Some(man_page), Stdio::piped()).map(|output| output.stdout)
