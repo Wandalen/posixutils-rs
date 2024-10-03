@@ -14,12 +14,13 @@ use libc::{
     setgroups, setuid, uid_t, ECHO, ECHONL, TCSANOW,
 };
 use plib::{group::Group, PROJECT_NAME};
+use sha2::{Digest, Sha256};
 
 use std::{
     env,
     ffi::{CStr, CString},
     fs::File,
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead, BufReader, Write},
     os::unix::io::AsRawFd,
     process::{self, Command},
 };
@@ -543,6 +544,7 @@ fn get_current_tty() -> Option<String> {
 ///
 /// Returns `Ok(group.gid)` if the user has the necessary permissions to access the group. If a password is required
 /// and does not match, it returns an `Err` with `io::ErrorKind::PermissionDenied`.
+
 fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
     let pw_name = unsafe {
         CStr::from_ptr(password.pw_name)
@@ -567,11 +569,13 @@ fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
     unsafe {
         if getuid() != 0 && need_password {
             let password_input = read_password().unwrap_or_default();
+            let hashed_input = pw_encrypt(&password_input, Some(&group.passwd)).unwrap();
 
-            if password_input == group.passwd {
+            if hashed_input == group.passwd {
                 // Return GID if password matches
                 return Ok(group.gid);
             } else {
+                dbg!(&hashed_input, &group.passwd);
                 eprintln!("Error: Incorrect password for group '{}'.", group.name);
                 return Err(io::Error::new(
                     io::ErrorKind::PermissionDenied,
@@ -583,6 +587,44 @@ fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
 
     // Return the group GID if no password check is required or if it passed
     Ok(group.gid)
+}
+
+fn pw_encrypt(clear: &str, salt: Option<&str>) -> Option<String> {
+    let mut hasher = Sha256::new();
+
+    // If a salt is provided, append it to the clear text
+    if let Some(salt_str) = salt {
+        hasher.update(salt_str.as_bytes());
+    }
+
+    // Add the clear text password to the hasher
+    hasher.update(clear.as_bytes());
+
+    // Finalize the hash and convert it to a hex string
+    let result = hasher.finalize();
+    let hash_hex = format!("{:x}", result);
+
+    // Check if the algorithm is supported based on the salt (if provided)
+    if let Some(salt_str) = salt {
+        if salt_str.starts_with('$') {
+            let method = match salt_str.chars().nth(1).unwrap_or('x') {
+                '1' => "MD5",
+                '2' => "BCRYPT",
+                '5' => "SHA256",
+                '6' => "SHA512",
+                'y' => "YESCRYPT",
+                other => &format!("Unknown method ${}", other),
+            };
+
+            if method != "SHA256" {
+                // Log an error and exit if the crypt method isn't SHA-256
+                let _ = writeln!(io::stderr(), "crypt method not supported: {}", method);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    Some(hash_hex)
 }
 
 /// Reads a password from the terminal without echoing the input.
