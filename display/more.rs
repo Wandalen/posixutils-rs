@@ -60,33 +60,29 @@ const _PATH_BSHELL: &str = "/bin/sh ";
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Args {
-    /// Display help instead of ringing bell
-    #[arg(short = 'd', long = "silent")]
-    silent: bool,
-
-    /// Count logical rather than screen lines
-    #[arg(short = 'f', long = "logical")]
-    logical: bool,
-
-    /// Suppress pause after form feed
-    #[arg(short = 'l', long = "no-pause")]
-    no_pause: bool,
-
     /// Do not scroll, display text and clean line ends
     #[arg(short = 'c', long = "print-over")]
     print_over : bool,
-
-    /// Do not scroll, clean screen and display text
-    #[arg(short = 'p', long = "clean-print")]
-    clean_print: bool,
 
     /// Exit on end-of-file
     #[arg(short = 'e', long = "exit-on-eof")]
     exit_on_eof: bool, 
 
+    /// Perform pattern matching in searches without regard to case
+    #[arg(short = 'i')]
+    pattern: String, 
+
+    /// Execute the more command(s) in the command arguments in the order specified
+    #[arg(short = 'p')]
+    commands: String,
+
     /// Squeeze multiple blank lines into one
     #[arg(short = 's', long = "squeeze")]
     squeeze: bool,
+
+    /// Write the screenful of the file containing the tag named by the tagstring argument
+    #[arg(short = 't', long = "tag")]
+    tag: String,
 
     /// Suppress underlining and bold
     #[arg(short = 'u', long = "plain")]
@@ -96,24 +92,13 @@ struct Args {
     #[arg(short = 'n', long = "lines")]
     lines: usize,
 
-    /// Same as --lines
-    #[arg(short = '-', long = "minus_lines")]
-    minus_lines: usize,
-
-    /// Display file beginning from line number
-    #[arg(short = '+', long = "plus_lines")]
-    plus_lines: usize,
-
-    /// Display file beginning from pattern match
-    //#[arg(short = '+/', long)]
-    pattern: usize,
-
     /// A pathnames of an input files. 
     #[arg(name = "FILE")]
     input_files: Vec<String>
 }
 
-enum MoreKeyCommands {
+/*
+enum KeyCommands {
     UnknownCommand,
     Colon,
     RepeatPrevious,
@@ -136,12 +121,42 @@ enum MoreKeyCommands {
     NextFile,
     PreviousFile,
     RunEditor,
+}*/
+
+enum KeyCommands {
+    UnknownCommand,
+    Help,
+    ScrollForwardOneScreenful,
+    ScrollBackwardOneScreenful,
+    ScrollForwardOneLine,
+    ScrollBackwardOneLine,
+    ScrollForwardOneHalfScreenful,
+    SkipForwardOneLine,
+    ScrollBackwardOneHalfScreenful,
+    GotoBeginningofFile,
+    GotoEOF,
+    RefreshScreen,
+    DiscardAndRefresh,
+    MarkPosition,
+    ReturnMark,
+    ReturnPreviousPosition,
+    SearchForwardPattern,
+    SearchBackwardPattern,
+    RepeatSearch,
+    RepeatSearchReverse,
+    ExamineNewFile,
+    ExamineNextFile,
+    ExaminePreviousFile,
+    GotoTag,
+    InvokeEditor,
+    DisplayPosition,
+    Quit
 }
 
 #[derive(Debug, Copy, Clone)]
 struct NumberCommand {
     number: u32,
-    key: MoreKeyCommands,
+    key: KeyCommands,
 }
 
 #[derive(Debug)]
@@ -188,7 +203,10 @@ struct MoreControl {
     sigset: sigset_t,            
 
     /// line buffer
-    line_buf: Option<&str>,             
+    line_buf: Option<&str>,  
+
+    ///
+    line_sz: size_t,           
 
     /// lines per page
     lines_per_page: usize,         
@@ -355,7 +373,7 @@ impl MoreControl{
             }, 
             prompt_len: (), 
             current_line: (), 
-            next_jump: (),  
+            next_jump: args.plus_lines,  
             shell: (), 
             sigfd: (), 
             sigset: (), 
@@ -374,7 +392,7 @@ impl MoreControl{
             move_line_down: (), 
             clear_rest: (), 
             num_columns: NUM_COLUMNS, 
-            next_search: (), 
+            next_search: , 
             previous_search: (), 
             context: (), 
             screen_start: (), 
@@ -1036,6 +1054,7 @@ impl MoreControl{
         eprint!("{}", self.backspace_ch);
     }
     
+    //
     fn ttyin(&mut self, buf: &mut str, nmax: i32, pchar: char){
         let mut sp = buf;
         let mut spp = 0;
@@ -1217,7 +1236,7 @@ impl MoreControl{
         self.output_tty.c_cc[VMIN] = 1;
         self.output_tty.c_cc[VTIME] = 0;
         unsafe{
-            tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, self.output_tty as *mut );
+            tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, self.output_tty as *mut termios);
         }
     }
     
@@ -1233,6 +1252,7 @@ impl MoreControl{
         }
     }
     
+    /// 
     fn sigtstp_handler(&mut self) {
         self.reset_tty();
     
@@ -1241,10 +1261,12 @@ impl MoreControl{
         }
     }
     
+    ///
     fn sigcont_handler(&mut self) {
         self.set_tty();
     }
     
+    ///
     fn sigwinch_handler(&mut self) {
         let mut win: winsize;
     
@@ -1261,9 +1283,19 @@ impl MoreControl{
                 self.num_columns = win.ws_col as usize;
             }
         }
-        unsafe { prepare_line_buffer(self) };
+        self.prepare_line_buffer();
     }
-    
+
+    /// 
+    fn prepare_line_buffer(&mut self){
+        let mut sz = ctl.num_columns * 4;
+        if (ctl.line_sz >= sz) { return; }
+        if (sz < MIN_LINE_SZ){
+            sz = MIN_LINE_SZ;
+        }
+        ctl.line_sz = sz;
+    }
+
     //
     fn execute(&mut self, filename: &str, cmd: &str, args: &[&str]) {
         let pid = unsafe{ fork() }; 
@@ -1316,7 +1348,7 @@ impl MoreControl{
         let mut cmdbuf = "";
         self.erase_to_col(0);
         print!("!");
-        if self.previous_command.key == MoreKeyCommands::RunShell 
+        if self.previous_command.key == KeyCommands::RunShell 
             && self.shell_line.is_some() {
             if let Some(shell_line) = self.shell_line {
                 eprint!("{}", shell_line);
@@ -1514,11 +1546,11 @@ impl MoreControl{
                 }
                 break;
             }
-            self.poll(self, 0, None);
+            self.poll(0, None);
         }
     
         /* Move ctrl+c signal handling back to key_command(). */
-        signal(Signal::SIGINT, SigHandler::SigDfl).unwrap();
+        unsafe{ signal(Signal::SIGINT, SigHandler::SigDfl).unwrap(); }
         self.sigset.add(Signal::SIGINT).unwrap();
         self.sigset.thread_block().unwrap();
     
@@ -1655,14 +1687,14 @@ impl MoreControl{
             }
     
             cmd = self.read_command();
-            if cmd.key == MoreKeyCommands::UnknownCommand{
+            if cmd.key == KeyCommands::UnknownCommand{
                 continue;
-            }else if cmd.key == MoreKeyCommands::RepeatPrevious{
+            }else if cmd.key == KeyCommands::RepeatPrevious{
                 cmd = self.previous_command;
             }
     
             match cmd.key {
-                MoreKeyCommands::Backwards => {
+                KeyCommands::Backwards => {
                     if self.no_tty_in {
                         eprint!(r#"\a"#);
                         return -1;
@@ -1671,37 +1703,37 @@ impl MoreControl{
                     retval = skip_backwards(self, cmd.number);
                     done = true;
                 },
-                MoreKeyCommands::JumpLinesPerScreen | 
-                MoreKeyCommands::SetLinesPerScreen => {
+                KeyCommands::JumpLinesPerScreen | 
+                KeyCommands::SetLinesPerScreen => {
                     if cmd.number == 0 {
                         cmd.number = self.lines_per_screen;
-                    }else if cmd.key == MoreKeyCommands::SetLinesPerScreen{
+                    }else if cmd.key == KeyCommands::SetLinesPerScreen{
                         self.lines_per_screen = cmd.number;
                     }
                     retval = cmd.number;
                     done = true;
                 },
-                MoreKeyCommands::SetScrollLen => {
+                KeyCommands::SetScrollLen => {
                     if cmd.number != 0{
                         self.d_scroll_len = cmd.number;
                     }
                     retval = self.d_scroll_len;
                     done = true;
                 },
-                MoreKeyCommands::Quit => self.exit(EXIT_SUCCESS),
-                MoreKeyCommands::SkipForwardScreen => {
+                KeyCommands::Quit => self.exit(EXIT_SUCCESS),
+                KeyCommands::SkipForwardScreen => {
                     if self.skip_forwards(cmd.number, 'f'){
                         retval = self.lines_per_screen;
                     }
                     done = true;
                 },
-                MoreKeyCommands::SkipForwardLine => {
+                KeyCommands::SkipForwardLine => {
                     if self.skip_forwards(cmd.number, 's'){
                         retval = self.lines_per_screen;
                     }
                     done = true;
                 },
-                MoreKeyCommands::NextLine => {
+                KeyCommands::NextLine => {
                     if cmd.number != 0 { 
                         self.lines_per_screen = cmd.number;
                     } else{
@@ -1711,7 +1743,7 @@ impl MoreControl{
                     retval = cmd.number;
                     done = true;
                 },
-                MoreKeyCommands::ClearScreen => {
+                KeyCommands::ClearScreen => {
                     if !self.no_tty_in {
                         self.clear_screen();
                         self.seek(self.screen_start.row_num);
@@ -1722,7 +1754,7 @@ impl MoreControl{
                         eprint!(r#"\a"#);
                     }
                 },
-                MoreKeyCommands::PreviousSearchMatch => {
+                KeyCommands::PreviousSearchMatch => {
                     if !self.no_tty_in {
                         self.erase_to_col(0);
                         println!("\n***Back***\n");
@@ -1734,12 +1766,12 @@ impl MoreControl{
                         eprint!(r#"\a"#);
                     }
                 },
-                MoreKeyCommands::DisplayLine => {
+                KeyCommands::DisplayLine => {
                     self.erase_to_col(0);
                     self.prompt_len = self.current_line.to_string().len();
                     print!("{}", self.current_line);
                 },
-                MoreKeyCommands::DisplayFileAndLine => {
+                KeyCommands::DisplayFileAndLine => {
                     self.erase_to_col(0);
                     let prompt = if !self.no_tty_in{
                         format!("\"{}\" line {}",
@@ -1750,14 +1782,14 @@ impl MoreControl{
                     self.prompt_len = prompt.len();
                     print!(prompt);
                 },
-                MoreKeyCommands::RepeatSearch => {
+                KeyCommands::RepeatSearch => {
                     if !self.previous_search {
                         self.error("No previous regular expression");
                     }else{
                         search_again = true;
                     }
                 },
-                MoreKeyCommands::Search => {
+                KeyCommands::Search => {
                     if cmd.number == 0 {
                         cmd.number += 1;
                     }
@@ -1778,8 +1810,8 @@ impl MoreControl{
                     retval = self.lines_per_screen - 1;
                     done = true;
                 },
-                MoreKeyCommands::RunShell => self.run_shell(filename),
-                MoreKeyCommands::Help => {
+                KeyCommands::RunShell => self.run_shell(filename),
+                KeyCommands::Help => {
                     if self.no_scroll{
                         self.clear_screen();
                     }
@@ -1788,7 +1820,7 @@ impl MoreControl{
                     runtime_usage();
                     self.output_prompt(filename);
                 },
-                MoreKeyCommands::NextFile => {
+                KeyCommands::NextFile => {
                     print!("\r");
                     self.erase_to_col(0);
                     if cmd.number == 0{
@@ -1802,7 +1834,7 @@ impl MoreControl{
                     self.change_file(cmd.number);
                     done = true;
                 },
-                MoreKeyCommands::PreviousFile => {
+                KeyCommands::PreviousFile => {
                     if self.no_tty_in {
                         eprint!(r#"\a"#);
                     }else{
@@ -1815,7 +1847,7 @@ impl MoreControl{
                         done = true;
                     }
                 },
-                MoreKeyCommands::RunEditor => {
+                KeyCommands::RunEditor => {
                     if !self.no_tty_in {
                         self.execute_editor(cmdbuf, cmdbuf.len(), filename);
                     }
@@ -1840,7 +1872,137 @@ impl MoreControl{
     
             self.previous_command = cmd;
             if done {
-                cmd.key = MoreKeyCommands::UnknownCommand;
+                cmd.key = KeyCommands::UnknownCommand;
+                break;
+            }
+        }
+    
+        print!("\r");
+        self.no_quit_dialog = 1;
+        
+        retval
+    }
+
+    fn key_command1(&mut self, filename: &str) -> i32{
+        let mut retval = 0;
+        let mut done = false;
+        let mut search_again = false;
+        let mut stderr_active = false;
+        let mut cmdbuf = String::new();
+        let cmd: NumberCommand;
+    
+        if !self.report_errors{
+            self.output_prompt(filename);
+        }else{
+            self.report_errors = 0;
+        }
+    
+        self.search_called = 0;
+        loop {
+            if self.poll(-1, &stderr_active) <= 0{
+                continue;
+            }else if stderr_active{
+                continue;
+            }
+    
+            cmd = self.read_command();
+            if cmd.key == KeyCommands::UnknownCommand{
+                continue;
+            }else if cmd.key == KeyCommands::RepeatPrevious{
+                cmd = self.previous_command;
+            }
+    
+            match cmd.key {
+                KeyCommands::Help => {
+                    if self.no_scroll{
+                        self.clear_screen();
+                    }
+    
+                    self.erase_to_col(0);
+                    runtime_usage();
+                    self.output_prompt(filename);
+                },
+                KeyCommands::ScrollForwardOneScreenful => {
+
+                },
+                KeyCommands::ScrollBackwardOneScreenful => {
+
+                },
+                KeyCommands::ScrollForwardOneLine => {
+                    
+                },
+                KeyCommands::ScrollBackwardOneLine => {
+                    
+                },
+                KeyCommands::ScrollForwardOneHalfScreenful => {
+                    
+                },
+                KeyCommands::SkipForwardOneLine => {
+                    
+                },
+                KeyCommands::ScrollBackwardOneHalfScreenful => {
+                    
+                },
+                KeyCommands::GotoBeginningofFile => {
+                    
+                },
+                KeyCommands::GotoEOF => {
+                    
+                },
+                KeyCommands::RefreshScreen => {
+                    
+                },
+                KeyCommands::DiscardAndRefresh => {
+                    
+                },
+                KeyCommands::MarkPosition => {
+                    
+                },
+                KeyCommands::ReturnMark => {
+                    
+                },
+                KeyCommands::ReturnPreviousPosition => {
+                    
+                },
+                KeyCommands::SearchForwardPattern => {
+                    
+                },
+                KeyCommands::SearchBackwardPattern => {
+                    
+                },
+                KeyCommands::RepeatSearch => {
+                    
+                },
+                KeyCommands::RepeatSearchReverse => {
+                    
+                },
+                KeyCommands::ExamineNewFile => {
+                    
+                },
+                KeyCommands::ExamineNextFile => {
+                    
+                },
+                KeyCommands::ExaminePreviousFile => {
+                    
+                },
+                KeyCommands::GotoTag => {
+                    
+                },
+                KeyCommands::InvokeEditor => {
+                    
+                },
+                KeyCommands::DisplayPosition => {
+                    
+                },
+                KeyCommands::Quit => self.exit(EXIT_SUCCESS),
+                _ => {
+
+                }
+            }
+    
+            self.previous_command = cmd;
+            if done {
+                cmd.key = KeyCommands::UnknownCommand;
                 break;
             }
         }
@@ -1948,7 +2110,8 @@ impl MoreControl{
     //
     fn display_file(&mut self, filename: &str){
         let mut left = self.lines_per_screen;
-        let Some(mut current_file) = self.current_file.as_mut() else { return; };
+        let Some(mut current_file) 
+            = self.current_file.as_mut() else { return; };
         self.context.row_num = 0;
         self.context.line_num = 0;
         self.current_line = 0;
@@ -1964,7 +2127,7 @@ impl MoreControl{
                 }
             }
         } else if self.argv_position < self.num_files && !self.no_tty_out{
-            left = self.more_key_command(self.file_names[self.argv_position]);
+            left = self.key_command(self.file_names[self.argv_position]);
         }
     
         if left != 0 {
@@ -2144,37 +2307,16 @@ impl NumberCommand {
     }
 }
 
-fn isprint(c: char) -> bool{
-    0x20 < (c as u8) && (c as u8) < 0x7E
+fn drop_permissions() -> i32{    
+    if unsafe{ setgid(getgid()) < 0 || setuid(getuid()) < 0 }{
+        let errno = Error::last_os_error().raw_os_error();
+        return if errno != 0 { -errno } else { -1 };
+    }
+    0
 }
 
-//
-fn usage(){
-    println!("{}", USAGE_HEADER);
-    println!(" {} [options] <file>...\n", PROGRAM_INVOCATION_SHORT_NAME);
-
-    println!("{}", USAGE_SEPARATOR);
-    println!("{}", "Display the contents of a file in a terminal.");
-
-    println!("{}", USAGE_OPTIONS);
-    println!(" {}", " -d, --silent          display help instead of ringing bell");
-    println!(" {}", " -f, --logical         count logical rather than screen lines");
-    println!(" {}", " -l, --no-pause        suppress pause after form feed");
-    println!(" {}", " -c, --print-over      do not scroll, display text and clean line ends");
-    println!(" {}", " -p, --clean-print     do not scroll, clean screen and display text");
-    println!(" {}", " -e, --exit-on-eof     exit on end-of-file");
-    println!(" {}", " -s, --squeeze         squeeze multiple blank lines into one");
-    println!(" {}", " -u, --plain           suppress underlining and bold");
-    println!(" {}", " -n, --lines <number>  the number of lines per screenful");
-    println!(" {}", " -<number>             same as --lines");
-    println!(" {}", " +<number>             display file beginning from line number");
-    println!(" {}", " +/<pattern>           display file beginning from pattern match");
-    println!("{}", USAGE_SEPARATOR);
-
-    println!("{}", usage_help_options(23));  
-    println!("{}", usage_man_tail("more(1)")); 
-
-    exit(EXIT_SUCCESS);
+fn isprint(c: char) -> bool{
+    0x20 < (c as u8) && (c as u8) < 0x7E
 }
 
 ///
@@ -2199,8 +2341,7 @@ fn find_editor() -> &'static str {
 
 ///
 fn runtime_usage() {
-    let stdout = io::stdout();
-    let mut handle = stdout.lock();
+    let stdout = io::stdout().lock();
 
     writeln!(
         handle,
@@ -2278,7 +2419,7 @@ fn main() {
 	if ctl.no_tty_in {
         if let Some(stdin) = std::io::stdin().ok(){
             if self.no_tty_out{
-                copy_file(stdin);
+                ctl.copy_file(stdin);
             } else {
                 ctl.display_file(stdin);
             }
@@ -2295,9 +2436,36 @@ fn main() {
 		ctl.first_file = false;
         ctl.argv_position += 1;
     }
-
-	ctl.clear_line_ends = false;
-	ctl.prompt_len = false;
 	
     exit(EXIT_SUCCESS);
 }
+
+/*
+//
+fn usage(){
+    println!("{}", USAGE_HEADER);
+    println!(" {} [options] <file>...\n", PROGRAM_INVOCATION_SHORT_NAME);
+
+    println!("{}", USAGE_SEPARATOR);
+    println!("{}", "Display the contents of a file in a terminal.");
+
+    println!("{}", USAGE_OPTIONS);
+    println!(" {}", " -d, --silent          display help instead of ringing bell");
+    println!(" {}", " -f, --logical         count logical rather than screen lines");
+    println!(" {}", " -l, --no-pause        suppress pause after form feed");
+    println!(" {}", " -c, --print-over      do not scroll, display text and clean line ends");
+    println!(" {}", " -p, --clean-print     do not scroll, clean screen and display text");
+    println!(" {}", " -e, --exit-on-eof     exit on end-of-file");
+    println!(" {}", " -s, --squeeze         squeeze multiple blank lines into one");
+    println!(" {}", " -u, --plain           suppress underlining and bold");
+    println!(" {}", " -n, --lines <number>  the number of lines per screenful");
+    println!(" {}", " -<number>             same as --lines");
+    println!(" {}", " +<number>             display file beginning from line number");
+    println!(" {}", " +/<pattern>           display file beginning from pattern match");
+    println!("{}", USAGE_SEPARATOR);
+
+    println!("{}", usage_help_options(23));  
+    println!("{}", usage_man_tail("more(1)")); 
+
+    exit(EXIT_SUCCESS);
+}*/
