@@ -32,12 +32,20 @@ const ABC_INPUT: &'static str = "abc";
 const SCRIPT_A: &'static str = "s/a/ab/g";
 const SCRIPT_B: &'static str = "s/b/bc/g";
 const SCRIPT_C: &'static str = "s/c/ca/g";
+const SCRIPT_SOME_NEWLINES: &'static str = "s/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\n";
+const SCRIPT_ALL_NEWLINES: &'static str = "\n\n\n";
+const SCRIPT_BLANKS: &'static str = "   s/a/ab/g\n   s/b/bc/g\n   s/c/ca/g";
+const SCRIPT_SEMICOLONS: &'static str = ";;;s/a/ab/g\n;;;s/b/bc/g\n;;;s/c/ca/g";
 
-const ABC_FILE: &'static str = "tests/sed/abc";
-const CBA_FILE: &'static str = "tests/sed/cba";
-const SCRIPT_A_FILE: &'static str = "tests/sed/script_a";
-const SCRIPT_B_FILE: &'static str = "tests/sed/script_b";
-const SCRIPT_C_FILE: &'static str = "tests/sed/script_c";
+const ABC_FILE: &'static str = "tests/sed/assets/abc";
+const CBA_FILE: &'static str = "tests/sed/assets/cba";
+const SCRIPT_A_FILE: &'static str = "tests/sed/assets/script_a";
+const SCRIPT_B_FILE: &'static str = "tests/sed/assets/script_b";
+const SCRIPT_C_FILE: &'static str = "tests/sed/assets/script_c";
+const SCRIPT_SOME_NEWLINES_FILE: &'static str = "tests/sed/assets/script_some_newlines";
+const SCRIPT_ALL_NEWLINES_FILE: &'static str = "tests/sed/assets/script_all_newlines";
+const SCRIPT_BLANKS_FILE: &'static str = "tests/sed/assets/script_blanks";
+const SCRIPT_SEMICOLONS_FILE: &'static str = "tests/sed/assets/script_blanks";
 
 #[test]
 fn test_no_arguments() {
@@ -349,4 +357,70 @@ fn test_mixed_e_f_scripts() {
         "",
         0,
     );
+}
+
+#[test]
+fn test_script_some_newlines() {
+    sed_test(&[SCRIPT_SOME_NEWLINES], ABC_INPUT, "abcabcaca", "", 0);
+}
+
+#[test]
+fn test_script_all_newlines() {
+    sed_test(&[SCRIPT_ALL_NEWLINES], ABC_INPUT, ABC_INPUT, "", 0);
+}
+
+#[test]
+fn test_e_script_some_newlines() {
+    sed_test(&["-e", SCRIPT_SOME_NEWLINES], ABC_INPUT, "abcabcaca", "", 0);
+}
+
+#[test]
+fn test_e_script_all_newlines() {
+    sed_test(&["-e", SCRIPT_ALL_NEWLINES], ABC_INPUT, ABC_INPUT, "", 0);
+}
+
+#[test]
+fn test_f_script_some_newlines() {
+    sed_test(&["-f", SCRIPT_SOME_NEWLINES_FILE], ABC_INPUT, "abcabcaca", "", 0);
+}
+
+#[test]
+fn test_f_script_all_newlines() {
+    sed_test(
+        &["-f", SCRIPT_ALL_NEWLINES_FILE],
+        ABC_INPUT,
+        ABC_INPUT,
+        "",
+        0,
+    );
+}
+
+#[test]
+fn test_single_script_ignore_blank_chars() {
+    sed_test(&[SCRIPT_BLANKS], ABC_INPUT, "abcabcaca", "", 0);
+}
+
+#[test]
+fn test_e_script_ignore_blank_chars() {
+    sed_test(&["-e", SCRIPT_BLANKS], ABC_INPUT, "abcabcaca", "", 0);
+}
+
+#[test]
+fn test_f_script_ignore_blank_chars() {
+    sed_test(&["-f", SCRIPT_BLANKS_FILE], ABC_INPUT, "abcabcaca", "", 0);
+}
+
+#[test]
+fn test_single_script_ignore_semicolon_chars() {
+    sed_test(&[SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca", "", 0);
+}
+
+#[test]
+fn test_e_script_ignore_semicolon_chars() {
+    sed_test(&["-e", SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca", "", 0);
+}
+
+#[test]
+fn test_f_script_ignore_semicolon_chars() {
+    sed_test(&["-f", SCRIPT_SEMICOLONS_FILE], ABC_INPUT, "abcabcaca", "", 0);
 }
