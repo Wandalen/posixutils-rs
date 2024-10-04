@@ -77,7 +77,7 @@ impl Args {
             if self.file.is_empty() {
                 return Err(SedError::NoScripts);
             } else {
-                // Neither [-e script] nor [-f script_file] is provided and [file...] is not empty
+                // Neither [-e script] nor [-f script_file] is supplied and [file...] is not empty
                 // then consider first [file...] as single script.
                 for raw_script in self.file.remove(0).split('\n') {
                     scripts.push(Script::parse(raw_script)?);
@@ -85,7 +85,7 @@ impl Args {
             }
         }
 
-        // If no [file...] were provided or single file is considered to to be script, then
+        // If no [file...] were supplied or single file is considered to to be script, then
         // sed must read input from STDIN.
         if self.file.is_empty() {
             self.file.push("-".to_string());
@@ -157,6 +157,7 @@ impl Sed {
                         break;
                     }
 
+                    // TODO: alternative way to remove <newline>?
                     let trimmed = if line.ends_with('\n') {
                         &line[..line.len() - 1]
                     } else {
