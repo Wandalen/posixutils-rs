@@ -85,6 +85,12 @@ impl Args {
             }
         }
 
+        // If no [file...] were provided or single file is considered to to be script, then
+        // sed must read input from STDIN.
+        if self.file.is_empty() {
+            self.file.push("-".to_string());
+        }
+
         Ok(Sed {
             ere: self.ere,
             quiet: self.quiet,
@@ -114,6 +120,15 @@ impl Script {
             .trim_start_matches(|c| c == ' ' || c == ';');
         Ok(Script::RawString(raw_script.into()))
     }
+
+    fn process_line(&self, line: &str, quiet: bool) -> Result<(), SedError> {
+        if !quiet {
+            println!("script: {self:?}");
+            println!("processed line: {line}");
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)] // TODO: debug only
@@ -122,6 +137,70 @@ struct Sed {
     quiet: bool,
     scripts: Vec<Script>,
     input_sources: Vec<String>,
+}
+
+impl Sed {
+    fn process_line(&mut self, line: &str) -> Result<(), SedError> {
+        for script in &self.scripts {
+            script.process_line(line, self.quiet)?
+        }
+
+        Ok(())
+    }
+
+    fn process_input(&mut self, mut reader: Box<dyn BufRead>) -> Result<(), SedError> {
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(bytes_read) => {
+                    if bytes_read == 0 {
+                        break;
+                    }
+
+                    let trimmed = if line.ends_with('\n') {
+                        &line[..line.len() - 1]
+                    } else {
+                        &line
+                    };
+
+                    if let Err(_) = self.process_line(trimmed) {
+                        eprintln!("sed: PROCESS LINE ERROR!!!")
+                    }
+                }
+                Err(_) => eprintln!("sed: READ LINE ERRROR!!!"),
+            }
+        }
+
+        Ok(())
+    }
+
+    fn sed(&mut self) -> Result<(), SedError> {
+        println!("SED: {self:?}");
+
+        for input in self.input_sources.drain(..).collect::<Vec<_>>() {
+            let reader: Box<dyn BufRead> = if input == "-" {
+                println!("Handling STDIN");
+                Box::new(BufReader::new(std::io::stdin()))
+            } else {
+                println!("Handling file: {input}");
+                match File::open(&input) {
+                    Ok(file) => Box::new(BufReader::new(file)),
+                    Err(err) => {
+                        eprintln!("sed: {input}: {err}");
+                        continue;
+                    }
+                }
+            };
+            match self.process_input(reader) {
+                Ok(_) => {}
+                Err(err) => {
+                    eprintln!("sed: {input}: {err}")
+                }
+            };
+        }
+
+        Ok(())
+    }
 }
 
 /// Exit code:
@@ -134,16 +213,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    let exit_code = match Args::try_to_sed(args) {
-        Ok(sed) => {
-            println!("Sed model: {sed:?}");
-            0
-        }
-        Err(err) => {
+    let exit_code = Args::try_to_sed(args)
+        .and_then(|mut sed| sed.sed())
+        .map(|_| 0)
+        .unwrap_or_else(|err| {
             eprintln!("sed: {err}");
             1
-        }
-    };
+        });
 
     std::process::exit(exit_code);
 }

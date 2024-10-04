@@ -380,7 +380,13 @@ fn test_e_script_all_newlines() {
 
 #[test]
 fn test_f_script_some_newlines() {
-    sed_test(&["-f", SCRIPT_SOME_NEWLINES_FILE], ABC_INPUT, "abcabcaca", "", 0);
+    sed_test(
+        &["-f", SCRIPT_SOME_NEWLINES_FILE],
+        ABC_INPUT,
+        "abcabcaca",
+        "",
+        0,
+    );
 }
 
 #[test]
@@ -421,5 +427,11 @@ fn test_e_script_ignore_semicolon_chars() {
 
 #[test]
 fn test_f_script_ignore_semicolon_chars() {
-    sed_test(&["-f", SCRIPT_SEMICOLONS_FILE], ABC_INPUT, "abcabcaca", "", 0);
+    sed_test(
+        &["-f", SCRIPT_SEMICOLONS_FILE],
+        ABC_INPUT,
+        "abcabcaca",
+        "",
+        0,
+    );
 }
