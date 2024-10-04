@@ -50,7 +50,7 @@ const SCRIPT_SEMICOLONS_FILE: &'static str = "tests/sed/assets/script_blanks";
 #[test]
 fn test_no_arguments() {
     // TODO: implement and give own error message
-    // sed_test(&[], "", "", "sed: no scripts provided", 1);
+    // sed_test(&[], "", "", "sed: no script is provided", 1);
 }
 
 #[test]
