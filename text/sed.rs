@@ -96,7 +96,7 @@ impl Args {
 
 #[derive(thiserror::Error, Debug)]
 enum SedError {
-    #[error("no script is provided")]
+    #[error("none script was supplied")]
     NoScripts,
     #[error("{0}")]
     Io(#[from] std::io::Error),
