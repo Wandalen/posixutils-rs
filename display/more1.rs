@@ -87,6 +87,8 @@ extern crate clap;
 extern crate libc;
 extern crate plib;
 
+use std::str::FromStr;
+
 use clap::Parser;
 use plib::PROJECT_NAME;
 
@@ -134,144 +136,219 @@ struct Args {
 enum Command {
     UnknownCommand,
     Help,
-    ScrollForwardOneScreenful,
-    ScrollBackwardOneScreenful,
-    ScrollForwardOneLine,
-    ScrollBackwardOneLine,
-    ScrollForwardOneHalfScreenful,
-    SkipForwardOneLine,
-    ScrollBackwardOneHalfScreenful,
-    GotoBeginningofFile,
-    GotoEOF,
+    ScrollForwardOneScreenful(Option<usize>),
+    ScrollBackwardOneScreenful(Option<usize>),
+    ScrollForwardOneLine{ 
+        count: Option<usize>, 
+        is_space: bool
+    },
+    ScrollBackwardOneLine(Option<usize>),
+    ScrollForwardOneHalfScreenful(Option<usize>),
+    SkipForwardOneLine(Option<usize>),
+    ScrollBackwardOneHalfScreenful(Option<usize>),
+    GoToBeginningOfFile(Option<usize>),
+    GoToEOF(Option<usize>),
     RefreshScreen,
     DiscardAndRefresh,
-    MarkPosition,
-    ReturnMark,
+    MarkPosition(char),
+    ReturnMark(char),
     ReturnPreviousPosition,
-    SearchForwardPattern,
-    SearchBackwardPattern,
-    RepeatSearch,
-    RepeatSearchReverse,
-    ExamineNewFile,
-    ExamineNextFile,
-    ExaminePreviousFile,
-    GotoTag,
+    SearchForwardPattern{
+        count: Option<usize>,
+        is_not: bool,
+        pattern: String
+    },
+    SearchBackwardPattern{
+        count: Option<usize>,
+        is_not: bool,
+        pattern: String
+    },
+    RepeatSearch(Option<usize>),
+    RepeatSearchReverse(Option<usize>),
+    ExamineNewFile(String),
+    ExamineNextFile(Option<usize>),
+    ExaminePreviousFile(Option<usize>),
+    GoToTag(String),
     InvokeEditor,
     DisplayPosition,
     Quit
 }
 
+impl Command{
+    fn has_count(&self) -> bool{
+        match self{
+            Command::ScrollForwardOneScreenful(_) |
+            Command::ScrollBackwardOneScreenful(_) |
+            Command::ScrollForwardOneLine{ .. } |
+            Command::ScrollBackwardOneLine(_) |
+            Command::ScrollForwardOneHalfScreenful(_) |
+            Command::SkipForwardOneLine(_) |
+            Command::ScrollBackwardOneHalfScreenful(_) |
+            Command::GoToBeginningOfFile(_) |
+            Command::GoToEOF(_) |
+            Command::SearchForwardPattern{ .. } |
+            Command::SearchBackwardPattern{ .. } |
+            Command::RepeatSearch(_) |
+            Command::RepeatSearchReverse(_) |
+            Command::ExamineNextFile(_) |
+            Command::ExaminePreviousFile(_) => true,
+            _ => false
+        }
+    }
+}
+
+struct Terminal{
+    pub terminal: termios,
+}
+
+impl Terminal{
+    pub fn clear(&mut self){
+
+    }
+}
+
+#[derive(Default)]
+struct State{
+    pub window_size: (usize, usize),
+    pub current_file: Option<File>,
+    pub file_position: usize,
+    pub current_lines_count: usize,
+    pub current_line: usize,
+    pub marked_positions: HashMap<char, usize>
+}
+
 struct MoreControl{
-    args: Args,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
-    : ,
+    pub args: Args,
+    pub terminal: Option<Terminal>,
+    pub state: State,
     : ,
 }
 
 impl MoreControl{
     fn new() -> Result<Self, ()>{
         let args = Args::parse();
-
         let mut s = Self { 
             args,
+            terminal: if Ok(terminal) = Terminal::new(){
+                Some(terminal)
+            } else {
+                None
+            },
+            state: State{
+
+            },
         };
 
         s
     }
 
-    fn poll(){
+    fn display(&mut self){
+        self.terminal.clear();
+    }
+
+    fn poll(&mut self) -> Result<&str, ()>{
 
     }
     
-    fn execute(){
+    fn execute(&mut self, command: Command) -> Result<(), ()>{
         match command{ 
             Command::UnknownCommand => {
                 
             },
-            Command::Help => {
+            Command::Help => commands_usage(),
+            Command::ScrollForwardOneScreenful(count) => {
+
+            },
+            Command::ScrollBackwardOneScreenful(count) => {
+
+            },
+            Command::ScrollForwardOneLine{ count, is_space } => {
+                let Some(count) = count else { 
+                    if is_space { self.state.window_size.0 } else { 1 } 
+                };
+                self.state.current_line += count;
+                if self.state.current_line > self.state.current_lines_count{
+                    self.state.current_line = self.state.current_lines_count;
+                };
+            },
+            Command::ScrollBackwardOneLine(count) => {
+                let Some(count) = count else { 1 };
+                if self.state.current_line >= count{
+                    self.state.current_line -= count;
+                }
+            },
+            Command::ScrollForwardOneHalfScreenful(count) => {
                 
             },
-            Command::ScrollForwardOneScreenful => {
+            Command::SkipForwardOneLine(count) => {
                 
             },
-            Command::ScrollBackwardOneScreenful => {
+            Command::ScrollBackwardOneHalfScreenful(count) => {
                 
             },
-            Command::ScrollForwardOneLine => {
-                
+            Command::GoToBeginningOfFile(count) => {
+                let Some(count) = count else { 0 };
+                self.current_line = count;
             },
-            Command::ScrollBackwardOneLine => {
-                
-            },
-            Command::ScrollForwardOneHalfScreenful => {
-                
-            },
-            Command::SkipForwardOneLine => {
-                
-            },
-            Command::ScrollBackwardOneHalfScreenful => {
-                
-            },
-            Command::GotoBeginningofFile => {
-                
-            },
-            Command::GotoEOF => {
-                
+            Command::GoToEOF(count) => {
+                let Some(count) = count else { 
+                    self.state.current_lines_count - self.state.window_size.0
+                };
+                self.current_line = count;
             },
             Command::RefreshScreen => {
                 
             },
             Command::DiscardAndRefresh => {
-                
+
+                if IS_SEEKABLE{
+                    let buf = String::new();
+                    std::io::stdin().read_to_end(buf);
+                }
             },
-            Command::MarkPosition => {
-                
+            Command::MarkPosition(letter) => {
+                self.state.marked_positions.insert(letter, self.state.current_line);
             },
-            Command::ReturnMark => {
-                
+            Command::ReturnMark(letter) => {
+                if let Some(position) = self.state.marked_positions.get(letter){
+                    self.state.current_line = position;
+                }
             },
             Command::ReturnPreviousPosition => {
+                let Some(last_line) = self.state.last_line else { 0 };
+                self.state.current_line = last_line;
+            },
+            Command::SearchForwardPattern{ 
+                count, 
+                is_not,
+                pattern 
+            } => {
+                let re = Regex::new(pattern.as_str());
+                re.
+            },
+            Command::SearchBackwardPattern{ 
+                count, 
+                is_not,
+                pattern 
+            } => {
                 
             },
-            Command::SearchForwardPattern => {
+            Command::RepeatSearch(count) => {
                 
             },
-            Command::SearchBackwardPattern => {
+            Command::RepeatSearchReverse(count) => {
                 
             },
-            Command::RepeatSearch => {
+            Command::ExamineNewFile(filename) => {
                 
             },
-            Command::RepeatSearchReverse => {
+            Command::ExamineNextFile(count) => {
                 
             },
-            Command::ExamineNewFile => {
+            Command::ExaminePreviousFile(count) => {
                 
             },
-            Command::ExamineNextFile => {
-                
-            },
-            Command::ExaminePreviousFile => {
-                
-            },
-            Command::GotoTag => {
+            Command::GoToTag(tagstring) => {
                 
             },
             Command::InvokeEditor => {
@@ -280,25 +357,175 @@ impl MoreControl{
             Command::DisplayPosition => {
                 
             },
-            Command::Quit => {
-                
-            },
+            Command::Quit => exit(),
             _ => {
     
             }
-        }
+        };
+
+        Ok(())
     }
 
-    fn _(){
-        
+    fn process_p(&mut self) -> i32{
+        let mut commands_str = self.args.commands.as_str();
+        commands_str.
+        for command in parse(commands_str)?{
+            self.execute(commands)?;
+        } 
     }
 
-    fn _loop(&mut self) -> i32{
+    fn loop_(&mut self) -> i32{
         loop{
-            poll();
-            execute();
+            let commands = self.poll()?;
+            for command in self.parse(commands)?{
+                self.execute(command)?;
+            }
         }
     }
+}
+
+fn parse(commands_str: &str) -> Result<Vec<Command>, >{
+    let mut commands = Vec::<Command>::new();
+    let mut count: Option<usize> = None;
+    
+    let i = 0;
+    while i < commands_str.len(){
+        let Some(ch) = *commands_str.get(i) else { break; };
+        let command = match ch{
+            ch if ch.is_numeric() => {
+                let mut count_str = String::new();
+                while ch.is_numeric(){
+                    let Some(ch) = *commands_str.get(i) else { break; };
+                    count_str.push(ch);
+                    i += 1;
+                }
+                
+                count = Some(count_str.parse::<usize>()?);
+                continue;
+            },
+            'h' => Command::Help,
+            'f' | '\x06' => Command::ScrollForwardOneScreenful(count),
+            'b' | '\x02' => Command::ScrollBackwardOneScreenful(count),
+            ' ' => Command::ScrollForwardOneLine{ count, is_space: true},
+            'j' | '\n' => Command::ScrollForwardOneLine{ count, is_space: false },
+            'k' => Command::ScrollBackwardOneLine(count),
+            'd' | '\x04' => Command::ScrollForwardOneHalfScreenful(count),
+            's' => Command::SkipForwardOneLine(count),
+            'u' | '\x15' => Command::ScrollBackwardOneHalfScreenful(count),
+            'g' => Command::GoToBeginningOfFile(count),
+            'G' => Command::GoToEOF(count),
+            'r' | '\x0C' => Command::RefreshScreen,
+            'R' => Command::DiscardAndRefresh,
+            'm' => {
+                i += 1;
+                let Some(ch) = *commands_str.get(i) else { break; };
+                if ch.is_ascii_lowercase() {
+                    Command::MarkPosition(ch)
+                }else{
+                    Command::UnknownCommand
+                }
+            },
+            '/' => {
+                i += 1;
+                let Some(ch) = *commands_str.get(i) else { break; };
+                let is_not = ch == '!';
+                if is_not { i += 1; }
+                let pattern = commands_str
+                    .chars().skip(i).take_while(|c| { i += 1; c != '\n' })
+                    .collect::<_>();
+                let Some(ch) = *commands_str.get(i - 1) else { break; };
+                if ch == '\n' {
+                    Command::SearchForwardPattern{ count, is_not, pattern }
+                }else{
+                    Command::UnknownCommand
+                } 
+            },
+            '?' => {
+                i += 1;
+                let Some(ch) = *commands_str.get(i) else { break; };
+                let is_not = ch == '!';
+                if is_not { i += 1; }
+                let pattern = commands_str
+                    .chars().skip(i).take_while(|c| { i += 1; c != '\n' })
+                    .collect::<_>();
+                let Some(ch) = *commands_str.get(i - 1) else { break; };
+                if ch == '\n' {
+                    Command::SearchBackwardPattern{ count, is_not, pattern }
+                }else{
+                    Command::UnknownCommand
+                } 
+            },
+            'n' => Command::RepeatSearch(count),
+            'N' => Command::RepeatSearchReverse(count),
+            '\'' => {
+                i += 1;
+                let Some(ch) = *commands_str.get(i) else { break; };
+                match ch{
+                    '\'' => Command::ReturnPreviousPosition,
+                    ch  if ch.is_ascii_lowercase() => Command::ReturnMark(ch),
+                    _ => Command::UnknownCommand
+                }
+            },
+            ':' => {
+                i += 1;
+                let Some(ch) = *commands_str.get(i) else { break; };
+                match ch{
+                    'e' => {
+                        i += 1;
+                        let Some(ch) = *commands_str.get(i) else { break; };
+                        if ch == ' ' { i += 1; }
+                        let filename = commands_str
+                            .chars().skip(i).take_while(|c| { i += 1; c != '\n' })
+                            .collect::<_>();
+                        let Some(ch) = *commands_str.get(i - 1) else { break; };
+                        if ch == '\n' {
+                            Command::ExamineNewFile(filename)
+                        }else{
+                            Command::UnknownCommand
+                        } 
+                    },
+                    'n' => Command::ExamineNextFile(count),
+                    'p' => Command::ExaminePreviousFile(count),
+                    't' => {
+                        i += 1;
+                        let Some(ch) = *commands_str.get(i) else { break; };
+                        if ch == ' ' { i += 1; }
+                        let tagstring = commands_str
+                            .chars().skip(i).take_while(|c| { i += 1; c != '\n' })
+                            .collect::<_>();
+                        let Some(ch) = *commands_str.get(i - 1) else { break; };
+                        if ch == '\n' {
+                            Command::GoToTag(tagstring)
+                        }else{
+                            Command::UnknownCommand
+                        }
+                    },
+                    'q' => Command::Quit,
+                }
+            },
+            'Z' => {
+                i += 1;
+                let Some(ch) = *commands_str.get(i) else { break; };
+                match ch{
+                    'Z' => Command::Quit,
+                    _ => Command::UnknownCommand
+                } 
+            },
+            'v'  => Command::InvokeEditor,
+            '=' | '\x07' => Command::DisplayPosition,
+            'q' => Command::Quit,
+            _ => Command::UnknownCommand
+        };
+
+        if command.has_count(){
+            count = None;
+        }
+
+        commands.push(command);
+        i += 1;
+    }
+
+    Ok(commands)
 }
 
 ///
@@ -340,8 +567,10 @@ fn commands_usage() {
         :t tagstring<newline>          If tagstring isn't the current file, examine the file, as if :e command was executed. Display beginning screenful with the tag\n\ 
         v                              Invoke an editor to edit the current file being examined. Editor shall be taken from EDITOR, or shall default to vi.\n\    
         = or\n\ 
-        <control>-G                    Write a message for which the information references the first byte of the line after the last line of the file on the screen\n\
-        q or :q or ZZ                  Exit more\n\n
+        ctrl-G                         Write a message for which the information references the first byte of the line after the last line of the file on the screen\n\
+        q or\n\
+        :q or\n\ 
+        ZZ                  Exit more\n\n
         For more see: https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/utilities/more.html"
     );
     writeln!(handle, '-'.repeat(79));
@@ -349,5 +578,9 @@ fn commands_usage() {
 
 fn main(){
     let mut ctl = MoreControl::new()?;
-    ctl._loop()
+    if let Err(err) = ctl.process_p(){
+
+    }
+
+    ctl.loop_()
 }
