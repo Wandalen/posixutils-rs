@@ -42,8 +42,6 @@ enum ManError {
     PageNotFound(String),
     #[error("failed to get terminal size")]
     GetTerminalSize,
-    #[error("neither groff(1), nor nroff(1), nor mandoc(1) are installed")]
-    NoFormatters,
     #[error("{0} command not found")]
     CommandNotFound(String),
     #[error("failed to execute command: {0}")]
@@ -189,7 +187,7 @@ fn get_page_width() -> Result<Option<u16>, ManError> {
     Ok(Some(result_width))
 }
 
-/// Gets formated by `groff(1)` system documentation.
+/// Parses `mdoc(7)`.
 ///
 /// # Arguments
 ///
@@ -198,78 +196,13 @@ fn get_page_width() -> Result<Option<u16>, ManError> {
 ///
 /// # Returns
 ///
-/// [Vec<u8>] STDOUT of called `groff(1)` formatter.
+/// [Vec<u8>] of formatted documentation.
 ///
 /// # Errors
 ///
 /// [ManError] if file failed to execute `groff(1)` formatter.
-fn groff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
-    let mut args = vec![
-        "-Tutf8",
-        "-S",
-        "-P-h",
-        "-Wall",
-        "-mtty-char",
-        "-t",
-        "-mandoc",
-    ];
-    let width = width.map(|w| (format!("-rLL={w}n"), format!("-rLR={w}n")));
-    if let Some((rll, rlr)) = width.as_ref() {
-        args.push(rll);
-        args.push(rlr);
-    }
-
-    spawn("groff", &args, Some(man_page), Stdio::piped()).map(|output| output.stdout)
-}
-
-/// Gets formated by `nroff(1)` system documentation.
-///
-/// # Arguments
-///
-/// `man_page` - [&[u8]] with content that needs to be formatted.
-/// `width` - [Option<u16>] width value of current terminal.
-///
-/// # Returns
-///
-/// [Vec<u8>] STDOUT of called `nroff(1)` formatter.
-///
-/// # Errors
-///
-/// [ManError] if file failed to execute `nroff(1)` formatter.
-fn nroff_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
-    let mut args = vec!["-Tutf8", "-S", "-Wall", "-mtty-char", "-t", "-mandoc"];
-    let width = width.map(|w| (format!("-rLL={w}n"), format!("-rLR={w}n")));
-    if let Some((rll, rlr)) = width.as_ref() {
-        args.push(rll);
-        args.push(rlr);
-    }
-
-    spawn("nroff", &args, Some(man_page), Stdio::piped()).map(|output| output.stdout)
-}
-
-/// Gets formatted by `mandoc(1)` system documentation.
-///
-/// # Arguments
-///
-/// `man_page` - [&[u8]] with content that needs to be formatted.
-/// `width` - [Option<u16>] width value of current terminal.
-///
-/// # Returns
-///
-/// [Vec<u8>] STDOUT of called `mandoc(1)` formatter.
-///
-/// # Errors
-///
-/// [ManError] if file failed to execute `mandoc(1)` formatter.
-fn mandoc_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
-    let mut args = vec![];
-    let width = width.map(|w| format!("width={w}"));
-    if let Some(width) = width.as_ref() {
-        args.push("-O");
-        args.push(width);
-    }
-
-    spawn("mandoc", &args, Some(man_page), Stdio::piped()).map(|output| output.stdout)
+fn parse_mdoc(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
+    Ok(man_page.into())
 }
 
 /// Formats man page content into appropriate format.
@@ -288,17 +221,7 @@ fn mandoc_format(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManErro
 fn format_man_page(man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
     let width = get_page_width()?;
 
-    let formatters = [groff_format, nroff_format, mandoc_format];
-
-    for formatter in &formatters {
-        match formatter(&man_page, width) {
-            Ok(formatted_man_page) => return Ok(formatted_man_page),
-            Err(ManError::CommandNotFound(_)) => continue,
-            Err(err) => return Err(err),
-        }
-    }
-
-    Err(ManError::NoFormatters)
+    parse_mdoc(&man_page, width)
 }
 
 /// Formats man page content into appropriate format.
