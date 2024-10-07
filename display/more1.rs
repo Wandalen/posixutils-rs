@@ -87,7 +87,9 @@ extern crate clap;
 extern crate libc;
 extern crate plib;
 
-use std::str::FromStr;
+use std::os::windows::fs::MetadataExt;
+use std::{collections::HashMap, str::FromStr};
+use std::path::Path;
 
 use clap::Parser;
 use plib::PROJECT_NAME;
@@ -130,7 +132,7 @@ struct Args {
 
     /// A pathnames of an input files. 
     #[arg(name = "FILE")]
-    input_files: Vec<String>
+    input_files: Vec<Path>
 }
 
 enum Command {
@@ -211,17 +213,22 @@ impl Terminal{
 struct State{
     pub window_size: (usize, usize),
     pub current_file: Option<File>,
-    pub file_position: usize,
+    pub file_position: Option<usize>,
+    pub current_file_path: Path,
+    pub last_file_path: Option<Path>,
     pub current_lines_count: usize,
     pub current_line: usize,
-    pub marked_positions: HashMap<char, usize>
+    pub last_line: usize,
+    pub marked_positions: HashMap<char, usize>,
+    pub last_search: Option<String>,
+    pub count_default: Option<usize>,
+    pub is_last_search_forward: Option<bool>
 }
 
 struct MoreControl{
     pub args: Args,
     pub terminal: Option<Terminal>,
     pub state: State,
-    : ,
 }
 
 impl MoreControl{
@@ -249,18 +256,85 @@ impl MoreControl{
     fn poll(&mut self) -> Result<&str, ()>{
 
     }
+
+    fn invoke_editor(&mut self) -> Result<(), ()>{
+
+    }
+
+    fn goto_tag(&mut self, tagstring: String) -> Result<(), ()>{
+        let mut result = Ok(());
+        loop{
+            let output = std::process::Command::new("ctags")
+            .args(["-x", tagstring.as_str()])
+            .output();
+            let Ok(output) = output else { result = Err(output.unwrap_err()); break; };
+            let output = std::str::from_utf8(&output.stdout);
+            let Ok(output) = output else { result = Err(output.unwrap_err()); break; };
+            let lines = output.split("\n").collect::<Vec<&str>>();
+            if lines.len() > 1 { result = Err(); break; }
+            else if lines.is_empty() { result = Err(); break; }
+            let Some(line) = lines.get(0) else { result = Err(); break; };
+            let fields = line.split(" ").collect::<Vec<&str>>();
+            if fields.len() != 4 { result = Err(); break; };
+            let Ok(line) = fields[1].parse::<usize>() else { result = Err(); break; };
+            let filename = Box::leak::<'static>(fields[2].into_boxed_str());
+            let filename = &*filename;
+            self.state.last_file_path = Some(self.state.current_file_path);
+            self.state.current_file_path = Path::new(filename);
+            self.state.current_line = line;
+            self.state.file_position = ;
+            break;
+        }
+
+        result
+    }
+
+    fn display_position(&mut self) -> Result<(), ()>{
+        let mut result = Ok(());
+
+        loop{
+            let filename = self.state.current_file_path.file_name() 
+                else { result = Err(); break; };
+            let file_position = self.state.file_position;
+            let input_files_count = self.args.input_files.len();
+            let current_line = self.state.current_line;
+            let byte_number = ;
+            let metadata = self.state.current_file_path.metadata();
+            let Ok(metadata) = metadata else { result = Err(metadata.unwrap_err()); break; };
+            let file_size = metadata.file_size(); 
+            if || 
+                self.state.current_lines_count >= self.state.window_size.0{
+                println!("{} {}/{} {} {} {} {}%", 
+                    filename, file_position, input_files_count, 
+                    current_line, byte_number, file_size, 
+                    self.state.current_line / self.state.current_lines_count
+                );
+            }else{
+                println!("{} {}/{}", 
+                    filename, file_position, input_files_count
+                );
+            }
+            break;
+        }
+
+        result
+    }
     
     fn execute(&mut self, command: Command) -> Result<(), ()>{
         match command{ 
-            Command::UnknownCommand => {
-                
-            },
             Command::Help => commands_usage(),
             Command::ScrollForwardOneScreenful(count) => {
-
+                let Some(count) = count else { self.args.lines - 1 };
+                self.state.current_line += count;
+                if self.state.current_line > self.state.current_lines_count{
+                    self.state.current_line = self.state.current_lines_count;
+                };
             },
             Command::ScrollBackwardOneScreenful(count) => {
-
+                let Some(count) = count else { self.args.lines - 1 };
+                if self.state.current_line >= count{
+                    self.state.current_line -= count;
+                }
             },
             Command::ScrollForwardOneLine{ count, is_space } => {
                 let Some(count) = count else { 
@@ -278,13 +352,34 @@ impl MoreControl{
                 }
             },
             Command::ScrollForwardOneHalfScreenful(count) => {
-                
+                if count.is_some() { self.state.count_default = count; }; 
+                let Some(count) = count else { 
+                    if let Some(count_default) = self.state.count_default{
+                        count_default
+                    } else {
+                        ((self.args.lines as f32 - 1.0) / 2.0).floor()
+                    }
+                };
+                self.state.current_line += count;
+                if self.state.current_line > self.state.current_lines_count{
+                    self.state.current_line = self.state.current_lines_count;
+                };
             },
             Command::SkipForwardOneLine(count) => {
                 
             },
             Command::ScrollBackwardOneHalfScreenful(count) => {
-                
+                if count.is_some() { self.state.count_default = count; }; 
+                let Some(count) = count else {                     
+                    if let Some(count_default) = self.state.count_default{
+                        count_default
+                    } else {
+                        ((self.args.lines as f32 - 1.0) / 2.0).floor()
+                    } 
+                };
+                if self.state.current_line >= count{
+                    self.state.current_line -= count;
+                }
             },
             Command::GoToBeginningOfFile(count) => {
                 let Some(count) = count else { 0 };
@@ -310,7 +405,7 @@ impl MoreControl{
                 self.state.marked_positions.insert(letter, self.state.current_line);
             },
             Command::ReturnMark(letter) => {
-                if let Some(position) = self.state.marked_positions.get(letter){
+                if let Some(position) = self.state.marked_positions.get(&letter){
                     self.state.current_line = position;
                 }
             },
@@ -324,7 +419,7 @@ impl MoreControl{
                 pattern 
             } => {
                 let re = Regex::new(pattern.as_str());
-                re.
+                re.captures_at()
             },
             Command::SearchBackwardPattern{ 
                 count, 
@@ -340,27 +435,117 @@ impl MoreControl{
                 
             },
             Command::ExamineNewFile(filename) => {
-                
+                if !filename.is_empty(){
+                    if filename.as_str() == "#"{
+                        if let Some(last_file_path) = self.state.last_file_path{
+                            if let Ok(last_file_path) = last_file_path.canonicalize(){
+                                self.state.file_position = Some(if let Some(file_position) = self.args.input_files
+                                    .iter()
+                                    .position(|p| p.canonicalize() == last_file_path) { 
+                                        file_position 
+                                    } else { 0 });
+                            } else {
+                                self.state.file_position = Some(0);
+                            }
+                            self.state.current_file_path = last_file_path;
+                            self.state.last_file_path = None;
+                        }
+                    } else {
+                        self.state.last_file_path = Some(self.state.current_file_path);
+                        let filename = Box::leak::<'static>(filename.into_boxed_str());
+                        let filename = &*filename;
+                        self.state.current_file_path = Path::new(filename);
+                    }
+                }
+
+                self.current_line = 0;
+                self.state.marked_positions = HashMap::new();
             },
             Command::ExamineNextFile(count) => {
-                
+                if let Some(file_position) = self.state.file_position{
+                    self.state.last_file_path = self.args.input_files.get(file_position);
+                }
+                let Some(count) = count else { 1 };
+                if let Some(file_position) = self.state.file_position.as_mut() {
+                    file_position += count;
+                    if *file_position >= self.args.input_files.len(){
+                        *file_position = self.args.input_files.len() - 1;
+                    }
+                } else { 
+                    if let Some(last_file_path) = self.state.last_file_path{
+                        if let Ok(last_file_path) = last_file_path.canonicalize(){
+                            self.state.file_position = Some(if let Some(file_position) = self.args.input_files
+                                .iter()
+                                .position(|p| p.canonicalize() == last_file_path) { 
+                                    file_position 
+                                } else { 0 });
+                        } else {
+                            self.state.file_position = Some(0);
+                        }
+                    }else{
+                        self.state.file_position = Some(0);
+                    }
+                    self.state.last_file_path = None;
+
+                    if let Some(file_position) = self.state.file_position.as_mut(){
+                        file_position += count;
+                        if *file_position >= self.args.input_files.len(){
+                            *file_position = self.args.input_files.len() - 1;
+                        }
+                    }
+                };
+
+                if let Some(file_position) = self.state.file_position{
+                    self.state.current_file_path = self.args.input_files.get(file_position);
+                }
+
+                self.current_line = 0;
+                self.state.marked_positions = HashMap::new();
             },
             Command::ExaminePreviousFile(count) => {
-                
+                if let Some(file_position) = self.state.file_position{
+                    self.state.last_file_path = self.args.input_files.get(file_position);
+                }
+                let Some(count) = count else { 1 };
+                if let Some(file_position) = self.state.file_position.as_mut() {
+                    if *file_position > count {
+                        *file_position -= count;
+                    } else {
+                        *file_position = 0;
+                    }
+                } else { 
+                    if let Ok(last_file_path) = self.state.last_file_path.canonicalize(){
+                        self.state.file_position = Some(if let Some(file_position) = self.args.input_files
+                            .iter()
+                            .position(|p| p.canonicalize() == last_file_path) { 
+                                file_position 
+                            } else { 0 });
+                    } else {
+                        self.state.file_position = Some(0);
+                    }
+                    self.state.last_file_path = None;
+
+                    if let Some(file_position) = self.state.file_position.as_mut(){
+                        if *file_position > count {
+                            *file_position -= count;
+                        } else {
+                            *file_position = 0;
+                        }
+                    }
+                };
+
+                if let Some(file_position) = self.state.file_position{
+                    self.state.current_file_path = self.args.input_files.get(file_position);
+                }
+
+                self.current_line = 0;
+                self.state.marked_positions = HashMap::new();
             },
-            Command::GoToTag(tagstring) => {
-                
-            },
-            Command::InvokeEditor => {
-                
-            },
-            Command::DisplayPosition => {
-                
-            },
-            Command::Quit => exit(),
-            _ => {
-    
-            }
+            Command::GoToTag(tagstring) => self.goto_tag(tagstring)?,
+            Command::InvokeEditor => self.invoke_editor()?,
+            Command::DisplayPosition => self.display_position()?,
+            Command::Quit => exit(std::process::ExitCode::SUCCESS),
+            _ => return Err(),
         };
 
         Ok(())
@@ -368,7 +553,6 @@ impl MoreControl{
 
     fn process_p(&mut self) -> i32{
         let mut commands_str = self.args.commands.as_str();
-        commands_str.
         for command in parse(commands_str)?{
             self.execute(commands)?;
         } 
@@ -473,7 +657,7 @@ fn parse(commands_str: &str) -> Result<Vec<Command>, >{
                     'e' => {
                         i += 1;
                         let Some(ch) = *commands_str.get(i) else { break; };
-                        if ch == ' ' { i += 1; }
+                        if ch == ' ' { i += 1; } else { }
                         let filename = commands_str
                             .chars().skip(i).take_while(|c| { i += 1; c != '\n' })
                             .collect::<_>();
@@ -489,7 +673,7 @@ fn parse(commands_str: &str) -> Result<Vec<Command>, >{
                     't' => {
                         i += 1;
                         let Some(ch) = *commands_str.get(i) else { break; };
-                        if ch == ' ' { i += 1; }
+                        if ch == ' ' { i += 1; } else { }
                         let tagstring = commands_str
                             .chars().skip(i).take_while(|c| { i += 1; c != '\n' })
                             .collect::<_>();
