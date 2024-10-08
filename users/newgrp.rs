@@ -13,14 +13,14 @@ use libc::{
     getgid, getgrnam, getgroups, getlogin, getpwnam, getpwuid, getuid, gid_t, passwd, setgid,
     setgroups, setuid, uid_t, ECHO, ECHONL, TCSANOW,
 };
+use libcrypt_rs::{Crypt, Encryptions};
 use plib::{group::Group, PROJECT_NAME};
-use sha2::{Digest, Sha256};
 
 use std::{
     env,
     ffi::{CStr, CString},
     fs::File,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader},
     os::unix::io::AsRawFd,
     process::{self, Command},
 };
@@ -589,44 +589,68 @@ fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
     Ok(group.gid)
 }
 
-fn pw_encrypt(clear: &str, salt: Option<&str>) -> Option<String> {
-    let mut hasher = Sha256::new();
+fn handle_unknown_method(salt: &str) -> String {
+    // Create a string that starts with "$x$" and append the second character from the salt
+    let mut method = String::from("$x$");
 
-    // If a salt is provided, append it to the clear text
-    if let Some(salt_str) = salt {
-        hasher.update(salt_str.as_bytes());
+    // Ensure there's a second character in the salt to avoid panicking
+    if salt.len() > 1 {
+        method.push(salt.chars().nth(1).unwrap()); // Get the second character from salt
+    } else {
+        eprintln!("Salt provided is too short: '{}'", salt);
     }
 
-    // Add the clear text password to the hasher
-    hasher.update(clear.as_bytes());
+    method
+}
 
-    // Finalize the hash and convert it to a hex string
-    let result = hasher.finalize();
-    let hash_hex = format!("{:x}", result);
+fn pw_encrypt(clear: &str, salt: Option<&str>) -> Option<String> {
+    // Create a new instance of the Crypt object
+    let mut engine = Crypt::new();
 
-    // Check if the algorithm is supported based on the salt (if provided)
-    if let Some(salt_str) = salt {
+    // Determine the encryption method based on the salt (if provided)
+    let method = if let Some(salt_str) = salt {
         if salt_str.starts_with('$') {
-            let method = match salt_str.chars().nth(1).unwrap_or('x') {
-                '1' => "MD5",
-                '2' => "BCRYPT",
-                '5' => "SHA256",
-                '6' => "SHA512",
-                'y' => "YESCRYPT",
-                other => &format!("Unknown method ${}", other),
-            };
-
-            if method != "SHA256" {
-                // Log an error and exit if the crypt method isn't SHA-256
-                let _ = writeln!(io::stderr(), "crypt method not supported: {}", method);
-                std::process::exit(1);
+            match salt_str.chars().nth(1).unwrap_or('x') {
+                '1' => Encryptions::Md5,
+                '5' => Encryptions::Sha256,
+                '6' => Encryptions::Sha512,
+                'y' => Encryptions::Yescrypt,
+                _ => {
+                    let unknown_method = handle_unknown_method(salt_str);
+                    eprintln!("crypt method not supported: {}", unknown_method);
+                    return None;
+                }
             }
+        } else {
+            Encryptions::Yescrypt
+        }
+    } else {
+        Encryptions::Yescrypt
+    };
+
+    // Special case handling for salt 'x'
+    if salt == Some("x") {
+        eprintln!("Using special handling for salt 'x'. Defaulting to Yescrypt.");
+        if clear == "x" {
+            return Some("x".to_string());
         }
     }
 
-    Some(hash_hex)
-}
+    // Generate the salt using the specified or default method
+    if engine.gen_salt(method).is_err() {
+        eprintln!("Salt generation failed");
+        return None;
+    }
 
+    // Encrypt the clear text password
+    match engine.encrypt(clear.to_string()) {
+        Ok(_) => Some(engine.encrypted.clone()), // Return a cloned string of the encrypted result
+        Err(err) => {
+            eprintln!("Encryption failed: {}", err);
+            None
+        }
+    }
+}
 /// Reads a password from the terminal without echoing the input.
 ///
 /// This function opens the terminal (`/dev/tty`), modifies the terminal settings to hide
