@@ -20,6 +20,11 @@ tokio = { version = "1.39", features = ["net", "macros", "rt"]}
 [build-dependencies]
 bindgen = { version = "0.70.0", features = ["runtime"] }
 
+
+[[bin]]
+name = "at"
+path = "./at.rs"
+
 [[bin]]
 name = "fuser"
 path = "./fuser.rs"
