@@ -13,6 +13,7 @@ gettext-rs.workspace = true
 regex = "1.11.0"
 magic = "0.16.2"
 ncursesw = "0.17"
+thiserror = "1.0.64"
 termios = "0.3.3"
 
 [[bin]]
