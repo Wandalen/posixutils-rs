@@ -10,10 +10,11 @@
 use clap::{error::ErrorKind, Parser};
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::{
-    getgid, getgrnam, getgroups, getlogin, getpwnam, getpwuid, getuid, gid_t, passwd, setgid,
-    setgroups, setuid, uid_t, ECHO, ECHONL, TCSANOW,
+    getgid, getgrnam, getgroups, getlogin, getpwnam, getpwuid, getspnam, getuid, gid_t, passwd,
+    setgid, setgroups, setuid, uid_t, ECHO, ECHONL, TCSANOW,
 };
-use libcrypt_rs::{Crypt, Encryptions};
+
+use libcrypt_rs::Crypt;
 use plib::{group::Group, PROJECT_NAME};
 
 use std::{
@@ -569,13 +570,15 @@ fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
     unsafe {
         if getuid() != 0 && need_password {
             let password_input = read_password().unwrap_or_default();
-            let hashed_input = pw_encrypt(&password_input, Some(&group.passwd)).unwrap();
 
-            if hashed_input == group.passwd {
+            let shadow_password = get_shadow_password(&group.name)?;
+
+            let hashed_input = pw_encrypt(&password_input, Some(&shadow_password))?;
+
+            if hashed_input == shadow_password {
                 // Return GID if password matches
                 return Ok(group.gid);
             } else {
-                dbg!(&hashed_input, &group.passwd);
                 eprintln!("Error: Incorrect password for group '{}'.", group.name);
                 return Err(io::Error::new(
                     io::ErrorKind::PermissionDenied,
@@ -589,67 +592,98 @@ fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
     Ok(group.gid)
 }
 
-fn handle_unknown_method(salt: &str) -> String {
-    // Create a string that starts with "$x$" and append the second character from the salt
-    let mut method = String::from("$x$");
+/// Retrieves the shadow password entry for a given username from the system's shadow file.
+///
+/// # Parameters
+/// - `username`: A string slice that holds the username whose shadow password is being retrieved.
+///
+/// # Returns
+/// - `Ok(String)`: The shadow password as a string if the username is found and the password is successfully retrieved.
+/// - `Err(io::Error)`: An error if the username is invalid, the user is not found in the shadow file,
+///   or another I/O-related error occurs.
+fn get_shadow_password(username: &str) -> Result<String, io::Error> {
+    unsafe {
+        // Convert the username to a CString
+        let c_username = CString::new(username).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "Invalid username provided.")
+        })?;
 
-    // Ensure there's a second character in the salt to avoid panicking
-    if salt.len() > 1 {
-        method.push(salt.chars().nth(1).unwrap()); // Get the second character from salt
-    } else {
-        eprintln!("Salt provided is too short: '{}'", salt);
+        // Call getspnam to retrieve the shadow password entry
+        let spwd_ptr = getspnam(c_username.as_ptr());
+        if spwd_ptr.is_null() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "User not found in shadow file.",
+            ));
+        }
+
+        // Extract the shadow password
+        let shadow_entry = *spwd_ptr;
+        let shadow_password = CStr::from_ptr(shadow_entry.sp_pwdp)
+            .to_string_lossy()
+            .into_owned();
+
+        Ok(shadow_password)
     }
-
-    method
 }
 
-fn pw_encrypt(clear: &str, salt: Option<&str>) -> Option<String> {
-    // Create a new instance of the Crypt object
+/// Extracts the salt from a given full hash string in the format used by cryptographic hash functions.
+///
+/// # Parameters
+/// - `full_hash`: A string slice representing the full hash, which typically includes the algorithm identifier,
+///   the salt, and the hashed password.
+///
+/// # Returns
+/// - `Some(String)`: The extracted salt if the hash string has the expected format with at least four parts.
+/// - `None`: If the hash string does not have the correct format or does not contain enough parts to extract the salt.
+fn extract_salt(full_hash: &str) -> Option<String> {
+    let parts: Vec<&str> = full_hash.split('$').collect();
+
+    if parts.len() >= 4 {
+        Some(format!("${}${}${}", parts[1], parts[2], parts[3]))
+    } else {
+        None
+    }
+}
+
+/// Encrypts a clear text password using the salt extracted from a shadow password entry.
+///
+/// # Parameters
+/// - `clear`: A string slice representing the clear text password to be encrypted.
+/// - `shadow_password`: An optional string slice containing the full shadow password hash
+///   from which the salt will be extracted.
+///
+/// # Returns
+/// - `Some(String)`: The encrypted password if the encryption process is successful.
+/// - `None`: If the salt extraction or encryption fails.
+fn pw_encrypt(clear: &str, shadow_password: Option<&str>) -> Result<String, io::Error> {
     let mut engine = Crypt::new();
 
-    // Determine the encryption method based on the salt (if provided)
-    let method = if let Some(salt_str) = salt {
-        if salt_str.starts_with('$') {
-            match salt_str.chars().nth(1).unwrap_or('x') {
-                '1' => Encryptions::Md5,
-                '5' => Encryptions::Sha256,
-                '6' => Encryptions::Sha512,
-                'y' => Encryptions::Yescrypt,
-                _ => {
-                    let unknown_method = handle_unknown_method(salt_str);
-                    eprintln!("crypt method not supported: {}", unknown_method);
-                    return None;
-                }
-            }
-        } else {
-            Encryptions::Yescrypt
+    // Extract the salt from the shadow password, returning an error if extraction fails
+    let salt = match shadow_password.and_then(extract_salt) {
+        Some(salt) if !salt.contains("!*") => salt, // Ensure the salt is not blocked
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Shadow password is blocked or salt extraction failed.",
+            ));
         }
-    } else {
-        Encryptions::Yescrypt
     };
 
-    // Special case handling for salt 'x'
-    if salt == Some("x") {
-        eprintln!("Using special handling for salt 'x'. Defaulting to Yescrypt.");
-        if clear == "x" {
-            return Some("x".to_string());
-        }
+    // Attempt to set the salt in the engine
+    if engine.set_salt(salt).is_err() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Salt generation failed.",
+        ));
     }
 
-    // Generate the salt using the specified or default method
-    if engine.gen_salt(method).is_err() {
-        eprintln!("Salt generation failed");
-        return None;
+    // Attempt to encrypt the clear text password
+    if engine.encrypt(clear.to_string()).is_err() {
+        return Err(io::Error::new(io::ErrorKind::Other, "Encryption failed."));
     }
 
-    // Encrypt the clear text password
-    match engine.encrypt(clear.to_string()) {
-        Ok(_) => Some(engine.encrypted.clone()), // Return a cloned string of the encrypted result
-        Err(err) => {
-            eprintln!("Encryption failed: {}", err);
-            None
-        }
-    }
+    Ok(engine.encrypted)
 }
 /// Reads a password from the terminal without echoing the input.
 ///
