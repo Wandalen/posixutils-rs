@@ -14,6 +14,10 @@ pub struct Config {
     pub ignore: bool,
     /// Whether to print recipe lines
     pub silent: bool,
+    /// Whether rule includes phony targets
+    pub phony: bool,
+    /// Whether rule includes precious targets
+    pub precious: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -22,6 +26,8 @@ impl Default for Config {
         Self {
             ignore: false,
             silent: false,
+            phony: false,
+            precious: false,
         }
     }
 }

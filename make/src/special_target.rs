@@ -8,6 +8,7 @@
 //
 
 use core::fmt;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     error_code::ErrorCode,
@@ -20,6 +21,7 @@ pub enum SpecialTarget {
     Default,
     Ignore,
     Posix,
+    Phony,
     Precious,
     SccsGet,
     Silent,
@@ -27,12 +29,15 @@ pub enum SpecialTarget {
 }
 use gettextrs::gettext;
 use SpecialTarget::*;
+use crate::config::Config;
+use crate::special_target::Error::MustNotHaveRecipes;
 
 impl SpecialTarget {
     // could be automated with `strum`
-    pub const COUNT: usize = 7;
-    pub const VARIANTS: [Self; Self::COUNT] =
-        [Default, Ignore, Posix, Precious, SccsGet, Silent, Suffixes];
+    pub const COUNT: usize = 8;
+    pub const VARIANTS: [Self; Self::COUNT] = [
+        Default, Ignore, Posix, Precious, SccsGet, Silent, Suffixes, Phony,
+    ];
 }
 
 impl AsRef<str> for SpecialTarget {
@@ -45,6 +50,7 @@ impl AsRef<str> for SpecialTarget {
             SccsGet => ".SCCS_GET",
             Silent => ".SILENT",
             Suffixes => ".SUFFIXES",
+            Phony => ".PHONY",
         }
     }
 }
@@ -53,6 +59,17 @@ impl fmt::Display for SpecialTarget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_ref())
     }
+}
+
+#[derive(Debug)]
+pub struct InferenceTarget {
+    from: String,
+    to: Option<String>,
+}
+
+impl InferenceTarget {
+    pub fn from(&self) -> &str { self.from.as_ref() }
+    pub fn to(&self) -> Option<&str> { self.to.as_ref().map(|s| s.as_str()) }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -113,6 +130,25 @@ impl TryFrom<Target> for SpecialTarget {
     }
 }
 
+impl TryFrom<(Target, Config)> for InferenceTarget {
+    type Error = ParseError;
+
+    fn try_from((target, config): (Target, Config)) -> Result<Self, Self::Error> {
+        let map = &BTreeSet::new();
+        let suffixes = config.rules.get(".SUFFIXES").unwrap_or(map);
+        let source = target.to_string();
+        
+        let from = suffixes.iter()
+            .filter_map(|x| source.strip_prefix(x))
+            .next().ok_or(ParseError)?.to_string();
+        let to = suffixes.iter()
+            .filter_map(|x| source.strip_prefix(x))
+            .next().map(|x| x.to_string());
+        
+        Ok(Self { from, to })
+    }
+}
+
 pub struct Processor<'make> {
     rule: Rule,
     make: &'make mut Make,
@@ -134,6 +170,10 @@ pub fn process(rule: Rule, make: &mut Make) -> Result<(), ErrorCode> {
         Default => this.process_default(),
         Ignore => this.process_ignore(),
         Silent => this.process_silent(),
+        Suffixes => this.process_suffixes(),
+        Phony => this.process_phony(),
+        Precious => this.process_precious(),
+        SccsGet => this.process_sccs_get(),
         unsupported => Err(Error::NotSupported(unsupported)),
     }
     .map_err(|err| ErrorCode::SpecialTargetConstraintNotFulfilled {
@@ -208,6 +248,82 @@ impl Processor<'_> {
         let what_to_do = |rule: &mut Rule| rule.config.silent = true;
         self.additive(what_to_do);
         self.global(what_to_do);
+
+        Ok(())
+    }
+
+    fn process_suffixes(self) -> Result<(), Error> {
+        let suffixes_key = ".SUFFIXES";
+        let suffixes_set = self
+            .rule
+            .prerequisites()
+            .map(|suffix| suffix.as_ref().to_string())
+            .collect::<BTreeSet<String>>();
+
+        if suffixes_set.is_empty() {
+            self.make
+                .config
+                .rules
+                .insert(suffixes_key.to_string(), BTreeSet::new());
+        } else {
+            self.make
+                .config
+                .rules
+                .insert(suffixes_key.to_string(), suffixes_set);
+        }
+
+        Ok(())
+    }
+    fn process_phony(mut self) -> Result<(), Error> {
+        let suffixes_set = self
+            .rule
+            .prerequisites()
+            .map(|suffix| suffix.as_ref().to_string())
+            .collect::<BTreeSet<String>>();
+
+        self.make
+            .config
+            .rules
+            .insert(".PHONY".to_string(), suffixes_set);
+
+        let what_to_do = |rule: &mut Rule| rule.config.phony = true;
+        self.additive(what_to_do);
+        self.global(what_to_do);
+
+        Ok(())
+    }
+
+    fn process_precious(mut self) -> Result<(), Error> {
+        let precious_set = self
+            .rule
+            .prerequisites()
+            .map(|val| val.as_ref().to_string())
+            .collect::<BTreeSet<String>>();
+
+        let what_to_do = |rule: &mut Rule| rule.config.precious = true;
+
+        self.additive(what_to_do);
+        self.global(what_to_do);
+
+        self.make
+            .config
+            .rules
+            .insert(".PRECIOUS".to_string(), precious_set);
+        Ok(())
+    }
+    fn process_sccs_get(self) -> Result<(), Error> {
+        self.without_prerequisites()?;
+
+        let sccs_set = self
+            .rule
+            .recipes()
+            .map(|val| val.as_ref().to_string())
+            .collect::<BTreeSet<String>>();
+
+        self.make
+            .config
+            .rules
+            .insert(".SCCS_GET".to_string(), sccs_set);
 
         Ok(())
     }

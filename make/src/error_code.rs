@@ -10,9 +10,9 @@
 use core::fmt;
 use std::io;
 
-use gettextrs::gettext;
-
+use crate::parser::parse::ParseError;
 use crate::special_target::Error;
+use gettextrs::gettext;
 
 /// Represents the error codes that can be returned by the make utility
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -20,12 +20,11 @@ pub enum ErrorCode {
     // Transparent
     ExecutionError { exit_code: Option<i32> },
     IoError(io::ErrorKind),
-    // for now just a string, in future `makefile_lossless::parse::ParseError` must be used (now it
-    // is private)
-    ParseError(String),
+    ParserError { constraint: ParseError },
 
     // Specific
     NoMakefile,
+    NotUpToDateError { target: String },
     NoTarget { target: Option<String> },
     NoRule { rule: String },
     RecursivePrerequisite { origin: String },
@@ -38,19 +37,21 @@ impl From<ErrorCode> for i32 {
     }
 }
 
+// todo: tests error codes
 impl From<&ErrorCode> for i32 {
     fn from(err: &ErrorCode) -> i32 {
         use ErrorCode::*;
 
         match err {
-            ExecutionError { .. } => 1,
-            IoError(_) => 2,
-            ParseError(_) => 3,
-            NoMakefile => 4,
-            NoTarget { .. } => 5,
-            NoRule { .. } => 6,
-            RecursivePrerequisite { .. } => 7,
-            SpecialTargetConstraintNotFulfilled { .. } => 8,
+            NotUpToDateError { .. } => 1,
+            ExecutionError { .. } => 2,
+            IoError(_) => 3,
+            ParserError { .. } => 4,
+            NoMakefile => 5,
+            NoTarget { .. } => 6,
+            NoRule { .. } => 7,
+            RecursivePrerequisite { .. } => 8,
+            SpecialTargetConstraintNotFulfilled { .. } => 9,
         }
     }
 }
@@ -60,6 +61,9 @@ impl fmt::Display for ErrorCode {
         use ErrorCode::*;
 
         match self {
+            NotUpToDateError { target } => {
+                write!(f, "{}: {}", target, gettext("target no up to date"))
+            }
             ExecutionError { exit_code } => match exit_code {
                 Some(exit_code) => {
                     write!(f, "{}: {}", gettext("execution error"), exit_code)
@@ -75,7 +79,7 @@ impl fmt::Display for ErrorCode {
             },
             IoError(err) => write!(f, "{}: {}", gettext("io error"), err),
             NoMakefile => write!(f, "{}", gettext("no makefile")),
-            ParseError(err) => write!(f, "{}: {}", gettext("parse error"), err),
+            ParserError { constraint } => write!(f, "{}: {}", gettext("parse error"), constraint),
             NoTarget { target } => match target {
                 Some(target) => write!(f, "{} '{}'", gettext("no target"), target),
                 None => write!(f, "{}", gettext("no targets to execute")),

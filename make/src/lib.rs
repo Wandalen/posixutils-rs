@@ -9,17 +9,24 @@
 
 pub mod config;
 pub mod error_code;
+pub mod parser;
 pub mod rule;
+pub mod signal_handler;
 pub mod special_target;
 
-use std::{collections::HashSet, fs, time::SystemTime};
+use std::{
+    collections::HashSet,
+    fs::{self},
+    time::SystemTime,
+};
 
-use makefile_lossless::{Makefile, VariableDefinition};
+use parser::{Makefile, VariableDefinition};
 
 use config::Config;
 use error_code::ErrorCode::{self, *};
 use rule::{prerequisite::Prerequisite, target::Target, Rule};
 use special_target::SpecialTarget;
+use crate::special_target::InferenceTarget;
 
 /// The default shell variable name.
 const DEFAULT_SHELL_VAR: &str = "SHELL";
@@ -29,12 +36,12 @@ const DEFAULT_SHELL: &str = "/bin/sh";
 
 /// Represents the make utility with its data and configuration.
 ///
-/// The only way to create a `Make` is from a `Makefile` and a `Config`.
+/// The only way to create a Make is from a Makefile and a Config.
 pub struct Make {
     macros: Vec<VariableDefinition>,
     rules: Vec<Rule>,
+    inference_rules: Vec<Rule>,
     default_rule: Option<Rule>, // .DEFAULT
-
     pub config: Config,
 }
 
@@ -43,8 +50,8 @@ impl Make {
     ///
     /// # Returns
     ///
-    /// - `Some(rule)` if a rule with the target exists.
-    /// - `None` if no rule with the target exists.
+    /// - Some(rule) if a rule with the target exists.
+    /// - None if no rule with the target exists.
     fn rule_by_target_name(&self, target: impl AsRef<str>) -> Option<&Rule> {
         self.rules
             .iter()
@@ -59,9 +66,9 @@ impl Make {
     /// Builds the target with the given name.
     ///
     /// # Returns
-    /// - `Ok(true)` if the target was built.
-    /// - `Ok(false)` if the target was already up to date.
-    /// - `Err(_)` if any errors occur.
+    /// - Ok(true) if the target was built.
+    /// - Ok(false) if the target was already up to date.
+    /// - Err(_) if any errors occur.
     pub fn build_target(&self, name: impl AsRef<str>) -> Result<bool, ErrorCode> {
         let rule = match self.rule_by_target_name(&name) {
             Some(rule) => rule,
@@ -82,9 +89,9 @@ impl Make {
     /// Runs the given rule.
     ///
     /// # Returns
-    /// - Ok(`true`) if the rule was run.
-    /// - Ok(`false`) if the rule was already up to date.
-    /// - `Err(_)` if any errors occur.
+    /// - Ok(true) if the rule was run.
+    /// - Ok(false) if the rule was already up to date.
+    /// - Err(_) if any errors occur.
     fn run_rule_with_prerequisites(&self, rule: &Rule, target: &Target) -> Result<bool, ErrorCode> {
         if self.are_prerequisites_recursive(target) {
             return Err(RecursivePrerequisite {
@@ -93,15 +100,19 @@ impl Make {
         }
 
         let newer_prerequisites = self.get_newer_prerequisites(target);
-        if newer_prerequisites.is_empty() && get_modified_time(target).is_some() {
+        let mut up_to_date = newer_prerequisites.is_empty() && get_modified_time(target).is_some();
+        if rule.config.phony {
+            up_to_date = false;
+        }
+
+        if up_to_date {
             return Ok(false);
         }
 
-        for prerequisite in newer_prerequisites {
-            self.build_target(prerequisite)?;
+        for prerequisite in &newer_prerequisites {
+            self.build_target(&prerequisite)?;
         }
-
-        rule.run(&self.config, &self.macros, target)?;
+        rule.run(&self.config, &self.macros, target, up_to_date)?;
 
         Ok(true)
     }
@@ -134,7 +145,7 @@ impl Make {
     }
 
     /// Checks if the target has recursive prerequisites.
-    /// Returns `true` if the target has recursive prerequisites.
+    /// Returns true if the target has recursive prerequisites.
     fn are_prerequisites_recursive(&self, target: impl AsRef<str>) -> bool {
         let mut visited = HashSet::from([target.as_ref()]);
         let mut stack = HashSet::from([target.as_ref()]);
@@ -176,13 +187,18 @@ impl TryFrom<(Makefile, Config)> for Make {
     fn try_from((makefile, config): (Makefile, Config)) -> Result<Self, Self::Error> {
         let mut rules = vec![];
         let mut special_rules = vec![];
+        let mut inference_rules = vec![];
+
         for rule in makefile.rules() {
             let rule = Rule::from(rule);
             let Some(target) = rule.targets().next() else {
                 return Err(NoTarget { target: None });
             };
+
             if SpecialTarget::try_from(target.clone()).is_ok() {
                 special_rules.push(rule);
+            } else if InferenceTarget::try_from((target.clone(), config.clone())).is_ok() {
+                inference_rules.push(rule);
             } else {
                 rules.push(rule);
             }
@@ -190,6 +206,7 @@ impl TryFrom<(Makefile, Config)> for Make {
 
         let mut make = Self {
             rules,
+            inference_rules,
             macros: makefile.variable_definitions().collect(),
             default_rule: None,
             config,
