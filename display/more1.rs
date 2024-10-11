@@ -7,33 +7,16 @@
 // SPDX-License-Identifier: MIT
 //
 
-/*
+//extern crate clap;
+//extern crate libc;
+//extern crate plib;
 
-if terminal{
-    main_thread{
-    
-    }
-
-    input_handle_thread{
-    
-    }
-}else{
-    print_input
-    print_files
-}
-
-*/
-
-extern crate clap;
-extern crate libc;
-extern crate plib;
-
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io::{self, BufReader, Read, SeekFrom};
 use std::os::windows::fs::MetadataExt;
 use std::{collections::HashMap, str::FromStr};
 use std::path::Path;
-
 use clap::Parser;
 use plib::PROJECT_NAME;
 
@@ -186,7 +169,24 @@ enum MoreError{
     SourceContextError(#[from] SourceContextError),
     /// 
     #[error("")]
-    SetOutsideError
+    SetOutsideError,
+    /// 
+    #[error("")]
+    PollError,
+    /// 
+    #[error("")]
+    InputReadError,
+    /// 
+    #[error("")]
+    OutputReadError,
+    /// 
+    #[error("")]
+    FileReadError,
+    /// 
+    #[error("")]
+    StringParseError,
+    #[error("")]
+    UnknownCommandError,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -209,16 +209,16 @@ enum SeekPositionsError{
 enum SourceContextError{
     /// 
     #[error("")]
-    ,
+    MissingTerminal,
     /// 
     #[error("")]
-    ,
+    PatternNotFound,
     /// 
     #[error("")]
-    ,
+    MissingLastSearch,
     /// 
     #[error("")]
-    ,
+    MissingMark,
 }
 
 /// 
@@ -233,17 +233,17 @@ impl Screen{
     }
 
     ///
-    fn set_str(&mut self, position: (usize, usize), string: String) -> Result<(), SetOutsideError>{
+    fn set_str(&mut self, position: (usize, usize), string: String) -> Result<(), MoreError>{
         if position.0 > self.0.len() || 
         (self.0[0].len() as isize - position.1 as isize) < string.len() as isize{
-            return Err(SetOutsideError);
+            return Err(MoreError::SetOutsideError);
         }
 
-        let chars = string.chars();
+        let mut chars = string.chars();
         self.0[position.0].iter_mut()
             .skip(position.1)
             .for_each(|c| if let Some(ch) = chars.next(){
-                c = ch;
+                *c = ch;
             });
 
         Ok(())
@@ -296,7 +296,7 @@ struct SeekPositions{
 
 impl SeekPositions{
     ///
-    fn new(source: Source, line_len: usize, squeeze_lines: bool) -> Result<Self, MoreError>{
+    fn new(source: Source, line_len: Option<usize>, squeeze_lines: bool) -> Result<Self, MoreError>{
         let (file, buffer) = match source.clone(){
             Source::File(path) => {
                 let Ok(file) = File::open(file_path) else { 
@@ -323,27 +323,24 @@ impl SeekPositions{
 
         seek_pos.lines_count = seek_pos.count();
 
-        seek_pos
+        Ok(seek_pos)
     }
 
     ///
     fn read_line(&mut self) -> Result<String, MoreError>{
-        if self.buffer.seek(SeekFrom::Start(self.current())).is_err() { 
-            return Err(SeekPositionsError::SeekError); 
-        };
-        loop{
-            let mut line_buf = [b' '; self.line_len];
-            if self.buffer.read_exact(line_buf).is_err() { 
-                return Err(SeekPositionsError::FileReadError); 
-            }
+        let current_seek = self.current();
+        if let Some(next_seek) = self.next(){
+            self.next_back();
+            let mut line_buf = [b' '; next_seek - current_seek];
+            self.buffer.read_exact(&mut line_buf)
+                .map_err(|_| MoreError::SeekPositionsError(SeekPositionsError::FileReadError))?;
             String::from_utf8(Vec::from_iter(line_buf))
-                .map_err(|_| SeekPositionsError::StringParseError)
-        }
-
-        let mut string = String::new();
-        match self.buffer.read_to_string(&mut string){
-            Ok(_) => Ok(string),
-            Err(err) => Err(SeekPositionsError::FileReadError)
+                .map_err(|_| MoreError::SeekPositionsError(SeekPositionsError::StringParseError))
+        }else{
+            let mut line_buf = String::new();
+            self.buffer.read_to_string(&mut line_buf)
+                .map_err(|_| MoreError::SeekPositionsError(SeekPositionsError::FileReadError))?;
+            Ok(line_buf)
         }
     }
 
@@ -402,6 +399,31 @@ impl SeekPositions{
         }
         Ok(())
     }
+
+    ///
+    pub fn find_n_char(&mut self, ch: char, n: usize) -> Option<u64>{
+        let last_seek = self.current();
+        let n_char_seek = None;
+
+        let mut buf = Vec::new();
+        self.buffer.rewind();
+        let mut i = 0;
+        loop{
+            let Ok(stream_position) = self.buffer.stream_position() else { break; }; 
+            let Ok(stream_len) = self.buffer.stream_len() else { break; }; 
+            if i >= n{
+                n_char_seek = Some(stream_position);
+                break;
+            }
+            if self.buffer.read_until(char as u8, buf).is_err(){
+                let _ = self.seek(last_seek);
+                return n_char_seek;
+            }
+        }
+
+        let _ = self.seek(last_seek);
+        n_char_seek
+    }
 }
 
 impl Iterator for SeekPositions {
@@ -410,47 +432,59 @@ impl Iterator for SeekPositions {
     /// 
     fn next(&mut self) -> Option<Self::Item>{
         let result = None;
-        let mut line_buf = [b' '; self.line_len];
-        loop{
-            let current_position = self.positions.last().unwrap_or(0);
-            if self.buffer.seek(SeekFrom::Start(last_position)).is_err() { break; };
-            if self.buffer.read_exact(line_buf).is_ok() { 
-                let mut line = line_buf.to_vec();
-                loop{
-                    if let Err(err) = std::str::from_utf8(line){
-                        let end = err.valid_up_to();
-                        let offset = (end - line.len()) as i64;
+        if let Some(line_len) = self.line_len{
+            let mut line_buf = [b' '; line_len];
+            loop{
+                let current_position = self.positions.last().unwrap_or(0);
+                if self.buffer.seek(SeekFrom::Start(last_position)).is_err() { break; };
+                if self.buffer.read_exact(line_buf).is_ok() { 
+                    let mut line = line_buf.to_vec();
+                    loop{
+                        if let Err(err) = std::str::from_utf8(line.as_slice()){
+                            let end = err.valid_up_to();
+                            let offset = (end - line.len()) as i64;
+                        }
+                        
+                        self.buffer.seek(SeekFrom::Current(-1 * offset)).unwrap();
+                    } 
+    
+                    let Ok(next_position_unchecked) = self.buffer.stream_position() else { break; };
+                    let mut next_position = 0;
+                    if self.squeeze_lines{
+                        let mut last_byte = b' ';
+                        line = line.into_iter().filter_map(|b|{
+                            let res = if last_byte == '\n' && b == '\n'{
+                                None
+                            }else{
+                                Some(b)
+                            };
+                            last_byte = b;
+                            res
+                        }).collect::<Vec<_>>();
+                    }
+                    if let Some(eol_pos) = line.iter().position(|&x| x == '\n') {
+                        next_position = next_position_unchecked - (line_len - eol_pos);
+                        self.positions.push(next_position);
+                    } else { 
+                        self.positions.push(next_position_unchecked);
+                        next_position = next_position_unchecked;
                     }
                     
-                    self.buffer.seek(SeekFrom::Current(-1 * offset)).unwrap();
-                } 
-
-                let Ok(next_position_unchecked) = self.buffer.stream_position() else { break; };
-                let mut next_position = 0;
-                if self.squeeze_lines{
-                    let mut last_byte = b' ';
-                    line = line.into_iter().filter_map(|b|{
-                        let res = if last_byte == '\n' && b == '\n'{
-                            None
-                        }else{
-                            Some(b)
-                        };
-                        last_byte = b;
-                        res
-                    }).collect::<Vec<_>>();
-                }
-                if let Some(eol_pos) = line.iter().position(|&x| x == '\n') {
-                    next_position = next_position_unchecked - (self.line_len - eol_pos);
+                    result = Some(next_position);
+                };
+                break;
+            }
+        }else{
+            let current_position = self.positions.last().unwrap_or(0);
+            if self.buffer.seek(SeekFrom::Start(last_position)).is_err() { return None; }
+            if self.buffer.lines().next().is_some(){
+                if Ok(next_position) = self.buffer.stream_position(){
+                    result = Some(next_position);
                     self.positions.push(next_position);
-                } else { 
-                    self.positions.push(next_position_unchecked);
-                    next_position = next_position_unchecked;
                 }
-                
-                result = Some(next_position);
-            };
-            break;
+            }            
         }
+        
         result
     }
 }
@@ -564,16 +598,16 @@ impl SourceContext{
     ///
     fn update_screen(&mut self) -> Result<(), MoreError>{
         let Some(terminal_size) = self.terminal_size else {
-            return Err(MoreError::);
+            return Err(MoreError::SourceContextError(SourceContextError::MissingTerminal));
         };
-        let Some(screen) = self.screen.as_mut(){
-            return Err(MoreError::);
-        }
+        let Some(screen) = self.screen.as_mut() else {
+            return Err(MoreError::SourceContextError(SourceContextError::MissingTerminal));
+        };
 
         let mut screen_lines = vec![];
         let current_line = self.seek_positions.current_line();
         loop{
-            let Ok(line) = self.seek_positions.read_line() else {  };
+            let line = self.seek_positions.read_line()?;
             screen_lines.push(line);
             if self.seek_positions.next_back().is_none() || 
                screen_lines.len() >= terminal_size.0 - 1{ 
@@ -582,7 +616,6 @@ impl SourceContext{
         }
         
         let remain = terminal_size.0 - 1 - screen_lines.len();
-
         if remain > 0 {
             if self.is_many_files{
                 header = self.format_file_header(self.current_source);
@@ -605,26 +638,21 @@ impl SourceContext{
 
         screen_lines.reverse();
         while screen_lines.len() < terminal_size.0 - 1 {
-            screen_lines.push("");
+            screen_lines.push(String::new());
         }
 
         self.seek_positions.set_current(current_line);
         
         for (i, line) in screen_lines.into_iter().enumerate(){
-            screen.set_str((i, 0), line)
+            screen.set_str((i, 0), line)?
         }
+
+        Ok(())
     }
 
     ///
     fn format_file_header(&self, file_path: Path) -> Vec<String>{
-        let file_name = file_path.file_name().unwrap_or(OsStr::new("<error>"));
-        let file_name = file_name.to_str().unwrap_or("<error>");
-        let file_extension = file_path.extension().unwrap_or(OsStr::new(""));
-        let mut file_extension = file_extension.to_str().unwrap_or("");
-        if file_extension != ""{
-            file_extension = "." + file_extension;
-        }
-        let name_and_ext = format!("{}{}", file_name, file_extension);
+        let name_and_ext = name_and_ext(file_path);
         
         let header_width = if name_and_ext.len() < 14{ 
             14
@@ -691,6 +719,7 @@ impl SourceContext{
         is_not: bool, 
         direction: Direction
     ) -> Result<bool, MoreError>{
+        let last_seek = self.seek_positions.current();
         let last_string = None;
         let result = Ok(false);
         loop{
@@ -713,9 +742,12 @@ impl SourceContext{
                     next_back
                 }
             }.is_none(){
+                let _ = self.seek_positions.seek(last_seek)?;
+                let result = 
+                    Err(MoreError::SourceContextError(SourceContextError::PatternNotFound));
                 break;
             }
-            last_string = Some(string);
+            last_string = Some(string.as_str());
         }
 
         self.last_search = Some((re, is_not, direction));
@@ -732,7 +764,7 @@ impl SourceContext{
             };
             self.search(count, pattern, is_not, direction)
         }else{
-            Err(MoreError::SourceContextError(SourceContextError::))
+            Err(MoreError::SourceContextError(SourceContextError::MissingLastSearch))
         }
     }
 
@@ -746,28 +778,29 @@ impl SourceContext{
         if let Some(position) = self.marked_positions.get(&letter){
             Ok(self.seek_positions.set_current(position))
         }else{
-            Err(MoreError::SourceContextError(SourceContextError::))
+            Err(MoreError::SourceContextError(SourceContextError::MissingMark))
         }
     }
 
     ///
     pub fn resize(&mut self, terminal_size: (usize, usize)) -> Result<(), MoreError>{
         if self.terminal_size.is_none() {
-            return Err(MoreError::);
+            return Err(MoreError::SourceContextError(SourceContextError::MissingTerminal));
         }
         let previous_seek_pos = self.seek_positions;
         let previous_seek = previous_seek_pos.current();
         let source = previous_seek_pos.source;
-        let mut next_seek_pos = SeekPositions::new(source, terminal_size.1)?;
+        let mut next_seek_pos = 
+            SeekPositions::new(source, Some(terminal_size.1), self.squeeze_lines)?;
         next_seek_pos.seek(previous_seek_pos);
         self.seek_positions = next_seek_pos;
         self.last_screen = None;
-        self.screen = Screen::new(terminal_sizes);
+        self.screen = Some(Screen::new(terminal_sizes));
         self.terminal_size = Some(terminal_size);
         Ok(())
     }
 
-    pub fn reset(&mut self){
+    pub fn reset(&mut self) -> Result<(), MoreError>{
         self.goto_beginning(None);
         self.marked_positions.clear();
         self.last_search = None;
@@ -793,8 +826,8 @@ struct Terminal{
 }
 
 impl Terminal{
-    /
-    pub fn new() -> Result<Self, ()>{
+    //
+    pub fn new() -> Result<Self, MoreError>{
         let stdout = std::io::stdout().as_raw_fd();
         let stdin = std::io::stdin().as_raw_fd();
         let stderr = std::io::stderr().as_raw_fd();
@@ -815,12 +848,7 @@ impl Terminal{
         let tty_err = unsafe{ tcgetattr(stderr, term as *mut termios) };
 
         let mut terminal = Self{
-            term,
-            tty_in,
-            tty_out,
-            tty_err,
-            screen: None,
-            window: None,
+            term, tty_in, tty_out, tty_err,
             size: (0, 0)
         };
 
@@ -832,11 +860,11 @@ impl Terminal{
         term.c_cc[VMIN] = 1;
         term.c_cc[VTIME] = 0;
     
-        if let Ok(screen) = new_prescr(){
+        /*if let Ok(screen) = new_prescr(){
             let res = set_term(screen);
             let Ok(screen) = res else { return Err(res.unwrap_err()); };
             terminal.screen = Some(screen);
-        };
+        };*/
     
         let win: winsize;
         if unsafe{ ioctl(stdout, TIOCGWINSZ, win as *mut winsize) } < 0 {
@@ -925,19 +953,19 @@ impl Terminal{
         Ok(terminal)
     }
 
-    /
+    ///
     pub fn display(&mut self, lines: Vec<String>) -> Result<(), MoreError>{
         if lines.len() != (self.size.0 - 1){
-            return Err();
+            return Err(MoreError::SetOutsideError);
         }
 
         for i in 0..(self.size.0 - 1){
             if lines[i].len() > self.size.1{
-                return Err(SetOutsideError);
+                return Err(MoreError::SetOutsideError);
             }
 
             if unsafe{ mvaddstr(Origin{ x: i, y: 0 }, lines[i]).is_err() }{
-                return Err(SetOutsideError);
+                return Err(MoreError::SetOutsideError);
             }
         }
 
@@ -945,21 +973,20 @@ impl Terminal{
         Ok(())
     }
 
-    /
+    //
     pub fn display_prompt(&mut self, prompt: Prompt) -> Result<(), MoreError>{
         if line.len() > self.size.1{
-            return Err(SetOutsideError);
+            return Err(MoreError::SetOutsideError);
         }
 
         if let Err(err) = unsafe{ mvaddstr(Origin{ x: self.size.0 - 1, y: 0 }, lines[i]) }{
-            return Err(SetOutsideError);
+            return Err(MoreError::SetOutsideError);
         }
 
-        //self.last_prompt = prompt;
         Ok(())
     }
 
-    /
+    ///
     pub fn set(&mut self){
         self.term.c_lflag &= !(ICANON | ECHO);
         self.term.c_cc[VMIN] = 1;
@@ -969,7 +996,7 @@ impl Terminal{
         }
     }
 
-    /
+    ///
     pub fn reset(&mut self){
         if self.tty_out != 0 {
             self.term.c_lflag |= ICANON | ECHO;
@@ -979,21 +1006,26 @@ impl Terminal{
         }
     }
 
-    /
-    pub fn refresh(&mut self){
+    ///
+    pub fn refresh(&mut self) -> Result<(), MoreError>{
         self.clear();
-        self.display(lines);
-        self.display_prompt(prompt);
+        self.display(lines)?;
+        self.display_prompt(prompt)
     }
 
-    /
+    /// 
     pub fn clear(&self){
         clear()
     }
 
-    /
+    //
     pub fn delete(){
 
+    }
+
+    ///
+    pub fn resize(&mut self, size: (usize, usize)){
+        self.size = size;
     }
 }
 
@@ -1001,6 +1033,8 @@ impl Terminal{
 enum Prompt{
     /// 
     More,
+    ///
+    EOF(String),
     ///,
     DisplayPosition(String),
     /// 
@@ -1018,6 +1052,10 @@ impl Prompt{
 ///
 struct InputHandler{
     ///
+    sigfd: RawFd,
+    ///
+    sigset: sigset_t,
+    ///
     signals: HashSet<i32>,
     ///
     input_buffer: String,
@@ -1028,7 +1066,21 @@ struct InputHandler{
 impl InputHandler{
     /// 
     fn new() -> Arc<Mutex<Self>>{
+        let mut sigset: sigset_t = 0;
+        let sigfd = unsafe{
+            sigemptyset(ctl.sigset as *mut sigset_t);
+            sigaddset(ctl.sigset as *mut sigset_t, SIGINT);
+            sigaddset(ctl.sigset as *mut sigset_t, SIGQUIT);
+            sigaddset(ctl.sigset as *mut sigset_t, SIGTSTP);
+            sigaddset(ctl.sigset as *mut sigset_t, SIGCONT);
+            sigaddset(ctl.sigset as *mut sigset_t, SIGWINCH);
+            sigprocmask(SIG_BLOCK, sigset as *const sigset_t, std::ptr::null::<*mut sigset_t>());
+            signalfd(-1, ctl.sigset as *const sigset_t, SFD_CLOEXEC)
+        };
+
         let handler = Arc::new(Mutex::new(Self{
+            sigfd: sigfd.clone(),
+            sigset,
             signals: HashSet::new(),
             input_buffer: String::new(),
             need_quit: false
@@ -1036,15 +1088,93 @@ impl InputHandler{
 
         let h = handler.clone(); 
         thread::spawn(move ||{
+            let sigfd = sigfd;
             let handler = h;
             while !handler.lock().unwrap().need_quit{
                 let mut buf = String::new(); 
                 std::io::stdin().lock().read_to_string(&mut buf);
                 handler.lock().unwrap().input_buffer.push_str(buf);
+
+                match InputHandler::poll_signals(sigfd){
+                    Ok((signals, need_quit)) => {
+                        handler.lock().unwrap().need_quit = need_quit;
+                        handler.lock().unwrap().signals = signals;
+                    },
+                    Err(_) => {
+                        handler.lock().unwrap().need_quit = true;
+                    } 
+                }
             }
         });
 
         handler
+    }
+
+    fn poll_signals(sigfd: RawFd) -> Result<(HashSet<i32>), MoreError>{
+        let signals = HashSet::<i32>::new();
+        let mut need_exit = false; 
+        let mut has_data = false;
+
+        let events: c_short = POLLIN | POLLERR | POLLHUP;
+        let mut poll_fds = vec![];
+        for raw_fd in [sigfd, std::io::stdin().as_raw_fd(), std::io::stderr().as_raw_fd()]{
+            poll_fds.push(pollfd{ 
+                fd: raw_fd, 
+                events,
+                revents: 0 as c_short
+            });
+        }
+    
+        while !has_data{
+            if self.ignore_stdin {
+                poll_fds[PollFdId::STDIN].fd = -1;
+            }
+    
+            let rc = unsafe{ 
+                poll(poll_fds.as_mut_ptr(), poll_fds.len() as u64, timeout) 
+            };
+
+            if rc < 0{
+                if Error::last_os_error().raw_os_error() == EAGAIN { continue; }
+                return Err(MoreError::PollError);
+            }else if rc == 0{
+                break;
+            }
+            
+            if poll_fds[PollFdId::SIGNAL].revents != 0 {
+                if revents & POLLIN {
+                    let mut info: signalfd_siginfo;
+                    let sz = unsafe{
+                        read(self.sigfd, info as *mut c_void, std::mem::size_of::<signalfd_siginfo>())
+                    };
+                    match info.ssi_signo as u32 {
+                        SIGINT => signals.insert(SIGINT),
+                        SIGQUIT => signals.insert(SIGQUIT),
+                        SIGTSTP => signals.insert(SIGTSTP),
+                        SIGCONT => signals.insert(SIGCONT),
+                        SIGWINCH => signals.insert(SIGWINCH),
+                        _ => need_exit = true,
+                    }
+                }
+            }
+
+            if poll_fds[PollFdId::STDIN].revents != 0 {
+                if revents & (POLLERR | POLLHUP) {
+                    need_exit = true;
+                }
+                if revents & (POLLHUP | POLLNVAL) {
+                    ignore_stdin = true;
+                } else {
+                    has_data = true;
+                }
+            }
+
+            if poll_fds[PollFdId::STDERR].revents != 0 && revents & POLLIN {
+                has_data = true;
+            }
+        }
+
+        Ok((signals, need_exit))
     }
 }
 
@@ -1058,36 +1188,44 @@ struct MoreControl{
     context: SourceContext,
     /// 
     input_handler: Arc<Mutex<InputHandler>>,
+    /// 
+    commands_buffer: String,
     ///
     prompt: Option<Prompt>,
     /// 
     current_position: Option<usize>,
     ///
     last_position: Option<usize>,
+    ///
+    last_source_before_usage: Option<(Source, u64)>,
     /// 
     file_pathes: Vec<Path>,
     /// 
-    count_default: Option<usize>
+    count_default: Option<usize>,
+    ///
+    is_ended_file: bool,
 }
 
 impl MoreControl{
     /// 
     fn new() -> Result<Self, MoreError>{
+        setlocale(LocaleCategory::LcAll, "");
+        textdomain(PROJECT_NAME)?;
+        bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+        setlocale(LocaleCategory::LcAll, "");
+
         let args = Args::parse();
         let terminal = Terminal::new().ok();
         let mut current_position = None;
         let mut file_pathes = vec![];
         for file_string in args.input_files{
-            let file_string = 
-                Box::leak::<'static>(file_string.into_boxed_str());
-            let file_string = &*file_string;
-            file_pathes.push(Path::new(file_string));
+            file_pathes.push(to_path(file_string)?);
         }
         let source = if args.input_files.is_empty() || 
             (args.input_files.len() == 1 && args.input_files[0] == "-".to_string()){
             let mut buf = String::new();
-            std::io::stdin().lock().read_to_string(&mut buf).map_err(
-                MoreError::
+            std::io::stdin().lock().read_to_string(&mut buf).map_err(|_|
+                MoreError::InputReadError
             )?;
             Source::Buffer(BufReader::new(buf))
         }else{
@@ -1112,22 +1250,117 @@ impl MoreControl{
             input_handler: InputHandler::new(),
             current_position,
             last_position: None,
-            count_default: None
+            count_default: None,
+            is_ended_file: false,
+            commands_buffer: String::new(),
+            prompt: None,
+            last_source_before_usage: None,
+            file_pathes: vec![],
         })
     }
 
-    /
-    fn display(&mut self) -> Result<(), MoreError>{
-        let Some(terminal) = self.terminal.as_mut() else {};
-        terminal.clear();
-        self.context.update_screen();
-        let screen = self.context.screen();
-        terminal.display(screen.get());
+    ///
+    fn print_all_input(&mut self){
+        if args.input_files.is_empty() || 
+            (args.input_files.len() == 1 && args.input_files[0] == "-".to_string()){
+            while self.context.seek_positions.next().is_some(){
+                let Ok(line) = self.context.seek_positions.read_line()
+                    .inspect_err(|e| self.handle_error(*e)) else { break; };
+                print!("{line}")
+            }
+        }else{
+            for file_path in self.args.input_files{
+                let mut file = File::open(file_path)
+                    .map_err(|_| MoreError::FileReadError)
+                    .inspect_err(|e| self.handle_error(*e));
+            
+                if self.args.input_files.len() > 1{
+                    for line in self.context.format_file_header(filepath){
+                        println!("{line}");
+                    }
+                }   
+
+                while self.context.seek_positions.next().is_some(){
+                    let Ok(line) = self.context.seek_positions.read_line()
+                        .inspect_err(|e| self.handle_error(*e)) else { break; };
+                    print!("{line}")
+                }     
+            }
+        }
     }
 
-    / 
-    fn poll(&mut self) -> Result<(), MoreError>{
+    //
+    fn display(&mut self) -> Result<(), MoreError>{
+        let Some(terminal) = self.terminal.as_mut() else { 
+            return Err(MoreError::SourceContextError(SourceContextError::MissingTerminal));
+        };
+        terminal.clear();
+        self.context.update_screen()?;
+        if let Some(screen) = self.context.screen(){
+            terminal.display(screen.get())?;
+            let prompt = if let Some(prompt) = prompt{
+                prompt
+            }else {
 
+            };
+
+            terminal.display_prompt(prompt)
+        }else{
+            Err(MoreError::SourceContextError(SourceContextError::MissingTerminal))
+        }
+    }
+
+    //
+    fn handle_events(&mut self) -> Result<(), MoreError>{
+        let mut signals = HashSet::new();
+        let mut need_quit = false;
+
+        {
+            let input_handler = self.input_handler.lock().unwrap();
+            need_quit = input_handler.need_quit;
+            signals = input_handler.signals.clone();
+            input_handler.signals.clear();
+            self.commands_buffer.push_str(input_handler.input_buffer);
+            input_handler.input_buffer.clear();
+        }
+
+        if need_quit{
+            self.exit();
+        }
+
+        for signal in signals{ 
+            match signal{
+                SIGINT => self.exit(),
+                SIGQUIT => signals.insert(SIGQUIT),
+                SIGTSTP => {
+                    self.terminal.reset();
+                    unsafe { kill(getpid(), SIGSTOP); }
+                },
+                SIGCONT => self.terminal.set(),
+                SIGWINCH => {
+                    let mut win: winsize;
+                    let mut terminal_size: (usize, usize) = (0, 0);
+                    if unsafe { ioctl(std::io::stdout().as_raw_fd(), TIOCGWINSZ, &mut win) } != -1 {
+                        if win.ws_row != 0 {
+                            terminal_size.0 = win.ws_row as usize;
+                        }else{
+                            terminal_size.0 = self.terminal.size.0;
+                        }
+                        if win.ws_col != 0 {
+                            terminal_size.1 = win.ws_col as usize;
+                        }else{
+                            terminal_size.1 = self.terminal.size.1;
+                        }
+                    }
+                    if self.terminal.size != terminal_size{
+                        self.resize(terminal_size)?;
+                    }
+                },
+                //_ => { need_exit = true; }
+            }
+        }
+
+        Ok(())
     }
 
     ///
@@ -1150,7 +1383,9 @@ impl MoreControl{
                 ]})
                 .output();
 
-            let Ok(output) = output else { result = Err(output.unwrap_err()); break; };
+            let Ok(output) = output else { 
+                result = Err(MoreError::OutputReadError); break; 
+            };
             
             break;
         }
@@ -1158,75 +1393,77 @@ impl MoreControl{
         result
     }
 
-    /
-    fn display_error(&mut self) -> Result<(), MoreError>{
-
-    }
-
-    //
+    ///
     fn goto_tag(&mut self, tagstring: String) -> Result<bool, MoreError>{
-        let mut result = Ok(false);
-        loop{
-            let output = std::process::Command::new("ctags")
-                .args(["-x", tagstring.as_str()])
-                .output();
-            let Ok(output) = output else { result = Err(output.unwrap_err()); break; };
-            let output = std::str::from_utf8(&output.stdout);
-            let Ok(output) = output else { result = Err(output.unwrap_err()); break; };
-            let lines = output.split("\n").collect::<Vec<&str>>();
-            if lines.len() > 1 { result = Err(); break; }
-            else if lines.is_empty() { result = Err(); break; }
-            let Some(line) = lines.get(0) else { result = Err(); break; };
-            let fields = line.split(" ").collect::<Vec<&str>>();
-            if fields.len() != 4 { result = Err(); break; };
-            let Ok(line) = fields[1].parse::<usize>() else { result = Err(); break; };
-            let filename = Box::leak::<'static>(fields[2].into_boxed_str());
-            let filename = &*filename;
-            self.context.last_source = self.current_source;
-            self.context.current_source = Source::File(Path::new(filename));
-            result = self.context.seek_positions.set_current(line);
-            self.current_position = ;
-            break;
+        let output = std::process::Command::new("ctags")
+            .args(["-x", tagstring.as_str()])
+            .output();
+        let Ok(output) = output else { 
+            return Err(MoreError::OutputReadError);
+        };
+        let output = std::str::from_utf8(&output.stdout);
+        let Ok(output) = output else { 
+            return Err(MoreError::StringParseError); 
+        };
+        let lines = output.split("\n").collect::<Vec<&str>>();
+        if lines.len() > 1 { 
+            return Err(MoreError::FileReadError);
         }
-
-        result
+        else if lines.is_empty() { 
+            return Err(MoreError::FileReadError);
+        }
+        let Some(line) = lines.get(0) else { 
+            return Err(MoreError::FileReadError); 
+        };
+        let fields = line.split(" ").collect::<Vec<&str>>();
+        if fields.len() != 4 { 
+            return Err(MoreError::StringParseError); 
+        };
+        let Ok(line) = fields[1].parse::<usize>() else { 
+            return Err(MoreError::StringParseError); 
+        };
+        self.context.set_source(Source::File(to_path(fields[2].to_string())?))?;
+        if let Some(n_char_seek) = self.context.seek_positions.find_n_char('\n', line){
+            self.context.seek_positions.seek(n_char_seek)
+        }else{
+            Err(MoreError::SourceContextError(SourceContextError::PatternNotFound))
+        }
     }
 
-    /
-    fn display_position(&mut self) -> Result<(), MoreError>{
-        let mut result = Ok(());
-        let line = 
-        loop{
-            let filename = self.state.current_file_path.file_name() 
-                else { result = Err(); break; };
-            let current_position = self.state.current_position;
-            let input_files_count = self.file_pathes.len();
-            let current_line = self.state.current_line;
-            let byte_number = if let Some(current_file) = self.context.current_file{
-                current_file.current()
-            }else{
-                0
-            };
-            let metadata = self.state.current_file_path.metadata();
-            let Ok(metadata) = metadata else { result = Err(metadata.unwrap_err()); break; };
-            let file_size = metadata.file_size(); 
-            let line = if self.state.current_lines_count >= self.state.window_size.0{
-                format!("{} {}/{} {} {} {} {}%", 
-                    filename, current_position, input_files_count, 
-                    current_line, byte_number, file_size, 
-                    self.state.current_line / self.state.current_lines_count
-                )
-            }else{
-                format!("{} {}/{}", 
-                    filename, current_position, input_files_count
-                )
-            };
-            break;
-        }
-
-        result
+    ///
+    fn set_position_prompt(&mut self) -> Result<(), MoreError>{
+        let filename = self.state.current_file_path.file_name() else { 
+            return Err(MoreError::FileReadError);
+        };
+        let current_position = self.state.current_position;
+        let input_files_count = self.file_pathes.len();
+        let current_line = self.state.current_line;
+        let byte_number = if let Some(current_file) = self.context.current_file{
+            current_file.current()
+        }else{
+            0
+        };
+        let metadata = self.state.current_file_path.metadata();
+        let Ok(metadata) = metadata else { 
+            return Err(MoreError::FileReadError);
+        };
+        let file_size = metadata.file_size(); 
+        let line = if self.state.current_lines_count >= self.state.window_size.0{
+            format!("{} {}/{} {} {} {} {}%", 
+                filename, current_position, input_files_count, 
+                current_line, byte_number, file_size, 
+                self.state.current_line / self.state.current_lines_count
+            )
+        }else{
+            format!("{} {}/{}", 
+                filename, current_position, input_files_count
+            )
+        };
+        self.prompt = Some(Prompt::DisplayPosition(line));
+        Ok(())
     }
 
+    /// 
     fn scroll_file_position(&mut self, count: Option<usize>, direction: Direction) -> Result<bool, MoreError>{
         let mut count = count.unwrap_or(1) as isize;
         let mut result = Ok(false);
@@ -1248,20 +1485,57 @@ impl MoreControl{
             let current_position = current_position as usize;
             if let Some(file_path) = self.file_pathes.get(current_position){
                 if let Some(file_string) = file_path.as_os_str().to_str(){
-                    self.examine_file(file_string.to_string())?;
-                    self.current_position = current_position;
+                    if let Err(e) = self.examine_file(file_string.to_string()){
+                        result = Err(e);
+                    }
+                    self.current_position = Some(current_position);
                 } 
             }
         }else{
             self.current_position = Some(0);
-            self.examine_file(file_string.to_string())?;
+            if let Err(e) = self.examine_file(file_string.to_string()){
+                result = Err(e);
+            }
         }
         result
     }
 
+    /// 
+    fn if_eof_and_prompt_goto_next_file(&mut self) -> Result<(), MoreError>{
+        if is_ended_file{
+            if self.last_source_before_usage.is_some(){
+                return self.refresh();
+            }
+            let next_position = self.current_position.unwrap_or(
+                self.last_position.unwrap_or(0)
+            ) + 1;
+
+            if let Some(next_file) = self.file_pathes.get(next_positions){
+                let name_and_ext = name_and_ext(next_file);
+                if self.prompt.is_none(){
+                    self.prompt = Some(Prompt::EOF(name_and_ext));
+                }else{
+                    if self.scroll_file_position(1, Direction::Forward).is_err(){
+                        self.exit();
+                    }
+                }
+                
+            }else{
+                self.exit();
+            }
+        }
+        Ok(())
+    }
+
+    ///
+    fn exit(&mut self){
+        exit(std::process::ExitCode::SUCCESS)
+    }
+
+    /// 
     fn examine_file(&mut self, file_string: String) -> Result<(), MoreError>{
         if file_string.is_empty(){ 
-            self.context.reset();
+            self.context.reset()?;
         }
 
         if file_string.as_str() == "#"{
@@ -1282,51 +1556,59 @@ impl MoreControl{
             }
             Ok(())
         } else {
-            let file_string = Box::leak::<'static>(file_string.into_boxed_str());
-            let file_string = &*file_string;
-            self.context.set_source(Source::File(Path::new(file_string)))?;
+            self.context.set_source(Source::File(to_path(file_string)?))?;
             self.last_position = self.current_position;
         }
         Ok(())
     }
+
+    ///
+    fn refresh(&mut self) -> Result<(), MoreError>{
+        if let Some((source, seek)) = last_source_before_usage{
+            self.context.set_source(source)?;
+            self.context.seek_positions.seek(seek)?;
+            self.last_source_before_usage = None;
+        } else{
+            self.scroll_file_position(Some(0), Direction::Forward)?;
+        }
+        self.display()
+    }
+
+    ///
+    fn resize(&mut self, terminal_size: (usize, usize)) -> Result<(), MoreError>{
+        self.terminal.resize(terminal_size);
+        self.context.resize(terminal_size)
+    }
     
-    /
+    ///
     fn execute(&mut self, command: Command) -> Result<(), MoreError>{
         match command{ 
             Command::Help => {
                 let string = commands_usage();
                 self.last_position = self.current_position;
-                self.last_file_seek = ;
+                self.last_source_before_usage = Some((self.context.seek_positions.source, self.context.seek_positions.current()));
                 self.context.set_source(Source::Buffer(BufReader::new(string)))?;
-                if self.context.goto_beginning(None){
-                    self.
-                }
+                self.is_ended_file = self.context.goto_beginning(None);                
             },
             Command::ScrollForwardOneScreenful(count) => {
                 let Some(count) = count else { self.args.lines - 1 };
-                if self.context.scroll(count, Direction::Forward){
-
-                }
+                self.is_ended_file = self.context.scroll(count, Direction::Forward);
+                self.if_eof_and_prompt_goto_next_file()?;
             },
             Command::ScrollBackwardOneScreenful(count) => {
                 let Some(count) = count else { self.args.lines - 1 };
-                if self.context.scroll(count, Direction::Backward){
-
-                }
+                self.is_ended_file = self.context.scroll(count, Direction::Backward);
             },
             Command::ScrollForwardOneLine{ count, is_space } => {
                 let Some(count) = count else { 
                     if is_space { self.state.window_size.0 } else { 1 } 
                 };
-                if self.context.scroll(count, Direction::Forward){
-
-                }
+                self.is_ended_file = self.context.scroll(count, Direction::Forward);
+                self.if_eof_and_prompt_goto_next_file()?;
             },
             Command::ScrollBackwardOneLine(count) => {
                 let Some(count) = count else { 1 };
-                if self.context.scroll(count, Direction::Backward){
-
-                }
+                self.is_ended_file = self.context.scroll(count, Direction::Backward);
             },
             Command::ScrollForwardOneHalfScreenful(count) => {
                 if count.is_some() { self.count_default = count; }; 
@@ -1334,18 +1616,16 @@ impl MoreControl{
                     if let Some(count_default) = self.count_default{
                         count_default
                     } else {
-                        ((self.args.lines as f32 - 1.0) / 2.0).floor()
+                        ((self.args.lines.unwrap_or(1.0) as f32 - 1.0) / 2.0).floor()
                     }
                 });
-                if self.context.scroll(count, Direction::Forward){
-
-                }
+                self.is_ended_file = self.context.scroll(count, Direction::Forward);
+                self.if_eof_and_prompt_goto_next_file()?;
             },
             Command::SkipForwardOneLine(count) => {
                 let Some(count) = count else { 1 };
-                if self.context.scroll(count, Direction::Forward){
-
-                }
+                self.is_ended_file = self.context.scroll(count, Direction::Forward);
+                self.if_eof_and_prompt_goto_next_file()?;
             },
             Command::ScrollBackwardOneHalfScreenful(count) => {
                 if count.is_some() { self.count_default = count; }; 
@@ -1353,123 +1633,220 @@ impl MoreControl{
                     if let Some(count_default) = self.count_default{
                         count_default
                     } else {
-                        ((self.args.lines as f32 - 1.0) / 2.0).floor()
+                        ((self.args.lines.unwrap_or(1.0) as f32 - 1.0) / 2.0).floor()
                     } 
                 });
-                if self.context.scroll(count, Direction::Backward){
-
-                }
+                self.is_ended_file = self.context.scroll(count, Direction::Backward);
             },
             Command::GoToBeginningOfFile(count) => {
-                if self.context.goto_beginning(count){
-
-                }
+                self.is_ended_file = self.context.goto_beginning(count);
             },
             Command::GoToEOF(count) => {
-                if self.context.goto_eof(count){
-                    
-                }
+                self.is_ended_file = self.context.goto_eof(count);
+                self.if_eof_and_prompt_goto_next_file()?;
             },
-            Command::RefreshScreen => {
-                self.scroll_file_position(Some(0), Direction::Forward)?;
-                self.display()?;
-            },
+            Command::RefreshScreen => self.refresh()?,
             Command::DiscardAndRefresh => {
-                self.display()?;
                 let mut buf = Vec::new();
                 let _ = std::io::stdin().lock().read_to_end(&mut buf);
                 self.input_handler.lock().unwrap().input_buffer = String::new();
+                self.refresh()?;
             },
             Command::MarkPosition(letter) => {
                 self.context.set_mark(letter);
             },
             Command::ReturnMark(letter) => {
-                if self.context.goto_mark(letter){
-
-                }
+                self.is_ended_file = self.context.goto_mark(letter);
             },
             Command::ReturnPreviousPosition => {
-                if self.context.return_previous(){
-
-                }
+                self.is_ended_file =  self.context.return_previous();
             },
             Command::SearchForwardPattern{ 
                 count, 
                 is_not,
                 pattern 
             } => {
-                let re = match Regex::new(pattern).map(|e| )?;
-                if self.context.search(count, re, is_not, Direction::Forward){
-
-                }
+                let re = Regex::new(pattern).map_err(|e| MoreError::StringParseError)?;
+                self.is_ended_file = self.context.search(count, re, is_not, Direction::Forward);
             },
             Command::SearchBackwardPattern{ 
                 count, 
                 is_not,
                 pattern 
             } => {
-                let re = match Regex::new(pattern).map(|e| )?;
-                if self.context.search(count, re, is_not, Direction::Backward){
-                    
-                }
+                let re = Regex::new(pattern).map_err(|e| MoreError::StringParseError)?;
+                self.is_ended_file = self.context.search(count, re, is_not, Direction::Backward);
             },
             Command::RepeatSearch(count) => {
-                if self.context.repeat_search(count, false){
-
-                }
+                self.is_ended_file = self.context.repeat_search(count, false);
             },
-            Command::RepeatSearchReverse(count) {
-                if self.context.repeat_search(count, true){
-
-                }
+            Command::RepeatSearchReverse(count) => {
+                self.is_ended_file = self.context.repeat_search(count, true);
             },
             Command::ExamineNewFile(filename) => self.examine_file(filename)?,
-            Command::ExamineNextFile(count) => if self.scroll_file_position(count, Direction::Forward)?{
-
+            Command::ExamineNextFile(count) => {
+                if self.scroll_file_position(count, Direction::Forward)?{
+                    self.exit();
+                }
             },
-            Command::ExaminePreviousFile(count) => if self.scroll_file_position(count, Direction::Backward)?{
-
+            Command::ExaminePreviousFile(count) => {
+                if self.scroll_file_position(count, Direction::Backward)?{
+                    self.exit();
+                }
             },
-            Command::GoToTag(tagstring) => if self.goto_tag(tagstring)?{
-
+            Command::GoToTag(tagstring) => {
+                self.is_ended_file = self.goto_tag(tagstring)?;
             },
             Command::InvokeEditor => self.invoke_editor()?,
-            Command::DisplayPosition => self.display_position()?,
-            Command::Quit => exit(std::process::ExitCode::SUCCESS),
-            _ => return Err(),
+            Command::DisplayPosition => self.set_position_prompt()?,
+            Command::Quit => self.exit(),
+            _ => return Err(MoreError::UnknownCommandError),
         };
 
         Ok(())
     }
 
-    //
-    fn process_p(&mut self) -> i32{
-        let mut commands_str = self.args.commands.as_str();
-        for command in parse(commands_str)?{
-            self.execute(commands)?;
-        } 
-    }
+    fn handle_error(&mut self, error: MoreError){
+        match error{
+            MoreError::SeekPositionsError(seek_positions_error) => {
+                match seek_positions_error{
+                    SeekPositionsError::StringParseError => {
 
-    //
-    fn loop_(&mut self) -> i32{
-        loop{
-            let commands = self.poll()?;
-            for command in self.parse(commands)?{
-                self.execute(command)?;
+                    },
+                    SeekPositionsError::OutOfRangeError => {
+                        
+                    },
+                    SeekPositionsError::SeekError => {
+                        
+                    },
+                    SeekPositionsError::FileReadError => {
+                        
+                    }
+                }
+            },
+            MoreError::SourceContextError(source_context_error) => {
+                match source_context_error{
+                    SourceContextError::MissingTerminal => {
+                        
+                    },
+                    SourceContextError::PatternNotFound => {
+                        
+                    },
+                    SourceContextError::MissingLastSearch => {
+                        
+                    },
+                    SourceContextError::MissingMark => {
+                        
+                    },
+                }
+            },
+            MoreError::SetOutsideError => {
+
+            },
+            MoreError::PollError => {
+
+            },
+            MoreError::InputReadError => {
+
+            },
+            MoreError::OutputReadError => {
+
+            },
+            MoreError::FileReadError => {
+
+            },
+            MoreError::StringParseError => {
+
+            },
+            MoreError::UnknownCommandError => {
+
             }
         }
     }
+
+    ///
+    fn process_p(&mut self) -> Result<(), MoreError>{
+        let Some(commands_str) = self.args.commands.as_mut() 
+        else { return Ok(()); };
+        loop{
+            let (command, remainder) = parse(commands_str)?;
+            if command == Command::UnknownCommand{
+                return Err(MoreError::UnknownCommandError)
+            }
+            *commands_str = remainder;
+            self.execute(command)?;
+            if remainder.is_empty(){
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    ///
+    fn loop_(&mut self) -> !{
+        self.process_p().inspect_err(|e| self.handle_error(*e));
+        self.display().inspect_err(|e| self.handle_error(*e));
+
+        loop{
+            self.handle_events().inspect_err(|e| self.handle_error(*e));
+            if let Ok((command, remainder)) = 
+                parse(self.commands_buffer).inspect_err(|e| self.handle_error(*e)){
+                if command == Command::UnknownCommand{
+                    self.handle_error(MoreError::UnknownCommandError);
+                }
+                self.commands_buffer = remainder;
+                self.execute(command).inspect_err(|e| self.handle_error(*e));
+                self.display().inspect_err(|e| self.handle_error(*e));
+            }
+        } 
+    }
 }
 
+//static magic: Arc<Mutex<Option<magic::Cookie<Load>>>> = ;
+
 //
-fn parse(commands_str: &str) -> Result<(Vec<Command>, String), MoreError>{
-    let mut commands = Vec::<Command>::new();
+fn to_path(file_string: String) -> Result<Path, MoreError>{
+    //let magic: Option<magic::Cookie<Load>> = cookie.load(&Default::default()).ok();
+    let file_string = 
+        Box::leak::<'static>(file_string.into_boxed_str());
+        let file_string = &*file_string;
+
+    let file_path = Path::new(file_string);
+    let _ = File::open(file_path).map_err(|_| MoreError::FileReadError)?;
+
+    if let Ok(metadata) = file_path.metadata(){
+        if metadata.is_dir(){ return Err(MoreError::FileReadError); }
+        //if Some(magic) = magic{
+        if metadata.len() == 0 /*|| !check_magic(self, filepath)*/ { 
+            return Err(MoreError::FileReadError); 
+        }
+        //}
+    } else{ return Err(MoreError::FileReadError); };
+
+    Ok(file_path)
+}
+
+/// 
+fn name_and_ext(path: Path) -> String {
+    let file_name = path.file_name().unwrap_or(OsStr::new("<error>"));
+    let file_name = file_name.to_str().unwrap_or("<error>");
+    let file_extension = path.extension().unwrap_or(OsStr::new(""));
+    let mut file_extension = file_extension.to_str().unwrap_or("");
+    if file_extension != ""{
+        file_extension = "." + file_extension;
+    }
+    format!("{}{}", file_name, file_extension)
+}
+
+///
+fn parse(commands_str: String) -> Result<(Command, String), MoreError>{
+    let mut command = Command::UnknownCommand;
     let mut count: Option<usize> = None;
     
     let i = 0;
-    while i < commands_str.len(){
+    while command == Command::UnknownCommand && i < commands_str.len(){
         let Some(ch) = *commands_str.get(i) else { break; };
-        let command = match ch{
+        command = match ch{
             ch if ch.is_numeric() => {
                 let mut count_str = String::new();
                 while ch.is_numeric(){
@@ -1478,7 +1855,9 @@ fn parse(commands_str: &str) -> Result<(Vec<Command>, String), MoreError>{
                     i += 1;
                 }
                 
-                count = Some(count_str.parse::<usize>()?);
+                count = Some(count_str.parse::<usize>().map_err(
+                    |_| MoreError::StringParseError
+                )?);
                 continue;
             },
             'h' => Command::Help,
@@ -1599,121 +1978,438 @@ fn parse(commands_str: &str) -> Result<(Vec<Command>, String), MoreError>{
             count = None;
         }
 
-        commands.push(command);
         i += 1;
     }
 
-    Ok(commands)
+    let remainder = if i == commands_str.len() && 
+        command == Command::UnknownCommand {
+        commands_str
+    } else{
+        commands_str[..i]
+    };
+
+    Ok((command, remainder.to_string()))
 }
+
+const COMMAND_USAGE: &'const str = 
+"h                             Write a summary of implementation-defined commands
+[count]f or
+[count]ctrl-F                  Scroll forward count lines, with one default screenful
+[count]b or
+[count]ctrl-B                  Scroll backward count lines, with one default screenful
+[count]<space> or 
+[count]j or
+[count]<newline>               Scroll forward count lines. Default is one screenful
+[count]k                       Scroll backward count lines. The entire count lines shall be written
+[count]d or
+[count]ctrl-D                  Scroll forward count lines. Default is one half of the screen size
+[count]s                       Display beginning lines count screenful after current screen last line
+[count]u or
+[count]ctrl-U                  Scroll backward count lines. Default is one half of the screen size
+[count]g                       Display the screenful beginning with line count
+[count]G                       If count is specified display beginning lines or last of file screenful
+r or
+ctrl-L                         Refresh the screen
+R                              Refresh the screen, discarding any buffered input
+mletter                        Mark the current position with the letter - one lowercase letter
+'letter                        Return to the position that was marked, making it as current position
+''                             Return to the position from which the last large movement command was executed
+[count]/[!]pattern<newline>    Display the screenful beginning with the countth line containing the pattern
+[count]?[!]pattern<newline>    Display the screenful beginning with the countth previous line containing the pattern
+[count]n                       Repeat the previous search for countth line containing the last pattern
+[count]N                       Repeat the previous search oppositely for the countth line containing the last pattern
+:e [filename]<newline>         Examine a new file. Default [filename] (current file) shall be re-examined
+[count]:n                      Examine the next file. If count is specified, the countth next file shall be examined
+[count]:p                      Examine the previous file. If count is specified, the countth next file shall be examined
+:t tagstring<newline>          If tagstring isn't the current file, examine the file, as if :e command was executed. Display beginning screenful with the tag
+v                              Invoke an editor to edit the current file being examined. Editor shall be taken from EDITOR, or shall default to vi.
+= or
+ctrl-G                         Write a message for which the information references the first byte of the line after the last line of the file on the screen
+q or
+:q or
+ZZ                             Exit more\n
+For more see: https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/utilities/more.html";
 
 ///
 pub fn commands_usage() -> String{
     let mut buf = String::new();
-
     buf.push_str('-'.repeat(79));
-    buf.push_str(format!("{}", 
-        "h                             Write a summary of implementation-defined commands\n\
-        [count]f or\n
-        [count]ctrl-F                  Scroll forward count lines, with one default screenful\n\
-        [count]b or\n
-        [count]ctrl-B                  Scroll backward count lines, with one default screenful\n\
-        [count]<space> or\n\   
-        [count]j or\n\ 
-        [count]<newline>               Scroll forward count lines. Default is one screenful\n\
-        [count]k                       Scroll backward count lines. The entire count lines shall be written\n\
-        [count]d or\n\ 
-        [count]ctrl-D                  Scroll forward count lines. Default is one half of the screen size\n\
-        [count]s                       Display beginning lines count screenful after current screen last line\n\
-        [count]u or\n\ 
-        [count]ctrl-U                  Scroll backward count lines. Default is one half of the screen size\n\
-        [count]g                       Display the screenful beginning with line count\n\
-        [count]G                       If count is specified display beginning lines or last of file screenful\n\
-        r or\n\ 
-        ctrl-L                         Refresh the screen\n\
-        R                              Refresh the screen, discarding any buffered input\n\
-        mletter                        Mark the current position with the letter - one lowercase letter\n\
-        'letter                        Return to the position that was marked, making it as current position\n\
-        ''                             Return to the position from which the last large movement command was executed\n\
-        [count]/[!]pattern<newline>    Display the screenful beginning with the countth line containing the pattern\n\
-        [count]?[!]pattern<newline>    Display the screenful beginning with the countth previous line containing the pattern\n\
-        [count]n                       Repeat the previous search for countth line containing the last pattern\n\
-        [count]N                       Repeat the previous search oppositely for the countth line containing the last pattern\n\
-        :e [filename]<newline>         Examine a new file. Default [filename] (current file) shall be re-examined\n\
-        [count]:n                      Examine the next file. If count is specified, the countth next file shall be examined\n\
-        [count]:p                      Examine the previous file. If count is specified, the countth next file shall be examined\n\
-        :t tagstring<newline>          If tagstring isn't the current file, examine the file, as if :e command was executed. Display beginning screenful with the tag\n\ 
-        v                              Invoke an editor to edit the current file being examined. Editor shall be taken from EDITOR, or shall default to vi.\n\    
-        = or\n\ 
-        ctrl-G                         Write a message for which the information references the first byte of the line after the last line of the file on the screen\n\
-        q or\n\
-        :q or\n\ 
-        ZZ                             Exit more\n\n
-        For more see: https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/utilities/more.html").as_str()
-    );
+    buf.push_str(format!("{COMMAND_USAGE}").as_str());
     buf.push_str('-'.repeat(79));
 }
 
 fn main(){
-    let mut ctl = MoreControl::new()?;
-    if ctl.args.print_over{
+    let Ok(ctl) = MoreControl::new()
+        .inspect_err(|e| self.handle_error(*e)) else { return; };
+    if ctl.terminal.is_none(){
         ctl.print_all_input();
-    }else{
-        if let Err(err) = ctl.process_p(){
-
-        }
-    
+    }else{    
         ctl.loop_()
     }
 }
 
-
-
 /*
+loop {
+    let size = file.read(&mut buff)?;
+    if size == 0 { break; }
+    let text = &buffer[..size];
+    let s = match std::str::from_utf8(text) {
+        Ok(s) => s,
+        Err(e) => {
+            let end = e.valid_up_to();
+            let s = unsafe { from_utf8_unchecked(&text[..end]) };
+            let offset = (end - size) as i64;
+            file.seek(SeekFrom::Current(-1 * offset)).unwrap();
+            s
+        }
+    };
+    println!("{}", s);
+}*/
 
-    //
-    fn print_all_input(&mut self) -> Result<(), MoreError>{
-        let mut buf = [u8; BUF_READ_SIZE];
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        //let mut buf = Vec::<u8>::new();
-        //let input = io::stdin().read_to_end(&mut buf)?;
+    mod screen{
+        use super::*;
 
-        for file_path in self.args.input_files{
-            let mut file = File::open(file_path)?;
-        
-            if self.args.input_files.len() > 1{
-                match self.format_file_header(filepath){
-                    Ok(header) => println!("{}", header),
-                    Err(err) => {
+        #[test]
+        fn new_screen_test() {
 
-                    }
-                }
-            }
-
-            loop {
-                let size = file.read(&mut buff)?;
-                if size == 0 { break; }
-                let text = &buffer[..size];
-                let s = match std::str::from_utf8(text) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        let end = e.valid_up_to();
-                        let s = unsafe { from_utf8_unchecked(&text[..end]) };
-                        let offset = (end - size) as i64;
-                        file.seek(SeekFrom::Current(-1 * offset)).unwrap();
-                        s
-                    }
-                };
-
-                if self.args.print_over{
-
-                }else{
-
-                }
-                println!("{}", s);
-            }
         }
 
-        Ok(())
+        #[test]
+        fn set_str_screen_test() {
+
+        }
+
+        #[test]
+        fn get_screen_test() {
+
+        }
+    }
+    
+    mod seek_positions{
+        use super::*;
+
+        #[test]
+        fn new_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn read_line_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn current_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn current_line_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn set_current_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn len_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn seek_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn find_n_char_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn next_seek_positions_test() {
+
+        }
+
+        #[test]
+        fn next_back_seek_positions_test() {
+
+        }
     }
 
-*/
+    mod source_context{
+        use super::*;
+
+        #[test]
+        fn new_source_context_test() {
+
+        }
+
+        #[test]
+        fn screen_source_context_test() {
+
+        }
+
+        #[test]
+        fn set_source_source_context_test() {
+
+        }
+
+        #[test]
+        fn update_screen_source_context_test() {
+
+        }
+
+        #[test]
+        fn format_file_header_source_context_test() {
+
+        }
+
+        #[test]
+        fn scroll_source_context_test() {
+
+        }
+
+        #[test]
+        fn goto_beginning_source_context_test() {
+
+        }
+
+        #[test]
+        fn goto_eof_source_context_test() {
+
+        }
+
+        #[test]
+        fn return_previous_source_context_test() {
+
+        }
+
+        #[test]
+        fn search_source_context_test() {
+
+        }
+
+        #[test]
+        fn repeat_search_source_context_test() {
+
+        }
+
+        #[test]
+        fn set_mark_source_context_test() {
+
+        }
+
+        #[test]
+        fn goto_mark_source_context_test() {
+
+        }
+
+        #[test]
+        fn resize_source_context_test() {
+
+        }
+
+        #[test]
+        fn reset_source_context_test() {
+
+        }
+    }
+
+    mod terminal{
+        use super::*;
+
+        #[test]
+        fn new_terminal_test() {
+
+        }
+
+        #[test]
+        fn display_terminal_test() {
+
+        }
+
+        #[test]
+        fn display_prompt_terminal_test() {
+
+        }
+
+        #[test]
+        fn set_terminal_test() {
+
+        }
+
+        #[test]
+        fn reset_terminal_test() {
+
+        }
+
+        #[test]
+        fn refresh_terminal_test() {
+
+        }
+
+        #[test]
+        fn clear_terminal_test() {
+
+        }
+
+        #[test]
+        fn delete_terminal_test() {
+
+        }
+
+        #[test]
+        fn resize_terminal_test() {
+
+        }
+    }
+
+    mod prompt{
+        use super::*;
+
+        #[test]
+        fn format_prompt_test() {
+
+        }
+    }
+
+    mod input_handler{
+        use super::*;
+
+        #[test]
+        fn new_input_handler_test() {
+
+        }
+
+        #[test]
+        fn poll_signals_input_handler_test() {
+
+        }        
+    }
+
+    mod more_control{
+        use super::*;
+
+        #[test]
+        fn new_more_control_test() {
+
+        }
+
+        #[test]
+        fn print_all_input_more_control_test() {
+
+        }
+
+        #[test]
+        fn display_more_control_test() {
+
+        }
+
+        #[test]
+        fn handle_events_more_control_test() {
+
+        }
+
+        #[test]
+        fn invoke_editor_more_control_test() {
+
+        }
+
+        #[test]
+        fn goto_tag_more_control_test() {
+
+        }
+
+        #[test]
+        fn set_position_prompt_more_control_test() {
+
+        }
+
+        #[test]
+        fn scroll_file_position_more_control_test() {
+
+        }
+
+        #[test]
+        fn if_eof_and_prompt_goto_next_file_more_control_test() {
+
+        }
+
+        #[test]
+        fn exit_more_control_test() {
+
+        }
+
+        #[test]
+        fn _more_control_test() {
+
+        }
+
+        #[test]
+        fn examine_file_more_control_test() {
+
+        }
+
+        #[test]
+        fn refresh_more_control_test() {
+
+        }
+
+        #[test]
+        fn resize_more_control_test() {
+
+        }
+
+        #[test]
+        fn execute_more_control_test() {
+
+        }
+
+        #[test]
+        fn handle_error_more_control_test() {
+
+        }
+
+        #[test]
+        fn process_p_more_control_test() {
+
+        }
+
+        #[test]
+        fn loop_more_control_test() {
+
+        }
+
+        #[test]
+        fn _more_control_test() {
+
+        }
+    }
+
+    #[test]
+    fn to_path_test() {
+
+    }
+
+    #[test]
+    fn name_and_ext_test() {
+
+    }
+
+    #[test]
+    fn parse_test() {
+
+    }
+
+    #[test]
+    fn commands_usage_test() {
+
+    }
+}
