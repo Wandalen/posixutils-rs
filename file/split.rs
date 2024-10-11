@@ -105,7 +105,7 @@ impl OutputState {
             if i == 0 {
                 break;
             }
-            i = i - 1;
+            i -= 1;
         }
 
         Err("maximum suffix reached")
@@ -141,7 +141,7 @@ impl OutputState {
     }
 
     fn incr_output(&mut self, n: u64) {
-        self.count = self.count + n;
+        self.count += n;
         assert!(self.count <= self.boundary);
 
         if self.count == self.boundary {
@@ -151,11 +151,8 @@ impl OutputState {
 
     fn write(&mut self, buf: &[u8]) -> io::Result<()> {
         match &mut self.outf {
-            None => {
-                assert!(false);
-                Ok(())
-            }
             Some(ref mut f) => f.write_all(buf),
+            None => Ok(()),
         }
     }
 
@@ -170,7 +167,7 @@ impl OutputState {
             let slice = &buf[consumed..consumed + wlen];
             self.write(slice)?;
 
-            consumed = consumed + wlen;
+            consumed += wlen;
 
             self.incr_output(wlen as u64);
         }

@@ -223,12 +223,10 @@ fn update_range_field(mut field1: RangeField, mut field2: RangeField) -> (RangeF
 /// the second RangeField object based on their field numbers and first characters.
 ///
 fn compare_range_fields(field1: &RangeField, field2: &RangeField) -> bool {
-    if field1.field_number < field2.field_number {
-        true
-    } else if field1.field_number == field2.field_number {
-        field1.first_character <= field2.first_character
-    } else {
-        false
+    match field1.field_number.cmp(&field2.field_number) {
+        Ordering::Less => true,
+        Ordering::Equal => field1.first_character <= field2.first_character,
+        Ordering::Greater => false,
     }
 }
 
@@ -947,19 +945,26 @@ fn merge_files(paths: &mut Vec<Box<dyn Read>>, output_path: &Option<PathBuf>) ->
 ///
 /// A vector of strings (`Vec<String>`) where consecutive empty strings are merged with the nearest non-empty string.
 ///
+/// # Examples
+///
+/// ```
+/// let result = merge_empty_lines(vec!["line1", "line2", "", "", "", "lineN"]);
+/// assert_eq!(result, vec!["line1", "line2", "   lineN"]);
+/// ```
+///
 fn merge_empty_lines(vec: Vec<&str>) -> Vec<String> {
     let mut empty_count = 0;
     let mut result = vec![];
 
-    for i in 0..vec.len() {
-        if vec[i].is_empty() {
+    for i in vec {
+        if i.is_empty() {
             empty_count += 1;
         } else if empty_count > 0 {
             let spaces = " ".repeat(empty_count);
-            result.push(format!("{}{}", spaces, vec[i]));
+            result.push(format!("{}{}", spaces, i));
             empty_count = 0;
         } else {
-            result.push(vec[i].to_string());
+            result.push(i.to_string());
         }
     }
 
@@ -1030,4 +1035,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::process::exit(exit_code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_merge_empty_lines() {
+        let result = merge_empty_lines(vec!["line1", "line2", "", "", "", "lineN"]);
+        assert_eq!(result, vec!["line1", "line2", "   lineN"]);
+    }
 }
