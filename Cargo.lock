@@ -1454,6 +1454,7 @@ dependencies = [
  "notify-debouncer-full",
  "plib",
  "regex",
+ "thiserror",
  "topological-sort",
  "walkdir",
 ]
