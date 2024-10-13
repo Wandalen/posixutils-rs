@@ -10,10 +10,9 @@
 use clap::{error::ErrorKind, Parser};
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::{
-    getgid, getgrnam, getgroups, getlogin, getpwnam, getpwuid, getspnam, getuid, gid_t, passwd,
-    setgid, setgroups, setuid, uid_t, ECHO, ECHONL, TCSANOW,
+    getgid, getgrnam, getgroups, getlogin, getpwnam, getpwuid, getuid, gid_t, passwd, setgid,
+    setgroups, setuid, uid_t, ECHO, ECHONL, TCSANOW,
 };
-
 use libcrypt_rs::Crypt;
 use plib::{group::Group, PROJECT_NAME};
 
@@ -25,6 +24,8 @@ use std::{
     os::unix::io::AsRawFd,
     process::{self, Command},
 };
+
+const GROUPSHADOW_PATH: &str = "/etc/gshadow";
 
 #[cfg(target_os = "linux")]
 const MAX_GROUPS: usize = libc::KERN_NGROUPS_MAX as usize;
@@ -592,39 +593,26 @@ fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
     Ok(group.gid)
 }
 
-/// Retrieves the shadow password entry for a given username from the system's shadow file.
-///
-/// # Parameters
-/// - `username`: A string slice that holds the username whose shadow password is being retrieved.
-///
-/// # Returns
-/// - `Ok(String)`: The shadow password as a string if the username is found and the password is successfully retrieved.
-/// - `Err(io::Error)`: An error if the username is invalid, the user is not found in the shadow file,
-///   or another I/O-related error occurs.
-fn get_shadow_password(username: &str) -> Result<String, io::Error> {
-    unsafe {
-        // Convert the username to a CString
-        let c_username = CString::new(username).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidInput, "Invalid username provided.")
-        })?;
+fn get_shadow_password(group_name: &str) -> Result<String, io::Error> {
+    let file = File::open(GROUPSHADOW_PATH)?;
+    let reader = BufReader::new(file);
 
-        // Call getspnam to retrieve the shadow password entry
-        let spwd_ptr = getspnam(c_username.as_ptr());
-        if spwd_ptr.is_null() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "User not found in shadow file.",
-            ));
+    for line in reader.lines() {
+        let line_content = line?;
+
+        if let Some(colon_pos) = line_content.find(':') {
+            let group = &line_content[..colon_pos];
+            if group == group_name {
+                let remaining = &line_content[colon_pos + 1..];
+                if let Some(next_colon_pos) = remaining.find(':') {
+                    let password = &remaining[..next_colon_pos];
+                    return Ok(password.to_string());
+                }
+            }
         }
-
-        // Extract the shadow password
-        let shadow_entry = *spwd_ptr;
-        let shadow_password = CStr::from_ptr(shadow_entry.sp_pwdp)
-            .to_string_lossy()
-            .into_owned();
-
-        Ok(shadow_password)
     }
+
+    Ok(String::new())
 }
 
 /// Extracts the salt from a given full hash string in the format used by cryptographic hash functions.
