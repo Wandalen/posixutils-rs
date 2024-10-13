@@ -1,10 +1,10 @@
 [package]
 name = "posixutils-users"
 version = "0.2.1"
-edition = "2021"
 authors = ["Jeff Garzik"]
-license = "MIT"
-repository = "https://github.com/rustcoreutils/posixutils-rs.git"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
 
 [dependencies]
 plib = { path = "../plib" }
@@ -14,6 +14,12 @@ libc.workspace = true
 chrono.workspace = true
 syslog = "6.1"
 libcrypt-rs = "0.1.2"
+thiserror = "1.0"
+binrw = "0.14"
+
+[lints]
+workspace = true
+
 
 [[bin]]
 name = "id"
@@ -44,5 +50,11 @@ name = "write"
 path = "./write.rs"
 
 [[bin]]
+
 name = "newgrp"
 path = "./newgrp.rs"
+
+[[bin]]
+name = "talk"
+path = "./talk.rs"
+
