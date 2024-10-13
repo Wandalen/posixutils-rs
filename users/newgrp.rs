@@ -28,7 +28,11 @@ use std::{
 };
 
 #[cfg(target_os = "linux")]
-use std::{fs::File, os::unix::io::AsRawFd, BufRead, BufReader};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    os::unix::io::AsRawFd,
+};
 
 #[cfg(target_os = "linux")]
 const GROUPSHADOW_PATH: &str = "/etc/gshadow";
