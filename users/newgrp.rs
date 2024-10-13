@@ -10,21 +10,27 @@
 use clap::{error::ErrorKind, Parser};
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::{
-    getgid, getgrnam, getgroups, getlogin, getpwnam, getpwuid, getuid, gid_t, passwd, setgid,
-    setgroups, setuid, uid_t, ECHO, ECHONL, TCSANOW,
+    getgid, getgrnam, getgroups, getlogin, getpwnam, getpwuid, getuid, gid_t, passwd, setegid,
+    setgid, setgroups, setuid, uid_t,
 };
+
+#[cfg(target_os = "linux")]
+use libc::{ECHO, ECHONL, TCSANOW};
+#[cfg(target_os = "linux")]
 use libcrypt_rs::Crypt;
 use plib::{group::Group, PROJECT_NAME};
 
 use std::{
     env,
     ffi::{CStr, CString},
-    fs::File,
-    io::{self, BufRead, BufReader},
-    os::unix::io::AsRawFd,
+    io,
     process::{self, Command},
 };
 
+#[cfg(target_os = "linux")]
+use std::{fs::File, os::unix::io::AsRawFd, BufRead, BufReader};
+
+#[cfg(target_os = "linux")]
 const GROUPSHADOW_PATH: &str = "/etc/gshadow";
 
 #[cfg(target_os = "linux")]
@@ -345,7 +351,7 @@ fn change_effective_gid_and_uid(gid: gid_t, group_name: &str) -> Result<(), io::
     }
 
     // Attempt to set the GID
-    if unsafe { setgid(gid) } != 0 {
+    if unsafe { setegid(gid) } != 0 {
         return Err(io::Error::last_os_error());
     }
 
@@ -569,21 +575,31 @@ fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
 
     // Check for permissions if necessary
     unsafe {
-        if getuid() != 0 && need_password {
-            let password_input = read_password().unwrap_or_default();
+        if getuid() != 0 {
+            if need_password {
+                #[cfg(target_os = "linux")]
+                {
+                    let password_input = read_password().unwrap_or_default();
+                    let shadow_password = get_shadow_password(&group.name)?;
+                    let hashed_input = pw_encrypt(&password_input, Some(&shadow_password))?;
 
-            let shadow_password = get_shadow_password(&group.name)?;
-
-            let hashed_input = pw_encrypt(&password_input, Some(&shadow_password))?;
-
-            if hashed_input == shadow_password {
-                // Return GID if password matches
-                return Ok(group.gid);
-            } else {
-                eprintln!("Error: Incorrect password for group '{}'.", group.name);
+                    if hashed_input == shadow_password {
+                        // Return GID if password matches
+                        return Ok(group.gid);
+                    } else {
+                        eprintln!("Error: Incorrect password for group '{}'.", group.name);
+                        return Err(io::Error::new(
+                            io::ErrorKind::PermissionDenied,
+                            "Incorrect password for group.",
+                        ));
+                    }
+                }
+            }
+            #[cfg(target_os = "macos")]
+            {
                 return Err(io::Error::new(
                     io::ErrorKind::PermissionDenied,
-                    "Incorrect password for group.",
+                    "Try to use root.",
                 ));
             }
         }
@@ -593,6 +609,23 @@ fn check_perms(group: &Group, password: passwd) -> Result<u32, io::Error> {
     Ok(group.gid)
 }
 
+/// Retrieves the shadow password for a specified group from the group shadow file.
+///
+/// This function searches through the group shadow file defined by `GROUPSHADOW_PATH`
+/// to find the entry corresponding to the provided `group_name`. If found, it extracts
+/// and returns the shadow password associated with that group.
+///
+/// # Parameters
+///
+/// - `group_name`: A string slice that holds the name of the group whose shadow password
+///   is to be retrieved.
+///
+/// # Returns
+///
+/// - `Result<String, io::Error>`: On success, returns the shadow password as a `String`.
+///   If the group is not found or if an I/O error occurs, it returns an `io::Error`.
+///
+#[cfg(target_os = "linux")]
 fn get_shadow_password(group_name: &str) -> Result<String, io::Error> {
     let file = File::open(GROUPSHADOW_PATH)?;
     let reader = BufReader::new(file);
@@ -624,6 +657,7 @@ fn get_shadow_password(group_name: &str) -> Result<String, io::Error> {
 /// # Returns
 /// - `Some(String)`: The extracted salt if the hash string has the expected format with at least four parts.
 /// - `None`: If the hash string does not have the correct format or does not contain enough parts to extract the salt.
+#[cfg(target_os = "linux")]
 fn extract_salt(full_hash: &str) -> Option<String> {
     let parts: Vec<&str> = full_hash.split('$').collect();
 
@@ -644,6 +678,7 @@ fn extract_salt(full_hash: &str) -> Option<String> {
 /// # Returns
 /// - `Some(String)`: The encrypted password if the encryption process is successful.
 /// - `None`: If the salt extraction or encryption fails.
+#[cfg(target_os = "linux")]
 fn pw_encrypt(clear: &str, shadow_password: Option<&str>) -> Result<String, io::Error> {
     let mut engine = Crypt::new();
 
@@ -692,7 +727,7 @@ fn pw_encrypt(clear: &str, shadow_password: Option<&str>) -> Result<String, io::
 /// - Failure to set the modified terminal attributes (i.e., disabling input echo).
 /// - Failure to read the password input.
 /// - Failure to restore the original terminal attributes after reading the password.
-///
+#[cfg(target_os = "linux")]
 fn read_password() -> io::Result<String> {
     // Open the terminal (tty) and get its file descriptor
     let tty = File::open("/dev/tty")?;

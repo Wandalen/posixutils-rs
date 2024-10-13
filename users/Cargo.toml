@@ -16,6 +16,8 @@ syslog = "6.1"
 libcrypt-rs = "0.1.2"
 thiserror = "1.0"
 binrw = "0.14"
+pbkdf2 = "0.12.2"
+sha2 = "0.10.8"
 
 [lints]
 workspace = true
