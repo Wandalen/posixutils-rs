@@ -13,7 +13,7 @@ gettext-rs.workspace = true
 libc = { version = "0.2.159", default-features = false }
 regex = "1.11.0"
 magic = "0.16.2"
-ncursesw = "0.6.4"
+ncurses = "6.0.1"
 thiserror = "1.0.64"
 
 [[bin]]
