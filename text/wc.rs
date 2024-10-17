@@ -7,19 +7,19 @@
 // SPDX-License-Identifier: MIT
 //
 
-extern crate clap;
-extern crate plib;
-
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
-use std::ffi::OsStr;
-use std::io::{self, BufRead, Read};
-use std::path::PathBuf;
+use std::{
+    ffi::OsStr,
+    io::{self, Read},
+    ops::AddAssign,
+    path::PathBuf,
+};
 
 /// wc - word, line, and byte or character count
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
     /// Count number of bytes in each file
     #[arg(short = 'c', long)]
@@ -41,37 +41,40 @@ struct Args {
     files: Vec<PathBuf>,
 }
 
+#[derive(Default)]
 struct CountInfo {
     words: usize,
     chars: usize,
     nl: usize,
 }
 
-impl CountInfo {
-    fn new() -> CountInfo {
-        CountInfo {
-            words: 0,
-            chars: 0,
-            nl: 0,
-        }
-    }
-
-    fn accum(&mut self, count: &CountInfo) {
-        self.words = self.words + count.words;
-        self.chars = self.chars + count.chars;
-        self.nl = self.nl + count.nl;
+impl AddAssign for CountInfo {
+    fn add_assign(&mut self, rhs: Self) {
+        self.words += rhs.words;
+        self.chars += rhs.chars;
+        self.nl += rhs.nl;
     }
 }
+
+/// is_space
+const fn create_table() -> [bool; 256] {
+    let mut table = [false; 256];
+    table[b'\t' as usize] = true;
+    table[b'\n' as usize] = true;
+    table[11 /* \v */] = true;
+    table[12 /* \f */] = true;
+    table['\r' as usize] = true;
+    table[' ' as usize] = true;
+    table
+}
+
+const BYTE_TABLE: [bool; 256] = create_table();
 
 fn build_display_str(args: &Args, count: &CountInfo, filename: &OsStr) -> String {
     let mut output = String::with_capacity(filename.len() + (3 * 10));
 
-    let multi_file = args.files.len() > 1;
-    let only_lines = (args.words == false) && (args.bytes == false) && (args.chars == false);
-    let only_words = (args.lines == false) && (args.bytes == false) && (args.chars == false);
-    let only_bytechars = (args.lines == false) && (args.words == false);
-
     if args.lines {
+        let only_lines = !args.words && !args.bytes && !args.chars;
         let numstr = match only_lines {
             true => format!("{}", count.nl),
             false => format!("{:>8}", count.nl),
@@ -79,9 +82,10 @@ fn build_display_str(args: &Args, count: &CountInfo, filename: &OsStr) -> String
         output.push_str(&numstr);
     }
     if args.words {
-        if output.len() > 0 {
+        if !output.is_empty() {
             output.push(' ');
         }
+        let only_words = !args.lines && !args.bytes && !args.chars;
         let numstr = match only_words {
             true => format!("{}", count.words),
             false => format!("{:>8}", count.words),
@@ -89,9 +93,10 @@ fn build_display_str(args: &Args, count: &CountInfo, filename: &OsStr) -> String
         output.push_str(&numstr);
     }
     if args.bytes || args.chars {
-        if output.len() > 0 {
+        if !output.is_empty() {
             output.push(' ');
         }
+        let only_bytechars = !args.lines && !args.words;
         let numstr = match only_bytechars {
             true => format!("{}", count.chars),
             false => format!("{:>8}", count.chars),
@@ -99,10 +104,11 @@ fn build_display_str(args: &Args, count: &CountInfo, filename: &OsStr) -> String
         output.push_str(&numstr);
     }
 
+    let multi_file = args.files.len() > 1;
     if multi_file {
         output.push(' ');
 
-        if filename == "" {
+        if filename.is_empty() {
             output.push_str("(stdin)");
         } else {
             output.push_str(filename.to_string_lossy().as_ref());
@@ -112,11 +118,11 @@ fn build_display_str(args: &Args, count: &CountInfo, filename: &OsStr) -> String
     output
 }
 
-fn wc_file_bytes(count: &mut CountInfo, pathname: &PathBuf) -> io::Result<()> {
+fn wc_file_bytes(count: &mut CountInfo, pathname: &PathBuf, chars_mode: bool) -> io::Result<()> {
     let mut file = plib::io::input_stream(pathname, false)?;
 
     let mut buffer = [0; plib::BUFSZ];
-    let mut in_word = false;
+    let mut was_space = true;
 
     loop {
         let n_read = file.read(&mut buffer[..])?;
@@ -124,70 +130,21 @@ fn wc_file_bytes(count: &mut CountInfo, pathname: &PathBuf) -> io::Result<()> {
             break;
         }
 
-        count.chars = count.chars + n_read;
-
         let bufslice = &buffer[0..n_read];
 
+        if !chars_mode {
+            // number of bytes read
+            count.chars += n_read;
+        } else {
+            // number of UTF-8 unicode codepoints in this slice of bytes
+            count.chars += bufslice.iter().filter(|&ch| (ch >> 6) != 0b10).count();
+        }
+
         for ch_u8 in bufslice {
-            let ch = *ch_u8 as char;
-
-            if ch == '\n' {
-                count.nl = count.nl + 1;
-                if in_word {
-                    in_word = false;
-                    count.words = count.words + 1;
-                }
-            } else if ch.is_whitespace() {
-                if in_word {
-                    in_word = false;
-                    count.words = count.words + 1;
-                }
-            } else {
-                if !in_word {
-                    in_word = true;
-                }
-            }
-        }
-    }
-
-    if in_word {
-        count.words = count.words + 1;
-    }
-
-    Ok(())
-}
-
-fn wc_file_chars(args: &Args, count: &mut CountInfo, pathname: &PathBuf) -> io::Result<()> {
-    let mut reader = plib::io::input_reader(pathname, false)?;
-
-    loop {
-        let mut buffer = String::new();
-        let n_read = reader.read_line(&mut buffer)?;
-        if n_read == 0 {
-            break;
-        }
-
-        count.nl = count.nl + 1;
-        count.chars = count.chars + n_read;
-
-        if args.words {
-            let mut in_word = false;
-
-            for ch in buffer.chars() {
-                if ch.is_whitespace() {
-                    if in_word {
-                        in_word = false;
-                        count.words = count.words + 1;
-                    }
-                } else {
-                    if !in_word {
-                        in_word = true;
-                    }
-                }
-            }
-            if in_word {
-                count.words = count.words + 1;
-            }
+            let is_space = BYTE_TABLE[*ch_u8 as usize];
+            count.nl += (ch_u8 == &10) as usize;
+            count.words += (!is_space && was_space) as usize;
+            was_space = is_space;
         }
     }
 
@@ -200,13 +157,9 @@ fn wc_file(
     pathname: &PathBuf,
     count: &mut CountInfo,
 ) -> io::Result<()> {
-    if chars_mode {
-        wc_file_chars(args, count, pathname)?;
-    } else {
-        wc_file_bytes(count, pathname)?;
-    }
+    wc_file_bytes(count, pathname, chars_mode)?;
 
-    let output = build_display_str(&args, count, pathname.as_os_str());
+    let output = build_display_str(args, count, pathname.as_os_str());
 
     println!("{}", output);
 
@@ -234,11 +187,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
     let mut exit_code = 0;
-    let mut totals = CountInfo::new();
+    let mut totals = CountInfo::default();
 
     // input via stdin
     if args.files.is_empty() {
-        let mut count = CountInfo::new();
+        let mut count = CountInfo::default();
 
         if let Err(e) = wc_file(&args, chars_mode, &PathBuf::new(), &mut count) {
             exit_code = 1;
@@ -248,19 +201,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // input files
     } else {
         for filename in &args.files {
-            let mut count = CountInfo::new();
+            let mut count = CountInfo::default();
 
             if let Err(e) = wc_file(&args, chars_mode, filename, &mut count) {
                 exit_code = 1;
                 eprintln!("{}: {}", filename.display(), e);
             }
 
-            totals.accum(&count);
+            totals += count;
         }
     }
 
     if args.files.len() > 1 {
-        let output = build_display_str(&args, &totals, &OsStr::new("total"));
+        let output = build_display_str(&args, &totals, OsStr::new("total"));
         println!("{}", output);
     }
 

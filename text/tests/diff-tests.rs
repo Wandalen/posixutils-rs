@@ -8,10 +8,15 @@
 // SPDX-License-Identifier: MIT
 //
 
-use plib::{run_test, TestPlan};
+#[path = "../diff_util/constants.rs"]
+mod constants;
 
-fn diff_test(args: &[&str], expected_output: &str) {
-    let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+use constants::{EXIT_STATUS_DIFFERENCE, EXIT_STATUS_NO_DIFFERENCE};
+use plib::{run_test, TestPlan};
+use std::{collections::HashMap, path::PathBuf, process::Stdio, sync::LazyLock};
+
+fn diff_test(args: &[&str], expected_output: &str, expected_diff_exit_status: u8) {
+    let str_args = args.iter().cloned().map(str::to_owned).collect();
 
     run_test(TestPlan {
         cmd: String::from("diff"),
@@ -19,11 +24,9 @@ fn diff_test(args: &[&str], expected_output: &str) {
         stdin_data: String::from(""),
         expected_out: String::from(expected_output),
         expected_err: String::from(""),
-        expected_exit_code: 0,
+        expected_exit_code: i32::from(expected_diff_exit_status),
     });
 }
-
-use std::{path::PathBuf, process::Stdio};
 
 fn diff_base_path() -> PathBuf {
     PathBuf::from("tests").join("diff")
@@ -70,14 +73,13 @@ fn f1_txt_with_eol_spaces_path() -> String {
 }
 
 struct DiffTestHelper {
-    pub key: String,
     content: String,
     file1_path: String,
     file2_path: String,
 }
 
 impl DiffTestHelper {
-    fn new(options: &str, file1_path: String, file2_path: String, key: String) -> Self {
+    fn new(options: &str, file1_path: String, file2_path: String) -> Self {
         let args = format!(
             "run --release --bin diff --{} {} {}",
             options, file1_path, file2_path
@@ -95,7 +97,6 @@ impl DiffTestHelper {
         let content = String::from_utf8(output.stdout).expect("Failed to read output of Command!");
 
         Self {
-            key,
             file1_path,
             file2_path,
             content,
@@ -115,20 +116,7 @@ impl DiffTestHelper {
     }
 }
 
-static mut DIFF_TEST_INPUT: Vec<DiffTestHelper> = vec![];
-
-fn input_by_key(key: &str) -> &DiffTestHelper {
-    unsafe {
-        DIFF_TEST_INPUT
-            .iter()
-            .filter(|data| data.key == key)
-            .nth(0)
-            .unwrap()
-    }
-}
-
-#[ctor::ctor]
-fn diff_tests_setup() {
+fn get_diff_test_helper_hash_map() -> HashMap<String, DiffTestHelper> {
     let diff_test_helper_init_data = [
         ("", f1_txt_path(), f2_txt_path(), "test_diff_normal"),
         (" -c", f1_txt_path(), f2_txt_path(), "test_diff_context3"),
@@ -206,15 +194,38 @@ fn diff_tests_setup() {
         ),
     ];
 
-    for row in diff_test_helper_init_data {
-        unsafe { DIFF_TEST_INPUT.push(DiffTestHelper::new(row.0, row.1, row.2, row.3.to_string())) }
+    let mut diff_test_helper_hash_map =
+        HashMap::<String, DiffTestHelper>::with_capacity(diff_test_helper_init_data.len());
+
+    for (options, file1_path, file2_path, key) in diff_test_helper_init_data {
+        let insert_option = diff_test_helper_hash_map.insert(
+            key.to_owned(),
+            DiffTestHelper::new(options, file1_path, file2_path),
+        );
+
+        assert!(insert_option.is_none());
     }
+
+    diff_test_helper_hash_map
+}
+
+fn input_by_key(key: &str) -> &'static DiffTestHelper {
+    static DIFF_TEST_INPUT: LazyLock<HashMap<String, DiffTestHelper>> =
+        LazyLock::new(get_diff_test_helper_hash_map);
+
+    // Initialized on first access
+    DIFF_TEST_INPUT.get(key).unwrap()
 }
 
 #[test]
 fn test_diff_normal() {
     let data = input_by_key("test_diff_normal");
-    diff_test(&[data.file1_path(), data.file2_path()], data.content());
+
+    diff_test(
+        &[data.file1_path(), data.file2_path()],
+        data.content(),
+        EXIT_STATUS_DIFFERENCE,
+    );
 }
 
 #[test]
@@ -224,6 +235,7 @@ fn test_diff_context3() {
     diff_test(
         &["-c", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -234,6 +246,7 @@ fn test_diff_context1() {
     diff_test(
         &["-C", "1", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -244,6 +257,7 @@ fn test_diff_context10() {
     diff_test(
         &["-C", "10", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -254,6 +268,7 @@ fn test_diff_edit_script() {
     diff_test(
         &["-e", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -264,6 +279,7 @@ fn test_diff_forward_edit_script() {
     diff_test(
         &["-f", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -274,6 +290,7 @@ fn test_diff_unified3() {
     diff_test(
         &["-u", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -284,6 +301,7 @@ fn test_diff_unified0() {
     diff_test(
         &["-U", "0", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -294,19 +312,30 @@ fn test_diff_unified10() {
     diff_test(
         &["-U", "10", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
 #[test]
 fn test_diff_file_directory() {
     let data = input_by_key("test_diff_file_directory");
-    diff_test(&[data.file1_path(), data.file2_path()], data.content());
+
+    diff_test(
+        &[data.file1_path(), data.file2_path()],
+        data.content(),
+        EXIT_STATUS_DIFFERENCE,
+    );
 }
 
 #[test]
 fn test_diff_directories() {
     let data = input_by_key("test_diff_directories");
-    diff_test(&[data.file1_path(), data.file2_path()], data.content());
+
+    diff_test(
+        &[data.file1_path(), data.file2_path()],
+        data.content(),
+        EXIT_STATUS_DIFFERENCE,
+    );
 }
 
 #[test]
@@ -316,6 +345,7 @@ fn test_diff_directories_recursive() {
     diff_test(
         &["-r", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -326,6 +356,7 @@ fn test_diff_directories_recursive_context() {
     diff_test(
         &["-r", "-c", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -336,6 +367,7 @@ fn test_diff_directories_recursive_edit_script() {
     diff_test(
         &["-r", "-e", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -346,6 +378,7 @@ fn test_diff_directories_recursive_forward_edit_script() {
     diff_test(
         &["-r", "-f", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
@@ -356,13 +389,19 @@ fn test_diff_directories_recursive_unified() {
     diff_test(
         &["-r", "-u", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }
 
 #[test]
 fn test_diff_counting_eol_spaces() {
     let data = input_by_key("test_diff_counting_eol_spaces");
-    diff_test(&[data.file1_path(), data.file2_path()], data.content());
+
+    diff_test(
+        &[data.file1_path(), data.file2_path()],
+        data.content(),
+        EXIT_STATUS_DIFFERENCE,
+    );
 }
 
 #[test]
@@ -372,6 +411,7 @@ fn test_diff_ignoring_eol_spaces() {
     diff_test(
         &["-b", data.file1_path(), data.file2_path()],
         data.content(),
+        EXIT_STATUS_NO_DIFFERENCE,
     );
 }
 
@@ -390,5 +430,6 @@ fn test_diff_unified_two_labels() {
             data.file2_path(),
         ],
         data.content(),
+        EXIT_STATUS_DIFFERENCE,
     );
 }

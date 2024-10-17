@@ -6,216 +6,403 @@
 // file in the root directory of this project.
 // SPDX-License-Identifier: MIT
 //
-// TODO:
-// - stdin ("-")
-// - fix:  empty-string delimiters \0
-// - improve:  don't open all files at once in --serial mode
-//
 
-extern crate clap;
-extern crate plib;
+// TODO:
+// - improve:  don't open all files at once in --serial mode
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
-use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, Write};
+use std::cell::{OnceCell, RefCell};
+use std::error::Error;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, Stdin, Write};
+use std::iter::Cycle;
+use std::rc::Rc;
+use std::slice::Iter;
 
 /// paste - merge corresponding or subsequent lines of files
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
-    /// Concatenate all of the lines from each input file into one line of output per file, in command line order.
+    /// Concatenate all of the lines from each input file into one line of output per file, in command line order
     #[arg(short, long)]
     serial: bool,
 
     /// Delimiter list
+    // Other implementations use "delimiters" as the long form, so mirror that
     #[arg(short, long)]
-    delims: Option<String>,
+    delimiters: Option<String>,
 
-    /// One or more input files.
+    /// One or more input files
     files: Vec<String>,
 }
 
+enum Source {
+    File {
+        buf_reader: BufReader<File>,
+        file_description: String,
+    },
+    StandardInput(Rc<RefCell<Stdin>>),
+}
+
+impl Source {
+    fn read_until_new_line(&mut self, vec: &mut Vec<u8>) -> Result<usize, Box<dyn Error>> {
+        const READ_UNTIL_BYTE: u8 = b'\n';
+
+        let (source_description, result) = match self {
+            Self::File {
+                buf_reader,
+                file_description,
+            } => (
+                file_description.as_str(),
+                buf_reader.read_until(READ_UNTIL_BYTE, vec),
+            ),
+            Self::StandardInput(st) => (
+                "Pipe: standard input",
+                st.try_borrow()?.lock().read_until(READ_UNTIL_BYTE, vec),
+            ),
+        };
+
+        match result {
+            Ok(us) => Ok(us),
+            Err(er) => Err(Box::from(format!("{source_description}: {er}"))),
+        }
+    }
+}
+
 struct PasteFile {
-    filename: String,
-    rdr: BufReader<File>,
     eof: bool,
     last: bool,
+    source: Source,
+}
+
+impl PasteFile {
+    fn new(source: Source) -> PasteFile {
+        PasteFile {
+            eof: false,
+            last: false,
+            source,
+        }
+    }
 }
 
 struct PasteInfo {
-    inputs: Vec<PasteFile>,
+    pub inputs: Vec<PasteFile>,
 }
 
-impl PasteInfo {
-    fn new() -> PasteInfo {
-        PasteInfo { inputs: Vec::new() }
-    }
+enum DelimiterState<'a> {
+    NoDelimiters,
+    SingleDelimiter(&'a [u8]),
+    MultipleDelimiters {
+        delimiters: &'a [Box<[u8]>],
+        delimiters_iterator: Cycle<Iter<'a, Box<[u8]>>>,
+    },
 }
 
-struct DelimInfo {
-    cur_delim: usize,
-    delims: String,
-}
-
-impl DelimInfo {
-    fn new() -> DelimInfo {
-        DelimInfo {
-            cur_delim: 0,
-            delims: String::from("\t"),
+impl<'a> DelimiterState<'a> {
+    fn new(parsed_delimiters_argument_ref: &'a [Box<[u8]>]) -> DelimiterState<'a> {
+        match parsed_delimiters_argument_ref {
+            [] => Self::NoDelimiters,
+            [only_delimiter] => {
+                // -d '\0' has the same effect as -d ''
+                if only_delimiter.is_empty() {
+                    Self::NoDelimiters
+                } else {
+                    Self::SingleDelimiter(only_delimiter)
+                }
+            }
+            _ => Self::MultipleDelimiters {
+                delimiters: parsed_delimiters_argument_ref,
+                delimiters_iterator: parsed_delimiters_argument_ref.iter().cycle(),
+            },
         }
     }
 
-    fn delim(&mut self) -> char {
-        let ch = self.delims.chars().nth(self.cur_delim).unwrap();
+    fn write(&mut self, write: &mut impl io::Write) -> io::Result<()> {
+        match *self {
+            DelimiterState::SingleDelimiter(sl) => {
+                write.write_all(sl)?;
+            }
+            DelimiterState::MultipleDelimiters {
+                ref mut delimiters_iterator,
+                ..
+            } => {
+                // Unwrap because advancing here should never fail
+                let bo = delimiters_iterator.next().unwrap();
 
-        self.advance();
+                write.write_all(bo)?;
+            }
+            _ => {}
+        }
 
-        ch
+        Ok(())
     }
 
-    fn advance(&mut self) {
-        if self.delims.len() > 1 {
-            self.cur_delim = self.cur_delim + 1;
-            if self.cur_delim >= self.delims.len() {
-                self.cur_delim = 0;
+    fn reset(&mut self) {
+        match self {
+            DelimiterState::MultipleDelimiters {
+                delimiters,
+                ref mut delimiters_iterator,
+                ..
+            } => {
+                *delimiters_iterator = delimiters.iter().cycle();
+            }
+            _ => {
+                // Nothing to do for these cases
             }
         }
     }
 }
 
-fn xlat_delim_str(s: &str) -> String {
-    let mut output = String::with_capacity(s.len() + 10);
+/// `delimiters`: Delimiters parsed from "-d"/"--delimiters" argument
+// Support for empty delimiter list:
+//
+// bsdutils: no, supports "-d" but requires the delimiter list to be non-empty
+// BusyBox: does not support "-d" at all
+// GNU Core Utilities: yes
+// toybox: yes
+// uutils's coreutils: no, supports "-d", but panics on an empty delimiter list
+//
+// POSIX seems to almost forbid this:
+// "These elements specify one or more delimiters to use, instead of the default <tab>, to replace the <newline> of the input lines."
+// https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+fn parse_delimiters_argument(delimiters: Option<String>) -> Result<Box<[Box<[u8]>]>, String> {
+    const BACKSLASH: char = '\\';
 
-    let mut in_escape = false;
-    for ch in s.chars() {
-        if in_escape {
-            let out_ch = match ch {
-                'n' => '\n',
-                't' => '\t',
-                '0' => '\0',
-                _ => ch,
-            };
+    fn add_normal_delimiter(ve: &mut Vec<Box<[u8]>>, byte: u8) {
+        ve.push(Box::new([byte]));
+    }
 
-            output.push(out_ch);
-            in_escape = false;
-        } else if ch == '\\' {
-            in_escape = true;
-        } else {
-            output.push(ch);
+    let Some(delimiters_string) = delimiters else {
+        // Default when no delimiter argument is provided
+        return Ok(Box::new([Box::new([b'\t'])]));
+    };
+
+    let mut buffer = [0_u8; 4];
+
+    let mut add_other_delimiter = |ve: &mut Vec<Box<[u8]>>, ch: char| {
+        let encoded = ch.encode_utf8(&mut buffer);
+
+        ve.push(Box::from(encoded.as_bytes()));
+    };
+
+    let mut vec = Vec::<Box<[u8]>>::with_capacity(delimiters_string.len());
+
+    let mut chars = delimiters_string.chars();
+
+    while let Some(char) = chars.next() {
+        match char {
+            BACKSLASH => match chars.next() {
+                Some('0') => {
+                    vec.push(Box::<[u8; 0]>::new([]));
+                }
+                Some(BACKSLASH) => {
+                    // '\'
+                    // U+005C
+                    add_normal_delimiter(&mut vec, b'\\');
+                }
+                Some('n') => {
+                    // U+000A
+                    add_normal_delimiter(&mut vec, b'\n');
+                }
+                Some('t') => {
+                    // U+0009
+                    add_normal_delimiter(&mut vec, b'\t');
+                }
+                Some(other_char) => {
+                    // "If any other characters follow the <backslash>, the results are unspecified."
+                    // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+                    // GNU Core Utilities: ignores the backslash
+                    // BusyBox, toybox: includes the backslash as one of the delimiters
+                    add_other_delimiter(&mut vec, other_char);
+                }
+                None => {
+                    return Err(format!(
+                        "delimiter list ends with an unescaped backslash: {delimiters_string}"
+                    ));
+                }
+            },
+            not_backslash => {
+                add_other_delimiter(&mut vec, not_backslash);
+            }
         }
     }
 
-    output
+    Ok(vec.into_boxed_slice())
 }
 
-fn open_inputs(args: &Args, info: &mut PasteInfo) -> io::Result<()> {
+fn open_inputs(files: Vec<String>) -> Result<PasteInfo, Box<dyn Error>> {
+    let stdin_once_cell = OnceCell::<Rc<RefCell<Stdin>>>::new();
+
+    let mut paste_file_vec = Vec::<PasteFile>::with_capacity(files.len());
+
     // open each input
-    for filename in &args.files {
-        let f_res = fs::File::open(filename);
-
-        match f_res {
-            Err(e) => {
-                eprintln!("{}: {}", filename, e);
-                return Err(e);
+    for file in files {
+        // POSIX says only to read from stdin if "-" is passed as a file. Most implementations
+        // automatically read from stdin if no files are passed to `paste`.
+        // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+        match file.as_str() {
+            "-" => {
+                paste_file_vec.push(PasteFile::new(Source::StandardInput(
+                    stdin_once_cell
+                        .get_or_init(|| Rc::new(RefCell::new(io::stdin())))
+                        .clone(),
+                )));
             }
-            Ok(f) => {
-                info.inputs.push(PasteFile {
-                    filename: filename.to_string(),
-                    rdr: BufReader::new(f),
-                    eof: false,
-                    last: false,
-                });
+            "" => {
+                eprintln!("FILE is an empty string, skipping");
+            }
+            st => {
+                let open_result = File::open(st);
+
+                let buf_reader = match open_result {
+                    Err(er) => {
+                        return Err(Box::from(format!("{st}: {er}")));
+                    }
+                    Ok(fi) => BufReader::new(fi),
+                };
+
+                let filename = format!("File: {st}");
+
+                paste_file_vec.push(PasteFile::new(Source::File {
+                    buf_reader,
+                    file_description: filename,
+                }));
             }
         }
+    }
+
+    if paste_file_vec.is_empty() {
+        return Err(Box::from(
+            "No valid [FILES] were specified. Use '-' if you are trying to read from stdin.",
+        ));
     }
 
     // mark final input
-    let idx = info.inputs.len() - 1;
-    info.inputs[idx].last = true;
+    if let Some(pa) = paste_file_vec.last_mut() {
+        pa.last = true;
+    }
 
-    Ok(())
+    Ok(PasteInfo {
+        inputs: paste_file_vec,
+    })
 }
 
-fn paste_files_serial(mut info: PasteInfo, mut dinfo: DelimInfo) -> io::Result<()> {
+fn paste_files_serial(
+    mut paste_info: PasteInfo,
+    mut delimiter_state: DelimiterState,
+) -> Result<(), Box<dyn Error>> {
+    let mut stdout_lock = io::stdout().lock();
+
+    // Re-use buffers to avoid repeated allocations
+    let mut buffer = Vec::new();
+
     // loop serially for each input file
-    for input in &mut info.inputs {
+    for paste_file in &mut paste_info.inputs {
         let mut first_line = true;
 
         // for each input line
         loop {
-            // read line
-            let mut buffer = String::new();
-            let n_read_res = input.rdr.read_line(&mut buffer);
-            if let Err(e) = n_read_res {
-                eprintln!("{}: {}", input.filename, e);
-                return Err(e);
-            }
-            let n_read = n_read_res.unwrap();
+            // Equivalent to allocating a new Vec here
+            buffer.clear();
+
+            let read_line_result = paste_file.source.read_until_new_line(&mut buffer)?;
 
             // if EOF, output line terminator and end inner loop
-            if n_read == 0 {
-                println!("");
+            if read_line_result == 0 {
+                stdout_lock.write_all(b"\n")?;
+
                 break;
-
-            // output line segment
             } else {
-                let slice = &buffer[0..buffer.len() - 1];
-
-                if first_line {
-                    print!("{}", slice);
-                } else {
-                    print!("{}{}", dinfo.delim(), slice);
+                if !first_line {
+                    delimiter_state.write(&mut stdout_lock)?;
                 }
+
+                // output line segment
+                let mut iter = buffer.iter();
+
+                // TODO
+                // Check that the removed character is a newline?
+                // Update: checking if it was a newline in this manner fixes "paste_multiple_stdin_serial_test_two"
+                // But this seems hacky
+                let slice = match iter.next_back() {
+                    // `iter` is correct, since the byte that was removed was a newline character
+                    Some(b'\n') => iter.as_slice(),
+                    // `iter` is wrong, since it is now missing the final character (which was not a newline
+                    // character), so use `buffer`, unmodified
+                    _ => buffer.as_slice(),
+                };
+
+                stdout_lock.write_all(slice)?;
             }
 
             if first_line {
                 first_line = false;
             }
         }
+
+        // See https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html:
+        //
+        //    When the -s option is specified:
+        //    The last <newline> in a file shall not be modified.
+        //    The delimiter shall be reset to the first element of list after each file operand is processed.
+        delimiter_state.reset();
     }
 
     Ok(())
 }
 
-fn paste_files(mut info: PasteInfo, mut dinfo: DelimInfo) -> io::Result<()> {
+fn paste_files(
+    mut paste_info: PasteInfo,
+    mut delimiter_state: DelimiterState,
+) -> Result<(), Box<dyn Error>> {
     // for each input line, across N files
+
+    // Re-use buffers to avoid repeated allocations
+    let mut buffer = Vec::new();
+    let mut output = Vec::new();
+
     loop {
-        let mut output = String::new();
+        // Equivalent to allocating a new Vec here
+        output.clear();
+
         let mut have_data = false;
 
         // for each input line
-        for input in &mut info.inputs {
+        for paste_file in &mut paste_info.inputs {
             // if not already at EOF, read and process a line
-            if !input.eof {
-                // read input line
-                let mut buffer = String::new();
-                let n_read_res = input.rdr.read_line(&mut buffer);
-                if let Err(e) = n_read_res {
-                    eprintln!("{}: {}", input.filename, e);
-                    return Err(e);
-                }
-                let n_read = n_read_res.unwrap();
+            if !paste_file.eof {
+                // Equivalent to allocating a new Vec here
+                buffer.clear();
 
-                // if at EOF, note and continue
-                if n_read == 0 {
-                    input.eof = true;
+                let read_line_result = paste_file.source.read_until_new_line(&mut buffer)?;
 
-                // otherwise add to output line, sans trailing NL
+                if read_line_result == 0 {
+                    // if at EOF, note and continue
+                    paste_file.eof = true;
                 } else {
+                    // otherwise add to output line, sans trailing NL
                     have_data = true;
-                    output.push_str(&buffer[0..buffer.len() - 1]);
+
+                    let mut iter = buffer.iter();
+
+                    // See note above
+                    let slice = match iter.next_back() {
+                        Some(b'\n') => iter.as_slice(),
+                        _ => buffer.as_slice(),
+                    };
+
+                    output.extend_from_slice(slice);
                 }
             }
 
             // final record, output line end
-            if input.last {
-                output.push('\n');
-
-            // next delimiter
+            if paste_file.last {
+                output.push(b'\n');
             } else {
-                output.push(dinfo.delim());
+                // next delimiter
+                delimiter_state.write(&mut output)?;
             }
         }
 
@@ -224,13 +411,9 @@ fn paste_files(mut info: PasteInfo, mut dinfo: DelimInfo) -> io::Result<()> {
         }
 
         // output all segments to stdout at once (one write per line)
-        match io::stdout().write_all(output.as_bytes()) {
-            Ok(()) => {}
-            Err(e) => {
-                eprintln!("stdout: {}", e);
-                return Err(e);
-            }
-        }
+        io::stdout().write_all(output.as_slice())?;
+
+        delimiter_state.reset();
     }
 
     Ok(())
@@ -244,21 +427,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    let mut state = PasteInfo::new();
-    let mut delim_state = DelimInfo::new();
-    match &args.delims {
-        None => {}
-        Some(dlm) => {
-            delim_state.delims = xlat_delim_str(dlm);
+    let Args {
+        delimiters,
+        files,
+        serial,
+    } = args;
+
+    let parsed_delimiters_argument = match parse_delimiters_argument(delimiters) {
+        Ok(bo) => bo,
+        Err(st) => {
+            eprintln!("paste: {st}");
+
+            // TODO
+            // `std::process::exit` should not be used
+            std::process::exit(1);
         }
-    }
+    };
 
-    open_inputs(&args, &mut state)?;
+    let paste_info = match open_inputs(files) {
+        Ok(pa) => pa,
+        Err(bo) => {
+            eprintln!("paste: {bo}");
 
-    if args.serial {
-        paste_files_serial(state, delim_state)?;
+            // TODO
+            // `std::process::exit` should not be used
+            std::process::exit(1);
+        }
+    };
+
+    let delimiter_state = DelimiterState::new(&parsed_delimiters_argument);
+
+    if serial {
+        paste_files_serial(paste_info, delimiter_state)?;
     } else {
-        paste_files(state, delim_state)?;
+        paste_files(paste_info, delimiter_state)?;
     }
 
     Ok(())

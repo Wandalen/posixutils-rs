@@ -7,8 +7,6 @@
 // SPDX-License-Identifier: MIT
 //
 
-extern crate plib;
-
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::fs;
@@ -73,14 +71,13 @@ const CONV_ASCII_EBCDIC: [u8; 256] = [
     0xdd, 0xde, 0xdf, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff,
 ];
 
-#[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)]
 enum AsciiConv {
     Ascii,
     EBCDIC,
     IBM,
 }
 
-#[derive(Debug)]
 enum Conversion {
     Ascii(AsciiConv),
     Lcase,
@@ -91,7 +88,6 @@ enum Conversion {
     Sync,
 }
 
-#[derive(Debug)]
 struct Config {
     ifile: String,
     ofile: String,
@@ -106,20 +102,20 @@ struct Config {
     notrunc: bool,
 }
 
-impl Config {
-    fn new() -> Config {
-        Config {
-            ifile: String::new(),
-            ofile: String::new(),
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            ifile: Default::default(),
+            ofile: Default::default(),
             ibs: DEF_BLOCK_SIZE,
             obs: DEF_BLOCK_SIZE,
-            cbs: 0,
-            seek: 0,
-            skip: 0,
-            count: 0,
-            conversions: Vec::new(),
-            noerror: false,
-            notrunc: false,
+            cbs: Default::default(),
+            seek: Default::default(),
+            skip: Default::default(),
+            count: Default::default(),
+            conversions: Default::default(),
+            noerror: Default::default(),
+            notrunc: Default::default(),
         }
     }
 }
@@ -153,7 +149,7 @@ fn convert_swab(data: &mut [u8]) {
 fn convert_lcase(data: &mut [u8]) {
     for byte in data.iter_mut() {
         if *byte >= b'A' && *byte <= b'Z' {
-            *byte = *byte + 32;
+            *byte += 32;
         }
     }
 }
@@ -161,7 +157,7 @@ fn convert_lcase(data: &mut [u8]) {
 fn convert_ucase(data: &mut [u8]) {
     for byte in data.iter_mut() {
         if *byte >= b'a' && *byte <= b'z' {
-            *byte = *byte - 32;
+            *byte -= 32;
         }
     }
 }
@@ -227,18 +223,16 @@ fn apply_conversions(data: &mut Vec<u8>, config: &Config) {
 }
 
 fn copy_convert_file(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    let mut ifile: Box<dyn Read>;
-    if config.ifile == "" {
-        ifile = Box::new(io::stdin().lock());
+    let mut ifile: Box<dyn Read> = if config.ifile.is_empty() {
+        Box::new(io::stdin().lock())
     } else {
-        ifile = Box::new(fs::File::open(&config.ifile)?);
-    }
-    let mut ofile: Box<dyn Write>;
-    if config.ofile == "" {
-        ofile = Box::new(io::stdout().lock())
+        Box::new(fs::File::open(&config.ifile)?)
+    };
+    let mut ofile: Box<dyn Write> = if config.ofile.is_empty() {
+        Box::new(io::stdout().lock())
     } else {
-        ofile = Box::new(fs::File::create(&config.ofile)?)
-    }
+        Box::new(fs::File::create(&config.ofile)?)
+    };
 
     let mut ibuf = vec![0u8; config.ibs];
     let obuf = vec![0u8; config.obs];
@@ -347,7 +341,7 @@ fn parse_block_size(s: &str) -> Result<usize, Box<dyn std::error::Error>> {
 }
 
 fn parse_cmdline(args: &[String]) -> Result<Config, Box<dyn std::error::Error>> {
-    let mut config = Config::new();
+    let mut config = Config::default();
 
     for arg in args {
         // Split arg into option and argument

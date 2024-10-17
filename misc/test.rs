@@ -11,9 +11,6 @@
 // - fix and test unary ops
 //
 
-extern crate libc;
-extern crate plib;
-
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::os::unix::fs::FileTypeExt;
@@ -21,7 +18,8 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-// unary operators
+/// Unary operators
+#[allow(clippy::upper_case_acronyms)]
 #[derive(PartialEq)]
 enum UnaryOp {
     Block,
@@ -43,7 +41,7 @@ enum UnaryOp {
     StrZero,
 }
 
-// binary operators
+/// Binary operators
 enum BinOp {
     PathEquals,
     PathNewer,
@@ -185,16 +183,9 @@ fn parse_binary_op(s: &str) -> Option<BinOp> {
     }
 }
 
-fn parse_int(s: &str) -> i64 {
-    match s.parse::<i64>() {
-        Ok(i) => i,
-        Err(_) => 0,
-    }
-}
-
 fn eval_binary_int(op: &BinOp, s1: &str, s2: &str) -> bool {
-    let i1 = parse_int(s1);
-    let i2 = parse_int(s2);
+    let i1: i64 = s1.parse().unwrap_or(0);
+    let i2: i64 = s2.parse().unwrap_or(0);
 
     match op {
         BinOp::IntEq => i1 == i2,

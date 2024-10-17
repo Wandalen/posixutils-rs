@@ -13,12 +13,23 @@ where
     Ok(None)
 }
 
+pub fn bindtextdomain<T, U>(
+    _domainname: T,
+    dirname: U,
+) -> Result<std::path::PathBuf, std::io::Error>
+where
+    T: Into<Vec<u8>>,
+    U: Into<std::path::PathBuf>,
+{
+    Ok(dirname.into())
+}
+
 pub fn textdomain<T: Into<Vec<u8>>>(domainname: T) -> Result<Vec<u8>, std::io::Error> {
     Ok(domainname.into())
 }
 
 pub fn gettext<T: Into<String>>(msgid: T) -> String {
-    return msgid.into();
+    msgid.into()
 }
 
 #[macro_export]

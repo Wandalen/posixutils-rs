@@ -13,10 +13,7 @@
 //	Write an 8-bit value that is the 0, 1, 2 or 3-digit octal number _num_.
 //
 
-extern crate plib;
-
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
-use plib::PROJECT_NAME;
 use std::io::{self, Write};
 
 fn translate_str(skip_nl: bool, s: &str) -> String {
@@ -57,7 +54,7 @@ fn translate_str(skip_nl: bool, s: &str) -> String {
                     output.push('\x11');
                 }
                 '\\' => {
-                    output.push_str("\\");
+                    output.push('\\');
                 }
                 _ => {}
             }
@@ -67,7 +64,7 @@ fn translate_str(skip_nl: bool, s: &str) -> String {
     }
 
     if nl && !skip_nl {
-        output.push_str("\n");
+        output.push('\n');
     }
 
     output
@@ -75,14 +72,14 @@ fn translate_str(skip_nl: bool, s: &str) -> String {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     setlocale(LocaleCategory::LcAll, "");
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+    textdomain(env!("PROJECT_NAME"))?;
+    bind_textdomain_codeset(env!("PROJECT_NAME"), "UTF-8")?;
 
     let mut args: Vec<String> = std::env::args().collect();
     args.remove(0);
 
     let skip_nl = {
-        if args.len() > 0 && (args[0] == "-n") {
+        if !args.is_empty() && (args[0] == "-n") {
             args.remove(0);
             true
         } else {
