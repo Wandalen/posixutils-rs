@@ -771,7 +771,7 @@ impl SourceContext{
 
     /// Seek to buffer end
     pub fn goto_eof(&mut self, count: Option<usize>) -> bool{
-        if count.is_some{ 
+        if count.is_some(){ 
             return self.goto_beginning(count); 
         }
         self.seek_positions.set_current(self.seek_positions.len() + 1)
@@ -1465,7 +1465,6 @@ impl MoreControl{
     /// Execute command
     fn execute(&mut self, command: Command) -> Result<(), MoreError>{
         match command{ 
-            //
             Command::Help => {
                 let string = commands_usage();
                 self.last_position = self.current_position;
@@ -1475,19 +1474,16 @@ impl MoreControl{
                     Source::Buffer(Cursor::new(string)))?;
                 self.is_ended_file = self.context.goto_beginning(None);                
             },
-            //
             Command::ScrollForwardOneScreenful(count) => {
                 let count = count.unwrap_or(self.context.terminal_size.unwrap_or((2, 0)).0 - 1);
                 self.is_ended_file = self.context.scroll(count, Direction::Forward);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
-            //
             Command::ScrollBackwardOneScreenful(count) => {
                 let count = count.unwrap_or(self.context.terminal_size.unwrap_or((2, 0)).0 - 1);
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
                 if_eof_set_default(&mut self.prompt);
             },
-            //
             Command::ScrollForwardOneLine{ count, is_space } => {
                 let count = count.unwrap_or(
                     if is_space { self.context.terminal_size.unwrap_or((1, 0)).0 } else { 1 } 
@@ -1495,13 +1491,11 @@ impl MoreControl{
                 self.is_ended_file = self.context.scroll(count, Direction::Forward);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
-            //
             Command::ScrollBackwardOneLine(count) => {
                 let count = count.unwrap_or(1);
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
                 if_eof_set_default(&mut self.prompt);
             },
-            //
             Command::ScrollForwardOneHalfScreenful(count) => {
                 if count.is_some() { self.count_default = count; }; 
                 let count = count.unwrap_or_else(||{ 
@@ -1515,13 +1509,11 @@ impl MoreControl{
                 self.is_ended_file = self.context.scroll(count, Direction::Forward);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
-            //
             Command::SkipForwardOneLine(count) => {
                 let count = count.unwrap_or(1);
                 self.is_ended_file = self.context.scroll(count, Direction::Forward);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
-            //
             Command::ScrollBackwardOneHalfScreenful(count) => {
                 if count.is_some() { self.count_default = count; }; 
                 let count = count.unwrap_or_else(||{                   
@@ -1535,33 +1527,26 @@ impl MoreControl{
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
                 if_eof_set_default(&mut self.prompt);
             },
-            //
             Command::GoToBeginningOfFile(count) => {
                 self.is_ended_file = self.context.goto_beginning(count);
                 if_eof_set_default(&mut self.prompt);
             },
-            //
             Command::GoToEOF(count) => {
                 self.is_ended_file = self.context.goto_eof(count);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
-            //
             Command::RefreshScreen => self.refresh()?,
-            //
             Command::DiscardAndRefresh => {
                 self.commands_buffer.clear();
                 if_eof_set_default(&mut self.prompt);
                 self.refresh()?;
             },
-            //
             Command::MarkPosition(letter) => {
                 self.context.set_mark(letter);
             },
-            //
             Command::ReturnMark(letter) => {
                 self.is_ended_file = self.context.goto_mark(letter)?;
             },
-            //x
             Command::ReturnPreviousPosition => {
                 self.is_ended_file =  self.context.return_previous();
                 if_eof_set_default(&mut self.prompt);
