@@ -13,21 +13,33 @@ use std::time::Instant;
 
 use clap::Parser;
 
-use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use gettextrs::{
+    bind_textdomain_codeset, bindtextdomain, gettext, setlocale, textdomain, LocaleCategory,
+};
 use plib::PROJECT_NAME;
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[derive(Parser)]
+#[command(
+    version,
+    about = gettext("time - time a simple command or give resource usage"),
+    help_template = gettext("{about-with-newline}\nUsage: {usage}\n\nArguments:\n{positionals}\n\nOptions:\n{options}")
+)]
 struct Args {
-    /// Write timing output to standard error in POSIX format
-    #[arg(short, long)]
+    #[arg(
+        short,
+        long,
+        help = gettext("Write timing output to standard error in POSIX format")
+    )]
     posix: bool,
 
-    /// The utility to be invoked
+    #[arg(help = gettext("The utility to be invoked"))]
     utility: String,
 
-    /// Arguments for the utility
-    #[arg(name = "ARGUMENT", trailing_var_arg = true)]
+    #[arg(
+        name = "ARGUMENT",
+        trailing_var_arg = true,
+        help = gettext("Arguments for the utility")
+    )]
     arguments: Vec<String>,
 }
 
@@ -113,11 +125,12 @@ impl Status {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
-
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
+    bindtextdomain(PROJECT_NAME, "locale")?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+
+    let args = Args::parse();
 
     if let Err(err) = time(args) {
         match err {

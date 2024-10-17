@@ -7,30 +7,23 @@
 // SPDX-License-Identifier: MIT
 //
 
-extern crate clap;
-extern crate libc;
-extern crate plib;
-
 use clap::Parser;
-use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use libc::{signal, SIGINT, SIG_IGN};
 use plib::PROJECT_NAME;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 
-/// tee - duplicate standard input
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about = gettext("tee - duplicate standard input"))]
 struct Args {
-    /// Append the output to the files.
-    #[arg(short, long)]
+    #[arg(short, long, help = gettext("Append the output to the files"))]
     append: bool,
 
-    /// Ignore the SIGINT signal.
-    #[arg(short, long)]
+    #[arg(short, long, help = gettext("Ignore the SIGINT signal"))]
     ignore: bool,
 
-    /// One or more output files.
+    #[arg(short, long, help = gettext("One or more output files"))]
     files: Vec<String>,
 }
 
@@ -39,16 +32,9 @@ struct TeeFile {
     f: File,
 }
 
+#[derive(Default)]
 struct TeeInfo {
     outputs: Vec<TeeFile>,
-}
-
-impl TeeInfo {
-    fn new() -> TeeInfo {
-        TeeInfo {
-            outputs: Vec::new(),
-        }
-    }
 }
 
 fn open_outputs(args: &Args, info: &mut TeeInfo) -> io::Result<()> {
@@ -120,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let mut state = TeeInfo::new();
+    let mut state = TeeInfo::default();
 
     open_outputs(&args, &mut state)?;
     tee_stdin(&mut state)?;

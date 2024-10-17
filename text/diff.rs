@@ -14,10 +14,6 @@
 
 mod diff_util;
 
-extern crate clap;
-extern crate diff;
-extern crate plib;
-
 use std::{fs, io, path::PathBuf};
 
 use clap::Parser;
@@ -32,8 +28,8 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 
 /// diff - compare two files
-#[derive(Parser, Debug, Clone)]
-#[command(author, version, about, long_about)]
+#[derive(Parser, Clone)]
+#[command(version, about)]
 struct Args {
     /// Cause EOL whitespace to be treated as blanks
     #[arg(short = 'b', long = "ignore-space-change")]
@@ -112,8 +108,6 @@ fn check_difference(args: Args) -> io::Result<DiffExitStatus> {
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    let output_format: OutputFormat = (&args).into();
-
     let path1 = PathBuf::from(&args.file1);
     let path2 = PathBuf::from(&args.file2);
 
@@ -128,41 +122,40 @@ fn check_difference(args: Args) -> io::Result<DiffExitStatus> {
         return Ok(DiffExitStatus::Trouble);
     }
 
+    let output_format: OutputFormat = (&args).into();
+
+    let format_options = FormatOptions::try_new(
+        args.ignore_eol_space,
+        output_format,
+        args.label,
+        args.label2,
+    );
+    let format_options = format_options.unwrap();
+
     let path1_is_file = fs::metadata(&path1)?.is_file();
     let path2_is_file = fs::metadata(&path2)?.is_file();
 
-    let format_options = FormatOptions {
-        ignore_trailing_white_spaces: args.ignore_eol_space,
-        label1: args.label,
-        label2: args.label2,
-        output_format: output_format,
-    };
-
     if path1_is_file && path2_is_file {
-        return FileDiff::file_diff(path1, path2, &format_options, None);
+        FileDiff::file_diff(path1, path2, &format_options, None)
     } else if !path1_is_file && !path2_is_file {
-        return DirDiff::dir_diff(
-            PathBuf::from(path1),
-            PathBuf::from(path2),
-            &format_options,
-            args.recurse,
-        );
+        DirDiff::dir_diff(path1, path2, &format_options, args.recurse)
     } else {
-        return FileDiff::file_dir_diff(path1, path2, &format_options);
+        FileDiff::file_dir_diff(path1, path2, &format_options)
     }
 }
 
-fn main() -> Result<DiffExitStatus, Box<dyn std::error::Error>> {
+fn main() -> DiffExitStatus {
     // parse command line arguments
     let args = Args::parse();
 
     let result = check_difference(args);
 
-    if let Ok(diff_exit_status) = &result {
-        return Ok(*diff_exit_status);
-    } else if let Err(error) = &result {
-        eprintln!("diff: {}", error);
-    }
+    match result {
+        Ok(diff_exit_status) => diff_exit_status,
+        Err(error) => {
+            eprintln!("diff: {}", error);
 
-    return Ok(DiffExitStatus::NotDifferent);
+            DiffExitStatus::Trouble
+        }
+    }
 }

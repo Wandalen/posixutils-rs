@@ -1,19 +1,25 @@
 [package]
 name = "posixutils-display"
-version = "0.2.0"
-edition = "2021"
+version = "0.2.1"
 authors = ["Jeff Garzik"]
-license = "MIT"
-repository = "https://github.com/rustcoreutils/posixutils-rs.git"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-plib = { path = "../plib" }
 clap.workspace = true
 gettext-rs.workspace = true
 libc = { version = "0.2.159", default-features = false }
 regex = "1.11.0"
 ncurses = "6.0.1"
 thiserror = "1.0.64"
+
+[dev-dependencies]
+plib = { path = "../plib" }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "echo"
@@ -26,7 +32,3 @@ path = "./printf.rs"
 [[bin]]
 name = "more"
 path = "./more.rs"
-
-[[bin]]
-name = "more1"
-path = "./more1.rs"

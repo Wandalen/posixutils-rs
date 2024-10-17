@@ -1,19 +1,24 @@
 [package]
 name = "posixutils-users"
-version = "0.2.0"
-edition = "2021"
+version = "0.2.1"
 authors = ["Jeff Garzik"]
-license = "MIT"
-repository = "https://github.com/rustcoreutils/posixutils-rs.git"
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 plib = { path = "../plib" }
 clap.workspace = true
 gettext-rs.workspace = true
 libc.workspace = true
-atty.workspace = true
 chrono.workspace = true
 syslog = "6.1"
+thiserror = "1.0"
+binrw = "0.14"
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "id"
@@ -43,3 +48,6 @@ path = "./tty.rs"
 name = "write"
 path = "./write.rs"
 
+[[bin]]
+name = "talk"
+path = "./talk.rs"

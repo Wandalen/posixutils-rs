@@ -7,52 +7,104 @@
 // SPDX-License-Identifier: MIT
 //
 
-extern crate clap;
-extern crate plib;
-
 use clap::Parser;
-use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::cmp;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, Error, ErrorKind, Read, Write};
 use std::path::PathBuf;
 
-/// split - split a file into pieces
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about = gettext("split - split a file into pieces"))]
 struct Args {
-    /// Use suffix_length letters to form the suffix portion of the filenames of the split file.
-    #[arg(short='a', long, default_value_t=2, value_parser = clap::value_parser!(u32).range(1..))]
+    #[arg(
+        short = 'a',
+        long,
+        default_value_t = 2,
+        value_parser = clap::value_parser!(u32).range(1..),
+        help = gettext(
+            "Use suffix_length letters to form the suffix portion of the filenames of the split file"
+        )
+    )]
     suffix_len: u32,
 
-    /// Use suffix_length letters to form the suffix portion of the filenames of the split file.
-    #[arg(short, long, group = "mode", value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(
+        short,
+        long,
+        group = "mode",
+        value_parser = clap::value_parser!(u64).range(1..),
+        help = gettext(
+            "Use suffix_length letters to form the suffix portion of the filenames of the split file"
+        )
+    )]
     lines: Option<u64>,
 
-    /// Split a file into pieces n bytes in size.
-    #[arg(short, long, group = "mode")]
+    #[arg(
+        short,
+        long,
+        group = "mode",
+        help = gettext("Split a file into pieces n bytes in size")
+    )]
     bytes: Option<String>,
 
-    /// File to be split
-    #[arg(default_value = "")]
+    #[arg(default_value = "", help = gettext("File to be split"))]
     file: PathBuf,
 
-    /// Prefix of output files
-    #[arg(default_value = "x")]
+    #[arg(default_value = "x", help = gettext("Prefix of output files"))]
     prefix: String,
 }
 
-fn inc_char(ch: char) -> char {
-    ((ch as u8) + 1) as char
+pub struct Suffix {
+    suffix: String,
+}
+
+impl Suffix {
+    pub fn new(len: usize) -> Self {
+        debug_assert!(len > 0);
+        Self {
+            suffix: "a".repeat(len),
+        }
+    }
+
+    fn inc_char(ch: char) -> char {
+        debug_assert!(('a'..='y').contains(&ch));
+        ((ch as u8) + 1) as char
+    }
+}
+
+impl Iterator for Suffix {
+    type Item = String;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.suffix.clone();
+
+        let mut i = self.suffix.len() - 1;
+        loop {
+            let ch = self.suffix.chars().nth(i).unwrap();
+            if ch != 'z' {
+                self.suffix
+                    .replace_range(i..i + 1, Self::inc_char(ch).to_string().as_str());
+                return Some(current);
+            }
+
+            self.suffix
+                .replace_range(i..i + 1, 'a'.to_string().as_str());
+
+            if i == 0 {
+                break;
+            }
+            i -= 1;
+        }
+        None
+    }
 }
 
 struct OutputState {
     prefix: String,
     boundary: u64,
 
-    suffix: String,
-    suffix_len: u32,
+    suffix: Suffix,
     count: u64,
     outf: Option<File>,
 }
@@ -62,41 +114,10 @@ impl OutputState {
         OutputState {
             prefix: String::from(prefix),
             boundary,
-            suffix_len,
-            suffix: String::new(),
+            suffix: Suffix::new(suffix_len as usize),
             count: 0,
             outf: None,
         }
-    }
-
-    fn incr_suffix(&mut self) -> Result<(), &'static str> {
-        assert!(self.suffix_len > 1);
-
-        if self.suffix.is_empty() {
-            self.suffix = String::from("a".repeat(self.suffix_len as usize));
-            return Ok(());
-        }
-
-        assert!(self.suffix.len() > 1);
-        let mut i = self.suffix.len() - 1;
-        loop {
-            let ch = self.suffix.chars().nth(i).unwrap();
-            if ch != 'z' {
-                self.suffix
-                    .replace_range(i..i + 1, inc_char(ch).to_string().as_str());
-                return Ok(());
-            }
-
-            self.suffix
-                .replace_range(i..i + 1, 'a'.to_string().as_str());
-
-            if i == 0 {
-                break;
-            }
-            i = i - 1;
-        }
-
-        Err("maximum suffix reached")
     }
 
     fn open_output(&mut self) -> io::Result<()> {
@@ -104,12 +125,14 @@ impl OutputState {
             return Ok(());
         }
 
-        let inc_res = self.incr_suffix();
-        if let Err(e) = inc_res {
-            return Err(Error::new(ErrorKind::Other, e));
-        }
+        let suffix = match self.suffix.next() {
+            Some(s) => s,
+            None => {
+                return Err(Error::new(ErrorKind::Other, "maximum suffix reached"));
+            }
+        };
 
-        let out_fn = format!("{}{}", self.prefix, self.suffix);
+        let out_fn = format!("{}{}", self.prefix, suffix);
         let f = OpenOptions::new()
             .read(false)
             .write(true)
@@ -129,7 +152,7 @@ impl OutputState {
     }
 
     fn incr_output(&mut self, n: u64) {
-        self.count = self.count + n;
+        self.count += n;
         assert!(self.count <= self.boundary);
 
         if self.count == self.boundary {
@@ -139,11 +162,9 @@ impl OutputState {
 
     fn write(&mut self, buf: &[u8]) -> io::Result<()> {
         match &mut self.outf {
-            None => {
-                assert!(false);
-                Ok(())
-            }
             Some(ref mut f) => f.write_all(buf),
+            // TODO:
+            None => panic!("unreachable"),
         }
     }
 
@@ -158,7 +179,7 @@ impl OutputState {
             let slice = &buf[consumed..consumed + wlen];
             self.write(slice)?;
 
-            consumed = consumed + wlen;
+            consumed += wlen;
 
             self.incr_output(wlen as u64);
         }
@@ -255,4 +276,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_suffix_inc_char() {
+        assert_eq!(Suffix::inc_char('a'), 'b');
+        assert_eq!(Suffix::inc_char('b'), 'c');
+        assert_eq!(Suffix::inc_char('y'), 'z');
+    }
+
+    #[ignore]
+    #[test]
+    fn test_suffix_iterable() {
+        let suffix = Suffix::new(1);
+        assert_eq!(suffix.count(), 26);
+    }
 }

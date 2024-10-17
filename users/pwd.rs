@@ -10,20 +10,17 @@
 // - compliance:  for -L mode, Rust performs unwanted normalization for "."
 //
 
-extern crate clap;
-extern crate plib;
-
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
 use std::ffi::OsStr;
 use std::path::{Component, Path};
 
-const PWD_ENV: &'static str = "PWD";
+const PWD_ENV: &str = "PWD";
 
 /// pwd - return working directory name
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[derive(Parser)]
+#[command(version, about)]
 struct Args {
     /// Count number of bytes in each file
     #[arg(short = 'L', long)]

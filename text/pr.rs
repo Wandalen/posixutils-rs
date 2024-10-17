@@ -110,7 +110,7 @@ fn print_footer(form_feed_as_page_separator: bool) {
     if form_feed_as_page_separator {
         print!("{FORM_FEED}");
     } else {
-        println!("");
+        println!();
     }
 }
 
@@ -254,7 +254,7 @@ fn pr_serial(path: &PathBuf, params: &Parameters) -> io::Result<()> {
             if !params.omit_header {
                 print_header(
                     &dt,
-                    &*path.to_string_lossy(),
+                    &path.to_string_lossy(),
                     page_number,
                     params.header.as_deref(),
                     params.page_width,
@@ -343,7 +343,7 @@ fn pr_serial(path: &PathBuf, params: &Parameters) -> io::Result<()> {
             if !params.omit_header {
                 print_header(
                     &dt,
-                    &*path.to_string_lossy(),
+                    &path.to_string_lossy(),
                     page_number,
                     params.header.as_deref(),
                     params.page_width,
@@ -462,14 +462,12 @@ fn pr_merged(paths: &[PathBuf], params: &Parameters) -> io::Result<()> {
             );
         }
 
-        let mut required_rows = 0;
-        for page in pages.iter() {
-            if let Some(p) = page {
-                if p.num_nonpadding_lines > required_rows {
-                    required_rows = p.num_nonpadding_lines;
-                }
-            }
-        }
+        let required_rows = pages
+            .iter()
+            .flatten()
+            .map(|p| p.num_nonpadding_lines)
+            .max()
+            .unwrap_or_default();
 
         let mut pages: Vec<_> = pages
             .into_iter()
