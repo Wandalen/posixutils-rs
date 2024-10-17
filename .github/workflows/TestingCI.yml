@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install libs
+        run: sudo apt-get install libncurses5-dev libncursesw5-dev
       - name: Fetch
         run: cargo fetch
       - name: Build
@@ -40,6 +42,8 @@ jobs:
         with:
           path: ~/.cargo/registry/cache
           key: registry-${{ runner.os }}-${{ steps.rust-version.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install libs
+        run: brew install ncurses
       - name: Fetch
         run: cargo fetch
       - name: Build
