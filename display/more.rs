@@ -13,7 +13,9 @@ extern crate clap;
 extern crate plib;
 
 use ncurses::{ 
-    addch, addstr, attroff, attron, clear, curs_set, endwin, getch, initscr, keypad, noecho, refresh, stdscr, tigetnum, wmove, A_STANDOUT, A_UNDERLINE, CURSOR_VISIBILITY, WINDOW
+    addch, addstr, attroff, attron, clear, curs_set, endwin, getch, getmaxyx, 
+    initscr, keypad, noecho, refresh, stdscr, tigetnum, wmove, A_STANDOUT, 
+    A_UNDERLINE, CURSOR_VISIBILITY, KEY_RESIZE, KEY_MOUSE
 };
 use gettextrs::{ setlocale, LocaleCategory, textdomain, bind_textdomain_codeset };
 use libc::{ ioctl, TIOCGWINSZ, winsize };
@@ -253,8 +255,6 @@ impl Screen{
     fn set_str(&mut self, position: (usize, usize), string: String, style: StyleType) -> Result<(), MoreError>{
         if position.0 >= self.0.len() || 
         (self.0[0].len() as isize - position.1 as isize) < string.len() as isize{
-            //let _ = wmove(stdscr(), 0, 0);
-            //let _ = addstr(&format!("{:#?}", ("ss", position.0, self.0.len(), (self.0[0].len() as isize - position.1 as isize), string.len())));
             return Err(MoreError::SetOutsideError);
         }
 
@@ -273,8 +273,6 @@ impl Screen{
     fn set_raw(&mut self, position: (usize, usize), string: Vec<(char, StyleType)>) -> Result<(), MoreError>{
         if position.0 > self.0.len() || 
         (self.0[0].len() as isize - position.1 as isize) < string.len() as isize{
-            /*let _ = wmove(stdscr(), 0, 0);
-            let _ = addstr(&format!("{:#?}", "sr"));*/
             return Err(MoreError::SetOutsideError);
         }
 
@@ -288,6 +286,7 @@ impl Screen{
         Ok(())
     }
 
+    /// Fill [`Screen`] with (' ', [StyleType::None])
     fn clear(&mut self){
         self.0.iter_mut().for_each(|line|{
             line.fill((' ', StyleType::None));
@@ -425,11 +424,11 @@ impl SeekPositions{
         while self.current_line() != position {
             if self.current_line() < position{
                 if self.next().is_none() { 
+                    is_ended = true; 
                     break; 
                 };
             }else if self.current_line() > position{
                 if self.next_back().is_none() {
-                    is_ended = true; 
                     break; 
                 };
             }
@@ -456,6 +455,8 @@ impl SeekPositions{
                 if self.next_back().is_none() { 
                     return Err(MoreError::SeekPositionsError(SeekPositionsError::OutOfRangeError)); 
                 };
+            }else{
+                break;
             }
             last_position = self.current();
         }
@@ -472,8 +473,6 @@ impl SeekPositions{
         let mut i = 0;
         loop{
             let Ok(stream_position) = self.buffer.stream_position() else { break; }; 
-            //let Ok(stream_len) = self.buffer.stream_len() else { break; };
-            //if stream_position >= stream_len { break; }
             if i >= n{
                 n_char_seek = Some(stream_position);
                 break;
@@ -642,23 +641,19 @@ impl SourceContext{
 
     /// Sets new [`Source`]
     fn set_source(&mut self, source: Source) -> Result<(), MoreError>{
-        self.seek_positions = SeekPositions::new(source.clone(), self.seek_positions.line_len, self.squeeze_lines, self.plain)?;
+        self.seek_positions = SeekPositions::new(
+            source.clone(), 
+            self.seek_positions.line_len, 
+            self.squeeze_lines, 
+            self.plain
+        )?;
         self.last_source = self.current_source.clone();
         self.current_source = source;
         self.marked_positions.clear();
         self.last_search = None;
         self.last_line = 0;
         self.previous_source_screen = self.screen.clone();        
-        self.header_lines_count = if let Source::File(path) = &self.current_source{
-            let header = format_file_header(path.clone(), self.terminal_size.map(|(r, _)| r));
-            Some(header.len())
-        }else{
-            None
-        };
-        let header_lines_count = self.header_lines_count.unwrap_or(0);
-        let count = self.terminal_size.map(|(r, _)| r)
-            .unwrap_or(header_lines_count) - header_lines_count;
-        self.scroll(count, Direction::Forward);
+        self.goto_beginning(None);
         self.update_screen()?;
         Ok(())
     }
@@ -691,6 +686,7 @@ impl SourceContext{
         if terminal_size.0 - 1 < content_lines_len{
             content_lines_len = terminal_size.0 - 1;
         } 
+
         remain = if remain > header_lines.len() {
             remain - header_lines.len() 
         }else {
@@ -710,6 +706,7 @@ impl SourceContext{
                     current_line = self.seek_positions.len();
                     self.seek_positions.set_current(current_line);
                 }
+                content_lines_len = current_line;
             }
         }
 
@@ -724,10 +721,6 @@ impl SourceContext{
             i += 1;
         }
 
-        /*wmove(stdscr(), 0, 0);
-        let _ = addstr(&format!("{:#?}", 
-        (&previous_lines.len(), &header_lines.len(), &content_lines.len(), self.terminal_size)));*/
-
         content_lines.reverse();
         screen_lines.extend(content_lines);
         self.seek_positions.set_current(current_line);
@@ -738,9 +731,6 @@ impl SourceContext{
 
         for (i, line) in screen_lines.into_iter().enumerate(){
             screen.set_str((i + previous_lines_len, 0), line, StyleType::None)?;
-            /*wmove(stdscr(), 0, 0);
-            let _ = addstr(&format!("{:#?}", i + previous_lines_len));
-            getch();*/
         }
 
         Ok(())
@@ -754,13 +744,12 @@ impl SourceContext{
         }
         let header_lines_count = self.header_lines_count.unwrap_or(0);
         let next_line = self.seek_positions.current_line() as isize + count;
+        let next_line = if next_line < 0 { 0 } else { next_line as usize };
         let terminal_size = self.terminal_size.unwrap_or((1 + header_lines_count, 0));
-        self.seek_positions.set_current(if (next_line as usize) > (self.seek_positions.len()) {
-            self.seek_positions.len() - 1
-        } else if (next_line as usize) < (terminal_size.0 - 1 - header_lines_count){
+        self.seek_positions.set_current(if next_line < (terminal_size.0 - 1 - header_lines_count){
             terminal_size.0 - 1 - header_lines_count
         } else {
-            next_line as usize
+            next_line
         })
     }
 
@@ -769,16 +758,23 @@ impl SourceContext{
         let terminal_size = self.terminal_size.unwrap_or((1, 0));
         let header_lines_count = self.header_lines_count.unwrap_or(0); 
         let next_line = terminal_size.0 - 1 - header_lines_count;
-        if self.seek_positions.len() < next_line{
+        let mut is_ended = if self.seek_positions.len() < next_line{
             self.seek_positions.set_current(self.seek_positions.len() - 1)
         }else{
             self.seek_positions.set_current(next_line)
-        }
+        };
+        if let Some(count) = count{
+            is_ended = self.scroll(count, Direction::Forward);
+        } 
+        is_ended
     }
 
     /// Seek to buffer end
     pub fn goto_eof(&mut self, count: Option<usize>) -> bool{
-        self.seek_positions.set_current(self.seek_positions.len() - 1)
+        if count.is_some{ 
+            return self.goto_beginning(count); 
+        }
+        self.seek_positions.set_current(self.seek_positions.len() + 1)
     }
 
     /// Seek to previous line
@@ -862,18 +858,21 @@ impl SourceContext{
         if self.terminal_size.is_none() {
             return Err(MoreError::SourceContextError(SourceContextError::MissingTerminal));
         }
-        let previous_seek_pos = &self.seek_positions;
-        let previous_seek = previous_seek_pos.current();
-        let source = &previous_seek_pos.source;
-        let mut next_seek_pos = 
-            SeekPositions::new(
-                source.clone(), Some(terminal_size.1), self.squeeze_lines, self.plain)?;
-        let _ = next_seek_pos.seek(previous_seek);
-        self.seek_positions = next_seek_pos;
+        let previous_seek = self.seek_positions.current();
+        {
+            let mut temp_seek_positions = SeekPositions::new(
+                self.seek_positions.source.clone(), 
+                Some(terminal_size.1), 
+                self.squeeze_lines, 
+                self.plain
+            )?;
+            std::mem::swap(&mut self.seek_positions, &mut temp_seek_positions);
+        }
+        let _ = self.seek_positions.seek(previous_seek)?;
         self.previous_source_screen = None;
         self.screen = Some(Screen::new((terminal_size.0 - 1, terminal_size.1)));
         self.terminal_size = Some(terminal_size);
-        Ok(())
+        self.update_screen()
     }
 
     /// Reset current file: seek to beggining, flush last state fields, update screen
@@ -910,7 +909,6 @@ impl Terminal{
         }
         let size = (win.ws_row as usize, win.ws_col as usize);
         let terminal = Self{ size, plain }; 
- 
         if initscr() == 0 as *mut i8 { return Err(MoreError::TerminalInitError); };
         let _ = keypad(stdscr(), true);
         let _ = noecho();
@@ -919,12 +917,17 @@ impl Terminal{
         Ok(terminal)
     }
 
+    pub fn get_size() -> (usize, usize){
+        let mut y = LINES_PER_PAGE;
+        let mut x = NUM_COLUMNS; 
+        getmaxyx(stdscr(), &mut y, &mut x);
+        return (y as usize, x as usize);
+    }
+
     /// Display [`Screen`] on [`Terminal`]
     pub fn display(&mut self, screen: Screen) -> Result<(), MoreError>{
         if screen.0.len() > self.size.0 || screen.0[0].len() > self.size.1 {
             self.set_style(StyleType::None);
-            /*let _ = wmove(stdscr(), 0, 0);
-            let _ = addstr(&format!("{:#?}", "d1"));*/
             return Err(MoreError::SetOutsideError);
         }
 
@@ -934,8 +937,6 @@ impl Terminal{
                 self.set_style(if !self.plain { *st } else { StyleType::None });
                 if addch(*ch as u32) != 0{
                     self.set_style(StyleType::None);
-                    /*let _ = wmove(stdscr(), 0, 0);
-                    let _ = addstr(&format!("{:#?}", "d2"));*/
                     return Err(MoreError::SetOutsideError);
                 }
             }
@@ -959,8 +960,6 @@ impl Terminal{
     pub fn display_prompt(&mut self, prompt: Prompt) -> Result<(), MoreError>{
         let line = prompt.format();
         if line.len() > self.size.1{
-            /*let _ = wmove(stdscr(), 0, 0);
-            let _ = addstr(&format!("{:#?}", "dp1"));*/
             return Err(MoreError::SetOutsideError);
         }
 
@@ -973,8 +972,6 @@ impl Terminal{
             wmove(stdscr(),  (self.size.0 - 1) as i32, i as i32);
             self.set_style(if !self.plain { *st } else { StyleType::None });
             if addch(*ch as u32) != 0{
-                /*let _ = wmove(stdscr(), 0, 0);
-                let _ = addstr(&format!("{:#?}", "dp2"));*/
                 return Err(MoreError::SetOutsideError);
             }
         }
@@ -999,8 +996,8 @@ impl Terminal{
     }
 
     /// Update terminal size for wrapper
-    pub fn resize(&mut self, size: (usize, usize)){
-        self.size = size;
+    pub fn resize(&mut self){
+        self.size = Self::get_size();
     }
 }
 
@@ -1024,8 +1021,8 @@ impl Prompt{
     fn format(&self) -> Vec<(char, StyleType)> {
         let mut line = vec![];
         let string = match self{
-            Prompt::More => "--More--".to_string(),
-            Prompt::EOF(next_file) => format!("--More--(Next file: {next_file})"),
+            Prompt::More => "-- More --".to_string(),
+            Prompt::EOF(next_file) => format!("-- More --(Next file: {next_file})"),
             Prompt::DisplayPosition(position) => position.clone(),
             Prompt::Input(input) => input.clone(),
             Prompt::Error(error) => error.clone()
@@ -1038,6 +1035,12 @@ impl Prompt{
 
         string.chars().for_each(|ch| line.push((ch, style)));
         line
+    }
+}
+
+fn if_eof_set_default(prompt: &mut Option<Prompt>){
+    if let Some(Prompt::EOF(_)) = prompt{
+        *prompt = Some(Prompt::More);
     }
 }
 
@@ -1182,11 +1185,15 @@ impl MoreControl{
     // Read input and handle signals
     fn handle_events(&mut self) -> Result<(), MoreError>{
         if self.terminal.is_some(){
-            if let Some(ch) = char::from_u32(getch() as u32){
+            let mut next = getch();
+            if next == KEY_RESIZE || next == KEY_MOUSE{
+                next = getch();
+            }
+            if let Some(ch) = char::from_u32(next as u32){
                 self.commands_buffer.push(ch);
             }
+            let _ = self.resize();
         }
-
         Ok(())
     }
 
@@ -1339,7 +1346,6 @@ impl MoreControl{
             }
         }else{
             self.current_position = Some(0);
-
             if let Some(file_path) = self.file_pathes.get(0){
                 if let Some(file_string) = file_path.as_os_str().to_str(){
                     if let Err(e) = self.examine_file(file_string.to_string()){
@@ -1366,12 +1372,13 @@ impl MoreControl{
 
             if let Some(next_file) = self.file_pathes.get(next_position){
                 let name_and_ext = name_and_ext(next_file.clone());
-                if self.prompt.is_none(){
-                    self.prompt = Some(Prompt::EOF(name_and_ext));
-                }else{
+                if let Some(Prompt::EOF(_)) = self.prompt{
                     if self.scroll_file_position(Some(1), Direction::Forward).is_err(){
                         self.exit();
                     }
+                    self.prompt = Some(Prompt::More);
+                }else{
+                    self.prompt = Some(Prompt::EOF(name_and_ext));
                 }
                 
             }else{
@@ -1413,14 +1420,18 @@ impl MoreControl{
                 } else {
                     self.current_position = Some(0);
                 }
-                self.context.current_source = self.context.last_source.clone();
+                let _ = self.context.goto_eof(None);
+                let _ = self.context.update_screen();
+                let _ = self.context.set_source(self.context.last_source.clone());
                 self.last_position = None;
             }
         } else {
+            let _ = self.context.goto_eof(None);
+            let _ = self.context.update_screen();
             self.context.set_source(Source::File(to_path(file_string)?))?;
             self.last_position = self.current_position;
         }
-        Ok(())
+        self.process_p()
     }
 
     /// return last state before help call, refresh current file and display result state
@@ -1430,7 +1441,6 @@ impl MoreControl{
             self.context.seek_positions.seek(*seek)?;
             self.last_source_before_usage = None;
         } else{
-            //self.scroll_file_position(Some(0), Direction::Forward)?;
             if let Some(terminal) = self.terminal.as_mut(){
                 terminal.refresh();
             }
@@ -1438,17 +1448,24 @@ impl MoreControl{
         self.display()
     }
 
-    /// Set new size of terminal for all depended resources relatively to signals
-    fn resize(&mut self, terminal_size: (usize, usize)) -> Result<(), MoreError>{
+    /// Update size of terminal for all depended resources
+    fn resize(&mut self) -> Result<(), MoreError>{
         if let Some(terminal) = self.terminal.as_mut(){
-            terminal.resize(terminal_size);
+            terminal.resize();
+            if self.context.terminal_size.is_some(){
+                if Some(terminal.size) != self.context.terminal_size{
+                    self.context.resize(terminal.size)?;
+                    let _ = self.refresh();
+                }
+            }
         };
-        self.context.resize(terminal_size)
+        Ok(())
     }
     
     /// Execute command
     fn execute(&mut self, command: Command) -> Result<(), MoreError>{
         match command{ 
+            //
             Command::Help => {
                 let string = commands_usage();
                 self.last_position = self.current_position;
@@ -1458,15 +1475,19 @@ impl MoreControl{
                     Source::Buffer(Cursor::new(string)))?;
                 self.is_ended_file = self.context.goto_beginning(None);                
             },
+            //
             Command::ScrollForwardOneScreenful(count) => {
-                let count = count.unwrap_or(self.args.lines.unwrap_or(2) - 1);
+                let count = count.unwrap_or(self.context.terminal_size.unwrap_or((2, 0)).0 - 1);
                 self.is_ended_file = self.context.scroll(count, Direction::Forward);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
+            //
             Command::ScrollBackwardOneScreenful(count) => {
-                let count = count.unwrap_or(self.args.lines.unwrap_or(2) - 1);
+                let count = count.unwrap_or(self.context.terminal_size.unwrap_or((2, 0)).0 - 1);
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
+                if_eof_set_default(&mut self.prompt);
             },
+            //
             Command::ScrollForwardOneLine{ count, is_space } => {
                 let count = count.unwrap_or(
                     if is_space { self.context.terminal_size.unwrap_or((1, 0)).0 } else { 1 } 
@@ -1474,58 +1495,76 @@ impl MoreControl{
                 self.is_ended_file = self.context.scroll(count, Direction::Forward);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
+            //
             Command::ScrollBackwardOneLine(count) => {
                 let count = count.unwrap_or(1);
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
+                if_eof_set_default(&mut self.prompt);
             },
+            //
             Command::ScrollForwardOneHalfScreenful(count) => {
                 if count.is_some() { self.count_default = count; }; 
                 let count = count.unwrap_or_else(||{ 
                     if let Some(count_default) = self.count_default{
                         count_default
                     } else {
-                        (((self.args.lines.unwrap_or(2) as f32 - 1.0) / 2.0).floor()) as usize
+                        let lines = self.context.terminal_size.unwrap_or((LINES_PER_PAGE as usize, 0)).0 as f32;
+                        (((lines - 1.0) / 2.0).floor()) as usize
                     }
                 });
                 self.is_ended_file = self.context.scroll(count, Direction::Forward);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
+            //
             Command::SkipForwardOneLine(count) => {
                 let count = count.unwrap_or(1);
                 self.is_ended_file = self.context.scroll(count, Direction::Forward);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
+            //
             Command::ScrollBackwardOneHalfScreenful(count) => {
                 if count.is_some() { self.count_default = count; }; 
                 let count = count.unwrap_or_else(||{                   
                     if let Some(count_default) = self.count_default{
                         count_default
                     } else {
-                        (((self.args.lines.unwrap_or(2) as f32 - 1.0) / 2.0).floor()) as usize
+                        let lines = self.context.terminal_size.unwrap_or((LINES_PER_PAGE as usize, 0)).0 as f32;
+                        (((lines - 1.0) / 2.0).floor()) as usize
                     } 
                 });
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
+                if_eof_set_default(&mut self.prompt);
             },
+            //
             Command::GoToBeginningOfFile(count) => {
                 self.is_ended_file = self.context.goto_beginning(count);
+                if_eof_set_default(&mut self.prompt);
             },
+            //
             Command::GoToEOF(count) => {
                 self.is_ended_file = self.context.goto_eof(count);
                 self.if_eof_and_prompt_goto_next_file()?;
             },
+            //
             Command::RefreshScreen => self.refresh()?,
+            //
             Command::DiscardAndRefresh => {
                 self.commands_buffer.clear();
+                if_eof_set_default(&mut self.prompt);
                 self.refresh()?;
             },
+            //
             Command::MarkPosition(letter) => {
                 self.context.set_mark(letter);
             },
+            //
             Command::ReturnMark(letter) => {
                 self.is_ended_file = self.context.goto_mark(letter)?;
             },
+            //x
             Command::ReturnPreviousPosition => {
                 self.is_ended_file =  self.context.return_previous();
+                if_eof_set_default(&mut self.prompt);
             },
             Command::SearchForwardPattern{ 
                 count, 
@@ -1534,6 +1573,7 @@ impl MoreControl{
             } => {
                 let re = Regex::new(pattern.as_str()).map_err(|_| MoreError::StringParseError)?;
                 self.is_ended_file = self.context.search(count, re, is_not, Direction::Forward)?;
+                if_eof_set_default(&mut self.prompt);
             },
             Command::SearchBackwardPattern{ 
                 count, 
@@ -1542,12 +1582,15 @@ impl MoreControl{
             } => {
                 let re = Regex::new(pattern.as_str()).map_err(|_| MoreError::StringParseError)?;
                 self.is_ended_file = self.context.search(count, re, is_not, Direction::Backward)?;
+                if_eof_set_default(&mut self.prompt);
             },
             Command::RepeatSearch(count) => {
                 self.is_ended_file = self.context.repeat_search(count, false)?;
+                if_eof_set_default(&mut self.prompt);
             },
             Command::RepeatSearchReverse(count) => {
                 self.is_ended_file = self.context.repeat_search(count, true)?;
+                if_eof_set_default(&mut self.prompt);
             },
             Command::ExamineNewFile(filename) => self.examine_file(filename)?,
             Command::ExamineNextFile(count) => {
@@ -1562,6 +1605,7 @@ impl MoreControl{
             },
             Command::GoToTag(tagstring) => {
                 self.is_ended_file = self.goto_tag(tagstring)?;
+                if_eof_set_default(&mut self.prompt);
             },
             Command::InvokeEditor => self.invoke_editor()?,
             Command::DisplayPosition => self.set_position_prompt()?,
@@ -1603,13 +1647,11 @@ impl MoreControl{
             MoreError::SetOutsideError => {
                 self.exit();
             },
-            MoreError::InputReadError => {
-                //println!("Error: Can't read stdin.");
-            },
             MoreError::StringParseError => {
                 self.commands_buffer.clear();
                 self.prompt = Some(Prompt::Error(error.to_string()));
             },
+            MoreError::InputReadError |
             MoreError::OutputReadError | 
             MoreError::FileReadError |  
             MoreError::UnknownCommandError => {
@@ -1646,22 +1688,20 @@ impl MoreControl{
         let _ = self.display().inspect_err(|e| self.handle_error(*e));
         loop{
             if self.handle_events().inspect_err(|e| self.handle_error(*e)).is_err() { continue; };
-            let last_buf = self.commands_buffer.clone();
             if let Ok((command, mut remainder, next_possible)) = 
                 parse(self.commands_buffer.clone()).inspect_err(|e| self.handle_error(*e)){
-                if next_possible != Command::UnknownCommand{
-                    self.prompt = Some(Prompt::Input(self.commands_buffer.clone()));
-                    let _ = self.display().inspect_err(|e| self.handle_error(*e));
-                }else{
-                    self.prompt = Some(Prompt::More);
+                if let Some(Prompt::EOF(_)) = self.prompt {} else{
+                    if next_possible != Command::UnknownCommand{
+                        self.prompt = Some(Prompt::Input(self.commands_buffer.clone()));
+                        let _ = self.display().inspect_err(|e| self.handle_error(*e));
+                    }else{
+                        self.prompt = Some(Prompt::More);
+                    }
                 }
-                let last_remainder = remainder.clone();
                 if command == Command::UnknownCommand{ continue; } else{ remainder.clear(); }
                 self.commands_buffer = remainder;
                 let _ = self.execute(command).inspect_err(|e| self.handle_error(*e));
                 let _ = self.display().inspect_err(|e| self.handle_error(*e));
-                //wmove(stdscr(), 0, 0);
-                //let _ = addstr(format!("{:#?}", (last_buf, command.clone(), last_remainder)).as_ref());
             }
         }
     }
@@ -1676,7 +1716,7 @@ fn to_path(file_string: String) -> Result<PathBuf, MoreError>{
     let file_path = Path::new(file_string);
     let file_path = 
         file_path.canonicalize().map_err(|_| MoreError::FileReadError)?;
-    let _ = File::open(file_path).map_err(|_| MoreError::FileReadError)?;
+    let _ = File::open(file_path.clone()).map_err(|_| MoreError::FileReadError)?;
     Ok(file_path)
 }
 
@@ -1819,9 +1859,6 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
                 let Some(ch) = get_char(&commands_str, i) else { break; };
                 match ch{
                     'e' => {
-                        i += 1;
-                        let Some(ch) = get_char(&commands_str, i) else { break; };
-                        if ch == ' ' { i += 1; } else { }
                         let filename = commands_str
                             .chars().skip(i).take_while(|c| { i += 1; *c != '\n' })
                             .collect::<_>();
@@ -1882,7 +1919,7 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
 
 /// Commands usage as [`&str`]
 const COMMAND_USAGE: &str = 
-"h                             Write a summary of implementation-defined commands
+"h                              Write a summary of implementation-defined commands
 [count]f or
 [count]ctrl-F                  Scroll forward count lines, with one default screenful
 [count]b or
@@ -1918,12 +1955,12 @@ ctrl-G                         Write a message for which the information referen
 q or
 :q or
 ZZ                             Exit more\n
-For more see: https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/utilities/more.html";
+For more see: https://pubs.opengroup.org/onlinepubs/9699919799.2018edition/utilities/more.html\n";
 
 /// Returns formated [`COMMAND_USAGE`]
 pub fn commands_usage() -> String{
     let mut buf = String::new();
-    let delimiter = "-".repeat(79);
+    let delimiter = "-".repeat(79) + "\n";
     let delimiter = delimiter.as_str();
     buf.push_str(delimiter);
     buf.push_str(format!("{COMMAND_USAGE}").as_str());
