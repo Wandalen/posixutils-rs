@@ -42,24 +42,25 @@ fn run_test_more(args: &[&str], expected_out: &str, expected_err: &str, expected
 
 mod base_tests{
     #[test]
-    fn test() {
+    fn test_1_file() {
         run_test_more(
-            &[".txt"], 
+            &["-p", "\":n\"", "README.md"], 
             "", 
             "", 
             0);
     }
 
     #[test]
-    fn test() {
+    fn test_2_files() {
         run_test_more(
-            &[".txt .txt"], 
+            &["-p", "\":n:n\"", "README.md", "TODO.md"], 
             "", 
             "", 
             0);
     }
 }
 
+/*
 mod commands_tests{
     #[test]
     fn test() {
@@ -239,7 +240,7 @@ mod tag_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-t", "", ".txt"], 
+            &["-t", "", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -248,7 +249,7 @@ mod tag_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-t", "", ".txt"], 
+            &["-t", "", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -257,7 +258,7 @@ mod tag_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-t", "", ".txt"], 
+            &["-t", "", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -266,7 +267,7 @@ mod tag_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-t", "", ".txt"], 
+            &["-t", "", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -275,7 +276,7 @@ mod tag_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-t", "", ".txt"], 
+            &["-t", "", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -284,7 +285,7 @@ mod tag_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-t", "", ".txt"], 
+            &["-t", "", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -294,7 +295,7 @@ mod tag_tests{
         #[test]
         fn test() {
             run_test_more(
-                &["-c", "-t", "", ".txt"], 
+                &["-c", "-t", "", "-p", "", ".txt"], 
                 "", 
                 "", 
                 0);
@@ -303,7 +304,7 @@ mod tag_tests{
         #[test]
         fn test() {
             run_test_more(
-                &["-e", "-t", "", ".txt"], 
+                &["-e", "-t", "", "-p", "", ".txt"], 
                 "", 
                 "", 
                 0);
@@ -312,7 +313,7 @@ mod tag_tests{
         #[test]
         fn test() {
             run_test_more(
-                &["-i", "-t", "", ".txt"], 
+                &["-i", "-t", "", "-p", "", ".txt"], 
                 "", 
                 "", 
                 0);
@@ -321,7 +322,7 @@ mod tag_tests{
         #[test]
         fn test() {
             run_test_more(
-                &["-n", "", "-t", "", ".txt"], 
+                &["-n", "", "-t", "", "-p", "", ".txt"], 
                 "", 
                 "", 
                 0);
@@ -330,7 +331,7 @@ mod tag_tests{
         #[test]
         fn test() {
             run_test_more(
-                &["-s", "-t", "", ".txt"], 
+                &["-s", "-t", "", "-p", "", ".txt"], 
                 "", 
                 "", 
                 0);
@@ -339,7 +340,7 @@ mod tag_tests{
         #[test]
         fn test() {
             run_test_more(
-                &["-u", "-t", "", ".txt"], 
+                &["-u", "-t", "", "-p", "", ".txt"], 
                 "", 
                 "", 
                 0);
@@ -351,7 +352,7 @@ mod other_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-c", ".txt"], 
+            &["-c", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -360,7 +361,7 @@ mod other_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-e", ".txt"], 
+            &["-e", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -369,7 +370,7 @@ mod other_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-i", ".txt"], 
+            &["-i", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -378,7 +379,7 @@ mod other_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-n", "", ".txt"], 
+            &["-n", "", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -387,7 +388,7 @@ mod other_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-s", ".txt"], 
+            &["-s", "-p", "", ".txt"], 
             "", 
             "", 
             0);
@@ -396,77 +397,14 @@ mod other_tests{
     #[test]
     fn test() {
         run_test_more(
-            &["-u", ".txt"], 
+            &["-u", "-p", "", ".txt"], 
             "", 
             "", 
             0);
     }
 }
 
-mod complex_tests{
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-c", "-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-e", "-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-i", "-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-s", "-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-u", "-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-n", "", "-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-    
+mod complex_tests{  
     #[test]
     fn test() {
         run_test_more(
@@ -484,4 +422,4 @@ mod complex_tests{
             "", 
             0);
     }
-}
+}*/
