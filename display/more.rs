@@ -13,21 +13,15 @@ extern crate clap;
 extern crate plib;
 
 use ncurses::{ 
-    initscr, clear, addch, addstr, tigetflag, wmove, curs_set,
-    tigetnum, keypad, noecho, endwin, getch, stdscr, refresh, 
-    CURSOR_VISIBILITY, A_STANDOUT, A_UNDERLINE, attron, attroff
+    addch, addstr, attroff, attron, clear, curs_set, endwin, getch, initscr, keypad, noecho, refresh, stdscr, tigetnum, wmove, A_STANDOUT, A_UNDERLINE, CURSOR_VISIBILITY, WINDOW
 };
 use gettextrs::{ setlocale, LocaleCategory, textdomain, bind_textdomain_codeset };
 use libc::{ ioctl, TIOCGWINSZ, winsize };
 use std::mem::MaybeUninit;
 use std::process::exit;
-use std::os::fd::{ RawFd, AsRawFd };
-use std::os::raw::c_short;
-use std::sync::{ Arc, Mutex };
-use std::thread;
+use std::os::fd::AsRawFd;
 use std::ops::Not;
 use std::fs::File;
-use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io::{ Seek, Cursor, BufReader, BufRead, Read, SeekFrom};
 use std::collections::HashMap;
@@ -40,7 +34,6 @@ const TERM_COLS: &str = "cols";
 const TERM_LINES: &str = "lines";
 const LINES_PER_PAGE: i32 = 24;
 const NUM_COLUMNS: i32 = 80;
-const POLL_TIMEOUT: i32 = 1;
 const DEFAULT_EDITOR: &str = "vi";
 const CONVERT_STRING_BUF_SIZE: usize = 64;
 
@@ -161,30 +154,6 @@ enum Command {
     Quit
 }
 
-impl Command{
-    /// Returns [`true`] if [`Command`] has [`count`] field else [`false`]
-    fn has_count(&self) -> bool{
-        match self{
-            Command::ScrollForwardOneScreenful(_) |
-            Command::ScrollBackwardOneScreenful(_) |
-            Command::ScrollForwardOneLine{ .. } |
-            Command::ScrollBackwardOneLine(_) |
-            Command::ScrollForwardOneHalfScreenful(_) |
-            Command::SkipForwardOneLine(_) |
-            Command::ScrollBackwardOneHalfScreenful(_) |
-            Command::GoToBeginningOfFile(_) |
-            Command::GoToEOF(_) |
-            Command::SearchForwardPattern{ .. } |
-            Command::SearchBackwardPattern{ .. } |
-            Command::RepeatSearch(_) |
-            Command::RepeatSearchReverse(_) |
-            Command::ExamineNextFile(_) |
-            Command::ExaminePreviousFile(_) => true,
-            _ => false
-        }
-    }
-}
-
 /// All more errors
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 enum MoreError{
@@ -197,9 +166,9 @@ enum MoreError{
     /// Attempt set [`String`] on [`Terminal`] that goes beyond 
     #[error("SetOutsideError")]
     SetOutsideError,
-    /// Errors raised in [`InputHandler::handle_events`]
+    /*/// Errors raised in [`InputHandler::handle_events`]
     #[error("PollError")]
-    PollError,
+    PollError,*/
     /// Read [`std::io::Stdin`] is failed
     #[error("InputReadError")]
     InputReadError,
@@ -377,7 +346,7 @@ struct SeekPositions{
 impl SeekPositions{
     /// Creates new [`SeekPositions`] 
     fn new(source: Source, line_len: Option<usize>, squeeze_lines: bool, plain: bool) -> Result<Self, MoreError>{
-        let mut buffer: Box<dyn SeekRead> = match source.clone(){
+        let buffer: Box<dyn SeekRead> = match source.clone(){
             Source::File(path) => {
                 let Ok(file) = File::open(path) else { 
                     return Err(MoreError::SeekPositionsError(SeekPositionsError::FileReadError)); 
@@ -417,6 +386,7 @@ impl SeekPositions{
         self.positions = vec![0];
         while i < current_line{
             if self.next().is_none() { break; };
+            i += 1;
         }
         count
     }
@@ -539,7 +509,7 @@ impl Iterator for SeekPositions {
             loop{
                 let Some(Ok(byte)) = bytes.next() else { is_ended = true; break; };
                 match byte{ 
-                    byte if nl_count > 0 => { break; },
+                    _ if nl_count > 0 => { break; },
                     b'\x08' | b'\r' => if !self.plain {  },
                     b'\n' => { line_len += 1; 
                         if self.squeeze_lines { nl_count += 1; } else { break; }
@@ -568,7 +538,7 @@ impl Iterator for SeekPositions {
             let _ = self.buffer.seek(SeekFrom::Start(current_position));
             None
         }else{
-            let _ = self.buffer.seek(SeekFrom::Start(next_position)) else { return None; };
+            if self.buffer.seek(SeekFrom::Start(next_position)).is_err() { return None; };
             self.positions.push(next_position);
             Some(next_position)
         }
@@ -715,11 +685,11 @@ impl SourceContext{
 
         let mut current_line = self.seek_positions.current_line();
         let mut content_lines_len = current_line;
-        let mut remain = if terminal_size.0 - 2 > content_lines_len {
-            terminal_size.0 - 2 - content_lines_len
+        let mut remain = if terminal_size.0 - 1 > content_lines_len {
+            terminal_size.0 - 1 - content_lines_len
         }else{ 0 };
-        if terminal_size.0 - 2 < content_lines_len{
-            content_lines_len = terminal_size.0 - 2;
+        if terminal_size.0 - 1 < content_lines_len{
+            content_lines_len = terminal_size.0 - 1;
         } 
         remain = if remain > header_lines.len() {
             remain - header_lines.len() 
@@ -754,9 +724,9 @@ impl SourceContext{
             i += 1;
         }
 
-        wmove(stdscr(), 0, 0);
+        /*wmove(stdscr(), 0, 0);
         let _ = addstr(&format!("{:#?}", 
-        (&previous_lines.len(), &header_lines.len(), &content_lines.len(), self.terminal_size)));
+        (&previous_lines.len(), &header_lines.len(), &content_lines.len(), self.terminal_size)));*/
 
         content_lines.reverse();
         screen_lines.extend(content_lines);
@@ -940,8 +910,8 @@ impl Terminal{
         }
         let size = (win.ws_row as usize, win.ws_col as usize);
         let terminal = Self{ size, plain }; 
-
-        let _ = initscr();
+ 
+        if initscr() == 0 as *mut i8 { return Err(MoreError::TerminalInitError); };
         let _ = keypad(stdscr(), true);
         let _ = noecho();
         let _ = curs_set(CURSOR_VISIBILITY::CURSOR_INVISIBLE);
@@ -961,7 +931,7 @@ impl Terminal{
         for (i, line) in screen.0.iter().enumerate(){
             for (j, (ch, st)) in line.iter().enumerate(){
                 wmove(stdscr(),  i as i32, j as i32);
-                self.set_style(*st);
+                self.set_style(if !self.plain { *st } else { StyleType::None });
                 if addch(*ch as u32) != 0{
                     self.set_style(StyleType::None);
                     /*let _ = wmove(stdscr(), 0, 0);
@@ -1001,7 +971,7 @@ impl Terminal{
         }
         for (i, (ch, st)) in line.iter().enumerate(){
             wmove(stdscr(),  (self.size.0 - 1) as i32, i as i32);
-            self.set_style(*st);
+            self.set_style(if !self.plain { *st } else { StyleType::None });
             if addch(*ch as u32) != 0{
                 /*let _ = wmove(stdscr(), 0, 0);
                 let _ = addstr(&format!("{:#?}", "dp2"));*/
@@ -1460,7 +1430,10 @@ impl MoreControl{
             self.context.seek_positions.seek(*seek)?;
             self.last_source_before_usage = None;
         } else{
-            self.scroll_file_position(Some(0), Direction::Forward)?;
+            //self.scroll_file_position(Some(0), Direction::Forward)?;
+            if let Some(terminal) = self.terminal.as_mut(){
+                terminal.refresh();
+            }
         }
         self.display()
     }
@@ -1542,9 +1515,7 @@ impl MoreControl{
             },
             Command::RefreshScreen => self.refresh()?,
             Command::DiscardAndRefresh => {
-                //let mut buf = Vec::new();
-                //let _ = std::io::stdin().lock().read_to_end(&mut buf);
-                //self.input_handler.lock().unwrap().input_buffer = String::new();
+                self.commands_buffer.clear();
                 self.refresh()?;
             },
             Command::MarkPosition(letter) => {
@@ -1632,7 +1603,6 @@ impl MoreControl{
             MoreError::SetOutsideError => {
                 self.exit();
             },
-            MoreError::PollError => {},
             MoreError::InputReadError => {
                 //println!("Error: Can't read stdin.");
             },
@@ -1655,7 +1625,7 @@ impl MoreControl{
         else { return Ok(()); };
         let mut commands_str= commands_str.clone();
         loop{
-            let (command, mut remainder, _) = parse(commands_str.clone())?;
+            let (command, remainder, _) = parse(commands_str.clone())?;
             if command == Command::UnknownCommand{ 
                 return Err(MoreError::UnknownCommandError) 
             }
@@ -1672,7 +1642,7 @@ impl MoreControl{
     /// Interactive session loop: handle events, parse, execute 
     /// next command, display result. Catch errors as needed
     fn loop_(&mut self) -> !{
-        //let _ = self.process_p().inspect_err(|e| self.handle_error(*e));
+        let _ = self.process_p().inspect_err(|e| self.handle_error(*e));
         let _ = self.display().inspect_err(|e| self.handle_error(*e));
         loop{
             if self.handle_events().inspect_err(|e| self.handle_error(*e)).is_err() { continue; };
@@ -1697,11 +1667,8 @@ impl MoreControl{
     }
 }
 
-//static magic: Arc<Mutex<Option<magic::Cookie<Load>>>> = ;
-
 // If [`String`] contains existed [`PathBuf`] than returns [`PathBuf`]
 fn to_path(file_string: String) -> Result<PathBuf, MoreError>{
-    //let magic: Option<magic::Cookie<Load>> = cookie.load(&Default::default()).ok();
     let file_string = 
         Box::leak::<'static>(file_string.into_boxed_str());
         let file_string = &*file_string;
@@ -1709,17 +1676,7 @@ fn to_path(file_string: String) -> Result<PathBuf, MoreError>{
     let file_path = Path::new(file_string);
     let file_path = 
         file_path.canonicalize().map_err(|_| MoreError::FileReadError)?;
-    /*let _ = File::open(file_path).map_err(|_| MoreError::FileReadError)?;
-
-    if let Ok(metadata) = file_path.metadata(){
-        if metadata.is_dir(){ return Err(MoreError::FileReadError); }
-        //if Some(magic) = magic{
-        if metadata.len() == 0 /*|| !check_magic(self, filepath)*/ { 
-            return Err(MoreError::FileReadError); 
-        }
-        //}
-    } else{ return Err(MoreError::FileReadError); };*/
-
+    let _ = File::open(file_path).map_err(|_| MoreError::FileReadError)?;
     Ok(file_path)
 }
 
@@ -1784,7 +1741,7 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
                     i += 1;
                 }
                 if let Ok(new_count) = count_str.parse::<usize>(){
-                    chars.by_ref().skip(count_str.len());
+                    let _ = chars.by_ref().skip(count_str.len());
                     count = Some(new_count);
                 }
                 continue;
@@ -1914,7 +1871,7 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
         i += 1;
     }
 
-    let mut remainder = if i == commands_str.len() && 
+    let remainder = if i == commands_str.len() && 
         command == Command::UnknownCommand {
         commands_str
     } else{
@@ -1976,403 +1933,9 @@ pub fn commands_usage() -> String{
 
 fn main(){
     let Ok(mut ctl) = MoreControl::new() else { return; };
-    //if ctl.terminal.is_none(){
-    //    ctl.print_all_input();
-    //}else{    
-    ctl.loop_();
-    //}
-}
-
-/*
-loop {
-    let size = file.read(&mut buff)?;
-    if size == 0 { break; }
-    let text = &buffer[..size];
-    let s = match std::str::from_utf8(text) {
-        Ok(s) => s,
-        Err(e) => {
-            let end = e.valid_up_to();
-            let s = unsafe { from_utf8_unchecked(&text[..end]) };
-            let offset = (end - size) as i64;
-            file.seek(SeekFrom::Current(-1 * offset)).unwrap();
-            s
-        }
-    };
-    println!("{}", s);
-}*/
-
-/*
-        if let Some(line_len) = self.line_len{
-            let mut line_buf = vec![b' '; dbg!(line_len)];
-            loop{
-                let current_position = *self.positions.last().unwrap_or(&0);
-                dbg!(current_position);
-                if self.buffer.seek(SeekFrom::Start(current_position)).is_err() { break; };
-                if self.buffer.read_exact(&mut line_buf).is_ok() { 
-                    let mut line = line_buf.to_vec();
-                    dbg!(&line);
-                    
-                    if let Err(err) = std::str::from_utf8(line.as_slice()){
-                        let end = err.valid_up_to();
-                        let offset = (end - line.len()) as i64;
-                        self.buffer.seek(SeekFrom::Current(-1 * offset)).unwrap();
-                    }
-    
-                    let Ok(next_position_unchecked) = self.buffer.stream_position()
-                        .map(|sp| sp as usize) else { break; };
-                    dbg!(next_position_unchecked);
-                    let mut next_position;
-                    if self.plain{
-
-                    } else {
-                        line = line.into_iter().filter_map(|b|{
-                            let res = if b == b'\x08' || b == b'\r'{ None
-                            } else{ Some(b) };
-                            res
-                        }).collect::<Vec<_>>();
-                    }
-                    if self.squeeze_lines{
-                        let mut last_byte = b' ';
-                        line = line.into_iter().filter_map(|b|{
-                            let res = if last_byte == b'\n' && b == b'\n'{ None }
-                            else{ Some(b) };
-                            last_byte = b;
-                            res
-                        }).collect::<Vec<_>>();
-                    }
-
-                    //dbg!(&line);
-                    if let Some(eol_pos) = line.iter().position(|&x| x == b'\n') {
-                        next_position = next_position_unchecked - (line_len - eol_pos);
-                    } else { 
-                        next_position = next_position_unchecked;
-                    }
-                    //dbg!(&next_position);
-                    self.positions.push(next_position as u64);
-                    result = Some(next_position as u64);
-                };
-                break;
-            }
-        }else{  
-            let current_position = *self.positions.last().unwrap_or(&0);
-            if self.buffer.seek(SeekFrom::Start(current_position)).is_err() { return None; }
-            let mut has_lines;
-            {
-                let mut reader = BufReader::new(&mut self.buffer);
-                let mut buf= String::new();
-                let Ok(bytes_readed) = reader.read_line(&mut buf) else { return None; };
-                if self.buffer.seek(SeekFrom::Start(current_position + buf.len() as u64)).is_err() { return None; }
-                has_lines = bytes_readed > 0;
-            }
-            if has_lines{
-                if let Ok(next_position) = self.buffer.stream_position(){
-                    result = Some(next_position);
-                    self.positions.push(next_position);
-                }          
-            }
-        }*/
-
-/*
-    /// Terminal identifier
-    term: termios,
-    /// Result of accessing to stdin for current terminal 
-    tty_in: i32,
-    /// Result of accessing to stdout for current terminal 
-    tty_out: i32,
-    /// Result of accessing to stderr for current terminal 
-    tty_err: i32,
-
-let stdout = std::io::stdout().as_raw_fd();
-let stdin = std::io::stdin().as_raw_fd();
-let stderr = std::io::stderr().as_raw_fd();
-let mut term: termios = unsafe{ MaybeUninit::zeroed().assume_init() };
-
-
-let (tty_in, tty_out, tty_err) = unsafe{( 
-    tcgetattr(stdin, &mut term),
-    tcgetattr(stdout, &mut term),   
-    tcgetattr(stderr, &mut term)
-)};
-
-let mut terminal = Self{
-    term, tty_in, tty_out, tty_err,
-    size: (0, 0), plain
-};
-
-if terminal.tty_out != 0{
-    return Ok(terminal);
-}
-
-term.c_lflag &= !(ICANON | ECHO);
-term.c_cc[VMIN] = 1;
-term.c_cc[VTIME] = 0;        */
-
-
-    /*/// 
-    pub fn set(&mut self){
-        self.term.c_lflag &= !(ICANON | ECHO);
-        self.term.c_cc[VMIN] = 1;
-        self.term.c_cc[VTIME] = 0;
-        unsafe{
-            tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, &mut self.term);
-        }
+    if ctl.terminal.is_none(){
+        ctl.print_all_input();
+    }else{    
+        ctl.loop_();
     }
-
-    /// 
-    pub fn reset(&mut self){
-        if self.tty_out != 0 {
-            self.term.c_lflag |= ICANON | ECHO;
-            self.term.c_cc[VMIN] = self.term.c_cc[VMIN];
-            self.term.c_cc[VTIME] = self.term.c_cc[VTIME];
-            unsafe{
-                tcsetattr(std::io::stderr().as_raw_fd(), TCSANOW, &self.term);
-            }
-        }
-    }*/
-
-
-            /*let mut signals;
-        let mut need_quit;
-
-        {
-            let mut input_handler = self.input_handler.lock().unwrap();
-            need_quit = input_handler.need_quit;
-            signals = input_handler.signals.clone();
-            input_handler.signals.clear();
-            self.commands_buffer.push_str(input_handler.input_buffer.as_str());
-            input_handler.input_buffer.clear();
-        }
-
-        if need_quit{
-            self.exit();
-        }
-
-        for signal in &signals{ 
-            match *signal{
-                SIGINT => self.exit(),
-                SIGQUIT => { need_quit = true; },
-                SIGTSTP => {
-                    let Some(terminal) = self.terminal.as_mut() else { continue; };
-                    //terminal.reset();
-                    unsafe { kill(getpid(), SIGSTOP); }
-                },
-                SIGCONT => {
-                    let Some(terminal) = self.terminal.as_mut() else { continue; };
-                    //terminal.set();
-                },
-                SIGWINCH => {
-                    let Some(ref terminal) = self.terminal else { continue; };
-                    let mut win: winsize = winsize{
-                        ws_row: 0,
-                        ws_col: 0,
-                        ws_xpixel: 0,
-                        ws_ypixel: 0,
-                    };
-                    let mut terminal_size: (usize, usize) = (0, 0);
-                    if unsafe { ioctl(std::io::stdout().as_raw_fd(), TIOCGWINSZ, &mut win) } != -1 {
-                        if win.ws_row != 0 {
-                            terminal_size.0 = win.ws_row as usize;
-                        }else{
-                            terminal_size.0 = terminal.size.0;
-                        }
-                        if win.ws_col != 0 {
-                            terminal_size.1 = win.ws_col as usize;
-                        }else{
-                            terminal_size.1 = terminal.size.1;
-                        }
-                    }
-                    if terminal.size != terminal_size{
-                        self.resize(terminal_size)?;
-                    }
-                },
-                _ => { /*need_exit = true;*/ }
-            }
-        }*/
-
-    /*
-/// Handles signals, input in separate thread
-struct InputHandler{
-    /// Signal file descriptor
-    sigfd: RawFd,
-    /// Signal flags for current program
-    sigset: sigset_t,
-    /// Current signals
-    signals: HashSet<i32>,
-    /// Buffer that stores last input
-    input_buffer: String,
-    /// Flag for closing threads and exit program
-    need_quit: bool
 }
-
-impl InputHandler{
-    /// New [`InputHandler`] in which the current thread is created
-    fn new() -> Arc<Mutex<Self>>{
-        let mut sigset: sigset_t = unsafe{ MaybeUninit::zeroed().assume_init() };
-        let sigfd = unsafe{
-            sigemptyset(&mut sigset as *mut sigset_t);
-            sigaddset(&mut sigset as *mut sigset_t, SIGINT);
-            sigaddset(&mut sigset as *mut sigset_t, SIGQUIT);
-            sigaddset(&mut sigset as *mut sigset_t, SIGTSTP);
-            sigaddset(&mut sigset as *mut sigset_t, SIGCONT);
-            sigaddset(&mut sigset as *mut sigset_t, SIGWINCH);
-            sigprocmask(SIG_BLOCK, &mut sigset as *mut sigset_t, core::ptr::null_mut());
-            signalfd(-1, &mut sigset as *mut sigset_t, SFD_CLOEXEC)
-        };
-
-        let handler = Arc::new(Mutex::new(Self{
-            sigfd: sigfd.clone(),
-            sigset,
-            signals: HashSet::new(),
-            input_buffer: String::new(),
-            need_quit: false
-        }));
-
-        let h = handler.clone(); 
-        thread::spawn(move ||{
-            let sigfd = sigfd;
-            let handler = h;
-            while !handler.lock().unwrap().need_quit{
-                let mut buf = String::new(); 
-                let _ = std::io::stdin().lock().read_to_string(&mut buf);
-                handler.lock().unwrap().input_buffer.push_str(&buf);
-
-                match InputHandler::poll_signals(sigfd){
-                    Ok((signals, need_quit)) => {
-                        handler.lock().unwrap().need_quit = need_quit;
-                        handler.lock().unwrap().signals = signals;
-                    },
-                    Err(_) => {
-                        handler.lock().unwrap().need_quit = true;
-                    } 
-                }
-            }
-        });
-
-        handler
-    }
-
-    /// Handle new signals
-    fn poll_signals(sigfd: RawFd) -> Result<(HashSet<i32>, bool), MoreError>{
-        let mut signals = HashSet::<i32>::new();
-        let mut need_exit = false; 
-        let mut has_data = false;
-
-        let events: c_short = POLLIN | POLLERR | POLLHUP;
-        let mut poll_fds = vec![];
-        for raw_fd in [sigfd, std::io::stdin().as_raw_fd(), std::io::stderr().as_raw_fd()]{
-            poll_fds.push(pollfd{ 
-                fd: raw_fd, 
-                events,
-                revents: 0 as c_short
-            });
-        }
-    
-        while !has_data{
-            /*if self.ignore_stdin {
-                poll_fds[PollFdId::STDIN].fd = -1;
-            }*/
-    
-            let rc = unsafe{ 
-                poll(poll_fds.as_mut_ptr(), poll_fds.len() as u64, POLL_TIMEOUT) 
-            };
-
-            if rc < 0{
-                if std::io::Error::last_os_error().raw_os_error() == Some(EAGAIN) { continue; }
-                return Err(MoreError::PollError);
-            }else if rc == 0{
-                break;
-            }
-            
-            let revents = poll_fds[POLL_SIGNAL].revents;
-            if revents != 0 && revents & POLLIN == 0 {
-                let mut info: signalfd_siginfo = unsafe{ MaybeUninit::zeroed().assume_init() };
-                let sz = unsafe{ read(
-                        sigfd, 
-                        &mut info as *mut signalfd_siginfo as *mut c_void, 
-                        std::mem::size_of::<signalfd_siginfo>()
-                )};
-                match info.ssi_signo as i32 {
-                    SIGINT => { signals.insert(SIGINT); },
-                    SIGQUIT => { signals.insert(SIGQUIT); },
-                    SIGTSTP => { signals.insert(SIGTSTP); },
-                    SIGCONT => { signals.insert(SIGCONT); },
-                    SIGWINCH => { signals.insert(SIGWINCH); },
-                    _ => need_exit = true,
-                }
-            }
-
-            let revents = poll_fds[POLL_STDIN].revents;
-            if revents != 0 {
-                if poll_fds[POLL_SIGNAL].revents & (POLLERR | POLLHUP) != 0 {
-                    need_exit = true;
-                }
-                if poll_fds[POLL_SIGNAL].revents & (POLLHUP | POLLNVAL) != 0 {
-                    //ignore_stdin = true;
-                } else {
-                    has_data = true;
-                }
-            }
-
-            let revents = poll_fds[POLL_STDERR].revents;
-            if revents != 0 && (revents & POLLIN != 0) {
-                has_data = true;
-            }
-        }
-
-        Ok((signals, need_exit))
-    }
-}*/
-
-/*
-use libc::{ 
-    kill, getpid, SIGSTOP, poll, signalfd, sigprocmask, sigaddset, SIGWINCH,
-    SIGCONT, SIGTSTP, SIGQUIT, SIGINT, sigemptyset, ioctl, signalfd_siginfo,
-    EAGAIN, POLLIN, POLLERR, POLLHUP, SFD_CLOEXEC, sigset_t, SIG_BLOCK, TIOCGWINSZ, 
-    winsize, read, pollfd, POLLNVAL, termios, tcsetattr, tcgetattr, VTIME,
-    VMIN, ECHO, ICANON, TCSANOW, c_void
-};
-
-const POLL_SIGNAL: usize = 0;
-const POLL_STDIN: usize = 1;
-const POLL_STDERR: usize = 2;
-*/
-
-
-
-/*
-
-            let mut buf = Vec::with_capacity(CONVERT_STRING_BUF_SIZE);
-            loop{
-                let Some(Ok(byte)) = bytes.next() else { is_ended = true; break; };
-                match byte{ 
-                    byte if nl_count > 0 => { break; },
-                    b'\x08' | b'\r' => if !self.plain {  },
-                    b'\n' => { line_len += 1; 
-                        if self.squeeze_lines { nl_count += 1; } else { break; }
-                    },
-                    _ => { line_len += 1; }
-                }
-                buf.push(byte);
-                if buf.len() >= CONVERT_STRING_BUF_SIZE{
-                    if let Err(err) = std::str::from_utf8(&buf){
-                        buf = buf[err.valid_up_to()..].to_vec();
-                    }else {
-                        buf.clear();
-                    }
-                }
-                if line_len > max_line_len{
-                    if std::str::from_utf8(&buf).is_ok() { break; }
-                }
-            } 
-
-*/
-
-
-    /*/// Returns [`Screen`] rows as [`Vec`] of [`String`]'s
-    fn get(&self) -> Vec<String>{
-        self.0.iter()
-            .map(|row| 
-                row.iter().map(|(c, _)| c).collect::<String>()
-            )
-            .collect::<Vec<_>>()
-    }*/
