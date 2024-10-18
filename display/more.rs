@@ -7,11 +7,6 @@
 // SPDX-License-Identifier: MIT
 //
 
-extern crate ncurses;
-extern crate libc;
-extern crate clap;
-extern crate plib;
-
 use ncurses::{ 
     addch, addstr, attroff, attron, clear, curs_set, endwin, getch, getmaxyx, 
     initscr, keypad, noecho, refresh, stdscr, tigetnum, wmove, A_STANDOUT, 
@@ -24,12 +19,11 @@ use std::process::exit;
 use std::os::fd::AsRawFd;
 use std::ops::Not;
 use std::fs::File;
-use std::ffi::OsStr;
 use std::io::{ Seek, Cursor, BufReader, BufRead, Read, SeekFrom};
 use std::collections::HashMap;
-use std::path::{ Path, PathBuf };
+use std::path::PathBuf;
+use std::str::FromStr;
 use clap::Parser;
-use plib::PROJECT_NAME;
 use regex::Regex;
 
 const TERM_COLS: &str = "cols";
@@ -38,6 +32,7 @@ const LINES_PER_PAGE: i32 = 24;
 const NUM_COLUMNS: i32 = 80;
 const DEFAULT_EDITOR: &str = "vi";
 const CONVERT_STRING_BUF_SIZE: usize = 64;
+const PROJECT_NAME: &str = "posixutils-rs";
 
 /// more - display files on a page-by-page basis.
 #[derive(Parser)]
@@ -616,7 +611,7 @@ impl SourceContext{
             )?, 
             header_lines_count: if let Source::File(path) = source{
                 let header = 
-                    format_file_header(path, terminal_size.map(|(_, c)| c));
+                    format_file_header(path, terminal_size.map(|(_, c)| c))?;
                 Some(header.len())
             }else{
                 None
@@ -674,7 +669,7 @@ impl SourceContext{
         let mut previous_lines = vec![];
         if self.is_many_files{
             if let Source::File(path) = &self.current_source{
-                header_lines = format_file_header(path.clone(), Some(terminal_size.1));
+                header_lines = format_file_header(path.clone(), Some(terminal_size.1))?;
             }
         }
 
@@ -1013,7 +1008,9 @@ enum Prompt{
     /// User input for pattern searching 
     Input(String),
     /// Inform user about raised errors, program state
-    Error(String)    
+    Error(String),
+    /// Message that inform user that session is ended
+    Exit
 }
 
 impl Prompt{
@@ -1025,7 +1022,8 @@ impl Prompt{
             Prompt::EOF(next_file) => format!("-- More --(Next file: {next_file})"),
             Prompt::DisplayPosition(position) => position.clone(),
             Prompt::Input(input) => input.clone(),
-            Prompt::Error(error) => error.clone()
+            Prompt::Error(error) => error.clone(),
+            Prompt::Exit => "Press Enter to exit ...".to_string(),
         };
 
         let style= match self{
@@ -1072,13 +1070,7 @@ struct MoreControl{
 
 impl MoreControl{
     /// Init [`MoreControl`]
-    fn new() -> Result<Self, MoreError>{
-        setlocale(LocaleCategory::LcAll, "");
-        let _ = textdomain(PROJECT_NAME);
-        let _ = bind_textdomain_codeset(PROJECT_NAME, "UTF-8");
-        setlocale(LocaleCategory::LcAll, "");
-
-        let args = Args::parse();
+    fn new(args: Args) -> Result<Self, MoreError>{
         let terminal = Terminal::new(args.plain).ok();
         let mut current_position = None;
         let mut file_pathes = vec![];
@@ -1135,12 +1127,13 @@ impl MoreControl{
             }
         }else{
             for file_path in &input_files{
-                let Ok(_) = self.context.set_source(Source::File(file_path.clone())) else { return; };
+                let Ok(_) = self.context.set_source(Source::File(file_path.clone()))
+                    .inspect_err(|e| self.handle_error(*e)) else { return; };
                 if input_files.len() > 1{
-                    let header = format_file_header(
+                    let Ok(header) = format_file_header(
                         file_path.clone(), 
                         self.context.terminal_size.map(|ts| ts.1)
-                    );
+                    ).inspect_err(|e| self.handle_error(*e)) else { return; };
                     for line in header{
                         println!("{line}");
                     }
@@ -1371,12 +1364,17 @@ impl MoreControl{
             ) + 1;
 
             if let Some(next_file) = self.file_pathes.get(next_position){
-                let name_and_ext = name_and_ext(next_file.clone());
+                let name_and_ext = name_and_ext(next_file.clone())?;
                 if let Some(Prompt::EOF(_)) = self.prompt{
                     if self.scroll_file_position(Some(1), Direction::Forward).is_err(){
                         self.exit();
                     }
-                    self.prompt = Some(Prompt::More);
+                    if self.current_position == Some(self.file_pathes.len() - 1) && 
+                        self.context.seek_positions.current_line() == self.context.seek_positions.len(){
+                        self.prompt = Some(Prompt::Exit);
+                    } else {
+                        self.prompt = Some(Prompt::More);
+                    }
                 }else{
                     self.prompt = Some(Prompt::EOF(name_and_ext));
                 }
@@ -1694,27 +1692,22 @@ impl MoreControl{
 
 // If [`String`] contains existed [`PathBuf`] than returns [`PathBuf`]
 fn to_path(file_string: String) -> Result<PathBuf, MoreError>{
-    let file_string = 
-        Box::leak::<'static>(file_string.into_boxed_str());
-        let file_string = &*file_string;
-
-    let file_path = Path::new(file_string);
-    let file_path = 
-        file_path.canonicalize().map_err(|_| MoreError::FileReadError)?;
-    let _ = File::open(file_path.clone()).map_err(|_| MoreError::FileReadError)?;
+    let file_path = PathBuf::from_str(file_string.as_str())
+        .map_err(|_| MoreError::FileReadError)?;
+    file_path.metadata().map_err(|_| MoreError::FileReadError)?;
     Ok(file_path)
 }
 
 /// Get formated file name and extension from [`PathBuf`]
-fn name_and_ext(path: PathBuf) -> String {
-    let file_name = path.file_name().unwrap_or(OsStr::new("<error>"));
-    let file_name = file_name.to_str().unwrap_or("<error>");
-    format!("{}", file_name)
+fn name_and_ext(path: PathBuf) -> Result<String, MoreError> {
+    let file_name = path.file_name().ok_or(MoreError::FileReadError)?;
+    let file_name = file_name.to_str().ok_or(MoreError::FileReadError)?;
+    Ok(file_name.to_string())
 }
 
 /// Format file header that can be displayed if input files count more than 1
-fn format_file_header(file_path: PathBuf, line_len: Option<usize>) -> Vec<String>{
-    let name_and_ext = name_and_ext(file_path);
+fn format_file_header(file_path: PathBuf, line_len: Option<usize>) -> Result<Vec<String>, MoreError>{
+    let name_and_ext = name_and_ext(file_path)?;
     
     let (mut name_and_ext, border) = if let Some(line_len) = line_len{
         let header_width = if name_and_ext.len() < 14{ 
@@ -1736,12 +1729,7 @@ fn format_file_header(file_path: PathBuf, line_len: Option<usize>) -> Vec<String
 
     name_and_ext.insert(0, border.clone());
     name_and_ext.push(border);
-    name_and_ext
-}
-
-/// Get char from [`&str`] by its position
-fn get_char(string: &str, position: usize) -> Option<char>{
-    string.chars().nth(position)
+    Ok(name_and_ext)
 }
 
 /// Parses [`String`] into [`Command`] and returns result with reminder
@@ -1751,22 +1739,21 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
     let mut next_possible_command = Command::UnknownCommand;
     
     let mut i = 0;
-    let mut chars = commands_str.chars();
-    let commands_str_len= commands_str.len();
+    let chars = commands_str.chars().collect::<Vec<_>>();
+    let commands_str_len = commands_str.len();
 
     while command == Command::UnknownCommand && i < commands_str_len{
-        let Some(ch) = chars.next() else { break; };
+        let Some(ch) = chars.get(i) else { break; };
         command = match ch{
             ch if ch.is_numeric() => {
                 let mut count_str = String::new();
                 loop{
-                    let Some(ch) = get_char(&commands_str, i) else { break; };
+                    let Some(ch) = chars.get(i) else { break; };
                     if !ch.is_numeric(){ break; }
-                    count_str.push(ch);
+                    count_str.push(*ch);
                     i += 1;
                 }
                 if let Ok(new_count) = count_str.parse::<usize>(){
-                    let _ = chars.by_ref().skip(count_str.len());
                     count = Some(new_count);
                 }
                 continue;
@@ -1786,9 +1773,9 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
             'R' => Command::DiscardAndRefresh,
             'm' => {
                 i += 1;
-                let Some(ch) = get_char(&commands_str, i) else { break; };
+                let Some(ch) = chars.get(i) else { break; };
                 if ch.is_ascii_lowercase() {
-                    Command::MarkPosition(ch)
+                    Command::MarkPosition(*ch)
                 }else{
                     next_possible_command = Command::MarkPosition(' ');
                     Command::UnknownCommand
@@ -1796,14 +1783,14 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
             },
             '/' => {
                 i += 1;
-                let Some(ch) = get_char(&commands_str, i) else { break; };
-                let is_not = ch == '!';
+                let Some(ch) = chars.get(i) else { break; };
+                let is_not = *ch == '!';
                 if is_not { i += 1; }
                 let pattern = commands_str
                     .chars().skip(i).take_while(|c| { i += 1; *c != '\n' })
                     .collect::<_>();
-                let Some(ch) = get_char(&commands_str, i - 1) else { break; };
-                if ch == '\n' {
+                let Some(ch) = chars.get(i - 1) else { break; };
+                if *ch == '\n' {
                     Command::SearchForwardPattern{ count, is_not, pattern }
                 }else{
                     next_possible_command = Command::SearchForwardPattern { count: None, is_not: false, pattern: "".to_string() };
@@ -1812,14 +1799,14 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
             },
             '?' => {
                 i += 1;
-                let Some(ch) = get_char(&commands_str, i) else { break; };
-                let is_not = ch == '!';
+                let Some(ch) = chars.get(i) else { break; };
+                let is_not = *ch == '!';
                 if is_not { i += 1; }
                 let pattern = commands_str
                     .chars().skip(i).take_while(|c| { i += 1; *c != '\n' })
                     .collect::<_>();
-                let Some(ch) = get_char(&commands_str, i - 1) else { break; };
-                if ch == '\n' {
+                let Some(ch) = chars.get(i - 1) else { break; };
+                if *ch == '\n' {
                     Command::SearchBackwardPattern{ count, is_not, pattern }
                 }else{
                     next_possible_command = Command::SearchBackwardPattern { count: None, is_not: false, pattern: "".to_string() };
@@ -1832,8 +1819,8 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
             'N' => Command::RepeatSearchReverse(count),
             '\'' => {
                 i += 1;
-                let Some(ch) = get_char(&commands_str, i) else { break; };
-                match ch{
+                let Some(ch) = chars.get(i) else { break; };
+                match *ch{
                     '\'' => Command::ReturnPreviousPosition,
                     ch  if ch.is_ascii_lowercase() => Command::ReturnMark(ch),
                     _ => { next_possible_command = Command::ReturnMark(' '); Command::UnknownCommand }
@@ -1841,14 +1828,14 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
             },
             ':' => {
                 i += 1;
-                let Some(ch) = get_char(&commands_str, i) else { break; };
-                match ch{
+                let Some(ch) = chars.get(i) else { break; };
+                match *ch{
                     'e' => {
                         let filename = commands_str
                             .chars().skip(i).take_while(|c| { i += 1; *c != '\n' })
                             .collect::<_>();
-                        let Some(ch) = get_char(&commands_str, i - 1) else { break; };
-                        if ch == '\n' {
+                        let Some(ch) = chars.get(i - 1) else { break; };
+                        if *ch == '\n' {
                             Command::ExamineNewFile(filename)
                         }else{
                             next_possible_command = Command::ExamineNewFile("".to_string());
@@ -1859,13 +1846,13 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
                     'p' => Command::ExaminePreviousFile(count),
                     't' => {
                         i += 1;
-                        let Some(ch) = get_char(&commands_str, i) else { break; };
-                        if ch == ' ' { i += 1; } else { }
+                        let Some(ch) = chars.get(i) else { break; };
+                        if *ch == ' ' { i += 1; } else { }
                         let tagstring = commands_str
                             .chars().skip(i).take_while(|c| { i += 1; *c != '\n' })
                             .collect::<_>();
-                        let Some(ch) = get_char(&commands_str, i - 1) else { break; };
-                        if ch == '\n' {
+                        let Some(ch) = chars.get(i - 1) else { break; };
+                        if *ch == '\n' {
                             Command::GoToTag(tagstring)
                         }else{
                             next_possible_command = Command::GoToTag(" ".to_string());
@@ -1878,8 +1865,8 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
             },
             'Z' => {
                 i += 1;
-                let Some(ch) = get_char(&commands_str, i) else { break; };
-                match ch{
+                let Some(ch) = chars.get(i) else { break; };
+                match *ch{
                     'Z' => Command::Quit,
                     _ => Command::UnknownCommand
                 } 
@@ -1893,7 +1880,7 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
         i += 1;
     }
 
-    let remainder = if i == commands_str.len() && 
+    let remainder = if i >= commands_str.len() && 
         command == Command::UnknownCommand {
         commands_str
     } else{
@@ -1906,7 +1893,7 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError>{
 const COMMAND_USAGE: &str = 
 "h                              Write a summary of implementation-defined commands
 [count]f or
-[count]ctrl-F                  Scroll forward count lines, with one default screenful
+[count]ctrl-F                  Scroll forward count lines, with one default screenful ([count] - unsigned integer)
 [count]b or
 [count]ctrl-B                  Scroll backward count lines, with one default screenful
 [count]<space> or 
@@ -1948,13 +1935,20 @@ pub fn commands_usage() -> String{
     let delimiter = "-".repeat(79) + "\n";
     let delimiter = delimiter.as_str();
     buf.push_str(delimiter);
-    buf.push_str(format!("{COMMAND_USAGE}").as_str());
+    buf.push_str(COMMAND_USAGE);
     buf.push_str(delimiter);
     buf
 }
 
 fn main(){
-    let Ok(mut ctl) = MoreControl::new() else { return; };
+    setlocale(LocaleCategory::LcAll, "");
+    let _ = textdomain(PROJECT_NAME);
+    let _ = bind_textdomain_codeset(PROJECT_NAME, "UTF-8");
+    setlocale(LocaleCategory::LcAll, "");
+
+    let args = Args::parse();
+
+    let mut ctl = MoreControl::new(args).unwrap();
     if ctl.terminal.is_none(){
         ctl.print_all_input();
     }else{    
