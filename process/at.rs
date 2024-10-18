@@ -1,12 +1,28 @@
-use clap::{error::ErrorKind, Parser};
+use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use libc::{getlogin, getpwnam, getpwuid, passwd, uid_t};
 use plib::PROJECT_NAME;
 
-use std::process;
+use std::{
+    env,
+    ffi::{CStr, CString},
+    process,
+};
 
 /// at - execute commands at a later time
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about)]
+#[command(
+    author,
+    version,
+    about = "at - execute commands at a later time",
+    long_about = "The 'at' command schedules commands to be executed later.\n\
+                  Usage:\n\
+                  at [-m] [-f file] [-q queuename] -t time_arg\n\
+                  at [-m] [-f file] [-q queuename] timespec...\n\
+                  at -r at_job_id...\n\
+                  at -l -q queuename\n\
+                  at -l [at_job_id...]"
+)]
 struct Args {
     /// Change the environment to what would be expected if the user actually logged in again (letter `l`).
     #[arg(short = 'l', long)]
@@ -41,21 +57,71 @@ struct Args {
     at_job_ids: Vec<String>,
 }
 
-fn at(_args: Args) -> Result<(), std::io::Error> {
+fn at(args: Args) -> Result<(), std::io::Error> {
+    if args.mail {
+        let real_uid = unsafe { libc::getuid() };
+        let mut mailname = get_login_name();
+
+        if mailname
+            .as_ref()
+            .and_then(|name| get_user_info_by_name(name))
+            .is_none()
+        {
+            if let Some(pass_entry) = get_user_info_by_uid(real_uid) {
+                mailname = unsafe {
+                    // Safely convert pw_name using CString, avoiding memory leaks.
+                    let cstr = CString::from_raw(pass_entry.pw_name as *mut i8);
+                    cstr.to_str().ok().map(|s| s.to_string())
+                };
+            }
+        }
+
+        match mailname {
+            Some(name) => println!("Mailname: {}", name),
+            None => println!("Failed to retrieve mailname."),
+        }
+    }
+
     Ok(())
+}
+
+fn get_login_name() -> Option<String> {
+    // Try to get the login name using getlogin
+    unsafe {
+        let login_ptr = getlogin();
+        if !login_ptr.is_null() {
+            if let Ok(c_str) = CStr::from_ptr(login_ptr).to_str() {
+                return Some(c_str.to_string());
+            }
+        }
+    }
+
+    // Fall back to checking the LOGNAME environment variable
+    env::var("LOGNAME").ok()
+}
+
+fn get_user_info_by_name(name: &str) -> Option<passwd> {
+    let c_name = CString::new(name).unwrap();
+    let pw_ptr = unsafe { getpwnam(c_name.as_ptr()) };
+    if pw_ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { *pw_ptr })
+    }
+}
+
+fn get_user_info_by_uid(uid: uid_t) -> Option<passwd> {
+    let pw_ptr = unsafe { getpwuid(uid) };
+    if pw_ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { *pw_ptr })
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::try_parse().unwrap_or_else(|err| {
-        if err.kind() == ErrorKind::DisplayHelp || err.kind() == ErrorKind::DisplayVersion {
-            // Print help or version message
-            eprintln!("{}", err);
-        } else {
-            // Print custom error message
-            eprintln!("Error parsing arguments: {}", err);
-        }
-
-        // Exit with a non-zero status code
+        eprintln!("{}", err);
         std::process::exit(1);
     });
 
