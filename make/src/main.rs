@@ -213,7 +213,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if keep_going {
-            eprintln!("{}: Target {} not remade because of errors", gettext("make"), target);
+            eprintln!(
+                "{}: Target {} not remade because of errors",
+                gettext("make"),
+                target
+            );
             had_error = true;
         }
 
@@ -222,13 +226,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if had_error { status_code = 2; }
+    if had_error {
+        status_code = 2;
+    }
     process::exit(status_code);
 }
 
-fn print_rules(
-    rules: &BTreeMap<String, BTreeSet<String>>,
-) {
+fn print_rules(rules: &BTreeMap<String, BTreeSet<String>>) {
     print!("{:?}", rules);
 }
 

@@ -43,7 +43,7 @@ impl Target {
     pub fn name(&self) -> &'static str {
         match self {
             Target::Simple { name } => name,
-            Target::Inference { name, from, to } => name,
+            Target::Inference { name, .. } => name,
             Target::Special(target) => match target {
                 SpecialTarget::Default => ".DEFAULT",
                 SpecialTarget::Ignore => ".IGNORE",

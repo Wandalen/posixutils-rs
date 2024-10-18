@@ -148,16 +148,14 @@ fn generate_macro_table(
 
         match operator {
             Operator::Equals => {}
-            Operator::Colon | Operator::Colon2 => {
-                loop {
-                    let (result, substitutions) = substitute(&macro_body, &macro_table)?;
-                    if substitutions == 0 {
-                        break;
-                    } else {
-                        macro_body = result
-                    }
+            Operator::Colon | Operator::Colon2 => loop {
+                let (result, substitutions) = substitute(&macro_body, &macro_table)?;
+                if substitutions == 0 {
+                    break;
+                } else {
+                    macro_body = result
                 }
-            }
+            },
             Operator::Colon3 => {
                 macro_body = substitute(&macro_body, &macro_table)?.0;
             }

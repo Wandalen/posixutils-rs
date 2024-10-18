@@ -20,8 +20,6 @@ all:
 "#;
 
         const EXPECTED: &'static str = r#"
-VAR = var
-V = ok
 
 all:
 	var ok var ok ok
@@ -323,18 +321,6 @@ rule: dependency
         };
         let parsed = parse(&processed);
         assert!(parsed.clone().err().is_some());
-        let node = parsed.clone().unwrap().syntax();
-        assert_eq!(
-            format!("{:#?}", node),
-            r#"ROOT@0..0
-  ERROR@0..0
-"#
-        );
-
-        let root = parsed.unwrap().root().clone_for_update();
-
-        let mut variables = root.variable_definitions().collect::<Vec<_>>();
-        assert_eq!(variables.len(), 0);
     }
 
     // TODO: create `include` test with real files

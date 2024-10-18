@@ -18,7 +18,13 @@ use crate::{
     parser::{Rule as ParsedRule, VariableDefinition},
     signal_handler, DEFAULT_SHELL, DEFAULT_SHELL_VAR,
 };
+use config::Config;
+use gettextrs::gettext;
+use prerequisite::Prerequisite;
+use recipe::config::Config as RecipeConfig;
+use recipe::Recipe;
 use std::collections::VecDeque;
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::{
     collections::HashMap,
@@ -28,17 +34,12 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
     time::SystemTime,
 };
-use std::io::ErrorKind;
-use config::Config;
-use gettextrs::gettext;
-use prerequisite::Prerequisite;
-use recipe::config::Config as RecipeConfig;
-use recipe::Recipe;
 use target::Target;
 
 type LazyArcMutex<T> = LazyLock<Arc<Mutex<T>>>;
 
-pub static INTERRUPT_FLAG: LazyArcMutex<Option<(String, bool)>> = LazyLock::new(|| Arc::new(Mutex::new(None)));
+pub static INTERRUPT_FLAG: LazyArcMutex<Option<(String, bool)>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Rule {
@@ -53,15 +54,15 @@ pub struct Rule {
 }
 
 impl Rule {
-    pub fn targets(&self) -> impl Iterator<Item=&Target> {
+    pub fn targets(&self) -> impl Iterator<Item = &Target> {
         self.targets.iter()
     }
 
-    pub fn prerequisites(&self) -> impl Iterator<Item=&Prerequisite> {
+    pub fn prerequisites(&self) -> impl Iterator<Item = &Prerequisite> {
         self.prerequisites.iter()
     }
 
-    pub fn recipes(&self) -> impl Iterator<Item=&Recipe> {
+    pub fn recipes(&self) -> impl Iterator<Item = &Recipe> {
         self.recipes.iter()
     }
 
@@ -97,11 +98,14 @@ impl Rule {
         } = self.config;
 
         let files = match target {
-            Target::Inference { name, from, to } => find_files_with_extension(from)?.into_iter().map(|input| {
-                let mut output = input.clone();
-                output.set_extension(to);
-                (input, output)
-            }).collect::<Vec<_>>(),
+            Target::Inference { from, to, .. } => find_files_with_extension(from)?
+                .into_iter()
+                .map(|input| {
+                    let mut output = input.clone();
+                    output.set_extension(to);
+                    (input, output)
+                })
+                .collect::<Vec<_>>(),
             _ => {
                 vec![(PathBuf::from(""), PathBuf::from(""))]
             }
@@ -160,11 +164,15 @@ impl Rule {
                 }
 
                 let mut command = Command::new(
-                    env::var(DEFAULT_SHELL_VAR).as_ref().map(|s| s.as_str()).unwrap_or(DEFAULT_SHELL),
+                    env::var(DEFAULT_SHELL_VAR)
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or(DEFAULT_SHELL),
                 );
 
                 self.init_env(env_macros, &mut command, macros);
-                let recipe = self.substitute_internal_macros(target, recipe, &inout, self.prerequisites());
+                let recipe =
+                    self.substitute_internal_macros(target, recipe, &inout, self.prerequisites());
                 command.args(["-c", recipe.as_ref()]);
 
                 let status = match command.status() {
@@ -217,7 +225,7 @@ impl Rule {
         target: &Target,
         recipe: &Recipe,
         files: &(PathBuf, PathBuf),
-        mut prereqs: impl Iterator<Item=&'a Prerequisite>,
+        mut prereqs: impl Iterator<Item = &'a Prerequisite>,
     ) -> Recipe {
         let recipe = recipe.inner();
         let mut stream = recipe.chars();
@@ -230,18 +238,20 @@ impl Rule {
             }
 
             match stream.next() {
-                Some('@') => if let Some(s) = target.as_ref().split('(').next() {
-                    result.push_str(
-                        s
-                    )
-                },
+                Some('@') => {
+                    if let Some(s) = target.as_ref().split('(').next() {
+                        result.push_str(s)
+                    }
+                }
                 Some('%') => {
                     if let Some(body) = target.as_ref().split('(').nth(1) {
                         result.push_str(body.strip_suffix(')').unwrap_or(body))
                     }
                 }
                 Some('?') => {
-                    (&mut prereqs).map(|x| x.as_ref()).for_each(|x| result.push_str(x));
+                    (&mut prereqs)
+                        .map(|x| x.as_ref())
+                        .for_each(|x| result.push_str(x));
                 }
                 Some('$') => result.push('$'),
                 Some('<') => result.push_str(files.0.to_str().unwrap()),
@@ -258,12 +268,15 @@ impl Rule {
 
     /// A helper function to initialize env vars for shell commands.
     fn init_env(&self, env_macros: bool, command: &mut Command, variables: &[VariableDefinition]) {
-        let mut macros: HashMap<String, String> = variables.iter().map(|v| {
-            (
-                v.name().unwrap_or_default(),
-                v.raw_value().unwrap_or_default(),
-            )
-        }).collect();
+        let mut macros: HashMap<String, String> = variables
+            .iter()
+            .map(|v| {
+                (
+                    v.name().unwrap_or_default(),
+                    v.raw_value().unwrap_or_default(),
+                )
+            })
+            .collect();
 
         if env_macros {
             let env_vars: HashMap<String, String> = std::env::vars().collect();
@@ -298,7 +311,9 @@ fn find_files_with_extension(ext: &str) -> Result<Vec<PathBuf>, ErrorCode> {
     use std::{env, fs};
 
     let mut result = vec![];
-    let Ok(current) = env::current_dir() else { Err(IoError(ErrorKind::PermissionDenied))? };
+    let Ok(current) = env::current_dir() else {
+        Err(IoError(ErrorKind::PermissionDenied))?
+    };
     let mut dirs_to_walk = VecDeque::new();
     dirs_to_walk.push_back(current);
 

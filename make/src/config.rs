@@ -51,7 +51,7 @@ impl Default for Config {
             clear: false,
             print: false,
             precious: false,
-            terminate: true, 
+            terminate: true,
             rules: BTreeMap::from([
                 (
                     ".SUFFIXES".to_string(),
