@@ -1188,16 +1188,16 @@ fn if_eof_set_default(prompt: &mut Option<Prompt>) {
 }
 
 fn compile_regex(pattern: String, ignore_case: bool) -> Result<regex_t, MoreError> {
-    let pattern = pattern.replace("\\\\", "\\");
+    let mut pattern = pattern.replace("\\\\", "\\");
     let mut cflags = 0;
     if ignore_case {
         cflags |= REG_ICASE;
     }
 
-    /// macOS version of [regcomp](regcomp) from `libc` provides additional check
-    /// for empty regex. In this case, an error
-    /// [REG_EMPTY](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/regcomp.3.html)
-    /// will be returned. Therefore, an empty pattern is replaced with ".*".
+    // macOS version of [regcomp](regcomp) from `libc` provides additional check
+    // for empty regex. In this case, an error
+    // [REG_EMPTY](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/regcomp.3.html)
+    // will be returned. Therefore, an empty pattern is replaced with ".*".
     #[cfg(target_os = "macos")]
     {
         pattern = if pattern == "" {
