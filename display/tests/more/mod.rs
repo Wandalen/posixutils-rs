@@ -40,386 +40,379 @@ fn run_test_more(args: &[&str], expected_out: &str, expected_err: &str, expected
     );
 }
 
-mod base_tests{
-    #[test]
-    fn test_1_file() {
-        run_test_more(
-            &["-p", "\":n\"", "README.md"], 
-            "", 
-            "", 
-            0);
-    }
+// base_tests
+#[test]
+fn test_1_file() {
+    run_test_more(
+        &["-p", "\":n\"", "README.md"], 
+        "", 
+        "", 
+        0);
+}
 
-    #[test]
-    fn test_2_files() {
-        run_test_more(
-            &["-p", "\":n:n\"", "README.md", "TODO.md"], 
-            "", 
-            "", 
-            0);
-    }
+#[test]
+fn test_2_files() {
+    run_test_more(
+        &["-p", "\":n:n\"", "README.md", "TODO.md"], 
+        "", 
+        "", 
+        0);
 }
 
 /*
-mod commands_tests{
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    mod with_flags_tests{
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-c", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-e", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-i", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-n", "", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-s", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-u", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    }
+// commands_tests
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
 }
 
-mod tag_tests{
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-t", "", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-t", "", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-t", "", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-t", "", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-t", "", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-t", "", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    mod with_flags_tests{
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-c", "-t", "", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-e", "-t", "", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-i", "-t", "", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-n", "", "-t", "", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-s", "-t", "", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    
-        #[test]
-        fn test() {
-            run_test_more(
-                &["-u", "-t", "", "-p", "", ".txt"], 
-                "", 
-                "", 
-                0);
-        }
-    }
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
 }
 
-mod other_tests{
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-c", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-e", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-i", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-n", "", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-s", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
-
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-u", "-p", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
 }
 
-mod complex_tests{  
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-ceisu", "-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
 
-    #[test]
-    fn test() {
-        run_test_more(
-            &["-ceisu", "-n", "", "-p", "", "-t", "", ".txt"], 
-            "", 
-            "", 
-            0);
-    }
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+// with_flags_tests
+#[test]
+fn test() {
+    run_test_more(
+        &["-c", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-e", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-i", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-n", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-s", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-u", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+// tag_tests
+#[test]
+fn test() {
+    run_test_more(
+        &["-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+// with_flags_tests{
+#[test]
+fn test() {
+    run_test_more(
+        &["-c", "-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-e", "-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-i", "-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-n", "", "-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-s", "-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-u", "-t", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+// other_tests
+#[test]
+fn test() {
+    run_test_more(
+        &["-c", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-e", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-i", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-n", "", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-s", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-u", "-p", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+// complex_tests  
+#[test]
+fn test() {
+    run_test_more(
+        &["-ceisu", "-p", "", "-t", "", ".txt"], 
+        "", 
+        "", 
+        0);
+}
+
+#[test]
+fn test() {
+    run_test_more(
+        &["-ceisu", "-n", "", "-p", "", "-t", "", ".txt"], 
+        "", 
+        "", 
+        0);
 }*/
