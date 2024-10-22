@@ -11,8 +11,8 @@ rust-version.workspace = true
 clap.workspace = true
 gettext-rs.workspace = true
 libc = { version = "0.2.159", default-features = false }
-regex = "1.11.0"
-ncurses = "6.0.1"
+termion = "4.0.3"
+simple-signal = "1.1.1"
 thiserror = "1.0.64"
 
 [dev-dependencies]
