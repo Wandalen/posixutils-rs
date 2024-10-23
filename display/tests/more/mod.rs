@@ -46,7 +46,7 @@ fn run_test_more(
     );
 }
 
-// base_tests
+// base tests
 #[test]
 fn test_minus_files() {
     run_test_more(
@@ -70,7 +70,7 @@ fn test_0_files() {
 #[test]
 fn test_1_file() {
     run_test_more(
-        &["-p", "\":n\"", "test_files/README.md"], 
+        &["--test", "-p", "\":n\"", "test_files/README.md"], 
         "",
         "", 
         "", 
@@ -80,18 +80,18 @@ fn test_1_file() {
 #[test]
 fn test_3_files() {
     run_test_more(
-        &["-p", "\":n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-p", ":n:n:n", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
         0);
 }
 
-// commands_tests
+// commands tests
 #[test]
 fn test_help() {
     run_test_more(
-        &["-p", "\"h:n:n\"", "test_files/README.md"], 
+        &["--test", "-p", "\"h:n:n\"", "test_files/README.md"], 
         "", 
         "",
         "", 
@@ -101,7 +101,7 @@ fn test_help() {
 #[test]
 fn test_scroll_forward_screenful() {
     run_test_more(
-        &["-p", "\"f\x06f\x06f\x06\"", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-p", "\"f\x06f\x06f\x06\"", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -111,7 +111,7 @@ fn test_scroll_forward_screenful() {
 #[test]
 fn test_scroll_backward_screenful() {
     run_test_more(
-        &["-p", "\"f\x06f\x06b\x02b\x02b\x02:n\"", "test_files/README.md"], 
+        &["--test", "-p", "\"f\x06f\x06b\x02b\x02b\x02:n\"", "test_files/README.md"], 
         "", 
         "",
         "", 
@@ -121,7 +121,7 @@ fn test_scroll_backward_screenful() {
 #[test]
 fn test_scroll_forward_one_line() {
     run_test_more(
-        &["-p", "\" j\n j\n j\n j\n:n j\n j\n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\" j\n j\n j\n j\n:n j\n j\n\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -131,7 +131,7 @@ fn test_scroll_forward_one_line() {
 #[test]
 fn test_scroll_backward_one_line() {
     run_test_more(
-        &["-p", "\"jjjjjkkkkkkkkk:nkkkjjjj\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"jjjjjkkkkkkkkk:nkkkjjjj\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -141,7 +141,7 @@ fn test_scroll_backward_one_line() {
 #[test]
 fn test_scroll_forward_halfscreen() {
     run_test_more(
-        &["-p", "\"d\x04d\x04d\x04\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"d\x04d\x04d\x04:nd\x04\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -151,7 +151,7 @@ fn test_scroll_forward_halfscreen() {
 #[test]
 fn test_scroll_backward_halfscreen() {
     run_test_more(
-        &["-p", "\"d\x04d\x04d\x04u\x15u\x15u\x15u\x15:nu\x15d\x04\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"d\x04d\x04d\x04u\x15u\x15u\x15u\x15:nu\x15d\x04\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -161,7 +161,7 @@ fn test_scroll_backward_halfscreen() {
 #[test]
 fn test_skip_lines() {
     run_test_more(
-        &["-p", "\"ssssssssssss:nsssss\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"ssssssssssss:nsssss\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -171,7 +171,7 @@ fn test_skip_lines() {
 #[test]
 fn test_goto_beggining() {
     run_test_more(
-        &["-p", "\"        g:nGg:n   \"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-p", "\"        g:nGg:n   \"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -181,7 +181,7 @@ fn test_goto_beggining() {
 #[test]
 fn test_goto_eof() {
     run_test_more(
-        &["-p", "\"G\nG\nG\n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-p", "\"G G G  \"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -191,7 +191,7 @@ fn test_goto_eof() {
 #[test]
 fn test_refresh() {
     run_test_more(
-        &["-p", "\"r\x0Cr\x0Cr\x0Cr\x0C:nr\x0Cr\x0C:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"r\x0Cr\x0Cr\x0Cr\x0C:nr\x0Cr\x0C:n\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -201,7 +201,7 @@ fn test_refresh() {
 #[test]
 fn test_discard() {
     run_test_more(
-        &["-p", "\"RRRRRR:nRRRRRRRR:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"RRRRRR:nRRRRRRRR:n\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -211,7 +211,18 @@ fn test_discard() {
 #[test]
 fn test_mark() {
     run_test_more(
-        &["-p", "\"mafmbfmc:nmafmbfmc:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"maffmbffmcff:nmaffmbffmcff:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        "", 
+        "",
+        "", 
+        0);
+}
+
+
+#[test]
+fn test_goto_mark() {
+    run_test_more(
+        &["--test", "-p", "\"ma'a:nma'a:n\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -219,19 +230,19 @@ fn test_mark() {
 }
 
 #[test]
-fn test_goto_mark() {
+fn test_goto_mark_error() {
     run_test_more(
-        &["-p", "\"'a'b'cmafmbfmc'a'b'c:n'a'b'cmafmbfmc'a'b'c:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"'a:q\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
-        "", 
+        "Couldn't find mark for 'a\n", 
         0);
 }
 
 #[test]
 fn test_return_to_last() {
     run_test_more(
-        &["-p", "\"''fff'''':n''ffff'''':n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"''fff'''':n''ffff'''':n\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -241,7 +252,7 @@ fn test_return_to_last() {
 #[test]
 fn test_search_forward() {
     run_test_more(
-        &["-p", "\"15/\\<goal\\>\n:n15/\\<test\\>\n:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"15/\\<goal\\>\n :n15/\\<test\\>\n:gn \"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -251,7 +262,7 @@ fn test_search_forward() {
 #[test]
 fn test_search_backward() {
     run_test_more(
-        &["-p", "\"G15?\\<goal\\>\n:nG15?\\<test\\>\n:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"Gk?\\<goal\\>\n :nG?\\<test\\>\n:n\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -261,7 +272,17 @@ fn test_search_backward() {
 #[test]
 fn test_search_repeat() {
     run_test_more(
-        &["-p", "\"nNG15?\\<goal\\>\ngnN:nnNG15?\\<test\\>\ngnN:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\"/\\<goal\\>\n:n:n \"", "test_files/README.md", "test_files/TODO.md"], 
+        "", 
+        "",
+        "", 
+        0);
+}
+
+#[test]
+fn test_search_repeat_1() {
+    run_test_more(
+        &["--test", "-p", "\"g/\\<goal\\>\n:nG15?\\<test\\>\ngn:n \"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -271,7 +292,7 @@ fn test_search_repeat() {
 #[test]
 fn test_scroll_file() {
     run_test_more(
-        &["-p", "\":p:n:p:n:p:n:n:p:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-p", "\":p:n:p:n:p:n:n:p:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -281,7 +302,7 @@ fn test_scroll_file() {
 #[test]
 fn test_examine_new_file() {
     run_test_more(
-        &["-p", "\":e test_files/README.md\nq\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\":e test_files/README.md\n q\"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
@@ -291,52 +312,53 @@ fn test_examine_new_file() {
 #[test]
 fn test_tag() {
     run_test_more(
-        &["-p", "\":t  \nq\"", "test_files/README.md", "test_files/TODO.md"], 
+        &["--test", "-p", "\":t SeekPositions\n q \"", "test_files/README.md", "test_files/TODO.md"], 
         "", 
         "",
         "", 
         0);
 }
 
+/*
 #[test]
 fn test_invoke_editor() {
     run_test_more(
-        &["-p", "\"v:n:n\"", "test_files/README.md", "test_files/TODO.md"], 
-        ":qa", 
+        &["--test", "-p", "\"v:n:n:n\"", "test_files/README.md", "test_files/TODO.md"], 
+        ":qa ", 
         "",
         "", 
         0);
-}
+}*/
 
 #[test]
 fn test_quit() {
     run_test_more(
-        &["-p", "\"\x03f\x04f\x1Cfq\"", "test_files/README.md", "test_files/TODO.md"], 
-        ":qa", 
+        &["--test", "-p", "\"\x03f\x04f\x1Cfq\"", "test_files/README.md", "test_files/TODO.md"], 
+        "", 
         "",
         "", 
         0);
 
     run_test_more(
-        &["-p", "\":q\"", "test_files/README.md", "test_files/TODO.md"], 
-        ":qa", 
+        &["--test", "-p", "\":q\"", "test_files/README.md", "test_files/TODO.md"], 
+        "", 
         "",
         "", 
         0);
 
     run_test_more(
-        &["-p", "\"ZZ\"", "test_files/README.md", "test_files/TODO.md"], 
-        ":qa", 
+        &["--test", "-p", "\"ZZ\"", "test_files/README.md", "test_files/TODO.md"], 
+        "", 
         "",
         "", 
         0);
 }
 
-// with_flags_tests
+// with flags tests
 #[test]
 fn test_c() {
     run_test_more(
-        &["-c", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-c", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -346,7 +368,7 @@ fn test_c() {
 #[test]
 fn test_e() {
     run_test_more(
-        &["-e", "-p", "\":n:n:n:nj\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-e", "-p", "\":n:n:n:nj\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -356,7 +378,7 @@ fn test_e() {
 #[test]
 fn test_i() {
     run_test_more(
-        &["-i", "-p", "\"15/!\\<GOAL\\>\n:n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-i", "-p", "\"15/!\\<GOAL\\>\n:n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -366,7 +388,7 @@ fn test_i() {
 #[test]
 fn test_n() {
     run_test_more(
-        &["-n", "18", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-n", "18", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -376,7 +398,7 @@ fn test_n() {
 #[test]
 fn test_s() {
     run_test_more(
-        &["-s", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-s", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -386,18 +408,18 @@ fn test_s() {
 #[test]
 fn test_u() {
     run_test_more(
-        &["-u", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-u", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
         0);
 }
 
-// tag_tests
+// tag tests
 #[test]
 fn test_tag_1() {
     run_test_more(
-        &["-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-t", "SeekPositions", "-p", "\":t SeekPositions\n :n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -407,7 +429,7 @@ fn test_tag_1() {
 #[test]
 fn test_tag_2() {
     run_test_more(
-        &["-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-t", "SeekPositions", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -417,7 +439,7 @@ fn test_tag_2() {
 #[test]
 fn test_tag_3() {
     run_test_more(
-        &["-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-t", "[0123456789]", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -427,7 +449,7 @@ fn test_tag_3() {
 #[test]
 fn test_tag_4() {
     run_test_more(
-        &["-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-t", "setlocale", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -437,7 +459,7 @@ fn test_tag_4() {
 #[test]
 fn test_tag_5() {
     run_test_more(
-        &["-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-t", "^struct", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -447,18 +469,18 @@ fn test_tag_5() {
 #[test]
 fn test_tag_6() {
     run_test_more(
-        &["-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-t", "\\<let\\>", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
         0);
 }
 
-// with_flags_tests{
+// tags with flags tests
 #[test]
 fn test_c_tag() {
     run_test_more(
-        &["-c", "-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-c", "-t", "SeekPositions", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -468,7 +490,7 @@ fn test_c_tag() {
 #[test]
 fn test_e_tag() {
     run_test_more(
-        &["-e", "-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-e", "-t", "SeekPositions", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -478,7 +500,7 @@ fn test_e_tag() {
 #[test]
 fn test_i_tag() {
     run_test_more(
-        &["-i", "-t", "", "-p", "\"15/!\\<GOAL\\>\n:n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-i", "-t", "SeekPositions", "-p", "\"15/!\\<GOAL\\>\n:n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -488,7 +510,7 @@ fn test_i_tag() {
 #[test]
 fn test_n_tag() {
     run_test_more(
-        &["-n", "18", "-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-n", "18", "-t", "SeekPositions", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -498,7 +520,7 @@ fn test_n_tag() {
 #[test]
 fn test_s_tag() {
     run_test_more(
-        &["-s", "-t", "", "-p", "\"ffffffffffff:n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-s", "-t", "SeekPositions", "-p", "\"ffffffffffff:n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -508,7 +530,7 @@ fn test_s_tag() {
 #[test]
 fn test_u_tag() {
     run_test_more(
-        &["-u", "-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-u", "-t", "SeekPositions", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -519,7 +541,7 @@ fn test_u_tag() {
 #[test]
 fn test_flags_tag() {
     run_test_more(
-        &["-ceisu", "-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-ceisu", "-t", "SeekPositions", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
@@ -529,7 +551,7 @@ fn test_flags_tag() {
 #[test]
 fn test_flags_n_tag() {
     run_test_more(
-        &["-ceisu", "-n", "18", "-t", "", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
+        &["--test", "-ceisu", "-n", "18", "-t", "SeekPositions", "-p", "\":n:n:n:n:n\"", "test_files/README.md", "test_files/TODO.md", "test_files/styled.txt"], 
         "", 
         "",
         "", 
