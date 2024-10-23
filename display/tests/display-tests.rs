@@ -8,5 +8,5 @@
 //
 
 mod echo;
-mod printf;
 mod more;
+mod printf;
