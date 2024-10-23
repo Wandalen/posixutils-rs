@@ -12,7 +12,6 @@ use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::{
     getegid, getgid, getuid, regcomp, regex_t, regexec, setgid, setuid, REG_ICASE, REG_NOMATCH,
 };
-use termion::{clear::*, cursor::*, event::*, input::*, raw::*, screen::*, style::*, *};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs::File;
@@ -23,6 +22,7 @@ use std::path::PathBuf;
 use std::process::{exit, ExitStatus};
 use std::ptr;
 use std::str::FromStr;
+use termion::{clear::*, cursor::*, event::*, input::*, raw::*, screen::*, style::*, *};
 
 const LINES_PER_PAGE: u16 = 24;
 const NUM_COLUMNS: u16 = 80;
@@ -34,6 +34,10 @@ const PROJECT_NAME: &str = "posixutils-rs";
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Args {
+    // Enable interactive session test
+    #[arg(long = "test")]
+    test: bool,
+
     /// Do not scroll, display text and clean line ends
     #[arg(short = 'c')]
     print_over: bool,
@@ -343,6 +347,8 @@ struct SeekPositions {
     positions: Vec<u64>,
     /// Terminal width for spliting long lines. If [`None`], lines not splited by length
     line_len: Option<usize>,
+    /// Stream size
+    stream_len: u64,
     /// Count of all lines in source
     lines_count: usize,
     /// Source that handles info for creating [`SeekRead`] buffer
@@ -384,25 +390,35 @@ impl SeekPositions {
         let mut seek_pos = Self {
             positions: vec![],
             line_len,
+            stream_len: 0,
             lines_count: 0,
-            source,
+            source: source.clone(),
             buffer,
             squeeze_lines,
             plain,
             style_positions: vec![],
         };
-        seek_pos.lines_count = seek_pos.lines_count();
+        (seek_pos.lines_count, seek_pos.stream_len) = seek_pos.lines_count_and_stream_len();
+        if seek_pos.lines_count as u64 > seek_pos.stream_len {
+            return Err(MoreError::FileRead(source.clone().name()));
+        }
         Ok(seek_pos)
     }
 
     /// Counts all buffer lines and set [`SeekPositions`] to previous state
-    fn lines_count(&mut self) -> usize {
+    fn lines_count_and_stream_len(&mut self) -> (usize, u64) {
         let current_line = self.current_line();
         let _ = self.buffer.rewind();
         let mut count = 0;
         while self.next().is_some() {
             count += 1;
         }
+        {
+            let mut reader = BufReader::new(&mut self.buffer);
+            let mut buf = vec![];
+            let _ = reader.read_to_end(&mut buf);
+        }
+        let stream_position = self.buffer.stream_position().unwrap_or(0);
         let _ = self.buffer.rewind();
         let mut i = 0;
         self.positions = vec![0];
@@ -412,7 +428,7 @@ impl SeekPositions {
             };
             i += 1;
         }
-        count
+        (count, stream_position)
     }
 
     /// Read line from current seek position
@@ -463,73 +479,66 @@ impl SeekPositions {
             } else if self.current_line() > position && self.next_back().is_none() {
                 break;
             }
-        } 
+        }
         is_ended
     }
 
     /// Returns full lines count fo current source
-    fn len(&self) -> usize {
+    fn len_lines(&self) -> usize {
         self.lines_count
+    }
+
+    /// Returns stream len fo current source
+    fn _len(&self) -> u64 {
+        self.stream_len
     }
 
     /// Seek to certain [`position`] over current source
     fn seek(&mut self, position: u64) -> Result<(), MoreError> {
-        let mut last_position = 0;
+        let err = Err(MoreError::SeekPositions(SeekPositionsError::OutOfRange(
+            position,
+        )));
+        if position > self.stream_len {
+            return err;
+        }
         loop {
-            match position {
-                position if self.current() < position => {
-                    if last_position >= position {
-                        break;
-                    };
-                    if self.next().is_none() {
-                        return Err(MoreError::SeekPositions(SeekPositionsError::OutOfRange(
-                            position,
-                        )));
-                    };
+            if self.next() > Some(position) && Some(position) > self.next_back() {
+                break;
+            } else if self.current() < position {
+                if self.next().is_none() {
+                    return err;
                 }
-                position if self.current() > position => {
-                    if last_position <= position {
-                        break;
-                    };
-                    if self.next_back().is_none() {
-                        return Err(MoreError::SeekPositions(SeekPositionsError::OutOfRange(
-                            position,
-                        )));
-                    };
+            } else if self.current() > position {
+                if self.next_back().is_none() {
+                    return err;
                 }
-                _ => {
-                    break;
-                }
+            } else {
+                break;
             }
-            last_position = self.current();
         }
         Ok(())
     }
 
     /// Returns nth position of choosen [`char`] if it exists
-    pub fn find_n_char(&mut self, ch: char, n: usize) -> Option<u64> {
+    pub fn find_n_line(&mut self, n: usize) -> Option<u64> {
         let last_seek = self.current();
         let mut n_char_seek = None;
-
-        let mut buf = Vec::new();
         let _ = self.buffer.rewind();
         let mut i = 0;
-        loop {
-            let Ok(stream_position) = self.buffer.stream_position() else {
-                break;
-            };
-            if i >= n {
-                n_char_seek = Some(stream_position);
-                break;
+        let mut seek_pos = 0;
+        {
+            let reader = BufReader::new(&mut self.buffer).lines();
+            for line in reader {
+                if let Ok(line) = line {
+                    seek_pos += line.as_bytes().len();
+                }
+                i += 1;
+                if i >= n {
+                    n_char_seek = Some(seek_pos as u64);
+                    break;
+                }
             }
-            let mut reader = BufReader::new(&mut self.buffer);
-            if reader.read_until(ch as u8, &mut buf).is_err() {
-                let _ = self.seek(last_seek);
-                return n_char_seek;
-            }
-            i += 1;
         }
-
         let _ = self.seek(last_seek);
         n_char_seek
     }
@@ -809,11 +818,11 @@ impl SourceContext {
                 let l = previous_source_screen.0.len();
                 previous_lines = previous_source_screen.0[(l - remain)..].to_vec();
             } else {
-                if current_line + remain < self.seek_positions.len() {
+                if current_line + remain < self.seek_positions.len_lines() {
                     current_line += remain;
                     self.seek_positions.set_current(current_line);
                 } else {
-                    current_line = self.seek_positions.len();
+                    current_line = self.seek_positions.len_lines();
                     self.seek_positions.set_current(current_line);
                 }
                 content_lines_len = current_line;
@@ -850,7 +859,11 @@ impl SourceContext {
         }
 
         for (i, line) in content_lines.into_iter().enumerate() {
-            screen.set_str((i + previous_lines_len + header_lines_len, 0), line, StyleType::None)?;
+            screen.set_str(
+                (i + previous_lines_len + header_lines_len, 0),
+                line,
+                StyleType::None,
+            )?;
             let Some(style_positions) = style_lines.get(i) else {
                 continue;
             };
@@ -898,9 +911,9 @@ impl SourceContext {
         } else {
             terminal_size.0 - 1 - header_lines_count
         };
-        let mut is_ended = if self.seek_positions.len() < next_line {
+        let mut is_ended = if self.seek_positions.len_lines() < next_line {
             self.seek_positions
-                .set_current(self.seek_positions.len() + 1)
+                .set_current(self.seek_positions.len_lines() + 1)
         } else {
             self.seek_positions.set_current(next_line)
         };
@@ -916,7 +929,7 @@ impl SourceContext {
             return self.goto_beginning(count);
         }
         self.seek_positions
-            .set_current(self.seek_positions.len() + 1)
+            .set_current(self.seek_positions.len_lines() + 1)
     }
 
     /// Seek to previous line
@@ -1081,8 +1094,10 @@ impl SourceContext {
 struct Terminal {
     /// Struct that keep terminal in raw mod
     _raw_terminal: Option<RawTerminal<std::io::Stdout>>,
+    /// Struct that keep terminal in buffer mod
+    _alternate_screen: Option<AlternateScreen<std::io::Stdout>>,
     /// Stream for sending commands into terminal
-    tty: Option<AlternateScreen<std::io::Stdout>>,
+    tty: std::io::Stdout,
     /// Terminal size in char rows and cols
     size: (u16, u16),
     /// Set terminal height as lines
@@ -1092,27 +1107,35 @@ struct Terminal {
 }
 
 impl Terminal {
-    fn new(lines: Option<u16>, plain: bool) -> Result<Self, MoreError> {
-        if !termion::is_tty(&std::io::stdout().as_raw_fd()) {
-            return Err(MoreError::TerminalInit);
+    fn new(is_test: bool, lines: Option<u16>, plain: bool) -> Result<Self, MoreError> {
+        let mut _raw_terminal = None;
+        let mut _alternate_screen = None;
+        if !is_test {
+            if !termion::is_tty(&std::io::stdout().as_raw_fd()) {
+                return Err(MoreError::TerminalInit);
+            }
+            let raw_terminal = stdout()
+                .into_raw_mode()
+                .map_err(|_| MoreError::TerminalInit)?;
+            raw_terminal
+                .activate_raw_mode()
+                .map_err(|_| MoreError::TerminalInit)?;
+            _raw_terminal = Some(raw_terminal);
+            _alternate_screen = Some(
+                stdout()
+                    .into_alternate_screen()
+                    .map_err(|_| MoreError::TerminalInit)?,
+            );
         }
-        let _raw_terminal = stdout()
-            .into_raw_mode()
-            .map_err(|_| MoreError::TerminalInit)?;
-        _raw_terminal
-            .activate_raw_mode()
-            .map_err(|_| MoreError::TerminalInit)?;
 
         let mut terminal = Self {
-            _raw_terminal: Some(_raw_terminal),
-            tty: Some(stdout()
-                .into_alternate_screen()
-                .map_err(|_| MoreError::TerminalInit)?),
+            _raw_terminal,
+            _alternate_screen,
+            tty: stdout(),
             size: (
                 u16::from_str(&std::env::var("LINES").unwrap_or_default())
                     .unwrap_or(LINES_PER_PAGE),
-                u16::from_str(&std::env::var("COLUMNS").unwrap_or_default())
-                    .unwrap_or(NUM_COLUMNS),
+                u16::from_str(&std::env::var("COLUMNS").unwrap_or_default()).unwrap_or(NUM_COLUMNS),
             ),
             lines,
             plain,
@@ -1147,18 +1170,16 @@ impl Terminal {
     }
 
     fn set_style(&mut self, style: StyleType) -> std::io::Result<()> {
-        let Some(tty) = &mut self.tty else { return Ok(()); };
-        let _ = write!(tty, "{}", Reset);
+        let _ = write!(self.tty, "{}", Reset);
         match style {
-            StyleType::Underscore => write!(tty, "{}", Underline),
-            StyleType::Negative => write!(tty, "{}", Invert),
+            StyleType::Underscore => write!(self.tty, "{}", Underline),
+            StyleType::Negative => write!(self.tty, "{}", Invert),
             _ => Ok(()),
         }
     }
 
     // Display prompt in bottom row
     pub fn display_prompt(&mut self, prompt: Prompt) -> Result<(), MoreError> {
-        let Some(tty) = &mut self.tty else { return Ok(()); };
         let line = prompt.format();
         if line.len() > self.size.1 as usize {
             let _ = self.set_style(StyleType::None);
@@ -1167,7 +1188,7 @@ impl Terminal {
 
         let mut style = StyleType::None;
         let _ = write!(
-            tty,
+            self.tty,
             "{}",
             if let Prompt::Input(_) = prompt {
                 Show.to_string()
@@ -1196,14 +1217,12 @@ impl Terminal {
 
     /// Clear terminal content
     pub fn _clear(&mut self) {
-        let Some(tty) = &mut self.tty else { return; };
-        let _ = write!(tty, "{}", All);
+        let _ = write!(self.tty, "{}", All);
     }
 
     /// Clear terminal content
     pub fn clear_current_line(&mut self) {
-        let Some(tty) = &mut self.tty else { return; };
-        let _ = write!(tty, "{}", CurrentLine);
+        let _ = write!(self.tty, "{}", CurrentLine);
     }
 
     /// Write error to [`Stderr`]
@@ -1213,14 +1232,12 @@ impl Terminal {
 
     /// Write string to terminal
     fn _write(&mut self, string: String, x: u16, y: u16) {
-        let Some(tty) = &mut self.tty else { return; };
-        let _ = write!(tty, "{}{string}", Goto(x + 1, y + 1));
+        let _ = write!(self.tty, "{}{string}", Goto(x + 1, y + 1));
     }
 
     /// Write string to terminal
     fn write_ch(&mut self, ch: char, x: u16, y: u16) {
-        let Some(tty) = &mut self.tty else { return; };
-        let _ = write!(tty, "{}{ch}", Goto(x + 1, y + 1));
+        let _ = write!(self.tty, "{}{ch}", Goto(x + 1, y + 1));
     }
 
     /// Get char from [`Stdin`]
@@ -1263,10 +1280,9 @@ impl Terminal {
 
     /// Prepare resources for closing terminal
     fn close(&mut self) {
-        if let Some(tty) = &mut self.tty{
-            let _ = write!(tty, "{}{}", Show, Reset);
-        }
+        let _ = write!(self.tty, "{}{}", Show, Reset);
         self._raw_terminal = None;
+        self._alternate_screen = None;
     }
 }
 
@@ -1379,13 +1395,13 @@ struct MoreControl {
     /// [`true`] if file iteration has reached EOF
     is_ended_file: bool,
     /// If true [`MoreControl::process_()`] is called
-    is_new_file: bool
+    is_new_file: bool,
 }
 
 impl MoreControl {
     /// Init [`MoreControl`]
     fn new(args: Args) -> Result<Self, MoreError> {
-        let terminal = Terminal::new(args.lines, args.plain).ok();
+        let terminal = Terminal::new(args.test, args.lines, args.plain).ok();
         let mut current_position = None;
         let mut file_pathes = vec![];
         let source = if args.input_files.is_empty()
@@ -1427,7 +1443,7 @@ impl MoreControl {
             last_source_before_usage: None,
             file_pathes,
             is_ended_file: false,
-            is_new_file: false
+            is_new_file: false,
         })
     }
 
@@ -1510,9 +1526,7 @@ impl MoreControl {
                 SourceContextError::MissingTerminal,
             ))
         };
-        if let Some(tty) = &mut terminal.tty{
-            let _ = tty.flush();
-        }
+        let _ = terminal.tty.flush();
         result
     }
 
@@ -1571,38 +1585,45 @@ impl MoreControl {
     }
 
     /// Find tag position with ctag and seek to it
+    /// For correct usage apply "ctags --fields=+n -R *" before this function
     fn goto_tag(&mut self, tagstring: String) -> Result<bool, MoreError> {
-        let output = std::process::Command::new("ctags")
-            .args(["-x", tagstring.as_str()])
+        let parse_error = Err(MoreError::StringParse(tagstring.clone() + " ctags output"));
+        let pattern = if tagstring.contains(['^']) {
+            tagstring.clone()
+        } else {
+            format!("^{}", tagstring)
+        };
+        let output = std::process::Command::new("grep")
+            .args(["-r", pattern.as_str(), "tags"])
             .output();
         let Ok(output) = output else {
             return Err(MoreError::CTagsFailed);
         };
-        let output = std::str::from_utf8(&output.stdout);
-        let Ok(output) = output else {
-            return Err(MoreError::StringParse(tagstring + " ctags output"));
+        let Ok(output) = std::str::from_utf8(&output.stdout) else {
+            return parse_error;
         };
-        /*
-        if let Some(terminal) = &mut self.terminal{
-            terminal.write(format!("{:#?}", output), 0, 0);
-            let _ = terminal.getch()?;
-        }*/
-
         let lines = output.split("\n").collect::<Vec<&str>>();
-        if lines.len() != 1 {
-            return Err(MoreError::FileRead(tagstring));
-        }
         let Some(line) = lines.first() else {
             return Err(MoreError::FileRead(tagstring));
         };
-        let fields = line.split(" ").collect::<Vec<&str>>();
-        if fields.len() != 4 {
-            return Err(MoreError::StringParse(tagstring + " ctags output"));
+        let fields = line.split("\t").collect::<Vec<&str>>();
+        if fields.len() < 2 {
+            return parse_error;
         };
-        let Ok(line) = fields[1].parse::<usize>() else {
-            return Err(MoreError::StringParse(tagstring + " ctags output"));
-        };
-        let path = to_path(fields[2].to_string())?;
+        let path = to_path(fields[1].to_string())?;
+        let line;
+        if let Some(line_str) = fields.iter().find(|w| w.starts_with("line:")) {
+            let Some(line_str) = line_str.split(":").last() else {
+                return parse_error;
+            };
+            let Ok(l) = line_str.parse::<usize>() else {
+                return parse_error;
+            };
+            line = l;
+        } else {
+            return parse_error;
+        }
+
         if let Some(tag) = &self.args.tag {
             if *tag == tagstring {
                 if !self.file_pathes.contains(&path) {
@@ -1611,8 +1632,9 @@ impl MoreControl {
                 self.current_position = Some(0);
             }
         }
+
         self.context.set_source(Source::File(path))?;
-        if let Some(n_char_seek) = self.context.seek_positions.find_n_char('\n', line) {
+        if let Some(n_char_seek) = self.context.seek_positions.find_n_line(line) {
             self.context.seek_positions.seek(n_char_seek)?;
             if let Some(terminal) = &self.terminal {
                 let new_position =
@@ -1623,7 +1645,7 @@ impl MoreControl {
             Ok(false)
         } else {
             Err(MoreError::SourceContext(
-                SourceContextError::PatternNotFound(tagstring + " ctags output"),
+                SourceContextError::PatternNotFound(tagstring),
             ))
         }
     }
@@ -1728,19 +1750,19 @@ impl MoreControl {
 
             if self.current_position == Some(self.file_pathes.len() - 1)
                 && self.context.seek_positions.current_line()
-                    == self.context.seek_positions.len()
+                    == self.context.seek_positions.len_lines()
             {
-                if self.args.exit_on_eof{
+                if self.args.exit_on_eof {
                     self.exit();
                 }
                 self.prompt = Some(Prompt::Exit);
-                let _ = self.display()?;
-                if let Some(terminal) = &mut self.terminal{
+                self.display()?;
+                if let Some(terminal) = &mut self.terminal {
                     let _ = terminal.getch();
                     self.exit();
                 }
             }
-            
+
             let next_position = self
                 .current_position
                 .unwrap_or(self.last_position.unwrap_or(0))
@@ -2011,6 +2033,9 @@ impl MoreControl {
         match error {
             MoreError::SeekPositions(ref seek_positions_error) => match seek_positions_error {
                 SeekPositionsError::StringParse(_) | SeekPositionsError::OutOfRange(_) => {
+                    if let Some(terminal) = &self.terminal {
+                        terminal.write_err(error_str + "\n");
+                    }
                     panic!("{}", error)
                 }
                 SeekPositionsError::FileRead(_) => {
@@ -2022,8 +2047,11 @@ impl MoreControl {
             },
             MoreError::SourceContext(ref source_context_error) => match source_context_error {
                 SourceContextError::MissingTerminal => {
+                    if let Some(terminal) = &self.terminal {
+                        terminal.write_err(error_str + "\n");
+                    }
                     panic!("{}", error)
-                },
+                }
                 SourceContextError::PatternNotFound(_)
                 | SourceContextError::MissingLastSearch
                 | SourceContextError::MissingMark(_) => {
@@ -2044,15 +2072,22 @@ impl MoreControl {
             | MoreError::SizeRead
             | MoreError::InputRead
             | MoreError::TerminalOutput => {
-                panic!("{}", error);
-            },
-            MoreError::UnknownCommand => {
-                self.prompt = Some(Prompt::Error(error_str.clone()));
                 if let Some(terminal) = &self.terminal {
                     terminal.write_err(error_str + "\n");
                 }
+                panic!("{}", error);
+            }
+            MoreError::UnknownCommand => {
+                self.prompt = Some(Prompt::Error(error_str.clone()));
+                if let Some(terminal) = &self.terminal {
+                    terminal
+                        .write_err(error_str + ". Command buffer: " + &self.commands_buffer + "\n");
+                }
             }
             MoreError::TerminalInit => {}
+        }
+        if self.args.test {
+            self.exit();
         }
     }
 
@@ -2066,12 +2101,22 @@ impl MoreControl {
         loop {
             let (command, remainder, _) = parse(commands_str.clone())?;
             if command == Command::Unknown {
+                /*if let Some(terminal) = &mut self.terminal{
+                    eprint!("{}", remainder.clone() + "   ");
+                }*/
                 return Err(MoreError::UnknownCommand);
             }
             let is_empty = remainder.is_empty();
-            commands_str = remainder;
+            commands_str = remainder.clone();
             self.execute(command)?;
-            if self.is_new_file{
+            if self.is_new_file {
+                if let Some(ref mut commands_str) = self.args.commands {
+                    *commands_str = remainder;
+                }
+                if commands_str.is_empty() {
+                    self.is_new_file = false;
+                }
+                //eprintln!("{}", commands_str);
                 break;
             }
             if is_empty {
@@ -2094,8 +2139,10 @@ impl MoreControl {
             .inspect_err(|e| self.handle_error(e.clone()));
         let _ = self.display().inspect_err(|e| self.handle_error(e.clone()));
         loop {
-            if self.is_new_file{
-                let _ = self.process_p().inspect_err(|e| self.handle_error(e.clone()));
+            if self.is_new_file {
+                let _ = self
+                    .process_p()
+                    .inspect_err(|e| self.handle_error(e.clone()));
                 continue;
             }
             match self.handle_events() {
@@ -2351,6 +2398,13 @@ fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError> 
                 };
                 match *ch {
                     'e' => {
+                        i += 1;
+                        let Some(ch) = chars.get(i) else {
+                            break;
+                        };
+                        if *ch == ' ' {
+                            i += 1;
+                        }
                         let filename = commands_str
                             .chars()
                             .skip(i)
@@ -2455,7 +2509,7 @@ mletter                        Mark the current position with the letter - one l
 [count]?[!]pattern<newline>    Display the screenful beginning with the countth previous line containing the pattern
 [count]n                       Repeat the previous search for countth line containing the last pattern
 [count]N                       Repeat the previous search oppositely for the countth line containing the last pattern
-:e[filename]<newline>         Examine a new file. Default [filename] (current file) shall be re-examined
+:e [filename]<newline>         Examine a new file. Default [filename] (current file) shall be re-examined
 [count]:n                      Examine the next file. If count is specified, the countth next file shall be examined
 [count]:p                      Examine the previous file. If count is specified, the countth next file shall be examined
 :t tagstring<newline>          If tagstring isn't the current file, examine the file, as if :e command was executed. Display beginning screenful with the tag
@@ -2479,8 +2533,10 @@ pub fn commands_usage() -> String {
 }
 
 fn main() {
-    let _ = setlocale(LocaleCategory::LcAll, 
-        std::env::var("LC_ALL").unwrap_or("".to_string()));
+    let _ = setlocale(
+        LocaleCategory::LcAll,
+        std::env::var("LC_ALL").unwrap_or("".to_string()),
+    );
     let _ = textdomain(PROJECT_NAME);
     let _ = bind_textdomain_codeset(PROJECT_NAME, "UTF-8");
     let _ = setlocale(LocaleCategory::LcAll, "");
@@ -2495,6 +2551,6 @@ fn main() {
                 ctl.loop_();
             }
         }
-        Err(error) => panic!("{}", error)
+        Err(error) => panic!("{}", error),
     }
 }
