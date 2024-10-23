@@ -759,7 +759,6 @@ impl SourceContext {
         self.last_line = 0;
         self.previous_source_screen = self.screen.clone();
         self.goto_beginning(None);
-        self.update_screen()?;
         Ok(())
     }
 
@@ -1389,10 +1388,6 @@ impl MoreControl {
         let terminal = Terminal::new(args.lines, args.plain).ok();
         let mut current_position = None;
         let mut file_pathes = vec![];
-        for file_string in &args.input_files {
-            let path = to_path(file_string.clone())?;
-            file_pathes.push(path);
-        }
         let source = if args.input_files.is_empty()
             || (args.input_files.len() == 1 && args.input_files[0] == *"-")
         {
@@ -1403,6 +1398,10 @@ impl MoreControl {
                 .map_err(|_| MoreError::InputRead)?;
             Source::Buffer(Cursor::new(buf))
         } else {
+            for file_string in &args.input_files {
+                let path = to_path(file_string.clone())?;
+                file_pathes.push(path);
+            }
             current_position = Some(0);
             Source::File(file_pathes[0].clone())
         };
@@ -2096,7 +2095,7 @@ impl MoreControl {
         let _ = self.display().inspect_err(|e| self.handle_error(e.clone()));
         loop {
             if self.is_new_file{
-                self.process_p().inspect_err(|e| self.handle_error(e.clone()));
+                let _ = self.process_p().inspect_err(|e| self.handle_error(e.clone()));
                 continue;
             }
             match self.handle_events() {
@@ -2456,7 +2455,7 @@ mletter                        Mark the current position with the letter - one l
 [count]?[!]pattern<newline>    Display the screenful beginning with the countth previous line containing the pattern
 [count]n                       Repeat the previous search for countth line containing the last pattern
 [count]N                       Repeat the previous search oppositely for the countth line containing the last pattern
-:e [filename]<newline>         Examine a new file. Default [filename] (current file) shall be re-examined
+:e[filename]<newline>         Examine a new file. Default [filename] (current file) shall be re-examined
 [count]:n                      Examine the next file. If count is specified, the countth next file shall be examined
 [count]:p                      Examine the previous file. If count is specified, the countth next file shall be examined
 :t tagstring<newline>          If tagstring isn't the current file, examine the file, as if :e command was executed. Display beginning screenful with the tag

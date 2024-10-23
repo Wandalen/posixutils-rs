@@ -9,10 +9,10 @@ rust-version.workspace = true
 
 [dependencies]
 clap.workspace = true
+clap.features = ["env"]
 gettext-rs.workspace = true
 libc = { version = "0.2.159", default-features = false }
 termion = "4.0.3"
-simple-signal = "1.1.1"
 thiserror = "1.0.64"
 
 [dev-dependencies]
