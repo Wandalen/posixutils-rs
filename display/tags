@@ -1,0 +1,306 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_OUTPUT_EXCMD	mixed	/number, pattern, mixed, or combineV2/
+!_TAG_OUTPUT_FILESEP	slash	/slash or backslash/
+!_TAG_OUTPUT_MODE	u-ctags	/u-ctags or e-ctags/
+!_TAG_PATTERN_LENGTH_LIMIT	96	/0 for no limit/
+!_TAG_PROC_CWD	/root/rustprojects/posixutils-rs/display/	//
+!_TAG_PROGRAM_AUTHOR	Universal Ctags Team	//
+!_TAG_PROGRAM_NAME	Universal Ctags	/Derived from Exuberant Ctags/
+!_TAG_PROGRAM_URL	https://ctags.io/	/official site/
+!_TAG_PROGRAM_VERSION	5.9.0	//
+Args	more.rs	/^struct Args {$/;"	s	line:37
+Backward	more.rs	/^    Backward,$/;"	e	line:321	enum:Direction
+Box	more.rs	/^impl<T: Seek + Read> SeekRead for Box<T> {}$/;"	c	line:340
+Buffer	more.rs	/^    Buffer(Cursor<String>),$/;"	e	line:652	enum:Source
+CTagsFailed	more.rs	/^    CTagsFailed,$/;"	e	line:175	enum:MoreError
+Command	more.rs	/^enum Command {$/;"	g	line:81
+ConvSpec	printf.rs	/^impl Default for ConvSpec {$/;"	c	line:33
+ConvSpec	printf.rs	/^struct ConvSpec {$/;"	s	line:18
+Conversion	printf.rs	/^    Conversion(ConvSpec),$/;"	e	line:54	enum:Token
+Cron category	test_files/README.md	/^### Cron category$/;"	S	line:167	section:posixutils-rs""Stage 0 - Not started
+Cursor	more.rs	/^impl SeekRead for Cursor<String> {}$/;"	c	line:342
+Development category	test_files/README.md	/^### Development category$/;"	S	line:172	section:posixutils-rs""Stage 0 - Not started
+Direction	more.rs	/^enum Direction {$/;"	g	line:317
+Direction	more.rs	/^impl Not for Direction {$/;"	c	line:324
+DiscardAndRefresh	more.rs	/^    DiscardAndRefresh,$/;"	e	line:111	enum:Command
+DisplayPosition	more.rs	/^    DisplayPosition(String),$/;"	e	line:1288	enum:Prompt
+DisplayPosition	more.rs	/^    DisplayPosition,$/;"	e	line:150	enum:Command
+EditorFailed	more.rs	/^    EditorFailed,$/;"	e	line:172	enum:MoreError
+Editors category	test_files/README.md	/^### Editors category$/;"	S	line:205	section:posixutils-rs""Stage 0 - Not started
+Eof	more.rs	/^    Eof(String),$/;"	e	line:1286	enum:Prompt
+Error	more.rs	/^    Error(String),$/;"	e	line:1292	enum:Prompt
+ExamineNewFile	more.rs	/^    ExamineNewFile(String),$/;"	e	line:137	enum:Command
+ExamineNextFile	more.rs	/^    ExamineNextFile(Option<usize>),$/;"	e	line:139	enum:Command
+ExaminePreviousFile	more.rs	/^    ExaminePreviousFile(Option<usize>),$/;"	e	line:141	enum:Command
+Exit	more.rs	/^    Exit,$/;"	e	line:1295	enum:Prompt
+ExitKeys	more.rs	/^    ExitKeys,$/;"	e	line:1293	enum:Prompt
+File	more.rs	/^    File(PathBuf),$/;"	e	line:650	enum:Source
+File	more.rs	/^impl SeekRead for File {}$/;"	c	line:341
+FileRead	more.rs	/^    FileRead(String),$/;"	e	line:178	enum:MoreError
+FileRead	more.rs	/^    FileRead(String),$/;"	e	line:207	enum:SeekPositionsError
+Flags	printf.rs	/^    Flags,$/;"	e	line:59	enum:ParseState
+Forward	more.rs	/^    Forward,$/;"	e	line:319	enum:Direction
+General TODO and future implementation notes	test_files/TODO.md	/^# General TODO and future implementation notes$/;"	c	line:1
+GoToBeginningOfFile	more.rs	/^    GoToBeginningOfFile(Option<usize>),$/;"	e	line:105	enum:Command
+GoToEOF	more.rs	/^    GoToEOF(Option<usize>),$/;"	e	line:107	enum:Command
+GoToTag	more.rs	/^    GoToTag(String),$/;"	e	line:144	enum:Command
+Goals	test_files/README.md	/^## Goals$/;"	s	line:7	chapter:posixutils-rs
+Help	more.rs	/^    Help,$/;"	e	line:85	enum:Command
+Input	more.rs	/^    Input(String),$/;"	e	line:1290	enum:Prompt
+InputRead	more.rs	/^    InputRead,$/;"	e	line:169	enum:MoreError
+Installation	test_files/README.md	/^## Installation$/;"	s	line:223	chapter:posixutils-rs
+InvokeEditor	more.rs	/^    InvokeEditor,$/;"	e	line:147	enum:Command
+Item	more.rs	/^    type Item = u64;$/;"	t	line:544	implementation:SeekPositions
+Literal	printf.rs	/^    Literal(String),$/;"	e	line:52	enum:Token
+Literal	printf.rs	/^    Literal,$/;"	e	line:58	enum:ParseState
+MarkPosition	more.rs	/^    MarkPosition(char),$/;"	e	line:113	enum:Command
+Misc. category	test_files/README.md	/^### Misc. category$/;"	S	line:210	section:posixutils-rs""Stage 0 - Not started
+MissingLastSearch	more.rs	/^    MissingLastSearch,$/;"	e	line:221	enum:SourceContextError
+MissingMark	more.rs	/^    MissingMark(char),$/;"	e	line:224	enum:SourceContextError
+MissingTerminal	more.rs	/^    MissingTerminal,$/;"	e	line:215	enum:SourceContextError
+More	more.rs	/^    More,$/;"	e	line:1284	enum:Prompt
+MoreError	more.rs	/^enum MoreError {$/;"	g	line:157
+Negative	more.rs	/^    Negative,$/;"	e	line:235	enum:StyleType
+Non-goals	test_files/README.md	/^### Non-goals$/;"	S	line:23	section:posixutils-rs""WANTED:  Volunteers!
+None	more.rs	/^    None,$/;"	e	line:231	enum:StyleType
+OS errors	test_files/TODO.md	/^## OS errors$/;"	s	line:12	chapter:General TODO and future implementation notes
+Other items	test_files/TODO.md	/^## Other items$/;"	s	line:19	chapter:General TODO and future implementation notes
+OutOfRange	more.rs	/^    OutOfRange(u64),$/;"	e	line:204	enum:SeekPositionsError
+Output	more.rs	/^    type Output = Direction;$/;"	t	line:325	implementation:Direction
+ParseState	printf.rs	/^enum ParseState {$/;"	g	line:57
+PatternNotFound	more.rs	/^    PatternNotFound(String),$/;"	e	line:218	enum:SourceContextError
+Precision	printf.rs	/^    Precision,$/;"	e	line:61	enum:ParseState
+PrecisionValue	printf.rs	/^    PrecisionValue,$/;"	e	line:62	enum:ParseState
+Prompt	more.rs	/^enum Prompt {$/;"	g	line:1282
+Prompt	more.rs	/^impl Prompt {$/;"	c	line:1298
+Quit	more.rs	/^    Quit,$/;"	e	line:152	enum:Command
+RefreshScreen	more.rs	/^    RefreshScreen,$/;"	e	line:109	enum:Command
+RepeatSearch	more.rs	/^    RepeatSearch(Option<usize>),$/;"	e	line:133	enum:Command
+RepeatSearchReverse	more.rs	/^    RepeatSearchReverse(Option<usize>),$/;"	e	line:135	enum:Command
+ReturnMark	more.rs	/^    ReturnMark(char),$/;"	e	line:115	enum:Command
+ReturnPreviousPosition	more.rs	/^    ReturnPreviousPosition,$/;"	e	line:117	enum:Command
+SCCS category	test_files/README.md	/^### SCCS category$/;"	S	line:180	section:posixutils-rs""Stage 0 - Not started
+Screen	more.rs	/^impl Screen {$/;"	c	line:242
+Screen	more.rs	/^struct Screen(Vec<Vec<(char, StyleType)>>);$/;"	s	line:240
+ScrollBackwardOneHalfScreenful	more.rs	/^    ScrollBackwardOneHalfScreenful(Option<usize>),$/;"	e	line:103	enum:Command
+ScrollBackwardOneLine	more.rs	/^    ScrollBackwardOneLine(Option<usize>),$/;"	e	line:97	enum:Command
+ScrollBackwardOneScreenful	more.rs	/^    ScrollBackwardOneScreenful(Option<usize>),$/;"	e	line:89	enum:Command
+ScrollForwardOneHalfScreenful	more.rs	/^    ScrollForwardOneHalfScreenful(Option<usize>),$/;"	e	line:99	enum:Command
+ScrollForwardOneLine	more.rs	/^    ScrollForwardOneLine {$/;"	e	line:91	enum:Command
+ScrollForwardOneScreenful	more.rs	/^    ScrollForwardOneScreenful(Option<usize>),$/;"	e	line:87	enum:Command
+SearchBackwardPattern	more.rs	/^    SearchBackwardPattern {$/;"	e	line:126	enum:Command
+SearchForwardPattern	more.rs	/^    SearchForwardPattern {$/;"	e	line:119	enum:Command
+SeekPositions	more.rs	/^    SeekPositions(#[from] SeekPositionsError),$/;"	e	line:160	enum:MoreError
+SeekPositions	more.rs	/^impl DoubleEndedIterator for SeekPositions {$/;"	c	line:635
+SeekPositions	more.rs	/^impl Iterator for SeekPositions {$/;"	c	line:543
+SeekPositions	more.rs	/^impl SeekPositions {$/;"	c	line:365
+SeekPositions	more.rs	/^struct SeekPositions {$/;"	s	line:346
+SeekPositionsError	more.rs	/^enum SeekPositionsError {$/;"	g	line:198
+SeekRead	more.rs	/^trait SeekRead: Seek + Read {}$/;"	i	line:338
+SetOutside	more.rs	/^    SetOutside,$/;"	e	line:166	enum:MoreError
+Similar projects	test_files/README.md	/^## Similar projects$/;"	s	line:32	chapter:posixutils-rs
+SizeRead	more.rs	/^    SizeRead,$/;"	e	line:193	enum:MoreError
+SkipForwardOneLine	more.rs	/^    SkipForwardOneLine(Option<usize>),$/;"	e	line:101	enum:Command
+Source	more.rs	/^enum Source {$/;"	g	line:648
+Source	more.rs	/^impl Source {$/;"	c	line:655
+SourceContext	more.rs	/^    SourceContext(#[from] SourceContextError),$/;"	e	line:163	enum:MoreError
+SourceContext	more.rs	/^impl SourceContext {$/;"	c	line:710
+SourceContext	more.rs	/^struct SourceContext {$/;"	s	line:679
+SourceContextError	more.rs	/^enum SourceContextError {$/;"	g	line:212
+Specifier	printf.rs	/^    Specifier,$/;"	e	line:63	enum:ParseState
+Stage 0 - Not started	test_files/README.md	/^## Stage 0 - Not started$/;"	s	line:165	chapter:posixutils-rs
+Stage 1 - Rough draft	test_files/README.md	/^## Stage 1 - Rough draft$/;"	s	line:142	chapter:posixutils-rs
+Stage 2 - Feature-complete and POSIX compliant	test_files/README.md	/^## Stage 2 - Feature-complete and POSIX compliant$/;"	s	line:117	chapter:posixutils-rs
+Stage 3 - Test coverage	test_files/README.md	/^## Stage 3 - Test coverage$/;"	s	line:58	chapter:posixutils-rs
+Stage 4 - Code coverage	test_files/README.md	/^## Stage 4 - Code coverage$/;"	s	line:54	chapter:posixutils-rs
+Stage 5 - Fully Translated to 2+ languages	test_files/README.md	/^## Stage 5 - Fully Translated to 2+ languages$/;"	s	line:50	chapter:posixutils-rs
+Stage 6 - Audited	test_files/README.md	/^## Stage 6 - Audited$/;"	s	line:46	chapter:posixutils-rs
+StringParse	more.rs	/^    StringParse(String),$/;"	e	line:181	enum:MoreError
+StringParse	more.rs	/^    StringParse(String),$/;"	e	line:201	enum:SeekPositionsError
+StyleType	more.rs	/^enum StyleType {$/;"	g	line:229
+Terminal	more.rs	/^impl Terminal {$/;"	c	line:1101
+Terminal	more.rs	/^struct Terminal {$/;"	s	line:1086
+TerminalInit	more.rs	/^    TerminalInit,$/;"	e	line:187	enum:MoreError
+TerminalOutput	more.rs	/^    TerminalOutput,$/;"	e	line:190	enum:MoreError
+Testing	test_files/README.md	/^## Testing$/;"	s	line:231	chapter:posixutils-rs
+Token	printf.rs	/^enum Token {$/;"	g	line:50
+Translations	test_files/TODO.md	/^## Translations$/;"	s	line:7	chapter:General TODO and future implementation notes
+UUCP category	test_files/README.md	/^### UUCP category $/;"	S	line:200	section:posixutils-rs""Stage 0 - Not started
+Underscore	more.rs	/^    Underscore,$/;"	e	line:233	enum:StyleType
+Unknown	more.rs	/^    Unknown,$/;"	e	line:83	enum:Command
+UnknownCommand	more.rs	/^    UnknownCommand,$/;"	e	line:184	enum:MoreError
+Upstream fixes wanted	test_files/TODO.md	/^## Upstream fixes wanted$/;"	s	line:3	chapter:General TODO and future implementation notes
+Utility status	test_files/README.md	/^## Utility status$/;"	s	line:44	chapter:posixutils-rs
+WANTED:  Volunteers!	test_files/README.md	/^## WANTED:  Volunteers!$/;"	s	line:19	chapter:posixutils-rs
+Width	printf.rs	/^    Width,$/;"	e	line:60	enum:ParseState
+_alternate_screen	more.rs	/^    _alternate_screen: Option<AlternateScreen<std::io::Stdout>>,$/;"	m	line:1090	struct:Terminal
+_clear	more.rs	/^    pub fn _clear(&mut self) {$/;"	P	line:1210	implementation:Terminal
+_raw_terminal	more.rs	/^    _raw_terminal: Option<RawTerminal<std::io::Stdout>>,$/;"	m	line:1088	struct:Terminal
+_write	more.rs	/^    fn _write(&mut self, string: String, x: u16, y: u16) {$/;"	P	line:1225	implementation:Terminal
+alt_form	printf.rs	/^    alt_form: bool,$/;"	m	line:29	struct:ConvSpec
+buffer	more.rs	/^    buffer: Box<dyn SeekRead>,$/;"	m	line:356	struct:SeekPositions
+case_insensitive	more.rs	/^    case_insensitive: bool,$/;"	m	line:52	struct:Args
+clear	more.rs	/^    fn clear(&mut self) {$/;"	P	line:308	implementation:Screen
+clear_current_line	more.rs	/^    pub fn clear_current_line(&mut self) {$/;"	P	line:1215	implementation:Terminal
+close	more.rs	/^    fn close(&mut self) {$/;"	P	line:1273	implementation:Terminal
+commands	more.rs	/^    commands: Option<String>,$/;"	m	line:56	struct:Args
+commands_usage	more.rs	/^pub fn commands_usage() -> String {$/;"	f	line:2522
+compile_regex	more.rs	/^fn compile_regex(pattern: String, ignore_case: bool) -> Result<regex_t, MoreError> {$/;"	f	line:1330
+current	more.rs	/^    fn current(&self) -> u64 {$/;"	P	line:452	implementation:SeekPositions
+current_line	more.rs	/^    fn current_line(&self) -> usize {$/;"	P	line:457	implementation:SeekPositions
+current_pattern	more.rs	/^    current_pattern: String,$/;"	m	line:697	struct:SourceContext
+current_source	more.rs	/^    current_source: Source,$/;"	m	line:681	struct:SourceContext
+default	printf.rs	/^    fn default() -> Self {$/;"	P	line:34	implementation:ConvSpec
+display	more.rs	/^    pub fn display(&mut self, screen: Screen) -> Result<(), MoreError> {$/;"	P	line:1140	implementation:Terminal
+display_prompt	more.rs	/^    pub fn display_prompt(&mut self, prompt: Prompt) -> Result<(), MoreError> {$/;"	P	line:1173	implementation:Terminal
+do_printf	printf.rs	/^fn do_printf(format: &str, args: &[String]) -> io::Result<()> {$/;"	f	line:292
+echo	tests/display-tests.rs	/^mod echo;$/;"	n	line:10
+echo_test	tests/echo/mod.rs	/^fn echo_test(args: &[&str], expected_output: &str) {$/;"	f	line:12
+escaped_char	printf.rs	/^fn escaped_char(c: char) -> char {$/;"	f	line:66
+examine_file	more.rs	/^    fn examine_file(&mut self, file_string: String) -> Result<(), MoreError> {$/;"	f	line:1810
+execute	more.rs	/^    fn execute(&mut self, command: Command) -> Result<(), MoreError> {$/;"	f	line:1874
+exit	more.rs	/^    fn exit(&mut self) {$/;"	f	line:1801
+exit_on_eof	more.rs	/^    exit_on_eof: bool,$/;"	m	line:48	struct:Args
+find_n_char	more.rs	/^    pub fn find_n_char(&mut self, ch: char, n: usize) -> Option<u64> {$/;"	P	line:515	implementation:SeekPositions
+format	more.rs	/^    fn format(&self) -> Vec<(char, StyleType)> {$/;"	P	line:1300	implementation:Prompt
+format_arg	printf.rs	/^fn format_arg(conv: &ConvSpec, arg: &str) -> String {$/;"	f	line:278
+format_arg_char	printf.rs	/^fn format_arg_char(conv: &ConvSpec, arg: &str) -> String {$/;"	f	line:241
+format_arg_hex	printf.rs	/^fn format_arg_hex(conv: &ConvSpec, arg: usize, upper: bool) -> String {$/;"	f	line:189
+format_arg_int	printf.rs	/^fn format_arg_int(conv: &ConvSpec, arg: &str) -> String {$/;"	f	line:224
+format_arg_octal	printf.rs	/^fn format_arg_octal(conv: &ConvSpec, arg: usize) -> String {$/;"	f	line:185
+format_arg_string	printf.rs	/^fn format_arg_string(conv: &ConvSpec, arg: &str) -> String {$/;"	f	line:246
+format_arg_uint	printf.rs	/^fn format_arg_uint(conv: &ConvSpec, arg: usize) -> String {$/;"	f	line:181
+format_arg_uint_base	printf.rs	/^fn format_arg_uint_base(conv: &ConvSpec, arg: &str) -> String {$/;"	f	line:198
+format_file_header	more.rs	/^fn format_file_header($/;"	f	line:2206
+getch	more.rs	/^    fn getch(&mut self) -> Result<Option<String>, MoreError> {$/;"	P	line:1235	implementation:Terminal
+goto_beginning	more.rs	/^    pub fn goto_beginning(&mut self, count: Option<usize>) -> bool {$/;"	P	line:898	implementation:SourceContext
+goto_eof	more.rs	/^    pub fn goto_eof(&mut self, count: Option<usize>) -> bool {$/;"	P	line:919	implementation:SourceContext
+goto_mark	more.rs	/^    pub fn goto_mark(&mut self, letter: char) -> Result<bool, MoreError> {$/;"	P	line:1034	implementation:SourceContext
+handle_error	more.rs	/^    fn handle_error(&mut self, error: MoreError) {$/;"	f	line:2033
+header_lines_count	more.rs	/^    header_lines_count: Option<usize>,$/;"	m	line:687	struct:SourceContext
+if_eof_and_prompt_goto_next_file	more.rs	/^    fn if_eof_and_prompt_goto_next_file(&mut self) -> Result<(), MoreError> {$/;"	f	line:1754
+if_eof_set_default	more.rs	/^fn if_eof_set_default(prompt: &mut Option<Prompt>) {$/;"	f	line:1324
+input_files	more.rs	/^    input_files: Vec<String>,$/;"	m	line:76	struct:Args
+is_many_files	more.rs	/^    is_many_files: bool,$/;"	m	line:703	struct:SourceContext
+last_line	more.rs	/^    last_line: usize,$/;"	m	line:695	struct:SourceContext
+last_search	more.rs	/^    last_search: Option<(regex_t, bool, Direction)>,$/;"	m	line:699	struct:SourceContext
+last_source	more.rs	/^    last_source: Source,$/;"	m	line:683	struct:SourceContext
+left_justify	printf.rs	/^    left_justify: bool,$/;"	m	line:26	struct:ConvSpec
+len	more.rs	/^    fn len(&self) -> usize {$/;"	P	line:476	implementation:SeekPositions
+line_len	more.rs	/^    line_len: Option<usize>,$/;"	m	line:350	struct:SeekPositions
+lines	more.rs	/^    lines: Option<u16>,$/;"	m	line:1096	struct:Terminal
+lines	more.rs	/^    lines: Option<u16>,$/;"	m	line:72	struct:Args
+lines_count	more.rs	/^    fn lines_count(&mut self) -> usize {$/;"	P	line:404	implementation:SeekPositions
+lines_count	more.rs	/^    lines_count: usize,$/;"	m	line:352	struct:SeekPositions
+loop_	more.rs	/^    fn loop_(&mut self) -> ! {$/;"	f	line:2130
+main	echo.rs	/^fn main() -> Result<(), Box<dyn std::error::Error>> {$/;"	f	line:73
+main	more.rs	/^fn main() {$/;"	f	line:2532
+main	printf.rs	/^fn main() -> Result<(), Box<dyn std::error::Error>> {$/;"	f	line:322
+marked_positions	more.rs	/^    marked_positions: HashMap<char, usize>,$/;"	m	line:701	struct:SourceContext
+more	tests/display-tests.rs	/^mod more;/;"	n	line:12
+name	more.rs	/^    fn name(&mut self) -> String {$/;"	P	line:656	implementation:Source
+name_and_ext	more.rs	/^fn name_and_ext(path: PathBuf) -> Result<String, MoreError> {$/;"	f	line:2195
+new	more.rs	/^    fn new($/;"	P	line:367	implementation:SeekPositions
+new	more.rs	/^    fn new(is_test: bool, lines: Option<u16>, plain: bool) -> Result<Self, MoreError> {$/;"	P	line:1102	implementation:Terminal
+new	more.rs	/^    fn new(size: (usize, usize)) -> Self {$/;"	P	line:244	implementation:Screen
+new	more.rs	/^    pub fn new($/;"	P	line:712	implementation:SourceContext
+next	more.rs	/^    fn next(&mut self) -> Option<Self::Item> {$/;"	P	line:547	implementation:SeekPositions
+next_back	more.rs	/^    fn next_back(&mut self) -> Option<Self::Item> {$/;"	P	line:637	implementation:SeekPositions
+not	more.rs	/^    fn not(self) -> Self::Output {$/;"	P	line:327	implementation:Direction
+parse	more.rs	/^fn parse(commands_str: String) -> Result<(Command, String, Command), MoreError> {$/;"	f	line:2243
+plain	more.rs	/^    plain: bool$/;"	m	line:1098	struct:Terminal
+plain	more.rs	/^    plain: bool,$/;"	m	line:360	struct:SeekPositions
+plain	more.rs	/^    plain: bool,$/;"	m	line:68	struct:Args
+plain	more.rs	/^    plain: bool,$/;"	m	line:707	struct:SourceContext
+positions	more.rs	/^    positions: Vec<u64>,$/;"	m	line:348	struct:SeekPositions
+posixutils-rs	test_files/README.md	/^# posixutils-rs$/;"	c	line:2
+precision	printf.rs	/^    precision: Option<usize>,$/;"	m	line:24	struct:ConvSpec
+previous_source_screen	more.rs	/^    previous_source_screen: Option<Screen>,$/;"	m	line:691	struct:SourceContext
+print_over	more.rs	/^    print_over: bool,$/;"	m	line:44	struct:Args
+printf	tests/display-tests.rs	/^mod printf;$/;"	n	line:11
+process_p	more.rs	/^    fn process_p(&mut self) -> Result<(), MoreError> {$/;"	f	line:2094
+read_line	more.rs	/^    fn read_line(&mut self) -> Result<String, MoreError> {$/;"	P	line:424	implementation:SeekPositions
+refresh	more.rs	/^    fn refresh(&mut self) -> Result<(), MoreError> {$/;"	f	line:1848
+repeat_search	more.rs	/^    pub fn repeat_search($/;"	P	line:1008	implementation:SourceContext
+reset	more.rs	/^    pub fn reset(&mut self) -> Result<(), MoreError> {$/;"	P	line:1075	implementation:SourceContext
+resize	more.rs	/^    fn resize(&mut self) -> Result<(), MoreError> {$/;"	P	line:1257	implementation:Terminal
+resize	more.rs	/^    fn resize(&mut self) -> Result<bool, MoreError> {$/;"	f	line:1860
+resize	more.rs	/^    pub fn resize(&mut self, terminal_size: (usize, usize)) -> Result<(), MoreError> {$/;"	P	line:1046	implementation:SourceContext
+return_previous	more.rs	/^    pub fn return_previous(&mut self) -> bool {$/;"	P	line:928	implementation:SourceContext
+run_test_more	tests/more/mod.rs	/^fn run_test_more($/;"	f	line:27
+screen	more.rs	/^    pub fn screen(&self) -> Option<Screen> {$/;"	P	line:748	implementation:SourceContext
+screen	more.rs	/^    screen: Option<Screen>,$/;"	m	line:693	struct:SourceContext
+scroll	more.rs	/^    pub fn scroll(&mut self, count: usize, direction: Direction) -> bool {$/;"	P	line:876	implementation:SourceContext
+scroll_file_position	more.rs	/^    fn scroll_file_position($/;"	f	line:1709
+search	more.rs	/^    pub fn search($/;"	P	line:933	implementation:SourceContext
+seek	more.rs	/^    fn seek(&mut self, position: u64) -> Result<(), MoreError> {$/;"	P	line:481	implementation:SeekPositions
+seek_positions	more.rs	/^    seek_positions: SeekPositions,$/;"	m	line:685	struct:SourceContext
+set_current	more.rs	/^    fn set_current(&mut self, position: usize) -> bool {$/;"	P	line:462	implementation:SeekPositions
+set_mark	more.rs	/^    pub fn set_mark(&mut self, letter: char) {$/;"	P	line:1028	implementation:SourceContext
+set_position_prompt	more.rs	/^    fn set_position_prompt(&mut self) -> Result<(), MoreError> {$/;"	f	line:1663
+set_raw	more.rs	/^    fn set_raw($/;"	P	line:283	implementation:Screen
+set_source	more.rs	/^    fn set_source(&mut self, source: Source) -> Result<(), MoreError> {$/;"	P	line:753	implementation:SourceContext
+set_str	more.rs	/^    fn set_str($/;"	P	line:256	implementation:Screen
+set_style	more.rs	/^    fn set_style(&mut self, style: StyleType) -> std::io::Result<()> {$/;"	P	line:1163	implementation:Terminal
+sign	printf.rs	/^    sign: bool,$/;"	m	line:27	struct:ConvSpec
+size	more.rs	/^    size: (u16, u16),$/;"	m	line:1094	struct:Terminal
+source	more.rs	/^    source: Source,$/;"	m	line:354	struct:SeekPositions
+space	printf.rs	/^    space: bool,$/;"	m	line:28	struct:ConvSpec
+spec	printf.rs	/^    spec: char,$/;"	m	line:20	struct:ConvSpec
+squeeze	more.rs	/^    squeeze: bool,$/;"	m	line:60	struct:Args
+squeeze_lines	more.rs	/^    squeeze_lines: bool,$/;"	m	line:358	struct:SeekPositions
+squeeze_lines	more.rs	/^    squeeze_lines: bool,$/;"	m	line:705	struct:SourceContext
+style_positions	more.rs	/^    style_positions: Vec<(usize, StyleType)>,$/;"	m	line:362	struct:SeekPositions
+tag	more.rs	/^    tag: Option<String>,$/;"	m	line:64	struct:Args
+terminal_size	more.rs	/^    terminal_size: Option<(usize, usize)>,$/;"	m	line:689	struct:SourceContext
+test	more.rs	/^    test: bool,$/;"	m	line:40	struct:Args
+test_0_files	tests/more/mod.rs	/^fn test_0_files() {$/;"	f	line:61
+test_1_file	tests/more/mod.rs	/^fn test_1_file() {$/;"	f	line:71
+test_3_files	tests/more/mod.rs	/^fn test_3_files() {$/;"	f	line:81
+test_basic_string_output	tests/printf/mod.rs	/^fn test_basic_string_output() {$/;"	f	line:13
+test_c	tests/more/mod.rs	/^fn test_c() {$/;"	f	line:359
+test_checker_more	tests/more/mod.rs	/^fn test_checker_more(plan: &TestPlan, output: &Output) {$/;"	f	line:14
+test_discard	tests/more/mod.rs	/^fn test_discard() {$/;"	f	line:202
+test_e	tests/more/mod.rs	/^fn test_e() {$/;"	f	line:369
+test_echo_basic	tests/echo/mod.rs	/^fn test_echo_basic() {$/;"	f	line:26
+test_examine_new_file	tests/more/mod.rs	/^fn test_examine_new_file() {$/;"	f	line:303
+test_goto_beggining	tests/more/mod.rs	/^fn test_goto_beggining() {$/;"	f	line:172
+test_goto_eof	tests/more/mod.rs	/^fn test_goto_eof() {$/;"	f	line:182
+test_goto_mark	tests/more/mod.rs	/^fn test_goto_mark() {$/;"	f	line:223
+test_goto_mark_error	tests/more/mod.rs	/^fn test_goto_mark_error() {$/;"	f	line:233
+test_help	tests/more/mod.rs	/^fn test_help() {$/;"	f	line:92
+test_hex_output	tests/printf/mod.rs	/^fn test_hex_output() {$/;"	f	line:49
+test_i	tests/more/mod.rs	/^fn test_i() {$/;"	f	line:379
+test_integer_output	tests/printf/mod.rs	/^fn test_integer_output() {$/;"	f	line:25
+test_mark	tests/more/mod.rs	/^fn test_mark() {$/;"	f	line:212
+test_minus_files	tests/more/mod.rs	/^fn test_minus_files() {$/;"	f	line:51
+test_n	tests/more/mod.rs	/^fn test_n() {$/;"	f	line:389
+test_octal_output	tests/printf/mod.rs	/^fn test_octal_output() {$/;"	f	line:37
+test_quit	tests/more/mod.rs	/^fn test_quit() {$/;"	f	line:334
+test_refresh	tests/more/mod.rs	/^fn test_refresh() {$/;"	f	line:192
+test_return_to_last	tests/more/mod.rs	/^fn test_return_to_last() {$/;"	f	line:243
+test_s	tests/more/mod.rs	/^fn test_s() {$/;"	f	line:399
+test_scroll_backward_halfscreen	tests/more/mod.rs	/^fn test_scroll_backward_halfscreen() {$/;"	f	line:152
+test_scroll_backward_one_line	tests/more/mod.rs	/^fn test_scroll_backward_one_line() {$/;"	f	line:132
+test_scroll_backward_screenful	tests/more/mod.rs	/^fn test_scroll_backward_screenful() {$/;"	f	line:112
+test_scroll_file	tests/more/mod.rs	/^fn test_scroll_file() {$/;"	f	line:293
+test_scroll_forward_halfscreen	tests/more/mod.rs	/^fn test_scroll_forward_halfscreen() {$/;"	f	line:142
+test_scroll_forward_one_line	tests/more/mod.rs	/^fn test_scroll_forward_one_line() {$/;"	f	line:122
+test_scroll_forward_screenful	tests/more/mod.rs	/^fn test_scroll_forward_screenful() {$/;"	f	line:102
+test_search_backward	tests/more/mod.rs	/^fn test_search_backward() {$/;"	f	line:263
+test_search_forward	tests/more/mod.rs	/^fn test_search_forward() {$/;"	f	line:253
+test_search_repeat	tests/more/mod.rs	/^fn test_search_repeat() {$/;"	f	line:273
+test_search_repeat_1	tests/more/mod.rs	/^fn test_search_repeat_1() {$/;"	f	line:283
+test_skip_lines	tests/more/mod.rs	/^fn test_skip_lines() {$/;"	f	line:162
+test_tag	tests/more/mod.rs	/^fn test_tag() {$/;"	f	line:313
+test_u	tests/more/mod.rs	/^fn test_u() {$/;"	f	line:409
+to_path	more.rs	/^fn to_path(file_string: String) -> Result<PathBuf, MoreError> {$/;"	f	line:2185
+tokenize_format_str	printf.rs	/^fn tokenize_format_str(format: &str) -> Vec<Token> {$/;"	f	line:80
+translate_str	echo.rs	/^fn translate_str(skip_nl: bool, s: &str) -> String {$/;"	f	line:19
+tty	more.rs	/^    tty: std::io::Stdout,$/;"	m	line:1092	struct:Terminal
+update_screen	more.rs	/^    fn update_screen(&mut self) -> Result<(), MoreError> {$/;"	P	line:771	implementation:SourceContext
+width	printf.rs	/^    width: Option<usize>,$/;"	m	line:22	struct:ConvSpec
+write_ch	more.rs	/^    fn write_ch(&mut self, ch: char, x: u16, y: u16) {$/;"	P	line:1230	implementation:Terminal
+write_err	more.rs	/^    fn write_err(&self, string: String) {$/;"	P	line:1220	implementation:Terminal
+zero_pad	printf.rs	/^    zero_pad: bool,$/;"	m	line:30	struct:ConvSpec
