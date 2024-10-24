@@ -173,7 +173,7 @@ enum MoreError {
     #[error("Couldn't call ctags")]
     CTagsFailed,
     /// Open, read [`File`] is failed
-    #[error("Couldn't read file {}", .0)]
+    #[error("Couldn't read file \'{}\'", .0)]
     FileRead(String),
     /// [`Output`], [`Regex`] parse errors
     #[error("Couldn't parse {}", .0)]
@@ -1337,11 +1337,28 @@ fn if_eof_set_default(prompt: &mut Option<Prompt>) {
 }
 
 fn compile_regex(pattern: String, ignore_case: bool) -> Result<regex_t, MoreError> {
+    #[cfg(target_os = "macos")]
+    let mut pattern = pattern.replace("\\\\", "\\");
+    #[cfg(all(unix, not(target_os = "macos")))]
     let pattern = pattern.replace("\\\\", "\\");
     let mut cflags = 0;
     if ignore_case {
         cflags |= REG_ICASE;
     }
+
+    // macOS version of [regcomp](regcomp) from `libc` provides additional check
+    // for empty regex. In this case, an error
+    // [REG_EMPTY](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/regcomp.3.html)
+    // will be returned. Therefore, an empty pattern is replaced with ".*".
+    #[cfg(target_os = "macos")]
+    {
+        pattern = if pattern == "" {
+            String::from(".*")
+        } else {
+            pattern
+        };
+    }
+
     let c_pattern =
         CString::new(pattern.clone()).map_err(|_| MoreError::StringParse(pattern.clone()))?;
     let mut regex = unsafe { std::mem::zeroed::<regex_t>() };
@@ -1570,6 +1587,9 @@ impl MoreControl {
     /// Find tag position with ctag and seek to it
     /// For correct usage apply "ctags --fields=+n -R *" before this function
     fn goto_tag(&mut self, tagstring: String) -> Result<bool, MoreError> {
+        if tagstring.is_empty(){
+            return Err(MoreError::FileRead(String::new()));
+        };
         let parse_error = Err(MoreError::StringParse(tagstring.clone() + " ctags output"));
         let pattern = if tagstring.contains(['^']) {
             tagstring.clone()
@@ -2016,32 +2036,20 @@ impl MoreControl {
         match error {
             MoreError::SeekPositions(ref seek_positions_error) => match seek_positions_error {
                 SeekPositionsError::StringParse(_) | SeekPositionsError::OutOfRange(_) => {
-                    if let Some(terminal) = &self.terminal {
-                        terminal.write_err(error_str + "\n");
-                    }
-                    panic!("{}", error)
+                    self.exit();
                 }
                 SeekPositionsError::FileRead(_) => {
                     self.prompt = Some(Prompt::Error(error_str.clone()));
-                    if let Some(terminal) = &self.terminal {
-                        terminal.write_err(error_str + "\n");
-                    }
                 }
             },
             MoreError::SourceContext(ref source_context_error) => match source_context_error {
                 SourceContextError::MissingTerminal => {
-                    if let Some(terminal) = &self.terminal {
-                        terminal.write_err(error_str + "\n");
-                    }
-                    panic!("{}", error)
+                    self.exit();
                 }
                 SourceContextError::PatternNotFound(_)
                 | SourceContextError::MissingLastSearch
                 | SourceContextError::MissingMark(_) => {
                     self.prompt = Some(Prompt::Error(error_str.clone()));
-                    if let Some(terminal) = &self.terminal {
-                        terminal.write_err(error_str + "\n");
-                    }
                 }
             },
             MoreError::StringParse(_) => {
@@ -2056,18 +2064,18 @@ impl MoreControl {
             | MoreError::InputRead
             | MoreError::TerminalOutput => {
                 if let Some(terminal) = &self.terminal {
-                    terminal.write_err(error_str + "\n");
+                    terminal.write_err(error_str.clone());
                 }
-                panic!("{}", error);
+                self.exit();
             }
             MoreError::UnknownCommand => {
                 self.prompt = Some(Prompt::Error(error_str.clone()));
-                if let Some(terminal) = &self.terminal {
-                    terminal
-                        .write_err(error_str + ". Command buffer: " + &self.commands_buffer + "\n");
-                }
+                
             }
             MoreError::TerminalInit => {}
+        }
+        if let Some(terminal) = &self.terminal {
+            terminal.write_err(error_str);
         }
         if self.args.test {
             self.exit();
@@ -2084,9 +2092,6 @@ impl MoreControl {
         loop {
             let (command, remainder, _) = parse(commands_str.clone())?;
             if command == Command::Unknown {
-                /*if let Some(terminal) = &mut self.terminal{
-                    eprint!("{}", remainder.clone() + "   ");
-                }*/
                 return Err(MoreError::UnknownCommand);
             }
             let is_empty = remainder.is_empty();
