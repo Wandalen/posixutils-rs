@@ -360,7 +360,7 @@ fn test_search_forward() {
         &[
             "--test",
             "-p",
-            "\"15/\\<goal\\>\n :n15/\\<test\\>\n:gn \"",
+            "\"15/goal\n :n15/test\n:gn \"",
             "test_files/README.md",
             "test_files/TODO.md",
         ],
@@ -377,7 +377,7 @@ fn test_search_backward() {
         &[
             "--test",
             "-p",
-            "\"Gk?\\<goal\\>\n :nG?\\<test\\>\n:n\"",
+            "\"Gk?goal\n :nG?test\n:n\"",
             "test_files/README.md",
             "test_files/TODO.md",
         ],
@@ -428,7 +428,7 @@ fn test_search_repeat() {
         &[
             "--test",
             "-p",
-            "\"/\\<goal\\>\n:n:n \"",
+            "\"/goal\n:n:n \"",
             "test_files/README.md",
             "test_files/TODO.md",
         ],
@@ -445,7 +445,7 @@ fn test_search_repeat_1() {
         &[
             "--test",
             "-p",
-            "\"g/\\<goal\\>\n:nG15?\\<test\\>\ngn:n \"",
+            "\"g/goal\n:nG15?test\ngn:n \"",
             "test_files/README.md",
             "test_files/TODO.md",
         ],
