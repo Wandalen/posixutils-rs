@@ -1587,7 +1587,7 @@ impl MoreControl {
     /// Find tag position with ctag and seek to it
     /// For correct usage apply "ctags --fields=+n -R *" before this function
     fn goto_tag(&mut self, tagstring: String) -> Result<bool, MoreError> {
-        if tagstring.is_empty(){
+        if tagstring.is_empty() {
             return Err(MoreError::FileRead(String::new()));
         };
         let parse_error = Err(MoreError::StringParse(tagstring.clone() + " ctags output"));
@@ -2070,7 +2070,6 @@ impl MoreControl {
             }
             MoreError::UnknownCommand => {
                 self.prompt = Some(Prompt::Error(error_str.clone()));
-                
             }
             MoreError::TerminalInit => {}
         }
