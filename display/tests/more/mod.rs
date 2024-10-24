@@ -332,7 +332,7 @@ fn test_goto_mark_error() {
         ],
         "",
         "",
-        "Couldn't find mark for 'a\n",
+        "Couldn't find mark for 'a",
         0,
     );
 }
@@ -384,6 +384,40 @@ fn test_search_backward() {
         "",
         "",
         "",
+        0,
+    );
+}
+
+#[test]
+fn test_search_forward_error() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            "\"15/\\<sdfsdfsfewcwiu,lxnsb\\>\n :n \"",
+            "test_files/README.md",
+            "test_files/TODO.md",
+        ],
+        "",
+        "",
+        "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern",
+        0,
+    );
+}
+
+#[test]
+fn test_search_backward_error() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            "\"Gk?\\<sdfsdfsfewcwiu,lxnsb\\>\n :n \"",
+            "test_files/README.md",
+            "test_files/TODO.md",
+        ],
+        "",
+        "",
+        "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern",
         0,
     );
 }
@@ -458,6 +492,23 @@ fn test_examine_new_file() {
 }
 
 #[test]
+fn test_examine_new_file_error() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            "\":e \n q\"",
+            "test_files/README.md",
+            "test_files/TODO.md",
+        ],
+        "",
+        "",
+        "Couldn't read file \'\'",
+        0,
+    );
+}
+
+#[test]
 fn test_tag() {
     run_test_more(
         &[
@@ -473,17 +524,6 @@ fn test_tag() {
         0,
     );
 }
-
-/*
-#[test]
-fn test_invoke_editor() {
-    run_test_more(
-        &["--test", "-p", "\"v:n:n:n\"", "test_files/README.md", "test_files/TODO.md"],
-        ":qa ",
-        "",
-        "",
-        0);
-}*/
 
 #[test]
 fn test_quit() {
@@ -526,6 +566,23 @@ fn test_quit() {
         "",
         "",
         "",
+        0,
+    );
+}
+
+#[test]
+fn test_unknown_error() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            "\"aaaaa\"",
+            "test_files/README.md",
+            "test_files/TODO.md",
+        ],
+        "",
+        "",
+        "Couldn't execute unknown command",
         0,
     );
 }
@@ -702,7 +759,7 @@ fn test_tag_3() {
         ],
         "",
         "",
-        "",
+        "Couldn't parse [0123456789] ctags output",
         0,
     );
 }
@@ -722,7 +779,7 @@ fn test_tag_4() {
         ],
         "",
         "",
-        "",
+        "Couldn't parse setlocale ctags output",
         0,
     );
 }
@@ -742,7 +799,7 @@ fn test_tag_5() {
         ],
         "",
         "",
-        "",
+        "Couldn't parse ^struct ctags output",
         0,
     );
 }
@@ -762,7 +819,83 @@ fn test_tag_6() {
         ],
         "",
         "",
+        "Couldn't parse \\<let\\> ctags output",
+        0,
+    );
+}
+
+#[test]
+fn test_tag_empty_error() {
+    run_test_more(
+        &[
+            "--test",
+            "-t",
+            "",
+            "-p",
+            "\":n:n:n:n:n\"",
+            "test_files/README.md",
+            "test_files/TODO.md",
+            "test_files/styled.txt",
+        ],
         "",
+        "",
+        "Couldn't read file ''",
+        0,
+    );
+}
+
+#[test]
+fn test_tag_not_found_error() {
+    run_test_more(
+        &[
+            "--test",
+            "-t",
+            "\\<dflbowvwvwvdfbfd\\>",
+            "-p",
+            "\":n:n:n:n:n\"",
+            "test_files/README.md",
+            "test_files/TODO.md",
+            "test_files/styled.txt",
+        ],
+        "",
+        "",
+        "Couldn't parse \\<dflbowvwvwvdfbfd\\> ctags output",
+        0,
+    );
+}
+
+#[test]
+fn test_command_tag_empty_error() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            "\":t \n :n:n:n:n:n\"",
+            "test_files/README.md",
+            "test_files/TODO.md",
+            "test_files/styled.txt",
+        ],
+        "",
+        "",
+        "Couldn't read file ''",
+        0,
+    );
+}
+
+#[test]
+fn test_command_tag_not_found_error() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            "\":t \\<dflbodfbfd\\>\n :n:n:n:n:n\"",
+            "test_files/README.md",
+            "test_files/TODO.md",
+            "test_files/styled.txt",
+        ],
+        "",
+        "",
+        "Couldn't parse \\<dflbodfbfd\\> ctags output",
         0,
     );
 }
