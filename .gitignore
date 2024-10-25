@@ -1,3 +1,9 @@
-
+text/tests/diff
+text/diff_util
+dev/tests/ar/generate_tests.sh
+dev/tests/strings/generate_tests.sh
+dev/tests/strip/generate_tests.sh
+process/tests/timeout/spawn_child.sh
+process/tests/timeout/with_argument.sh
 target/
 
