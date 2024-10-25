@@ -216,7 +216,7 @@ enum SourceContextError {
     #[error("Couldn't find \'{}\' pattern", .0)]
     PatternNotFound(String),
     /// Attempt execute previous search when it is [`None`]
-    #[error("Search operations have not yet been performed")]
+    #[error("No previous regular expression")]
     MissingLastSearch,
     /// Attempt move current position to mark when it isn`t set
     #[error("Couldn't find mark for \'{}", .0)]
@@ -451,9 +451,13 @@ impl SeekPositions {
             line_buf
         };
         for (pos, st) in self.style_positions.iter() {
-            line.remove(*pos);
-            if *st == StyleType::Underscore {
+            while line.get(*pos..(*pos + 1)) == Some("\x08") {
                 line.remove(*pos);
+            }
+            if *st == StyleType::Underscore {
+                while line.get(*pos..(*pos + 1)) == Some("_") {
+                    line.remove(*pos);
+                }
             }
         }
         Ok(line)
@@ -554,7 +558,7 @@ impl Iterator for SeekPositions {
             return None;
         }
         let mut style_positions = vec![];
-        let mut style_buf = vec![];
+        let mut style_buf = String::new();
         let mut is_ended = false;
         let mut nl_count = 0;
         let mut line_len = 0;
@@ -574,7 +578,7 @@ impl Iterator for SeekPositions {
                         break;
                     }
                     b'\x08' | b'_' if !self.plain => {
-                        style_buf.push(byte);
+                        style_buf.push(byte as char);
                         line_len += 1;
                     }
                     b'\n' => {
@@ -587,11 +591,17 @@ impl Iterator for SeekPositions {
                     }
                     _ => {
                         if !self.plain {
-                            match *style_buf.as_slice() {
-                                [b'\x08', b'_'] => {
+                            match style_buf.as_str() {
+                                "\x08_" => {
                                     style_positions.push((chars_len, StyleType::Underscore));
                                 }
-                                [b'\x08'] => {
+                                "\x08" => {
+                                    style_positions.push((chars_len, StyleType::Negative));
+                                }
+                                _ if style_buf.contains("\x08") && style_buf.ends_with("_") => {
+                                    style_positions.push((chars_len, StyleType::Underscore));
+                                }
+                                _ if style_buf.contains("\x08") && !style_buf.contains("_") => {
                                     style_positions.push((chars_len, StyleType::Negative));
                                 }
                                 _ => {}
@@ -977,13 +987,14 @@ impl SourceContext {
                 let Some((rows, _)) = self.terminal_size else {
                     break;
                 };
-                let mut new_position = self.seek_positions.current_line() + (rows - 2);
+                let mut new_position = self.seek_positions.current_line() + (rows - 4);
                 if let Some(count) = count {
                     new_position += count;
-                    if new_position > (rows - 2) {
-                        new_position -= rows - 2;
+                    if new_position > (rows - 4) {
+                        new_position -= rows - 4;
                     }
                 }
+
                 result = Ok(self.seek_positions.set_current(new_position));
                 break;
             }
@@ -1104,6 +1115,8 @@ struct Terminal {
     lines: Option<u16>,
     /// Suppress underlining and bold
     plain: bool,
+    /// Last acceptable pressed mouse button
+    last_mouse_button: Option<MouseButton>,
 }
 
 impl Terminal {
@@ -1139,6 +1152,7 @@ impl Terminal {
             ),
             lines,
             plain,
+            last_mouse_button: None,
         };
 
         let _ = terminal.resize();
@@ -1231,7 +1245,7 @@ impl Terminal {
     }
 
     /// Write string to terminal
-    fn _write(&mut self, string: String, x: u16, y: u16) {
+    fn write(&mut self, string: String, x: u16, y: u16) {
         let _ = write!(self.tty, "{}{string}", Goto(x + 1, y + 1));
     }
 
@@ -1247,6 +1261,24 @@ impl Terminal {
         };
         result
             .map(|(event, bytes)| match event {
+                Event::Mouse(mouse_event) => {
+                    let button = match mouse_event {
+                        MouseEvent::Press(button, _, _) => Some(button),
+                        _ => self.last_mouse_button,
+                    };
+                    self.last_mouse_button = if let MouseEvent::Release(..) = mouse_event {
+                        None
+                    } else {
+                        button
+                    };
+                    match button {
+                        Some(MouseButton::WheelDown) => Some("\n".to_string()),
+                        Some(MouseButton::WheelUp) => Some("k".to_string()),
+                        _ => None,
+                    }
+                }
+                Event::Key(Key::Up) => Some("k".to_string()),
+                Event::Key(Key::Down) => Some("\n".to_string()),
                 Event::Key(key) => {
                     let mut s = String::from_utf8(bytes).ok();
                     if key == Key::Char('\n') {
@@ -1290,7 +1322,7 @@ impl Terminal {
 #[derive(Debug, Clone)]
 enum Prompt {
     /// --More--
-    More,
+    More(Option<u8>),
     /// --More--(Next file)
     Eof(String),
     /// Current state info
@@ -1309,7 +1341,8 @@ impl Prompt {
     fn format(&self) -> Vec<(char, StyleType)> {
         let mut line = vec![];
         let string = match self {
-            Prompt::More => "-- More --".to_string(),
+            Prompt::More(Some(percent)) => format!("-- More --({}%)", percent),
+            Prompt::More(None) => "-- More --".to_string(),
             Prompt::Eof(next_file) => format!("-- More --(Next file: {next_file})"),
             Prompt::DisplayPosition(position) => position.clone(),
             Prompt::Input(input) => input.clone(),
@@ -1321,18 +1354,13 @@ impl Prompt {
         };
 
         let style = match self {
-            Prompt::More | Prompt::Eof(_) => StyleType::Negative,
+            Prompt::More(_) | Prompt::Eof(_) => StyleType::Negative,
+            Prompt::Error(error) if error.starts_with("No previous") => StyleType::Negative,
             _ => StyleType::None,
         };
 
         string.chars().for_each(|ch| line.push((ch, style)));
         line
-    }
-}
-
-fn if_eof_set_default(prompt: &mut Option<Prompt>) {
-    if let Some(Prompt::Eof(_)) = prompt {
-        *prompt = Some(Prompt::More);
     }
 }
 
@@ -1396,6 +1424,7 @@ struct MoreControl {
     is_ended_file: bool,
     /// If true [`MoreControl::process_()`] is called
     is_new_file: bool,
+    is_matched: bool,
 }
 
 impl MoreControl {
@@ -1444,6 +1473,7 @@ impl MoreControl {
             file_pathes,
             is_ended_file: false,
             is_new_file: false,
+            is_matched: false,
         })
     }
 
@@ -1511,16 +1541,30 @@ impl MoreControl {
         };
         self.context.update_screen()?;
         let result = if let Some(screen) = self.context.screen() {
-            let prompt = if let Some(prompt) = &self.prompt {
-                prompt
-            } else {
-                &Prompt::More
+            let prompt = match &self.prompt {
+                Some(Prompt::More(_)) | None => Prompt::More(if self.file_pathes.len() == 1 {
+                    Some(
+                        ((self.context.seek_positions.current_line() as f32
+                            / self.context.seek_positions.lines_count as f32)
+                            * 100.0) as u8,
+                    )
+                } else {
+                    None
+                }),
+                Some(prompt) => prompt.clone(),
             };
             if let Prompt::Input(_) = prompt {
             } else {
                 terminal.display(screen)?;
             };
-            terminal.display_prompt(prompt.clone())
+            terminal.display_prompt(prompt)?;
+            if self.is_matched {
+                terminal.write("".to_owned(), 0, 0);
+                terminal.clear_current_line();
+                terminal.write("...skipping".to_owned(), 0, 0);
+                self.is_matched = false;
+            }
+            Ok(())
         } else {
             Err(MoreError::SourceContext(
                 SourceContextError::MissingTerminal,
@@ -1744,6 +1788,16 @@ impl MoreControl {
         result
     }
 
+    fn if_eof_set_default(&mut self) {
+        if let Some(Prompt::Eof(_)) = self.prompt {
+            self.prompt = Some(Prompt::More(if self.file_pathes.len() == 1 {
+                Some(100)
+            } else {
+                None
+            }));
+        }
+    }
+
     /// Check if need go to next file
     fn if_eof_and_prompt_goto_next_file(&mut self) -> Result<(), MoreError> {
         if self.is_ended_file {
@@ -1780,7 +1834,15 @@ impl MoreControl {
                     {
                         self.exit();
                     }
-                    self.prompt = Some(Prompt::More);
+                    self.prompt = Some(Prompt::More(if self.file_pathes.len() == 1 {
+                        Some(
+                            (self.context.seek_positions.current_line() as f32
+                                / self.context.seek_positions.lines_count as f32)
+                                as u8,
+                        )
+                    } else {
+                        None
+                    }));
                 } else {
                     self.prompt = Some(Prompt::Eof(name_and_ext));
                 }
@@ -1886,7 +1948,7 @@ impl MoreControl {
             Command::ScrollBackwardOneScreenful(count) => {
                 let count = count.unwrap_or(self.context.terminal_size.unwrap_or((2, 0)).0 - 1);
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
-                if_eof_set_default(&mut self.prompt);
+                self.if_eof_set_default();
             }
             Command::ScrollForwardOneLine { count, is_space } => {
                 let count = count.unwrap_or(if is_space {
@@ -1900,7 +1962,7 @@ impl MoreControl {
             Command::ScrollBackwardOneLine(count) => {
                 let count = count.unwrap_or(1);
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
-                if_eof_set_default(&mut self.prompt);
+                self.if_eof_set_default();
             }
             Command::ScrollForwardOneHalfScreenful(count) => {
                 if count.is_some() {
@@ -1943,11 +2005,11 @@ impl MoreControl {
                     }
                 });
                 self.is_ended_file = self.context.scroll(count, Direction::Backward);
-                if_eof_set_default(&mut self.prompt);
+                self.if_eof_set_default();
             }
             Command::GoToBeginningOfFile(count) => {
                 self.is_ended_file = self.context.goto_beginning(count);
-                if_eof_set_default(&mut self.prompt);
+                self.if_eof_set_default();
             }
             Command::GoToEOF(count) => {
                 self.is_ended_file = self.context.goto_eof(count);
@@ -1956,7 +2018,7 @@ impl MoreControl {
             Command::RefreshScreen => self.refresh()?,
             Command::DiscardAndRefresh => {
                 self.commands_buffer.clear();
-                if_eof_set_default(&mut self.prompt);
+                self.if_eof_set_default();
                 self.refresh()?;
             }
             Command::MarkPosition(letter) => {
@@ -1967,7 +2029,7 @@ impl MoreControl {
             }
             Command::ReturnPreviousPosition => {
                 self.is_ended_file = self.context.return_previous();
-                if_eof_set_default(&mut self.prompt);
+                self.if_eof_set_default();
             }
             Command::SearchForwardPattern {
                 count,
@@ -1977,7 +2039,8 @@ impl MoreControl {
                 self.context.current_pattern = pattern.clone();
                 let re = compile_regex(pattern, self.args.case_insensitive)?;
                 self.is_ended_file = self.context.search(count, re, is_not, Direction::Forward)?;
-                if_eof_set_default(&mut self.prompt);
+                self.is_matched = true;
+                self.if_eof_set_default();
             }
             Command::SearchBackwardPattern {
                 count,
@@ -1989,15 +2052,18 @@ impl MoreControl {
                 self.is_ended_file = self
                     .context
                     .search(count, re, is_not, Direction::Backward)?;
-                if_eof_set_default(&mut self.prompt);
+                self.is_matched = true;
+                self.if_eof_set_default();
             }
             Command::RepeatSearch(count) => {
                 self.is_ended_file = self.context.repeat_search(count, false)?;
-                if_eof_set_default(&mut self.prompt);
+                self.is_matched = true;
+                self.if_eof_set_default();
             }
             Command::RepeatSearchReverse(count) => {
                 self.is_ended_file = self.context.repeat_search(count, true)?;
-                if_eof_set_default(&mut self.prompt);
+                self.is_matched = true;
+                self.if_eof_set_default();
             }
             Command::ExamineNewFile(filename) => self.examine_file(filename)?,
             Command::ExamineNextFile(count) => {
@@ -2012,7 +2078,7 @@ impl MoreControl {
             }
             Command::GoToTag(tagstring) => {
                 self.is_ended_file = self.goto_tag(tagstring)?;
-                if_eof_set_default(&mut self.prompt);
+                self.if_eof_set_default();
             }
             Command::InvokeEditor => self.invoke_editor()?,
             Command::DisplayPosition => self.set_position_prompt()?,
@@ -2036,6 +2102,9 @@ impl MoreControl {
         match error {
             MoreError::SeekPositions(ref seek_positions_error) => match seek_positions_error {
                 SeekPositionsError::StringParse(_) | SeekPositionsError::OutOfRange(_) => {
+                    if let Some(terminal) = &self.terminal {
+                        terminal.write_err(error_str.clone());
+                    }
                     self.exit();
                 }
                 SeekPositionsError::FileRead(_) => {
@@ -2044,6 +2113,9 @@ impl MoreControl {
             },
             MoreError::SourceContext(ref source_context_error) => match source_context_error {
                 SourceContextError::MissingTerminal => {
+                    if let Some(terminal) = &self.terminal {
+                        terminal.write_err(error_str.clone());
+                    }
                     self.exit();
                 }
                 SourceContextError::PatternNotFound(_)
@@ -2073,10 +2145,10 @@ impl MoreControl {
             }
             MoreError::TerminalInit => {}
         }
-        if let Some(terminal) = &self.terminal {
-            terminal.write_err(error_str);
-        }
         if self.args.test {
+            if let Some(terminal) = &self.terminal {
+                terminal.write_err(error_str);
+            }
             self.exit();
         }
     }
@@ -2140,7 +2212,15 @@ impl MoreControl {
                 Ok(_) => {
                     if let Some(Prompt::ExitKeys) = self.prompt {
                         let _ = self.display();
-                        self.prompt = Some(Prompt::More);
+                        self.prompt = Some(Prompt::More(if self.file_pathes.len() == 1 {
+                            Some(
+                                (self.context.seek_positions.current_line() as f32
+                                    / self.context.seek_positions.lines_count as f32)
+                                    as u8,
+                            )
+                        } else {
+                            None
+                        }));
                         continue;
                     }
                 }
@@ -2153,7 +2233,15 @@ impl MoreControl {
                     self.prompt = Some(Prompt::Input(self.commands_buffer.clone()));
                     let _ = self.display().inspect_err(|e| self.handle_error(e.clone()));
                 } else {
-                    self.prompt = Some(Prompt::More);
+                    self.prompt = Some(Prompt::More(if self.file_pathes.len() == 1 {
+                        Some(
+                            (self.context.seek_positions.current_line() as f32
+                                / self.context.seek_positions.lines_count as f32)
+                                as u8,
+                        )
+                    } else {
+                        None
+                    }));
                 }
                 match command {
                     Command::Unknown => {
