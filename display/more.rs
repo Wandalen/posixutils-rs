@@ -687,7 +687,7 @@ impl Iterator for SeekPositions {
                 .all(check_styled)
         {
             style_positions.push((
-                (line_len - buffer.len() - l - 1)..(line_len - 1),
+                (line_len - buffer.len() - l - (!is_ended as usize))..(line_len - 1),
                 StyleType::Negative,
             ));
         }
@@ -697,13 +697,14 @@ impl Iterator for SeekPositions {
         };
         if is_ended || next_position >= stream_position {
             let _ = self.buffer.seek(SeekFrom::Start(current_position));
+            self.style_positions = style_positions;
             None
         } else {
+            self.style_positions = style_positions;
             if self.buffer.seek(SeekFrom::Start(next_position)).is_err() {
                 return None;
             };
             self.positions.push(next_position);
-            self.style_positions = style_positions;
             Some(next_position)
         }
     }
@@ -915,15 +916,12 @@ impl SourceContext {
         content_lines.push(line);
 
         content_lines.reverse();
-        let mut style_lines = vec![];
-        while self.seek_positions.current_line() <= current_line {
-            if self.seek_positions.next().is_none() {
-                break;
-            }
 
+        let mut style_lines = vec![];
+        let mut add_style_line = |seek_positions: &mut SeekPositions| {
             let mut deleted_count = 0;
             style_lines.push(
-                self.seek_positions
+                seek_positions
                     .style_positions
                     .iter()
                     .cloned()
@@ -933,8 +931,13 @@ impl SourceContext {
                     })
                     .collect::<Vec<_>>(),
             );
+        };
+        while self.seek_positions.next().is_some()
+            && self.seek_positions.current_line() <= current_line
+        {
+            add_style_line(&mut self.seek_positions);
         }
-
+        add_style_line(&mut self.seek_positions);
         self.seek_positions.set_current(current_line);
         let previous_lines_len = previous_lines.len();
         for (i, line) in previous_lines.into_iter().enumerate() {
