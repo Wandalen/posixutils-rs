@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs::File;
 use std::io::{stdout, BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Write};
-use std::ops::Not;
+use std::ops::{Not, Range};
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::process::{exit, ExitStatus};
@@ -360,7 +360,7 @@ struct SeekPositions {
     /// Suppress underlining and bold
     plain: bool,
     /// Char positions for stylized text
-    style_positions: Vec<(usize, StyleType)>,
+    style_positions: Vec<(Range<usize>, StyleType)>,
 }
 
 impl SeekPositions {
@@ -417,6 +417,9 @@ impl SeekPositions {
             let mut reader = BufReader::new(&mut self.buffer);
             let mut buf = vec![];
             let _ = reader.read_to_end(&mut buf);
+            if !buf.is_empty() {
+                count += 1;
+            }
         }
         let stream_position = self.buffer.stream_position().unwrap_or(0);
         let _ = self.buffer.rewind();
@@ -444,19 +447,26 @@ impl SeekPositions {
                 MoreError::SeekPositions(SeekPositionsError::StringParse(self.source.name()))
             })?
         } else {
-            let mut line_buf = String::new();
-            self.buffer.read_to_string(&mut line_buf).map_err(|_| {
-                MoreError::SeekPositions(SeekPositionsError::FileRead(self.source.name()))
-            })?;
-            line_buf
+            let mut line_buf = vec![];
+            let _ = self.buffer.read_to_end(&mut line_buf);
+            let line_buf = line_buf[..(line_buf.len() - 1)].to_owned();
+            String::from_utf8(Vec::from_iter(line_buf)).unwrap_or_default()
         };
-        for (pos, st) in self.style_positions.iter() {
-            while line.get(*pos..(*pos + 1)) == Some("\x08") {
-                line.remove(*pos);
-            }
-            if *st == StyleType::Underscore {
-                while line.get(*pos..(*pos + 1)) == Some("_") {
-                    line.remove(*pos);
+        if line.is_empty() {
+            return Ok(String::new());
+        }
+        for (rng, _) in self.style_positions.iter().rev() {
+            if rng.end >= line.len() {
+                continue;
+            };
+            let new = line[rng.clone()]
+                .chars()
+                .filter(|ch| *ch != '\x08' && *ch != '_' && *ch != '\r')
+                .collect::<String>();
+            if !new.is_empty() {
+                let new = new[..1].to_string();
+                if line.len() > rng.end {
+                    line.replace_range(rng.clone(), &new);
                 }
             }
         }
@@ -557,12 +567,15 @@ impl Iterator for SeekPositions {
         if self.buffer.seek(SeekFrom::Start(current_position)).is_err() {
             return None;
         }
+        let check_styled = |(i, ch, first): (usize, &char, char)| {
+            (i % 2 == 0 && *ch == first) || (i % 2 == 1 && *ch == '\x08')
+        };
         let mut style_positions = vec![];
-        let mut style_buf = String::new();
+        let mut buffer_str = String::new();
         let mut is_ended = false;
-        let mut nl_count = 0;
+        let mut new_line_count = 0;
         let mut line_len = 0;
-        let mut chars_len = 0;
+        let mut need_add_chars = 0;
         let max_line_len = self.line_len.unwrap_or(usize::MAX) as u64;
         {
             let reader = BufReader::new(&mut self.buffer);
@@ -574,41 +587,64 @@ impl Iterator for SeekPositions {
                     break;
                 };
                 match byte {
-                    _ if nl_count > 0 => {
+                    _ if new_line_count > 0 => {
                         break;
                     }
-                    b'\x08' | b'_' if !self.plain => {
-                        style_buf.push(byte as char);
+                    b'\r' => {
                         line_len += 1;
+                        buffer_str.push(byte as char);
+                        continue;
                     }
                     b'\n' => {
                         line_len += 1;
                         if self.squeeze_lines {
-                            nl_count += 1;
+                            new_line_count += 1;
                         } else {
                             break;
                         }
                     }
                     _ => {
                         if !self.plain {
-                            match style_buf.as_str() {
-                                "\x08_" => {
-                                    style_positions.push((chars_len, StyleType::Underscore));
+                            let buffer = buffer_str.chars().collect::<Vec<char>>();
+                            if buffer == vec![' '] {
+                                buffer_str.clear();
+                            } else if buffer.len() == 3
+                                && (buffer.starts_with(&['_', '\x08'])
+                                    || buffer.ends_with(&['\x08', '_']))
+                            {
+                                style_positions.push((
+                                    (line_len - buffer.len())..line_len,
+                                    StyleType::Underscore,
+                                ));
+                                need_add_chars += 2;
+                                buffer_str.clear();
+                            } else if buffer.len() >= 3 {
+                                let is_styled = buffer[..(buffer.len() - 1)]
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, ch)| (i, ch, buffer[0]))
+                                    .all(check_styled);
+                                if buffer.last() == Some(&' ') && is_styled && buffer_str.len() >= 3
+                                {
+                                    style_positions.push((
+                                        (line_len - buffer.len())..line_len,
+                                        StyleType::Negative,
+                                    ));
+                                    need_add_chars += ((buffer.len() as f32) / 2.0).floor() as u64;
+                                } else if buffer
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, ch)| (i, ch, buffer[0]))
+                                    .all(check_styled)
+                                {
+                                    buffer_str.push(byte as char);
+                                    line_len += 1;
+                                    continue;
                                 }
-                                "\x08" => {
-                                    style_positions.push((chars_len, StyleType::Negative));
-                                }
-                                _ if style_buf.contains("\x08") && style_buf.ends_with("_") => {
-                                    style_positions.push((chars_len, StyleType::Underscore));
-                                }
-                                _ if style_buf.contains("\x08") && !style_buf.contains("_") => {
-                                    style_positions.push((chars_len, StyleType::Negative));
-                                }
-                                _ => {}
+                                buffer_str.clear();
                             }
-                            style_buf.clear();
-                            chars_len += 1;
                         }
+                        buffer_str.push(byte as char);
                         line_len += 1;
                     }
                 }
@@ -620,15 +656,42 @@ impl Iterator for SeekPositions {
                         buf.clear();
                     }
                 }
-                if line_len >= max_line_len {
+                if line_len as u64 >= max_line_len + need_add_chars {
                     if let Err(err) = std::str::from_utf8(&buf) {
-                        line_len -= (buf.len() - err.valid_up_to()) as u64;
+                        line_len -= buf.len() - err.valid_up_to();
                     }
                     break;
                 }
             }
         }
-        let next_position = current_position + line_len;
+        let l = buffer_str
+            .chars()
+            .filter(|ch| *ch == '\r' || *ch == ' ')
+            .count();
+        let buffer = buffer_str
+            .chars()
+            .filter(|ch| *ch != '\r' && *ch != ' ')
+            .collect::<Vec<char>>();
+        if buffer.len() == 3
+            && (buffer.starts_with(&['_', '\x08']) || buffer.ends_with(&['\x08', '_']))
+        {
+            style_positions.push((
+                (line_len - buffer.len() - 2)..(line_len - 1),
+                StyleType::Underscore,
+            ));
+        } else if buffer.len() >= 3
+            && buffer
+                .iter()
+                .enumerate()
+                .map(|(i, ch)| (i, ch, buffer[0]))
+                .all(check_styled)
+        {
+            style_positions.push((
+                (line_len - buffer.len() - l - 1)..(line_len - 1),
+                StyleType::Negative,
+            ));
+        }
+        let next_position = current_position + line_len as u64;
         let Ok(stream_position) = self.buffer.stream_position() else {
             return None;
         };
@@ -839,9 +902,8 @@ impl SourceContext {
             }
         }
 
-        let mut style_lines = vec![];
         let mut i = 0;
-        while i < content_lines_len {
+        while i < content_lines_len - 1 {
             let line = self.seek_positions.read_line()?;
             content_lines.push(line);
             if self.seek_positions.next_back().is_none() {
@@ -849,13 +911,28 @@ impl SourceContext {
             }
             i += 1;
         }
+        let line = self.seek_positions.read_line()?;
+        content_lines.push(line);
 
         content_lines.reverse();
+        let mut style_lines = vec![];
         while self.seek_positions.current_line() <= current_line {
             if self.seek_positions.next().is_none() {
                 break;
             }
-            style_lines.push(self.seek_positions.style_positions.clone());
+
+            let mut deleted_count = 0;
+            style_lines.push(
+                self.seek_positions
+                    .style_positions
+                    .iter()
+                    .cloned()
+                    .map(|(rng, st)| {
+                        deleted_count += rng.end - rng.start - 1;
+                        (rng.end - deleted_count - 1, st)
+                    })
+                    .collect::<Vec<_>>(),
+            );
         }
 
         self.seek_positions.set_current(current_line);
@@ -1165,10 +1242,9 @@ impl Terminal {
             let _ = self.set_style(StyleType::None);
             return Err(MoreError::SetOutside);
         }
-
         let mut style = StyleType::None;
         for (i, line) in screen.0.iter().enumerate() {
-            self.write_ch(' ', 1, i as u16);
+            self.write_ch(' ', 0, i as u16);
             self.clear_current_line();
             for (j, (ch, st)) in line.iter().enumerate() {
                 if style != *st {
@@ -1178,7 +1254,6 @@ impl Terminal {
                 self.write_ch(*ch, j as u16, i as u16);
             }
         }
-
         let _ = self.set_style(StyleType::None);
         Ok(())
     }
@@ -1240,7 +1315,7 @@ impl Terminal {
     }
 
     /// Write error to [`Stderr`]
-    fn write_err(&self, string: String) {
+    fn _write_err(&self, string: String) {
         eprint!("{string}");
     }
 
@@ -1810,14 +1885,14 @@ impl MoreControl {
                     == self.context.seek_positions.len_lines()
             {
                 if self.args.exit_on_eof {
-                    self.exit();
+                    self.exit(None);
                 }
                 self.prompt = Some(Prompt::Exit);
                 self.display()?;
                 if let Some(terminal) = &mut self.terminal {
                     let _ = terminal.getch();
-                    self.exit();
                 }
+                self.exit(None);
             }
 
             let next_position = self
@@ -1832,7 +1907,12 @@ impl MoreControl {
                         .scroll_file_position(Some(1), Direction::Forward)
                         .is_err()
                     {
-                        self.exit();
+                        self.prompt = Some(Prompt::Exit);
+                        self.display()?;
+                        if let Some(terminal) = &mut self.terminal {
+                            let _ = terminal.getch();
+                        }
+                        self.exit(None);
                     }
                     self.prompt = Some(Prompt::More(if self.file_pathes.len() == 1 {
                         Some(
@@ -1847,18 +1927,26 @@ impl MoreControl {
                     self.prompt = Some(Prompt::Eof(name_and_ext));
                 }
             } else {
-                self.exit();
+                self.prompt = Some(Prompt::Exit);
+                self.display()?;
+                if let Some(terminal) = &mut self.terminal {
+                    let _ = terminal.getch();
+                }
+                self.exit(None);
             }
         }
         Ok(())
     }
 
     /// Prepare all required resource to drop and exit
-    fn exit(&mut self) {
+    fn exit(&mut self, error_message: Option<String>) {
         if let Some(terminal) = &mut self.terminal {
             terminal.close();
         }
         self.terminal = None;
+        if let Some(error_message) = error_message {
+            eprintln!("{error_message}");
+        }
         exit(0);
     }
 
@@ -1906,9 +1994,7 @@ impl MoreControl {
             self.context.set_source(source.clone())?;
             self.context.seek_positions.seek(*seek)?;
             self.last_source_before_usage = None;
-        } /*else if let Some(terminal) = self.terminal.as_mut() {
-              terminal.refresh();
-          }*/
+        }
         self.display()
     }
 
@@ -2068,12 +2154,22 @@ impl MoreControl {
             Command::ExamineNewFile(filename) => self.examine_file(filename)?,
             Command::ExamineNextFile(count) => {
                 if self.scroll_file_position(count, Direction::Forward)? {
-                    self.exit();
+                    self.prompt = Some(Prompt::Exit);
+                    self.display()?;
+                    if let Some(terminal) = &mut self.terminal {
+                        let _ = terminal.getch();
+                    }
+                    self.exit(None);
                 }
             }
             Command::ExaminePreviousFile(count) => {
                 if self.scroll_file_position(count, Direction::Backward)? {
-                    self.exit();
+                    self.prompt = Some(Prompt::Exit);
+                    self.display()?;
+                    if let Some(terminal) = &mut self.terminal {
+                        let _ = terminal.getch();
+                    }
+                    self.exit(None);
                 }
             }
             Command::GoToTag(tagstring) => {
@@ -2082,7 +2178,7 @@ impl MoreControl {
             }
             Command::InvokeEditor => self.invoke_editor()?,
             Command::DisplayPosition => self.set_position_prompt()?,
-            Command::Quit => self.exit(),
+            Command::Quit => self.exit(None),
             _ => return Err(MoreError::UnknownCommand),
         };
 
@@ -2102,10 +2198,7 @@ impl MoreControl {
         match error {
             MoreError::SeekPositions(ref seek_positions_error) => match seek_positions_error {
                 SeekPositionsError::StringParse(_) | SeekPositionsError::OutOfRange(_) => {
-                    if let Some(terminal) = &self.terminal {
-                        terminal.write_err(error_str.clone());
-                    }
-                    self.exit();
+                    self.exit(Some(error_str.clone()));
                 }
                 SeekPositionsError::FileRead(_) => {
                     self.prompt = Some(Prompt::Error(error_str.clone()));
@@ -2113,10 +2206,7 @@ impl MoreControl {
             },
             MoreError::SourceContext(ref source_context_error) => match source_context_error {
                 SourceContextError::MissingTerminal => {
-                    if let Some(terminal) = &self.terminal {
-                        terminal.write_err(error_str.clone());
-                    }
-                    self.exit();
+                    self.exit(Some(error_str.clone()));
                 }
                 SourceContextError::PatternNotFound(_)
                 | SourceContextError::MissingLastSearch
@@ -2135,10 +2225,7 @@ impl MoreControl {
             | MoreError::SizeRead
             | MoreError::InputRead
             | MoreError::TerminalOutput => {
-                if let Some(terminal) = &self.terminal {
-                    terminal.write_err(error_str.clone());
-                }
-                self.exit();
+                self.exit(Some(error_str.clone()));
             }
             MoreError::UnknownCommand => {
                 self.prompt = Some(Prompt::Error(error_str.clone()));
@@ -2146,10 +2233,7 @@ impl MoreControl {
             MoreError::TerminalInit => {}
         }
         if self.args.test {
-            if let Some(terminal) = &self.terminal {
-                terminal.write_err(error_str);
-            }
-            self.exit();
+            self.exit(Some(error_str.clone()));
         }
     }
 
@@ -2175,7 +2259,6 @@ impl MoreControl {
                 if commands_str.is_empty() {
                     self.is_new_file = false;
                 }
-                //eprintln!("{}", commands_str);
                 break;
             }
             if is_empty {
@@ -2202,6 +2285,7 @@ impl MoreControl {
                 let _ = self
                     .process_p()
                     .inspect_err(|e| self.handle_error(e.clone()));
+                let _ = self.display().inspect_err(|e| self.handle_error(e.clone()));
                 continue;
             }
             match self.handle_events() {
