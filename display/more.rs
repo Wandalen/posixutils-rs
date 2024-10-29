@@ -386,7 +386,6 @@ impl SeekPositions {
                 buffer
             }
         };
-
         let mut seek_pos = Self {
             positions: vec![],
             line_len,
@@ -602,6 +601,10 @@ impl Iterator for SeekPositions {
                         } else {
                             break;
                         }
+                    }
+                    byte if byte.is_ascii_control() => {
+                        line_len += 1;
+                        break;
                     }
                     _ => {
                         if !self.plain {
@@ -1514,11 +1517,9 @@ impl MoreControl {
         let source = if args.input_files.is_empty()
             || (args.input_files.len() == 1 && args.input_files[0] == *"-")
         {
-            let mut buf = String::new();
-            std::io::stdin()
-                .lock()
-                .read_to_string(&mut buf)
-                .map_err(|_| MoreError::InputRead)?;
+            let Some(Ok(buf)) = BufReader::new(std::io::stdin().lock()).lines().next() else {
+                return Err(MoreError::InputRead);
+            };
             Source::Buffer(Cursor::new(buf))
         } else {
             for file_string in &args.input_files {
@@ -1947,10 +1948,11 @@ impl MoreControl {
             terminal.close();
         }
         self.terminal = None;
-        if let Some(error_message) = error_message {
+        if let Some(ref error_message) = error_message {
             eprintln!("{error_message}");
+            println!("{error_message}");
         }
-        exit(0);
+        exit(error_message.is_some() as i32);
     }
 
     /// Set current file by [`file_string`] path
@@ -2713,6 +2715,10 @@ fn main() {
                 ctl.loop_();
             }
         }
-        Err(error) => panic!("{}", error),
+        Err(error) => {
+            eprintln!("{}", error);
+            println!("{}", error);
+            std::process::exit(1);
+        }
     }
 }

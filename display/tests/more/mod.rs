@@ -49,12 +49,23 @@ fn run_test_more(
 // base tests
 #[test]
 fn test_minus_files() {
-    run_test_more(&["-p", "\":n\"", "-"], "", "", "", 0);
+    run_test_more(&["-p", "\":n\"", "-"], "ABC", "", "", 0);
 }
 
 #[test]
 fn test_0_files() {
-    run_test_more(&["-p", "\":n\""], "", "", "", 0);
+    run_test_more(&["-p", "\":n\""], "ABC", "", "", 0);
+}
+
+#[test]
+fn test_0_files_error() {
+    run_test_more(
+        &["-p", "\":n\""],
+        "",
+        "Couldn't read from stdin\n",
+        "Couldn't read from stdin\n",
+        1,
+    );
 }
 
 #[test]
@@ -198,7 +209,7 @@ fn test_scroll_forward_screenful() {
         &[
             "--test",
             "-p",
-            "\"f\x06f\x06f\x06\"",
+            "\"f\x06f\x06f\x06 \"",
             "test_files/TODO.md",
             "test_files/styled.txt",
         ],
@@ -299,7 +310,7 @@ fn test_skip_lines() {
         &[
             "--test",
             "-p",
-            "\"ssssssssssss:nsssss\"",
+            "\"ssssssssssss:n sssss\"",
             "test_files/README.md",
             "test_files/TODO.md",
         ],
@@ -425,9 +436,9 @@ fn test_goto_mark_error() {
             "test_files/TODO.md",
         ],
         "",
-        "",
         "Couldn't find mark for 'a\n",
-        0,
+        "Couldn't find mark for 'a\n",
+        1,
     );
 }
 
@@ -493,9 +504,9 @@ fn test_search_forward_error() {
             "test_files/TODO.md",
         ],
         "",
-        "",
         "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern\n",
-        0,
+        "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern\n",
+        1,
     );
 }
 
@@ -510,9 +521,9 @@ fn test_search_backward_error() {
             "test_files/TODO.md",
         ],
         "",
-        "",
         "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern\n",
-        0,
+        "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern\n",
+        1,
     );
 }
 
@@ -596,9 +607,9 @@ fn test_examine_new_file_error() {
             "test_files/TODO.md",
         ],
         "",
-        "",
         "Couldn't read file \'\'\n",
-        0,
+        "Couldn't read file \'\'\n",
+        1,
     );
 }
 
@@ -675,9 +686,9 @@ fn test_unknown_error() {
             "test_files/TODO.md",
         ],
         "",
-        "",
         "Couldn't execute unknown command\n",
-        0,
+        "Couldn't execute unknown command\n",
+        1,
     );
 }
 
@@ -852,9 +863,9 @@ fn test_tag_3() {
             "test_files/styled.txt",
         ],
         "",
-        "",
         "Couldn't parse [0123456789] ctags output\n",
-        0,
+        "Couldn't parse [0123456789] ctags output\n",
+        1,
     );
 }
 
@@ -872,9 +883,9 @@ fn test_tag_4() {
             "test_files/styled.txt",
         ],
         "",
-        "",
         "Couldn't parse setlocale ctags output\n",
-        0,
+        "Couldn't parse setlocale ctags output\n",
+        1,
     );
 }
 
@@ -892,9 +903,9 @@ fn test_tag_5() {
             "test_files/styled.txt",
         ],
         "",
-        "",
         "Couldn't parse ^struct ctags output\n",
-        0,
+        "Couldn't parse ^struct ctags output\n",
+        1,
     );
 }
 
@@ -912,9 +923,9 @@ fn test_tag_6() {
             "test_files/styled.txt",
         ],
         "",
-        "",
         "Couldn't parse \\<let\\> ctags output\n",
-        0,
+        "Couldn't parse \\<let\\> ctags output\n",
+        1,
     );
 }
 
@@ -932,9 +943,9 @@ fn test_tag_empty_error() {
             "test_files/styled.txt",
         ],
         "",
-        "",
         "Couldn't read file ''\n",
-        0,
+        "Couldn't read file ''\n",
+        1,
     );
 }
 
@@ -952,9 +963,9 @@ fn test_tag_not_found_error() {
             "test_files/styled.txt",
         ],
         "",
-        "",
         "Couldn't parse \\<dflbowvwvwvdfbfd\\> ctags output\n",
-        0,
+        "Couldn't parse \\<dflbowvwvwvdfbfd\\> ctags output\n",
+        1,
     );
 }
 
@@ -970,9 +981,9 @@ fn test_command_tag_empty_error() {
             "test_files/styled.txt",
         ],
         "",
-        "",
         "Couldn't read file ''\n",
-        0,
+        "Couldn't read file ''\n",
+        1,
     );
 }
 
@@ -988,9 +999,9 @@ fn test_command_tag_not_found_error() {
             "test_files/styled.txt",
         ],
         "",
-        "",
         "Couldn't parse \\<dflbodfbfd\\> ctags output\n",
-        0,
+        "Couldn't parse \\<dflbodfbfd\\> ctags output\n",
+        1,
     );
 }
 
