@@ -86,6 +86,100 @@ fn test_3_files() {
     );
 }
 
+#[test]
+fn test_styled_text() {
+    run_test_more(
+        &["--test", "-p", "jjjjjjjjjjj:n", "test_files/styled.txt"],
+        "",
+        "",
+        "",
+        0,
+    );
+}
+
+#[test]
+fn test_styled_text_1() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            ":n:njjjjjjjjjjj:n",
+            "test_files/README.md",
+            "test_files/TODO.md",
+            "test_files/styled.txt",
+        ],
+        "",
+        "",
+        "",
+        0,
+    );
+}
+
+#[test]
+fn test_styled_text_2() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            ":n:nG:n",
+            "test_files/README.md",
+            "test_files/TODO.md",
+            "test_files/styled.txt",
+        ],
+        "",
+        "",
+        "",
+        0,
+    );
+}
+
+#[test]
+fn test_styled_text_3() {
+    run_test_more(
+        &["--test", "-p", "jjjjjjjjjjj:n", "test_files/styled1.txt"],
+        "",
+        "",
+        "",
+        0,
+    );
+}
+
+#[test]
+fn test_styled_text_4() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            ":n:njjjjjjjjjjj:n",
+            "test_files/README.md",
+            "test_files/TODO.md",
+            "test_files/styled1.txt",
+        ],
+        "",
+        "",
+        "",
+        0,
+    );
+}
+
+#[test]
+fn test_styled_text_5() {
+    run_test_more(
+        &[
+            "--test",
+            "-p",
+            ":n:nG:n",
+            "test_files/README.md",
+            "test_files/TODO.md",
+            "test_files/styled1.txt",
+        ],
+        "",
+        "",
+        "",
+        0,
+    );
+}
+
 // commands tests
 #[test]
 fn test_help() {
@@ -154,7 +248,7 @@ fn test_scroll_backward_one_line() {
         &[
             "--test",
             "-p",
-            "\"jjjjjkkkkkkkkk:nkkkjjjj\"",
+            "\"jjjjjkkkkkkkkk:n kkkjjjj\"",
             "test_files/README.md",
             "test_files/TODO.md",
         ],
@@ -332,7 +426,7 @@ fn test_goto_mark_error() {
         ],
         "",
         "",
-        "Couldn't find mark for 'a",
+        "Couldn't find mark for 'a\n",
         0,
     );
 }
@@ -400,7 +494,7 @@ fn test_search_forward_error() {
         ],
         "",
         "",
-        "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern",
+        "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern\n",
         0,
     );
 }
@@ -417,7 +511,7 @@ fn test_search_backward_error() {
         ],
         "",
         "",
-        "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern",
+        "Couldn't find '\\<sdfsdfsfewcwiu,lxnsb\\>' pattern\n",
         0,
     );
 }
@@ -503,7 +597,7 @@ fn test_examine_new_file_error() {
         ],
         "",
         "",
-        "Couldn't read file \'\'",
+        "Couldn't read file \'\'\n",
         0,
     );
 }
@@ -582,7 +676,7 @@ fn test_unknown_error() {
         ],
         "",
         "",
-        "Couldn't execute unknown command",
+        "Couldn't execute unknown command\n",
         0,
     );
 }
@@ -759,7 +853,7 @@ fn test_tag_3() {
         ],
         "",
         "",
-        "Couldn't parse [0123456789] ctags output",
+        "Couldn't parse [0123456789] ctags output\n",
         0,
     );
 }
@@ -779,7 +873,7 @@ fn test_tag_4() {
         ],
         "",
         "",
-        "Couldn't parse setlocale ctags output",
+        "Couldn't parse setlocale ctags output\n",
         0,
     );
 }
@@ -799,7 +893,7 @@ fn test_tag_5() {
         ],
         "",
         "",
-        "Couldn't parse ^struct ctags output",
+        "Couldn't parse ^struct ctags output\n",
         0,
     );
 }
@@ -819,7 +913,7 @@ fn test_tag_6() {
         ],
         "",
         "",
-        "Couldn't parse \\<let\\> ctags output",
+        "Couldn't parse \\<let\\> ctags output\n",
         0,
     );
 }
@@ -839,7 +933,7 @@ fn test_tag_empty_error() {
         ],
         "",
         "",
-        "Couldn't read file ''",
+        "Couldn't read file ''\n",
         0,
     );
 }
@@ -859,7 +953,7 @@ fn test_tag_not_found_error() {
         ],
         "",
         "",
-        "Couldn't parse \\<dflbowvwvwvdfbfd\\> ctags output",
+        "Couldn't parse \\<dflbowvwvwvdfbfd\\> ctags output\n",
         0,
     );
 }
@@ -877,7 +971,7 @@ fn test_command_tag_empty_error() {
         ],
         "",
         "",
-        "Couldn't read file ''",
+        "Couldn't read file ''\n",
         0,
     );
 }
@@ -895,7 +989,7 @@ fn test_command_tag_not_found_error() {
         ],
         "",
         "",
-        "Couldn't parse \\<dflbodfbfd\\> ctags output",
+        "Couldn't parse \\<dflbodfbfd\\> ctags output\n",
         0,
     );
 }
