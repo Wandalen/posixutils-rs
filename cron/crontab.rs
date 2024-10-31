@@ -1,9 +1,12 @@
+mod job;
+
 use clap::Parser;
 
 use std::env;
 use std::fs;
-use std::io::Result;
-use std::process::ExitStatus;
+use std::fs::File;
+use std::io::{ErrorKind, Read, Result, Write};
+use std::process::{exit, ExitStatus};
 
 #[derive(Parser)]
 struct CronArgs {
@@ -17,62 +20,118 @@ struct CronArgs {
     file: Option<String>,
 }
 
-// TODO: implement better error handling
-fn list_crontab(logname: &str) -> Result<String> {
-    let file = format!("/var/spool/cron/{logname}");
-    fs::read_to_string(&file)
+fn print_usage(err: &str) {
+    let name = env::args().next().unwrap();
+    eprintln!("{name}: usage error: {err}");
+    eprintln!("usage:\t{name} [ FILE ]");
+    eprintln!("\t{name} [ -e | -l | -r ]");
+    eprintln!("\t-e\t- edit user's crontab");
+    eprintln!("\t-l\t- list user's crontab");
+    eprintln!("\t-r\t- delete user's crontab");
 }
 
-fn remove_crontab(logname: &str) -> Result<()> {
-    let path = format!("/var/spool/cron/{logname}");
-    fs::remove_file(&path)
+fn list_crontab(path: &str) -> Result<String> {
+    fs::read_to_string(path)
 }
 
-fn edit_crontab(logname: &str) -> Result<ExitStatus> {
-    let path = format!("/var/spool/cron/{logname}");
-    let editor = env::var("EDITOR").unwrap_or("edit".to_string());
+fn remove_crontab(path: &str) -> Result<()> {
+    fs::remove_file(path)
+}
+
+fn edit_crontab(path: &str) -> Result<ExitStatus> {
+    File::create(path)?;
+    let editor = env::var("EDITOR").unwrap_or("vi".to_string());
     let shell = env::var("SHELL").unwrap_or("sh".to_string());
     let args = ["-c".to_string(), format!("{editor} {path}")];
     std::process::Command::new(shell).args(args).status()
 }
 
+fn replace_crontab(from: &str, to: &str) -> Result<()> {
+    let mut source = File::open(from)?;
+    let mut target = File::create(to)?;
+    let mut buffer = Vec::new();
+
+    source.read_to_end(&mut buffer)?;
+    target.write_all(&buffer)?;
+
+    Ok(())
+}
+
 fn main() {
     let args = CronArgs::parse();
     let Ok(logname) = env::var("LOGNAME") else {
-        panic!("Could not obtain the user's logname.")
+        println!("Could not obtain the user's logname.");
+        exit(1);
     };
+    let path = format!("/var/spool/cron/{logname}");
+
+    let opt_count = [args.edit, args.list, args.remove, args.file.is_some()].into_iter().map(|x| x as i32).sum::<i32>();
+    if opt_count > 1 {
+        print_usage("Too many options specified.");
+        exit(1);
+    }
 
     if args.edit {
-        match edit_crontab(&logname) {
-            Ok(status) => std::process::exit(status.code().unwrap_or(0)),
-            Err(_) => {
-                println!("No crontab file");
-                std::process::exit(1);
+        match edit_crontab(&path) {
+            Ok(status) => exit(status.code().unwrap_or(0)),
+            Err(err) => {
+                match err.kind() {
+                    ErrorKind::NotFound => println!("No crontab file has been found."),
+                    ErrorKind::PermissionDenied => println!("Permission to access user's crontab file denied."),
+                    ErrorKind::Interrupted => println!("crontab was interrupted."),
+                    ErrorKind::OutOfMemory => println!("crontab exceeded available memory."),
+                    _ => println!("Unknown error: {}", err),
+                }
+                exit(1);
             }
         }
     }
 
     if args.list {
-        match list_crontab(&logname) {
+        match list_crontab(&path) {
             Ok(content) => println!("{}", content),
-            Err(_) => {
-                println!("No crontab file");
-                std::process::exit(1);
+            Err(err) => {
+                match err.kind() {
+                    ErrorKind::NotFound => println!("No crontab file has been found."),
+                    ErrorKind::PermissionDenied => println!("Permission to access user's crontab file denied."),
+                    ErrorKind::Interrupted => println!("crontab was interrupted."),
+                    ErrorKind::OutOfMemory => println!("crontab exceeded available memory."),
+                    _ => println!("Unknown error: {}", err),
+                }
+                exit(1);
             }
         }
     }
 
     if args.remove {
-        match remove_crontab(&logname) {
+        match remove_crontab(&path) {
             Ok(()) => println!("Removed crontab file"),
-            Err(_) => {
-                println!("No crontab file");
-                std::process::exit(1);
+            Err(err) => {
+                match err.kind() {
+                    ErrorKind::NotFound => println!("No crontab file has been found."),
+                    ErrorKind::PermissionDenied => println!("Permission to access user's crontab file denied."),
+                    ErrorKind::Interrupted => println!("crontab was interrupted."),
+                    ErrorKind::OutOfMemory => println!("crontab exceeded available memory."),
+                    _ => println!("Unknown error: {}", err),
+                }
+                exit(1);
             }
         }
     }
 
     if let Some(file) = args.file {
-        println!("FILE = {file}")
+        match replace_crontab(&file, &path) {
+            Ok(()) => println!("Replaced crontab file with {file}"),
+            Err(err) => {
+                match err.kind() {
+                    ErrorKind::NotFound => println!("Crontab file or user-specified file has not been found."),
+                    ErrorKind::PermissionDenied => println!("Permission to access user's crontab file or user-specified file denied."),
+                    ErrorKind::Interrupted => println!("crontab was interrupted."),
+                    ErrorKind::OutOfMemory => println!("crontab exceeded available memory."),
+                    _ => println!("Unknown error: {}", err),
+                }
+                exit(1);
+            }
+        }
     }
 }
