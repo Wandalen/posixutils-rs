@@ -863,8 +863,8 @@ fn test_tag_3() {
             "test_files/styled.txt",
         ],
         "",
-        "Couldn't parse [0123456789] ctags output\n",
-        "Couldn't parse [0123456789] ctags output\n",
+        "",
+        "Couldn't find '[0123456789]' pattern\n",
         1,
     );
 }
@@ -883,8 +883,8 @@ fn test_tag_4() {
             "test_files/styled.txt",
         ],
         "",
-        "Couldn't parse setlocale ctags output\n",
-        "Couldn't parse setlocale ctags output\n",
+        "",
+        "Couldn't find 'setlocale' pattern\n",
         1,
     );
 }
@@ -903,8 +903,8 @@ fn test_tag_5() {
             "test_files/styled.txt",
         ],
         "",
-        "Couldn't parse ^struct ctags output\n",
-        "Couldn't parse ^struct ctags output\n",
+        "",
+        "Couldn't find '^struct' pattern\n",
         1,
     );
 }
@@ -923,8 +923,8 @@ fn test_tag_6() {
             "test_files/styled.txt",
         ],
         "",
-        "Couldn't parse \\<let\\> ctags output\n",
-        "Couldn't parse \\<let\\> ctags output\n",
+        "",
+        "Couldn't find '\\<let\\>' pattern\n",
         1,
     );
 }
@@ -963,8 +963,8 @@ fn test_tag_not_found_error() {
             "test_files/styled.txt",
         ],
         "",
-        "Couldn't parse \\<dflbowvwvwvdfbfd\\> ctags output\n",
-        "Couldn't parse \\<dflbowvwvwvdfbfd\\> ctags output\n",
+        "",
+        "Couldn't find '\\<dflbowvwvwvdfbfd\\>' pattern\n",
         1,
     );
 }
@@ -981,7 +981,7 @@ fn test_command_tag_empty_error() {
             "test_files/styled.txt",
         ],
         "",
-        "Couldn't read file ''\n",
+        "",
         "Couldn't read file ''\n",
         1,
     );
@@ -999,8 +999,8 @@ fn test_command_tag_not_found_error() {
             "test_files/styled.txt",
         ],
         "",
-        "Couldn't parse \\<dflbodfbfd\\> ctags output\n",
-        "Couldn't parse \\<dflbodfbfd\\> ctags output\n",
+        "",
+        "Couldn't find '\\<dflbodfbfd\\>' pattern\n",
         1,
     );
 }
