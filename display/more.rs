@@ -22,6 +22,9 @@ use std::path::PathBuf;
 use std::process::{exit, ExitStatus};
 use std::ptr;
 use std::str::FromStr;
+use std::sync::mpsc::{channel, Receiver, TryRecvError};
+use std::sync::Mutex;
+use std::time::Duration;
 use termion::{clear::*, cursor::*, event::*, input::*, raw::*, screen::*, style::*, *};
 
 const LINES_PER_PAGE: u16 = 24;
@@ -29,6 +32,11 @@ const NUM_COLUMNS: u16 = 80;
 const DEFAULT_EDITOR: &str = "vi";
 const CONVERT_STRING_BUF_SIZE: usize = 64;
 const PROJECT_NAME: &str = "posixutils-rs";
+
+/// Last acceptable pressed mouse button
+static LAST_MOUSE_BUTTON: Mutex<Option<MouseButton>> = Mutex::new(None);
+/// Inform terminal input handler thread that program is closing
+static NEED_QUIT: Mutex<bool> = Mutex::new(false);
 
 /// more - display files on a page-by-page basis.
 #[derive(Parser)]
@@ -1333,8 +1341,8 @@ struct Terminal {
     lines: Option<u16>,
     /// Suppress underlining and bold
     plain: bool,
-    /// Last acceptable pressed mouse button
-    last_mouse_button: Option<MouseButton>,
+    /// Input stream
+    input_stream: Receiver<Result<String, MoreError>>,
 }
 
 impl Terminal {
@@ -1359,6 +1367,7 @@ impl Terminal {
             );
         }
 
+        let (sender, receiver) = channel();
         let mut terminal = Self {
             _raw_terminal,
             _alternate_screen,
@@ -1370,10 +1379,22 @@ impl Terminal {
             ),
             lines,
             plain,
-            last_mouse_button: None,
+            input_stream: receiver,
         };
 
         let _ = terminal.resize();
+        let _ = std::thread::spawn(move || {
+            let sender = sender;
+            while !*NEED_QUIT.lock().unwrap() {
+                let result = getch();
+                match result {
+                    Ok(Some(new_input)) => sender.send(Ok(new_input)).unwrap(),
+                    Err(err) => sender.send(Err(err)).unwrap(),
+                    _ => {}
+                }
+            }
+        });
+
         Ok(terminal)
     }
 
@@ -1397,6 +1418,20 @@ impl Terminal {
         }
         let _ = self.set_style(StyleType::None);
         Ok(())
+    }
+
+    /// Get input without blocking
+    fn get_input(&mut self) -> Result<Option<String>, MoreError> {
+        let mut input = String::new();
+        loop {
+            match self.input_stream.try_recv() {
+                Ok(Ok(new_input)) => input += new_input.as_str(),
+                Ok(Err(err)) => return Err(err),
+                Err(TryRecvError::Disconnected) => return Err(MoreError::InputRead),
+                Err(TryRecvError::Empty) => break,
+            }
+        }
+        Ok(if input.is_empty() { None } else { Some(input) })
     }
 
     fn set_style(&mut self, style: StyleType) -> std::io::Result<()> {
@@ -1470,46 +1505,6 @@ impl Terminal {
         let _ = write!(self.tty, "{}{ch}", Goto(x + 1, y + 1));
     }
 
-    /// Get char from [`Stdin`]
-    fn getch(&mut self) -> Result<Option<String>, MoreError> {
-        let Some(result) = std::io::stdin().lock().events_and_raw().next() else {
-            return Ok(None);
-        };
-        result
-            .map(|(event, bytes)| match event {
-                Event::Mouse(mouse_event) => {
-                    let button = match mouse_event {
-                        MouseEvent::Press(button, _, _) => Some(button),
-                        _ => self.last_mouse_button,
-                    };
-                    self.last_mouse_button = if let MouseEvent::Release(..) = mouse_event {
-                        None
-                    } else {
-                        button
-                    };
-                    match button {
-                        Some(MouseButton::WheelDown) => Some("\n".to_string()),
-                        Some(MouseButton::WheelUp) => Some("k".to_string()),
-                        _ => None,
-                    }
-                }
-                Event::Key(Key::Up) => Some("k".to_string()),
-                Event::Key(Key::Down) => Some("\n".to_string()),
-                Event::Key(key) => {
-                    let mut s = String::from_utf8(bytes).ok();
-                    if key == Key::Char('\n') {
-                        if let Some(s) = &mut s {
-                            s.clear();
-                            s.push('\n');
-                        }
-                    }
-                    s
-                }
-                _ => None,
-            })
-            .map_err(|_| MoreError::InputRead)
-    }
-
     /// Update terminal size for wrapper
     fn resize(&mut self) -> Result<(), MoreError> {
         let (x, y) = terminal_size().map_err(|_| MoreError::SizeRead)?;
@@ -1528,10 +1523,52 @@ impl Terminal {
 
     /// Prepare resources for closing terminal
     fn close(&mut self) {
+        *NEED_QUIT.lock().unwrap() = true;
         let _ = write!(self.tty, "{}{}", Show, Reset);
         self._raw_terminal = None;
         self._alternate_screen = None;
     }
+}
+
+/// Get char from [`Stdin`]
+fn getch() -> Result<Option<String>, MoreError> {
+    let Some(result) = std::io::stdin().lock().events_and_raw().next() else {
+        return Ok(None);
+    };
+    result
+        .map(|(event, bytes)| match event {
+            Event::Mouse(mouse_event) => {
+                let button = match mouse_event {
+                    MouseEvent::Press(button, _, _) => Some(button),
+                    _ => *LAST_MOUSE_BUTTON.lock().unwrap(),
+                };
+                let last_mouse_button = if let MouseEvent::Release(..) = mouse_event {
+                    None
+                } else {
+                    button
+                };
+                *LAST_MOUSE_BUTTON.lock().unwrap() = last_mouse_button;
+                match button {
+                    Some(MouseButton::WheelDown) => Some("\n".to_string()),
+                    Some(MouseButton::WheelUp) => Some("k".to_string()),
+                    _ => None,
+                }
+            }
+            Event::Key(Key::Up) => Some("k".to_string()),
+            Event::Key(Key::Down) => Some("\n".to_string()),
+            Event::Key(key) => {
+                let mut s = String::from_utf8(bytes).ok();
+                if key == Key::Char('\n') {
+                    if let Some(s) = &mut s {
+                        s.clear();
+                        s.push('\n');
+                    }
+                }
+                s
+            }
+            _ => None,
+        })
+        .map_err(|_| MoreError::InputRead)
 }
 
 /// String that was printed in bottom terminal row
@@ -1783,16 +1820,28 @@ impl MoreControl {
         result
     }
 
+    /// Get input with blocking. While blocking can be updated screen
+    fn get_input_with_update(&mut self) -> Result<Option<String>, MoreError> {
+        loop {
+            self.resize()?;
+            if let Some(terminal) = self.terminal.as_mut() {
+                if let Some(chars) = terminal.get_input()? {
+                    return Ok(Some(chars));
+                }
+            } else {
+                return Err(MoreError::MissingTerminal);
+            }
+            std::thread::sleep(Duration::from_secs_f32(0.08));
+        }
+    }
+
     /// Read input and handle signals
     fn handle_events(&mut self) -> Result<(), MoreError> {
-        self.resize()?;
-        if let Some(terminal) = &mut self.terminal {
-            if let Some(chars) = terminal.getch()? {
-                if "\x03\x04\x1C".contains(chars.get(0..1).unwrap_or("0")) {
-                    self.prompt = Some(Prompt::ExitKeys);
-                }
-                self.commands_buffer.push_str(&chars);
+        if let Some(chars) = self.get_input_with_update()? {
+            if "\x03\x04\x1C".contains(chars.get(0..1).unwrap_or("0")) {
+                self.prompt = Some(Prompt::ExitKeys);
             }
+            self.commands_buffer.push_str(&chars);
         }
         Ok(())
     }
@@ -2054,9 +2103,7 @@ impl MoreControl {
                 }
                 self.prompt = Some(Prompt::Exit);
                 self.display()?;
-                if let Some(terminal) = self.terminal.as_mut() {
-                    terminal.getch()?;
-                }
+                self.get_input_with_update()?;
                 self.exit(None);
             }
 
@@ -2074,9 +2121,7 @@ impl MoreControl {
                     {
                         self.prompt = Some(Prompt::Exit);
                         self.display()?;
-                        if let Some(terminal) = self.terminal.as_mut() {
-                            terminal.getch()?;
-                        }
+                        self.get_input_with_update()?;
                         self.exit(None);
                     }
                     self.prompt = Some(Prompt::More(if self.file_pathes.len() == 1 {
@@ -2094,9 +2139,7 @@ impl MoreControl {
             } else {
                 self.prompt = Some(Prompt::Exit);
                 self.display()?;
-                if let Some(terminal) = self.terminal.as_mut() {
-                    terminal.getch()?;
-                }
+                self.get_input_with_update()?;
                 self.exit(None);
             }
         }
@@ -2324,9 +2367,7 @@ impl MoreControl {
                 if self.scroll_file_position(count, Direction::Forward)? {
                     self.prompt = Some(Prompt::Exit);
                     self.display()?;
-                    if let Some(terminal) = self.terminal.as_mut() {
-                        terminal.getch()?;
-                    }
+                    self.get_input_with_update()?;
                     self.exit(None);
                 }
             }
@@ -2334,9 +2375,7 @@ impl MoreControl {
                 if self.scroll_file_position(count, Direction::Backward)? {
                     self.prompt = Some(Prompt::Exit);
                     self.display()?;
-                    if let Some(terminal) = self.terminal.as_mut() {
-                        terminal.getch()?;
-                    }
+                    self.get_input_with_update()?;
                     self.exit(None);
                 }
             }
