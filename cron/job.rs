@@ -30,6 +30,14 @@ macro_rules! time_unit {
 
             fn new_all() -> Vec<Self> { ($range).map(Self).collect::<Vec<Self>>() }
         }
+        
+        impl std::ops::Sub<$name> for $name {
+            type Output = $name;
+
+            fn sub(self, rhs: $name) -> Self::Output {
+                Self(self.0.max(rhs.0) - self.0.min(rhs.0))
+            }
+        }
     };
 }
 
@@ -77,13 +85,28 @@ impl FromStr for CronJob {
         let command = String::new();
 
         Ok(Self {
-            minute,
-            hour,
-            monthday,
-            month,
-            weekday,
-            command,
+            minute: todo!(),
+            hour: todo!(),
+            monthday: todo!(),
+            month: todo!(),
+            weekday: todo!(),
+            command: todo!(),
         })
+    }
+}
+
+impl std::ops::Sub<CronJob> for CronJob {
+    type Output = CronJob;
+
+    fn sub(self, rhs: CronJob) -> Self::Output {
+        Self {
+            minute: self.minute - rhs.minute,
+            hour: self.hour - rhs.hour,
+            monthday: self.monthday - rhs.monthday,
+            month: self.month - rhs.month,
+            weekday: self.weekday - rhs.weekday,
+            command: String::new(),
+        }
     }
 }
 
