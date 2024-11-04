@@ -45,7 +45,7 @@ struct Args {
     /// Do not scroll, display text and clean line ends
     #[arg(
         short = 'c', 
-        long = "print_over", 
+        long = "print-over", 
         help = gettext("Do not scroll, display text and clean line ends")
     )]
     print_over: bool,
@@ -53,7 +53,7 @@ struct Args {
     /// Exit on end-of-file
     #[arg(
         short = 'e', 
-        long = "exit_on_eof", 
+        long = "exit-on-eof", 
         help = gettext("Exit on end-of-file")
     )]
     exit_on_eof: bool,
@@ -69,7 +69,7 @@ struct Args {
     /// Execute the more command(s) in the command arguments in the order specified
     #[arg(
         short = 'p',
-        long = "commands", 
+        long = "execute", 
         help = gettext("Execute the more command(s) in the command arguments in the order specified")
     )]
     commands: Option<String>,
