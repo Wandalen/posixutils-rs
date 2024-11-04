@@ -8,7 +8,7 @@
 //
 
 use clap::Parser;
-use gettextrs::{gettext, bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use libc::{
     getegid, getgid, getuid, regcomp, regex_t, regexec, setgid, setuid, REG_ICASE, REG_NOMATCH,
 };
@@ -44,7 +44,7 @@ static NEED_QUIT: Mutex<bool> = Mutex::new(false);
 struct Args {
     /// Do not scroll, display text and clean line ends
     #[arg(
-        short = 'c', 
+        short = 'c',
         long = "print-over", 
         help = gettext("Do not scroll, display text and clean line ends")
     )]
@@ -52,7 +52,7 @@ struct Args {
 
     /// Exit on end-of-file
     #[arg(
-        short = 'e', 
+        short = 'e',
         long = "exit-on-eof", 
         help = gettext("Exit on end-of-file")
     )]
@@ -76,7 +76,7 @@ struct Args {
 
     /// Squeeze multiple blank lines into one
     #[arg(
-        short = 's', 
+        short = 's',
         long = "squeeze", 
         help = gettext("Squeeze multiple blank lines into one")
     )]
@@ -92,7 +92,7 @@ struct Args {
 
     /// Suppress underlining and bold
     #[arg(
-        short = 'u', 
+        short = 'u',
         long = "plain", 
         help = gettext("Suppress underlining and bold")
     )]
@@ -100,7 +100,7 @@ struct Args {
 
     /// The number of lines per screenful
     #[arg(
-        short = 'n', 
+        short = 'n',
         long = "lines", 
         help = gettext("The number of lines per screenful")
     )]
@@ -116,7 +116,7 @@ struct Args {
 
     /// A pathnames of an input files
     #[arg(
-        name = "FILES", 
+        name = "FILES",
         help = gettext("A pathnames of input files")
     )]
     input_files: Vec<String>,
