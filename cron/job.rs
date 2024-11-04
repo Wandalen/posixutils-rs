@@ -1,39 +1,34 @@
+use std::cmp::Ordering;
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 use std::iter::Peekable;
 
-trait TimeUnit { 
-    type Unit;
-    
-    fn new(amount: i32) -> Option<Self::Unit>;
-    fn new_range(min: i32, max: i32) -> Option<Self::Unit>;
-    fn new_all() -> Self;
+trait TimeUnit: Sized {
+    fn new(amount: i32) -> Option<Self>;
+    fn new_range(min: i32, max: i32) -> Vec<Self>;
+    fn new_all() -> Vec<Self>;
 }
 
 macro_rules! time_unit {
     ($name:ident, $range:expr) => {
-        enum $name {
-            Exact(u8),
-            Range(RangeInclusive<u8>),
-        }
+        #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
+        struct $name(u8);
 
         impl TimeUnit for $name {
-            type Unit = Self;
-            
             fn new(amount: i32) -> Option<Self> {
                 if !($range).contains(&amount) { return None; }
-                Some(Self::Exact(amount as u8))
+                Some(Self(amount as u8))
             }
 
-            fn new_range(min: i32, max: i32) -> Option<Self> {
-                if !($range).contains(&min) { return None; }
-                if !($range).contains(&max) { return None; }
-                if min > max { return None; }
+            fn new_range(min: i32, max: i32) -> Vec<Self> {
+                if !($range).contains(&min) { return vec![]; }
+                if !($range).contains(&max) { return vec![]; }
+                if min > max { return vec![]; }
 
-                Some(Self::Range((min as u8)..=(max as u8)))
+                ((min as u8)..=(max as u8)).map(Self).collect::<Vec<Self>>()
             }
 
-            fn new_all() -> Self { Self::Range($range) }
+            fn new_all() -> Vec<Self> { ($range).map(Self).collect::<Vec<Self>>() }
         }
     };
 }
@@ -44,6 +39,7 @@ time_unit!(MonthDay, 1..=31);
 time_unit!(Month   , 1..=12);
 time_unit!(WeekDay , 0..= 6);
 
+#[derive(Eq, PartialEq, Ord)]
 pub struct CronJob {
     minute: Minute,
     hour: Hour,
@@ -51,6 +47,17 @@ pub struct CronJob {
     month: Month,
     weekday: WeekDay,
     command: String,
+}
+
+impl PartialOrd for CronJob {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let month = self.month.cmp(&other.month);
+        let monthday = self.monthday.cmp(&other.monthday);
+        let weekday = self.weekday.cmp(&other.weekday);
+        let hour = self.hour.cmp(&other.hour);
+        let minute = self.minute.cmp(&other.minute);
+        Some(month.then(monthday).then(weekday).then(hour).then(minute))
+    }
 }
 
 impl FromStr for CronJob {
@@ -112,9 +119,6 @@ fn parse_value<T: TimeUnit>(src: &mut Peekable<impl Iterator<Item = char>>) -> V
         return if expect(src, ' ') { vec![T::new_all()] } else { Vec::new() }
     }
     
-    if let Some(number) = get_number(src) {
-        vec![<T as TimeUnit>::new(number).unwrap()]
-    } else {
-        vec![]
-    }
+    let Some(number) = get_number(src) else { return vec![] };
+    vec![]
 }
