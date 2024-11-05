@@ -94,7 +94,6 @@ fn generate_macro_table(
         }
 
         let mut text = def.chars().peekable();
-        
         let line = take_till_eol(&mut text);
         if line.is_empty() || line.split_whitespace().next().is_none() { continue; }
         

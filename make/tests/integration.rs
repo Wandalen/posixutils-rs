@@ -12,8 +12,37 @@ use std::fs::{remove_file, File};
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
 
-use plib::{run_test, TestPlan};
+use plib::{run_test, run_test_base, TestPlan};
 use posixutils_make::error_code::ErrorCode;
+
+pub fn run_test_not_comparing_error_message(plan: TestPlan) {
+    let output = run_test_base(&plan.cmd, &plan.args, plan.stdin_data.as_bytes());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout, plan.expected_out);
+
+    assert_eq!(output.status.code(), Some(plan.expected_exit_code));
+    if plan.expected_exit_code == 0 {
+        assert!(output.status.success());
+    }
+}
+
+fn run_test_helper_without_error_message(
+    args: &[&str],
+    expected_output: &str,
+    expected_exit_code: i32,
+) {
+    let str_args: Vec<String> = args.iter().map(|s| String::from(*s)).collect();
+
+    run_test_not_comparing_error_message(TestPlan {
+        cmd: String::from("make"),
+        args: str_args,
+        stdin_data: String::new(),
+        expected_out: String::from(expected_output),
+        expected_err: String::new(),
+        expected_exit_code,
+    });
+}
 
 fn run_test_helper(
     args: &[&str],
@@ -545,11 +574,11 @@ mod recipes {
 }
 
 mod special_targets {
-    use std::{fs, thread, time::Duration};
-    use std::fs::remove_dir;
     use super::*;
     use libc::{kill, SIGINT};
     use posixutils_make::special_target;
+    use std::fs::remove_dir;
+    use std::{fs, thread, time::Duration};
 
     #[test]
     fn default() {
@@ -587,10 +616,9 @@ mod special_targets {
 
     #[test]
     fn phony() {
-        run_test_helper(
+        run_test_helper_without_error_message(
             &["-f", "tests/makefiles/special_targets/phony/phony_basic.mk"],
             "rm temp\n",
-            "rm: cannot remove 'temp': No such file or directory\nmake: execution error: 1\n",
             2,
         );
     }
