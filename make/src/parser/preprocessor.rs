@@ -65,7 +65,7 @@ fn take_till_eol(letters: &mut Peekable<impl Iterator<Item = char>>) -> String {
 
     while let Some(letter) = letters.peek() {
         if matches!(letter, '\n' | '#') {
-            break;
+            if !content.ends_with('\\') { break; }
         };
         content.push(*letter);
         letters.next();
@@ -79,7 +79,7 @@ fn take_till_eol(letters: &mut Peekable<impl Iterator<Item = char>>) -> String {
 fn generate_macro_table(
     source: &str,
 ) -> std::result::Result<HashMap<String, String>, PreprocError> {
-    let macro_defs = source.lines().filter(|line| line.contains('='));
+    let macro_defs = source.lines().filter(|line| line.contains('=') && line.strip_prefix('\t').is_none());
     let mut macro_table = HashMap::<String, String>::new();
 
     for def in macro_defs {
@@ -94,6 +94,11 @@ fn generate_macro_table(
         }
 
         let mut text = def.chars().peekable();
+        
+        let line = take_till_eol(&mut text);
+        if line.is_empty() || line.split_whitespace().next().is_none() { continue; }
+        
+        let mut text = line.chars().peekable();
 
         let mut macro_name = get_ident(&mut text)?;
         if macro_name == "export" {
