@@ -96,6 +96,9 @@ impl Args {
             quiet: self.quiet,
             scripts,
             input_sources: self.file,
+            pattern_space: String::new(),
+            hold_space: String::new(),
+            current_line: 0,
         })
     }
 }
@@ -108,17 +111,107 @@ enum SedError {
     Io(#[from] std::io::Error),
 }
 
-#[derive(Debug)] // TODO: debug only
-enum Script {
-    RawString(String),
+struct Address(Vec<usize>);
+
+enum SReplaceFlag{
+    N,
+    G,
+    P,
+    W(String)
 }
+
+enum Command{
+    PrintTextAfter(Address, String),
+    BranchToLabel(Address, Option<String>),
+    DeletePatternAndPrintText(Address, String),
+    DeleteLineInPattern(Address, bool),
+    ReplacePatternWithHold(Address),
+    AppendHoldToPattern(Address),
+    ReplaceHoldWithPattern(Address),
+    AppendPatternToHold(Address),
+    PrintTextBefore(Address, String),
+    PrintPatternBinary(Address),
+    NPrint(Address, bool), // ?
+    PrintPattern(Address, bool),
+    Quit(Address),
+    PrintFile(Address, PathBuf),
+    SReplace(Pattern, String, Vec<SReplaceFlag>),
+    Test(Address, String),
+    AppendPatternToFile(Address, PathBuf),
+    ExchangeSpaces(Address),
+    YReplace(Address, String, String),
+    BearBranchLabel(String),
+    PrintStandard(Address),
+    IgnoreComment
+}
+
+/// Parse count argument of future [`Command`]
+fn parse_address(chars: &[char], i: &mut usize, count: &mut Option<usize>) {
+    let mut count_str = String::new();
+    loop {
+        let Some(ch) = chars.get(*i) else {
+            break;
+        };
+        if !ch.is_numeric() {
+            break;
+        }
+        count_str.push(*ch);
+        *i += 1;
+    }
+    if let Ok(new_count) = count_str.parse::<usize>() {
+        *count = Some(new_count);
+    }
+}
+
+#[derive(Debug)] 
+struct Script(Vec<Command>);
 
 impl Script {
     fn parse(raw_script: impl AsRef<str>) -> Result<Script, SedError> {
         let raw_script = raw_script
             .as_ref()
             .trim_start_matches(|c| c == ' ' || c == ';');
-        Ok(Script::RawString(raw_script.into()))
+
+        let mut address: Option<Address> = None;
+        let chars = raw_script.chars().collect::<Vec<_>>();
+        let mut i = 0;
+        loop{
+            let Some(ch) = chars.get(i) else{ 
+                break; 
+            };
+            match *ch{
+                ch if ch.is_numeric() => {
+                    parse_address(&chars, &mut i, &mut address);
+                    continue;
+                }
+                'a' => {},
+                'b' => {},
+                'c' => {},
+                'd' => {},
+                'D' => {},
+                'g' => {},
+                'G' => {},
+                'h' => {},
+                'H' => {},
+                'i' => {},
+                'I' => {},
+                'n' => {},
+                'N' => {},
+                'p' => {},
+                'P' => {},
+                'r' => {},
+                's' => {},
+                't' => {},
+                'w' => {},
+                'x' => {},
+                'y' => {},
+                ':' => {},
+                '=' => {},
+                '#' => {},
+            }
+        }
+
+        Ok(Script(raw_script.into()))
     }
 
     fn process_line(&self, line: &str, quiet: bool) -> Result<(), SedError> {
@@ -137,6 +230,9 @@ struct Sed {
     quiet: bool,
     scripts: Vec<Script>,
     input_sources: Vec<String>,
+    pattern_space: String,
+    hold_space: String,
+    current_line: usize 
 }
 
 impl Sed {
@@ -149,6 +245,9 @@ impl Sed {
     }
 
     fn process_input(&mut self, mut reader: Box<dyn BufRead>) -> Result<(), SedError> {
+        self.pattern_space.clear();
+        self.hold_space.clear();
+        self.current_line = 0;
         loop {
             let mut line = String::new();
             match reader.read_line(&mut line) {
@@ -164,9 +263,11 @@ impl Sed {
                         &line
                     };
 
+                    self.pattern_space = trimmed.clone().to_string();
                     if let Err(_) = self.process_line(trimmed) {
                         eprintln!("sed: PROCESS LINE ERROR!!!")
                     }
+                    self.current_line += 1;
                 }
                 Err(_) => eprintln!("sed: READ LINE ERRROR!!!"),
             }
@@ -224,3 +325,61 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     std::process::exit(exit_code);
 }
+
+
+
+/*
+let c_input = CString::new(haystack)
+    .map_err(|_| MoreError::StringParse(self.current_source.name()))?;
+let has_match = unsafe {
+    regexec(
+        &pattern as *const regex_t,
+        c_input.as_ptr(),
+        0,
+        ptr::null_mut(),
+        0,
+    )
+};
+let has_match = if is_not {
+    has_match == REG_NOMATCH
+} else {
+    has_match != REG_NOMATCH
+};
+
+let re = compile_regex(pattern, self.args.case_insensitive)?;
+
+/// Compiles [`pattern`] as [`regex_t`]
+fn compile_regex(pattern: String, ignore_case: bool) -> Result<regex_t, MoreError> {
+    #[cfg(target_os = "macos")]
+    let mut pattern = pattern.replace("\\\\", "\\");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let pattern = pattern.replace("\\\\", "\\");
+    let mut cflags = 0;
+    if ignore_case {
+        cflags |= REG_ICASE;
+    }
+
+    // macOS version of [regcomp](regcomp) from `libc` provides additional check
+    // for empty regex. In this case, an error
+    // [REG_EMPTY](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/regcomp.3.html)
+    // will be returned. Therefore, an empty pattern is replaced with ".*".
+    #[cfg(target_os = "macos")]
+    {
+        pattern = if pattern == "" {
+            String::from(".*")
+        } else {
+            pattern
+        };
+    }
+
+    let c_pattern =
+        CString::new(pattern.clone()).map_err(|_| MoreError::StringParse(pattern.clone()))?;
+    let mut regex = unsafe { std::mem::zeroed::<regex_t>() };
+
+    if unsafe { regcomp(&mut regex, c_pattern.as_ptr(), cflags) } == 0 {
+        Ok(regex)
+    } else {
+        Err(MoreError::StringParse(pattern))
+    }
+}
+*/
