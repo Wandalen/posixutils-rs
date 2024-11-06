@@ -10,7 +10,7 @@
 use std::{
     fs::File,
     io::{BufRead, BufReader},
-    path::PathBuf,
+    path::PathBuf, str::pattern::Pattern,
 };
 
 use clap::Parser;
@@ -91,10 +91,14 @@ impl Args {
             self.file.push("-".to_string());
         }
 
+        let commands = scripts.iter().map(|s| s.0)
+            .collect::<Vec<Vec<_>>>().as_ptr().concat();
+        let script = Script(commands);
+
         Ok(Sed {
             ere: self.ere,
             quiet: self.quiet,
-            scripts,
+            script,
             input_sources: self.file,
             pattern_space: String::new(),
             hold_space: String::new(),
@@ -121,28 +125,31 @@ enum SReplaceFlag{
 }
 
 enum Command{
-    PrintTextAfter(Address, String),
-    BranchToLabel(Address, Option<String>),
-    DeletePatternAndPrintText(Address, String),
-    DeleteLineInPattern(Address, bool),
-    ReplacePatternWithHold(Address),
-    AppendHoldToPattern(Address),
-    ReplaceHoldWithPattern(Address),
-    AppendPatternToHold(Address),
-    PrintTextBefore(Address, String),
-    PrintPatternBinary(Address),
-    NPrint(Address, bool), // ?
-    PrintPattern(Address, bool),
-    Quit(Address),
-    PrintFile(Address, PathBuf),
-    SReplace(Pattern, String, Vec<SReplaceFlag>),
-    Test(Address, String),
-    AppendPatternToFile(Address, PathBuf),
-    ExchangeSpaces(Address),
-    YReplace(Address, String, String),
-    BearBranchLabel(String),
-    PrintStandard(Address),
-    IgnoreComment
+    Block(Address, Vec<Command>),                 // {
+    PrintTextAfter(Address, String),              // a
+    BranchToLabel(Address, Option<String>),       // b
+    DeletePatternAndPrintText(Address, String),   // c
+    DeleteLineInPattern(Address, bool),           // d
+    ReplacePatternWithHold(Address),              // g
+    AppendHoldToPattern(Address),                 // G
+    ReplaceHoldWithPattern(Address),              // h
+    AppendPatternToHold(Address),                 // H
+    PrintTextBefore(Address, String),             // i
+    PrintPatternBinary(Address),                  // I
+    NPrint(Address, bool),                        // nN?       
+    PrintPattern(Address, bool),                  // pP
+    Quit(Address),                                // q
+    PrintFile(Address, PathBuf),                  // r
+    SReplace(Pattern, String, Vec<SReplaceFlag>), // s
+    Test(Address, String),                        // t
+    AppendPatternToFile(Address, PathBuf),        // w
+    ExchangeSpaces(Address),                      // x
+    YReplace(Address, String, String),            // y
+    BearBranchLabel(String),                      // :
+    PrintStandard(Address),                       // =
+    IgnoreComment,                                // #
+    Empty,                                        
+    Unknown
 }
 
 /// Parse count argument of future [`Command`]
@@ -172,6 +179,7 @@ impl Script {
             .as_ref()
             .trim_start_matches(|c| c == ' ' || c == ';');
 
+        let mut commands = vec![];
         let mut address: Option<Address> = None;
         let chars = raw_script.chars().collect::<Vec<_>>();
         let mut i = 0;
@@ -183,35 +191,74 @@ impl Script {
                 ch if ch.is_numeric() => {
                     parse_address(&chars, &mut i, &mut address);
                     continue;
-                }
+                },
+                ' ' => {},
+                '\n' => {},
+                '{' => {},
                 'a' => {},
                 'b' => {},
                 'c' => {},
-                'd' => {},
-                'D' => {},
-                'g' => {},
-                'G' => {},
-                'h' => {},
-                'H' => {},
+                'd' => commands.push(Command::DeleteLineInPattern(address, false)),
+                'D' => commands.push(Command::DeleteLineInPattern(address, true)),
+                'g' => commands.push(Command::ReplacePatternWithHold(address)),
+                'G' => commands.push(Command::AppendHoldToPattern(address)),
+                'h' => commands.push(Command::ReplaceHoldWithPattern(address)),
+                'H' => commands.push(Command::AppendPatternToHold(address)),
                 'i' => {},
-                'I' => {},
-                'n' => {},
-                'N' => {},
-                'p' => {},
-                'P' => {},
+                'I' => commands.push(Command::PrintPatternBinary(address)),
+                'n' => commands.push(Command::NPrint(address, false)),
+                'N' => commands.push(Command::NPrint(address, true)),
+                'p' => commands.push(Command::PrintPattern(address, false)),
+                'P' => commands.push(Command::PrintPattern(address, true)),
+                'q' => commands.push(Command::Quit(address)),
                 'r' => {},
-                's' => {},
+                's' => {
+                    i += 1;
+                    let first_position= i + 1;
+                    let Some(splitter) = chars[i] else {
+                        break;
+                    };
+                    i += 1;
+                    let splitters = chars.iter().enumerate().skip(i)
+                        .filter(|pair| pair.1 == splitter)
+                        .map(|pair| pair.0)
+                        .collect::<Vec>();
+
+                    if splitter == '/'{
+                        splitters.retain(|j|
+                            if let Some(previous_ch) = chars.get(s.checked_sub(1)){
+                                previous_ch == '\\'
+                            }else{
+                                false
+                            }
+                        )
+                    }
+
+                    let Some(pattern) = raw_script.get(first_position..splitters[0]) else{
+                        commands.push(Command::Unknown);
+                        break;
+                    };
+
+                    let Some(replacement) = raw_script.get((splitters[0] + 1)..splitters[1]) else{
+                        commands.push(Command::Unknown);
+                        break;
+                    };
+                    let pattern = pattern;
+                    commands.push(Command::SReplace(pattern, replacement.to_owned(), ()));
+                },
                 't' => {},
                 'w' => {},
-                'x' => {},
+                'x' => commands.push(Command::ExchangeSpaces(address)),
                 'y' => {},
                 ':' => {},
-                '=' => {},
-                '#' => {},
+                '=' => commands.push(Command::PrintStandard(address)),
+                '#' => commands.push(Command::IgnoreComment),
+                _ => commands.push(Command::Unknown)
             }
+            i += 1;
         }
 
-        Ok(Script(raw_script.into()))
+        Ok(Script(commands))
     }
 
     fn process_line(&self, line: &str, quiet: bool) -> Result<(), SedError> {
@@ -228,7 +275,7 @@ impl Script {
 struct Sed {
     ere: bool,
     quiet: bool,
-    scripts: Vec<Script>,
+    script: Script,
     input_sources: Vec<String>,
     pattern_space: String,
     hold_space: String,
@@ -236,14 +283,6 @@ struct Sed {
 }
 
 impl Sed {
-    fn process_line(&mut self, line: &str) -> Result<(), SedError> {
-        for script in &self.scripts {
-            script.process_line(line, self.quiet)?
-        }
-
-        Ok(())
-    }
-
     fn process_input(&mut self, mut reader: Box<dyn BufRead>) -> Result<(), SedError> {
         self.pattern_space.clear();
         self.hold_space.clear();
@@ -264,7 +303,7 @@ impl Sed {
                     };
 
                     self.pattern_space = trimmed.clone().to_string();
-                    if let Err(_) = self.process_line(trimmed) {
+                    if let Err(_) = self.script.process_line(trimmed, self.quiet) {
                         eprintln!("sed: PROCESS LINE ERROR!!!")
                     }
                     self.current_line += 1;
