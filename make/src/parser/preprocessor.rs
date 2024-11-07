@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::fs;
 use std::iter::Peekable;
 use std::path::Path;
+use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Acquire;
 
@@ -193,6 +194,84 @@ fn generate_macro_table(
 
 pub static ENV_MACROS: AtomicBool = AtomicBool::new(false);
 
+enum MacroFunction {
+    Shell,
+    And,
+    Or,
+    If,
+}
+
+fn detect_function(s: impl AsRef<str>) -> Option<MacroFunction> {
+    match s.as_ref() {
+        "shell" => Some(MacroFunction::Shell),
+        "and" => Some(MacroFunction::And),
+        "or" => Some(MacroFunction::Or),
+        "if" => Some(MacroFunction::If),
+        _ => None,
+    }
+}
+fn parse_function(f: MacroFunction, src: &mut Peekable<impl Iterator<Item = char>>, table: &HashMap<String, String>) -> Result<String> {
+    let mut args = String::new();
+    while let Some(&c) = src.peek() {
+        if c == ')' || c == '}' { break; }
+        args.push(c);
+    }
+    
+    match f {
+        MacroFunction::Shell => {
+            let output = Command::new("sh").args(["-c", &args]).output();
+            let mut result = output.into_iter()
+                .filter_map(|x| String::from_utf8(x.stdout).ok());
+            result.next().ok_or(PreprocError::CommandFailed)
+        },
+        MacroFunction::If => {
+            let mut args = args.split(',');
+            let Some(cond    ) = args.next() else { Err(PreprocError::CommandFailed)? };
+            let Some(on_true ) = args.next() else { Err(PreprocError::CommandFailed)? };
+            let on_false = args.next();
+            
+            let (result,_) = substitute(cond, table)?;
+            let cond = result.split_whitespace().next().is_none();
+            let (output, _) = if cond {
+                substitute(on_true, table)?
+            } else {
+                on_false.iter()
+                    .flat_map(|x| substitute(x, table))
+                    .next().unwrap_or_default()
+            };
+            
+            Ok(output)
+        }
+        MacroFunction::And => {
+            let args = args.split(',');
+            let expanded = args.map(|x| substitute(x, table));
+            let is_true = expanded.clone().all(|x|
+                if let Ok((s, _)) = x {
+                    s.split_whitespace().next().is_some()
+                } else {
+                    false
+                }
+            );
+            
+            let (result, _) = expanded.last().ok_or(PreprocError::CommandFailed)??;
+            Ok(if is_true { result } else { String::new() })
+        }
+        MacroFunction::Or => {
+            let args = args.split(',');
+            let expanded = args.map(|x| substitute(x, table));
+            let chosen = expanded.clone().find(|x|
+                if let Ok((s, _)) = x {
+                    s.split_whitespace().next().is_some()
+                } else {
+                    false
+                }
+            );
+            
+            Ok(if let Some(x) = chosen { x?.0 } else { String::new() })
+        }
+    }
+}
+
 fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, u32)> {
     let env_macros = ENV_MACROS.load(Acquire);
 
@@ -238,6 +317,14 @@ fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, 
                 let Ok(macro_name) = get_ident(&mut letters) else {
                     Err(PreprocError::BadMacroName)?
                 };
+                
+                if let Some(name) = detect_function(&macro_name) {
+                    let macro_body = parse_function(name, &mut letters, table)?;
+                    result.push_str(&macro_body);
+                    substitutions += 1;
+                    continue;
+                }
+                
                 skip_blank(&mut letters);
                 let Some(finilizer) = letters.next() else {
                     Err(PreprocError::UnexpectedEOF)?
