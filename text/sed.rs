@@ -10,7 +10,8 @@
 use std::{
     fs::File,
     io::{BufRead, BufReader},
-    path::PathBuf, str::pattern::Pattern,
+    path::PathBuf, 
+    str::pattern::Pattern,
 };
 
 use clap::Parser;
@@ -260,15 +261,6 @@ impl Script {
 
         Ok(Script(commands))
     }
-
-    fn process_line(&self, line: &str, quiet: bool) -> Result<(), SedError> {
-        if !quiet {
-            println!("script: {self:?}");
-            println!("processed line: {line}");
-        }
-
-        Ok(())
-    }
 }
 
 #[derive(Debug)] // TODO: debug only
@@ -283,6 +275,46 @@ struct Sed {
 }
 
 impl Sed {
+    fn execute(&mut self, command: Command, line: &str) -> Result<(), SedError> {
+        match command{
+            Block(address, commands) => {},                     // {
+            PrintTextAfter(address, text) => {},                // a
+            BranchToLabel(address, label) => {},                // b
+            DeletePatternAndPrintText(address, text) => {},     // c
+            DeleteLineInPattern(address, to_first_line) => {},  // d
+            ReplacePatternWithHold(address) => {},              // g
+            AppendHoldToPattern(address) => {},                 // G
+            ReplaceHoldWithPattern(address) => {},              // h
+            AppendPatternToHold(address) => {},                 // H
+            PrintTextBefore(address, text) => {},               // i
+            PrintPatternBinary(address) => {},                  // I
+            NPrint(address, bool) => {},                        // nN?       
+            PrintPattern(address, bool) => {},                  // pP
+            Quit(address) => {},                                // q
+            PrintFile(address, rfile) => {},                    // r
+            SReplace(pattern, replacement, flags) => {},        // s
+            Test(address, label) => {},                         // t
+            AppendPatternToFile(address, wfile) => {},          // w
+            ExchangeSpaces(address) => {},                      // x
+            YReplace(address, string1, string2) => {},          // y
+            BearBranchLabel(label) => {},                       // :
+            PrintStandard(address) => {},                       // =
+            IgnoreComment => {},                       // #
+            Empty => {},                                        
+            Unknown => {}
+        }
+    }
+
+    fn process_line(&mut self, line: &str) -> Result<(), SedError> {
+        if !self.quiet {
+            for command in self.script.0{
+                self.execute(command, line)?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn process_input(&mut self, mut reader: Box<dyn BufRead>) -> Result<(), SedError> {
         self.pattern_space.clear();
         self.hold_space.clear();
@@ -303,7 +335,7 @@ impl Sed {
                     };
 
                     self.pattern_space = trimmed.clone().to_string();
-                    if let Err(_) = self.script.process_line(trimmed, self.quiet) {
+                    if let Err(_) = self.process_line(trimmed) {
                         eprintln!("sed: PROCESS LINE ERROR!!!")
                     }
                     self.current_line += 1;
