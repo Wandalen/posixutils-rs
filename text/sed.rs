@@ -39,8 +39,8 @@ struct Args {
 
 impl Args {
     // Get ordered script sources from [-e script] and [-f script_file] manually.
-    fn get_scripts() -> Result<Vec<Script>, SedError> {
-        let mut scripts: Vec<Script> = vec![];
+    fn get_raw_script() -> Result<String, SedError> {
+        let mut raw_scripts: Vec<String> = vec![];
 
         let args: Vec<String> = std::env::args().skip(1).collect();
         let mut args_iter = args.iter();
@@ -49,9 +49,9 @@ impl Args {
             match arg.as_str() {
                 "-e" => {
                     // Can unwrap because `-e` is already validated by `clap`.
-                    let raw_scripts = args_iter.next().unwrap();
-                    for raw_script in raw_scripts.split('\n') {
-                        scripts.push(Script::parse(raw_script)?)
+                    let e_script = args_iter.next().unwrap();
+                    for raw_script_line in e_script.split('\n') {
+                        raw_scripts.push(raw_script_line.to_owned());
                     }
                 }
                 "-f" => {
@@ -61,27 +61,27 @@ impl Args {
                     let reader = BufReader::new(script_file);
                     for line in reader.lines() {
                         let raw_script = line.map_err(SedError::Io)?;
-                        scripts.push(Script::parse(raw_script)?);
+                        raw_scripts.push(raw_script);
                     }
                 }
                 _ => continue,
             }
         }
 
-        Ok(scripts)
+        Ok(raw_scripts.join('\n'))
     }
 
     fn try_to_sed(mut self: Args) -> Result<Sed, SedError> {
-        let mut scripts: Vec<Script> = Self::get_scripts()?;
+        let mut raw_script = Self::get_raw_script()?;
 
-        if scripts.is_empty() {
+        if raw_script.is_empty() {
             if self.file.is_empty() {
                 return Err(SedError::NoScripts);
             } else {
                 // Neither [-e script] nor [-f script_file] is supplied and [file...] is not empty
                 // then consider first [file...] as single script.
                 for raw_script in self.file.remove(0).split('\n') {
-                    scripts.push(Script::parse(raw_script)?);
+                    script.push_str(raw_script);
                 }
             }
         }
@@ -92,9 +92,7 @@ impl Args {
             self.file.push("-".to_string());
         }
 
-        let commands = scripts.iter().map(|s| s.0)
-            .collect::<Vec<Vec<_>>>().as_ptr().concat();
-        let script = Script(commands);
+        let script = Script::parse(raw_script)?;
 
         Ok(Sed {
             ere: self.ere,
@@ -130,7 +128,7 @@ enum Command{
     PrintTextAfter(Address, String),              // a
     BranchToLabel(Address, Option<String>),       // b
     DeletePatternAndPrintText(Address, String),   // c
-    DeleteLineInPattern(Address, bool),           // d
+    DeletePattern(Address, bool),                 // d
     ReplacePatternWithHold(Address),              // g
     AppendHoldToPattern(Address),                 // G
     ReplaceHoldWithPattern(Address),              // h
@@ -154,20 +152,61 @@ enum Command{
 }
 
 /// Parse count argument of future [`Command`]
-fn parse_address(chars: &[char], i: &mut usize, count: &mut Option<usize>) {
-    let mut count_str = String::new();
+fn parse_address(chars: &[char], i: &mut usize, address: &mut Option<Address>) {
+    let mut address_str = String::new();
     loop {
         let Some(ch) = chars.get(*i) else {
             break;
         };
-        if !ch.is_numeric() {
+        if !(ch.is_numeric() && ",;+$".contains(ch)) {
             break;
         }
-        count_str.push(*ch);
+        address_str.push(*ch);
         *i += 1;
     }
-    if let Ok(new_count) = count_str.parse::<usize>() {
-        *count = Some(new_count);
+    if let Ok(new_address) = address_str.parse::<usize>() {
+        *address = Some(new_address);
+    }
+}
+
+fn parse_text_attribute(chars: &[char], i: &mut usize) -> Option<String>{
+    *i += 1;
+    let Some(ch) = chars.get(i) else {
+        return None;
+    };
+    if ch != '\\'{
+        return None;
+    }
+    *i += 1;
+    loop {
+        let Some(ch) = chars.get(*i) else {
+            break;
+        };
+        if ch == ' '{
+            continue;
+        }
+        if ch == '\n'{
+            *i += 1;
+            break;
+        }
+        *i += 1;
+    }
+    let mut text = String::new();
+    loop{
+        let Some(ch) = chars.get(*i) else {
+            break;
+        };
+        if ch == '\n'{
+            *i += 1;
+            break;
+        }
+        text.push(ch);
+        *i += 1;
+    }
+    if text.is_empty(){
+        None
+    }else{
+        Some(text)
     }
 }
 
@@ -176,10 +215,6 @@ struct Script(Vec<Command>);
 
 impl Script {
     fn parse(raw_script: impl AsRef<str>) -> Result<Script, SedError> {
-        let raw_script = raw_script
-            .as_ref()
-            .trim_start_matches(|c| c == ' ' || c == ';');
-
         let mut commands = vec![];
         let mut address: Option<Address> = None;
         let chars = raw_script.chars().collect::<Vec<_>>();
@@ -196,16 +231,34 @@ impl Script {
                 ' ' => {},
                 '\n' => {},
                 '{' => {},
-                'a' => {},
+                'a' => {
+                    if let Some(text) = parse_text_attribute(chars, &mut i){
+                        commands.push(Command::PrintTextAfter(address, text));
+                    }else{
+                        commands.push(Command::Unknown);
+                    }
+                },
                 'b' => {},
-                'c' => {},
-                'd' => commands.push(Command::DeleteLineInPattern(address, false)),
-                'D' => commands.push(Command::DeleteLineInPattern(address, true)),
+                'c' => {
+                    if let Some(text) = parse_text_attribute(chars, &mut i){
+                        commands.push(Command::DeletePatternAndPrintText(address, text));
+                    }else{
+                        commands.push(Command::Unknown);
+                    }
+                },
+                'd' => commands.push(Command::DeletePattern(address, false)),
+                'D' => commands.push(Command::DeletePattern(address, true)),
                 'g' => commands.push(Command::ReplacePatternWithHold(address)),
                 'G' => commands.push(Command::AppendHoldToPattern(address)),
                 'h' => commands.push(Command::ReplaceHoldWithPattern(address)),
                 'H' => commands.push(Command::AppendPatternToHold(address)),
-                'i' => {},
+                'i' => {
+                    if let Some(text) = parse_text_attribute(chars, &mut i){
+                        commands.push(Command::PrintTextBefore(address, text));
+                    }else{
+                        commands.push(Command::Unknown);
+                    }
+                },
                 'I' => commands.push(Command::PrintPatternBinary(address)),
                 'n' => commands.push(Command::NPrint(address, false)),
                 'N' => commands.push(Command::NPrint(address, true)),
@@ -216,7 +269,7 @@ impl Script {
                 's' => {
                     i += 1;
                     let first_position= i + 1;
-                    let Some(splitter) = chars[i] else {
+                    let Some(splitter) = chars.get(i) else {
                         break;
                     };
                     i += 1;
@@ -281,7 +334,7 @@ impl Sed {
             PrintTextAfter(address, text) => {},                // a
             BranchToLabel(address, label) => {},                // b
             DeletePatternAndPrintText(address, text) => {},     // c
-            DeleteLineInPattern(address, to_first_line) => {},  // d
+            DeletePattern(address, to_first_line) => {},  // d
             ReplacePatternWithHold(address) => {},              // g
             AppendHoldToPattern(address) => {},                 // G
             ReplaceHoldWithPattern(address) => {},              // h
