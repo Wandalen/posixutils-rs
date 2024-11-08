@@ -146,7 +146,7 @@ fn generate_macro_table(
                 };
                 Operator::Plus
             }
-            c => Err(PreprocError::UnexpectedSymbol(c))?,
+            c => Err(dbg!(PreprocError::UnexpectedSymbol(c)))?,
         };
         skip_blank(&mut text);
         let mut macro_body = take_till_eol(&mut text);
@@ -326,11 +326,12 @@ fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, 
                 }
                 
                 skip_blank(&mut letters);
+                while let Some(c) = letters.peek() { if *c == '}' || *c == ')' { break; } }
                 let Some(finilizer) = letters.next() else {
                     Err(PreprocError::UnexpectedEOF)?
                 };
                 if !matches!(finilizer, ')' | '}') {
-                    Err(PreprocError::UnexpectedSymbol(finilizer))?
+                    Err(dbg!(PreprocError::UnexpectedSymbol(finilizer)))?
                 }
 
                 let env_macro = if env_macros {
@@ -347,7 +348,7 @@ fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, 
 
                 continue;
             }
-            c => Err(PreprocError::UnexpectedSymbol(c))?,
+            c => Err(dbg!(PreprocError::UnexpectedSymbol(c)))?,
         }
     }
 

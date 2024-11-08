@@ -167,7 +167,8 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
             self.skip_ws();
             self.try_expect(EXPORT);
             self.skip_ws();
-            self.expect(IDENTIFIER);
+            let is_pattern = self.try_expect(PERCENT);
+            if !is_pattern { self.expect(IDENTIFIER); }
             self.skip_ws();
             if self.tokens.pop() == Some((COLON, ":".to_string())) {
                 self.builder.token(COLON.into(), ":");
