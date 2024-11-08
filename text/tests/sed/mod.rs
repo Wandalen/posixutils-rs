@@ -439,6 +439,178 @@ fn test_f_script_ignore_semicolon_chars() {
 
 /*
 
+sed [-n] [file]
+
+sed -e '' [file]
+
+sed -f [file]
+
+sed [-n] -e '' -e '' -e '' [file]
+
+sed [-n] -f -f -f [file]
+
+sed [-n] -e '' -f [file]
+
+sed [-n] -e '' -e '' -e '' -f -f -f [file]
+
+sed  -f -f -f -e '' -e '' -e '' [file]
+
+sed [-n] -e '' -f -e '' -f -e '' [file]
+
+sed [-n] -e '' -f -f -e '' -f -f -e '' [file]
+
+sed [-n] -e '' -e '' -f -e '' -e '' -f [file]
+
+{}
+
+
+
+
+0,
+0,0,
+0,0,0
+0,0
+0,+
+,
+,0
+,,
+,;
+0;
+0;0;
+0;0;0
+0;0,0
+0;$;0
+0;0
+;;
+;,
+
+a
+
+a\ text
+a\ text
+
+b
+
+b
+
+c
+
+c\ text
+
+d
+
+
+
+D
+
+
+
+g
+
+
+
+G
+
+
+
+h
+
+
+
+H
+
+
+
+i
+
+i\ text
+
+I
+
+
+
+n
+
+
+
+N
+
+
+
+p
+
+
+
+P
+
+
+
+q
+
+
+
+r
+
+
+
+s//
+
+
+
+s//n
+
+
+
+s//g
+
+
+
+s//p
+
+
+
+s//w wfile
+
+
+
+t
+
+t
+t label
+
+w
+
+w wfile
+
+x
+
+x
+,x
+
+y//
+
+
+
+:
+
+
+
+=
+
+
+
+<empty>
+
+
+
+#
+
+
+
+*/
+
+/*
+
 Tests:
 - args
 - script sequence atributes
