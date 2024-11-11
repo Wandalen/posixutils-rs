@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::fs;
 use std::iter::Peekable;
@@ -40,7 +40,7 @@ fn skip_blank(letters: &mut Peekable<impl Iterator<Item = char>>) {
 }
 
 fn suitable_ident(c: &char) -> bool {
-    c.is_alphanumeric() || matches!(c, '_' | '.')
+    c.is_alphanumeric() || matches!(c, '_' | '.' | '-')
 }
 
 fn get_ident(letters: &mut Peekable<impl Iterator<Item = char>>) -> Result<String> {
@@ -166,7 +166,7 @@ fn generate_macro_table(
             }
             Operator::Bang => {
                 macro_body = substitute(&macro_body, &macro_table)?.0;
-                let Ok(result) = std::process::Command::new("sh")
+                let Ok(result) = Command::new("sh")
                     .args(["-c", &macro_body])
                     .output()
                 else {
@@ -195,6 +195,7 @@ fn generate_macro_table(
 pub static ENV_MACROS: AtomicBool = AtomicBool::new(false);
 
 enum MacroFunction {
+    FilterOut,
     Shell,
     And,
     Or,
@@ -203,6 +204,7 @@ enum MacroFunction {
 
 fn detect_function(s: impl AsRef<str>) -> Option<MacroFunction> {
     match s.as_ref() {
+        "filter-out" => Some(MacroFunction::FilterOut),
         "shell" => Some(MacroFunction::Shell),
         "and" => Some(MacroFunction::And),
         "or" => Some(MacroFunction::Or),
@@ -215,9 +217,27 @@ fn parse_function(f: MacroFunction, src: &mut Peekable<impl Iterator<Item = char
     while let Some(&c) = src.peek() {
         if c == ')' || c == '}' { break; }
         args.push(c);
+        src.next();
     }
     
     match f {
+        MacroFunction::FilterOut => {
+            let mut args = args.split(',');
+            let Some(pattern) = args.next() else { Err(PreprocError::CommandFailed)? };
+            let (pattern, _) = substitute(pattern, table)?;
+            let Some(text) = args.next() else { Err(PreprocError::CommandFailed)? };
+            let (text, _) = substitute(text, table)?;
+            
+            let patterns = pattern.split_whitespace();
+            let words = text.split_whitespace();
+            let pattern_set = HashSet::<&str>::from_iter(patterns);
+            
+            let result = words
+                .filter(|s| pattern_set.contains(s))
+                .fold(String::new(), |acc, s| acc + s);
+            
+            Ok(result)
+        },
         MacroFunction::Shell => {
             let output = Command::new("sh").args(["-c", &args]).output();
             let mut result = output.into_iter()
