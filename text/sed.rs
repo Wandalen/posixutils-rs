@@ -69,6 +69,8 @@ impl Args {
         Ok(raw_scripts.join('\n'))
     }
 
+    /// Creates [`Sed`] from [`Args`], if [`Script`] 
+    /// parsing is failed, then returns error 
     fn try_to_sed(mut self: Args) -> Result<Sed, SedError> {
         let mut raw_script = Self::get_raw_script()?;
 
@@ -104,81 +106,114 @@ impl Args {
     }
 }
 
-/// 
+/// Errors that can be returned by [`Sed`] and its inner functions
 #[derive(thiserror::Error, Debug)]
 enum SedError {
+    /// Sed didn't get script for processing input files
     #[error("none script was supplied")]
     NoScripts,
+    /// 
     #[error("{0}")]
     Io(#[from] std::io::Error),
+    /// Sed can`t parse raw script string
     #[error("can't parse {}", .0)]
     ParseError(String)
 }
 
-/// 
+/// Range or position in input files 
+/// to which related commands may apply
 struct Address(Vec<usize>);
 
-/// 
+/// [`Command::SReplace`] optional flags
 enum SReplaceFlag{
-    /// 
+    /// Substitute for the nth occurrence only of the 
+    /// BRE found within the pattern space
     ReplaceNth,                                   //n
-    /// 
+    /// Globally substitute for all non-overlapping 
+    /// instances of the BRE rather than just the first one
     ReplaceAll,                                   //g
-    /// 
+    /// Write the pattern space to standard output if 
+    /// a replacement was made
     PrintPatternIfReplace,                        //p
-    /// 
-    AppendToIfReplace(PathBuf)                     //w
+    /// Write. Append the pattern space to wfile if a 
+    /// replacement was made
+    AppendToIfReplace(PathBuf)                    //w
 }
 
-/// 
+/// Atomic parts of [`Script`], that can process input
+/// files line by line
 enum Command{
-    /// 
+    /// Execute a list of sed editing commands only 
+    /// when the pattern space is selected
     Block(Address, Vec<Command>),                 // {
-    /// 
+    /// Write text to standard output as described previously
     PrintTextAfter(Address, String),              // a
-    /// 
+    /// Branch to the : command verb bearing the label 
+    /// argument. If label is not specified, branch to 
+    /// the end of the script
     BranchToLabel(Address, Option<String>),       // b
-    /// 
+    /// Delete the pattern space. With a 0 or 1 address 
+    /// or at the end of a 2-address range, place text 
+    /// on the output and start the next cycle
     DeletePatternAndPrintText(Address, String),   // c
-    /// 
-    DeletePattern(Address, bool),                 // d
-    /// 
+    /// Delete the pattern space and start the next cycle (d)
+    /// If the pattern space contains no <newline>, 
+    /// delete the pattern space and start new cycle (D)
+    DeletePattern(Address, bool),                 // dD
+    /// Replace the contents of the pattern 
+    /// space by the contents of the hold space
     ReplacePatternWithHold(Address),              // g
-    /// 
+    /// Append to the pattern space a <newline> 
+    /// followed by the contents of the hold space
     AppendHoldToPattern(Address),                 // G
-    /// 
+    /// Replace the contents of the hold space 
+    /// with the contents of the pattern space
     ReplaceHoldWithPattern(Address),              // h
-    /// 
+    /// Append to the hold space a <newline> followed 
+    /// by the contents of the pattern space
     AppendPatternToHold(Address),                 // H
-    /// 
+    /// Write text to standard output
     PrintTextBefore(Address, String),             // i
-    /// 
+    /// Write the pattern space to standard 
+    /// output in a visually unambiguous form
     PrintPatternBinary(Address),                  // I
-    /// 
+    /// Write the pattern space to standard output (n).
+    /// Append the next line of input, less its 
+    /// terminating <newline>, to the pattern space (N)
     NPrint(Address, bool),                        // nN?       
-    /// 
+    /// Write the pattern space to standard output (p).
+    /// Write the pattern space, up to the first <newline>, 
+    /// to standard output (P).
     PrintPattern(Address, bool),                  // pP
-    /// 
+    /// Branch to the end of the script and quit without 
+    /// starting a new cycle
     Quit(Address),                                // q
-    /// 
+    /// Copy the contents of rfile to standard output
     PrintFile(Address, PathBuf),                  // r
-    /// 
+    /// Substitute the replacement string for instances 
+    /// of the BRE in the pattern space
     SReplace(regex_t, String, Vec<SReplaceFlag>), // s
-    /// 
+    /// Test. Branch to the : command verb bearing the 
+    /// label if any substitutions have been made since 
+    /// the most recent reading of an input line or 
+    /// execution of a t
     Test(Address, Option<String>),                // t
-    /// 
+    /// Append (write) the pattern space to wfile
     AppendPatternToFile(Address, PathBuf),        // w
-    /// 
+    /// Exchange the contents of the pattern and hold spaces
     ExchangeSpaces(Address),                      // x
-    /// 
+    /// Replace all occurrences of characters in string1 
+    /// with the corresponding characters in string2
     YReplace(Address, String, String),            // y
-    /// 
+    /// Do nothing. This command bears a label to which 
+    /// the b and t commands branch.
     BearBranchLabel(String),                      // :
-    /// 
+    /// Write the following to standard output:
+    /// "%d\n", <current line number>
     PrintStandard(Address),                       // =
-    /// 
+    /// Ignore remainder of the line (treat it as a comment)
     IgnoreComment,                                // #                                       
-    /// 
+    /// Char sequence that can`t be recognised as `Command`
     Unknown
 }
 
@@ -200,7 +235,9 @@ fn parse_address(chars: &[char], i: &mut usize, address: &mut Option<Address>) {
     }
 }
 
-/// 
+/// Parse text attribute of a, c, i [`Command`]s that formated as:
+/// a\
+/// text
 fn parse_text_attribute(chars: &[char], i: &mut usize) -> Option<String>{
     *i += 1;
     let Some(ch) = chars.get(i) else {
@@ -242,7 +279,8 @@ fn parse_text_attribute(chars: &[char], i: &mut usize) -> Option<String>{
     }
 }
 
-/// 
+/// Parse label, xfile attributes of b, r, t, w [`Command`]s that formated as:
+/// b [label], r  rfile
 fn parse_word_attribute(chars: &[char], i: &mut usize) -> Result<Option<String>, SedError>{
     loop{
         let ch = *chars[i];
@@ -261,7 +299,7 @@ fn parse_word_attribute(chars: &[char], i: &mut usize) -> Result<Option<String>,
     }
 }
 
-/// 
+/// Parse rfile attribute of r [`Command`]
 fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedError>{
     try_next_blank(chars, i)?;
     let start = *i; 
@@ -292,7 +330,7 @@ fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedErr
     }
 }
 
-///
+/// Parse `{ ... }` like [`Script`] part
 fn parse_block(chars: &[char], i: &mut usize) -> Result<(), SedError>{
     let block_limits = chars.iter().enumerate().skip(*i)
         .filter(|pair| pair.1 == '{' || pair.1 == '}')
@@ -327,6 +365,8 @@ fn parse_block(chars: &[char], i: &mut usize) -> Result<(), SedError>{
     Ok(())
 }
 
+/// Parse s, y [`Command`]s that formated as:
+/// x/string1/string2/
 fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, String), SedError>{
     *i += 1;
     let first_position= *i + 1;
@@ -361,6 +401,7 @@ fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, Strin
     Ok((pattern, replacement))
 }
 
+/// Parse [`Command::SReplace`] flags
 fn parse_s_flags(chars: &[char], i: &mut usize) -> Result<Vec<SReplaceFlag>, SedError>{
     let mut flags = vec![];
     let mut flag_map= HashMap::from([
@@ -416,7 +457,8 @@ fn parse_s_flags(chars: &[char], i: &mut usize) -> Result<Vec<SReplaceFlag>, Sed
     Ok(flags)
 }
 
-/// 
+/// If next char isn`t ' ' then raise error. 
+/// Updates current char position counter ([`i`]). 
 fn try_next_blank(chars: &[char], i: &mut usize) -> Result<(), SedError>{
     *i += 1;
     let Some(ch) = chars.get(*i) else {
@@ -462,12 +504,14 @@ fn compile_regex(pattern: String) -> Result<regex_t, SedError> {
     }
 }
 
-/// 
+/// Contains [`Command`] sequence of all [`Sed`] session 
+/// that applied all to every line of input files 
 #[derive(Debug)] 
 struct Script(Vec<Command>);
 
 impl Script {
-    /// 
+    /// Try parse raw script string to sequence of [`Command`]s 
+    /// formated as [`Script`]
     fn parse(raw_script: impl AsRef<str>) -> Result<Script, SedError> {
         let mut commands = vec![];
         let mut address: Option<Address> = None;
@@ -535,7 +579,16 @@ impl Script {
                 },
                 ':' => commands.push(Command::BearBranchLabel(parse_word_attribute(chars, &mut i)?)),
                 '=' => commands.push(Command::PrintStandard(address)),
-                '#' => commands.push(Command::IgnoreComment),
+                '#' => {
+                    commands.push(Command::IgnoreComment);
+                    i += 1;
+                    while let Some(ch) = chars(i){
+                        if ch == '\n'{
+                            break;
+                        } 
+                        i += 1;
+                    }
+                },
                 _ => return Err(err)
             }
             i += 1;
@@ -545,7 +598,8 @@ impl Script {
     }
 }
 
-/// 
+/// Main program structure. Process input 
+/// files by [`Script`] [`Command`]s
 #[derive(Debug)] // TODO: debug only
 struct Sed {
     ere: bool,
@@ -558,7 +612,8 @@ struct Sed {
 }
 
 impl Sed {
-    /// 
+    /// Executes one command for `line` string argument 
+    /// and updates [`Sed`] state
     fn execute(&mut self, command: Command, line: &str) -> Result<(), SedError> {
         match command{
             Block(address, commands) => {},                     // {
@@ -588,7 +643,7 @@ impl Sed {
         }
     }
 
-    /// 
+    /// Executes all commands of [`Sed`]'s [`Script`] for `line` string argument 
     fn process_line(&mut self, line: &str) -> Result<(), SedError> {
         if !self.quiet {
             for command in self.script.0{
@@ -599,7 +654,8 @@ impl Sed {
         Ok(())
     }
 
-    /// 
+    /// Executes all commands of [`Sed`]'s [`Script`] 
+    /// for all content of `reader` file argument 
     fn process_input(&mut self, mut reader: Box<dyn BufRead>) -> Result<(), SedError> {
         self.pattern_space.clear();
         self.hold_space.clear();
@@ -632,7 +688,8 @@ impl Sed {
         Ok(())
     }
 
-    /// 
+    /// Main [`Sed`] function. Executes all commands of 
+    /// own [`Script`] for all content of all input files 
     fn sed(&mut self) -> Result<(), SedError> {
         println!("SED: {self:?}");
 
