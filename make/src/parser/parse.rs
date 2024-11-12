@@ -74,6 +74,7 @@ impl rowan::Language for Lang {
 /// but doesn't contain offsets and parent pointers.
 use rowan::GreenNode;
 
+
 use super::SyntaxKind;
 use crate::parser::preprocessor::preprocess;
 /// You can construct GreenNodes by hand, but a builder
@@ -162,6 +163,54 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
             self.builder.finish_node();
         }
 
+        fn parse_macro_call(&mut self) -> bool {
+            enum Delims {
+                Paren,
+                Brace,
+            }
+
+            self.builder.start_node(MACRO.into());
+            self.expect(DOLLAR);
+
+            let internal = [
+                AT_SIGN,
+                PERCENT,
+                QUESTION,
+                LESS,
+                STAR,
+                DOLLAR,
+            ].iter().any(|x| self.try_expect(*x));
+
+            if internal {
+                self.builder.finish_node();
+                return true;
+            }
+
+            if self.try_expect(IDENTIFIER) {
+                let (_, ident) = self.find(|(kind, _)| *kind == IDENTIFIER).unwrap();
+                if ident.len() > 1 {
+                    self.error(format!("Macro name `${ident}` is too long, use parenthesis  like this: `$({ident})`"));
+                }
+            }
+
+            let delim = if self.try_expect(LPAREN) { Delims::Paren } else if self.try_expect(LBRACE) { Delims::Brace } else {
+                self.error("Found dollar outside of macro invocation".to_string());
+                return false;
+            };
+            
+            self.expect(IDENTIFIER);
+            while self.parse_macro_call() {
+                self.expect(COMMA);
+            }
+            match delim {
+                Delims::Paren => self.expect(RPAREN),
+                Delims::Brace => self.expect(RBRACE),
+            }
+            
+            self.builder.finish_node();
+            true
+        }
+
         fn parse_rule(&mut self) {
             self.builder.start_node(RULE.into());
             self.skip_ws();
@@ -244,11 +293,7 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
             &self,
             finder: impl FnMut(&&(SyntaxKind, String)) -> bool,
         ) -> Option<(SyntaxKind, &str)> {
-            self.tokens
-                .iter()
-                .rev()
-                .find(finder)
-                .map(|(kind, text)| (*kind, text.as_str()))
+            self.tokens.iter().rev().find(finder).map(|(kind, text)| (*kind, text.as_str()))
         }
 
         fn expect(&mut self, expected: SyntaxKind) {
@@ -282,8 +327,7 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
         tokens,
         builder: GreenNodeBuilder::new(),
         errors: Vec::new(),
-    }
-    .parse();
+    }.parse();
 
     if !result.errors.is_empty() {
         Err(ParseError(result.errors))
@@ -348,10 +392,13 @@ macro_rules! ast_node {
     };
 }
 
+ast_node!(Macro, MACRO);
 ast_node!(Makefile, ROOT);
 ast_node!(Rule, RULE);
 ast_node!(Identifier, IDENTIFIER);
 ast_node!(VariableDefinition, VARIABLE);
+
+impl Macro {}
 
 impl VariableDefinition {
     pub fn name(&self) -> Option<String> {
@@ -367,10 +414,7 @@ impl VariableDefinition {
     }
 
     pub fn raw_value(&self) -> Option<String> {
-        self.syntax()
-            .children()
-            .find(|it| it.kind() == EXPR)
-            .map(|it| it.text().to_string())
+        self.syntax().children().find(|it| it.kind() == EXPR).map(|it| it.text().to_string())
     }
 }
 
@@ -400,19 +444,16 @@ impl Makefile {
         Ok(parsed.root())
     }
 
-    pub fn rules(&self) -> impl Iterator<Item = Rule> {
+    pub fn rules(&self) -> impl Iterator<Item=Rule> {
         self.syntax().children().filter_map(Rule::cast)
     }
 
-    pub fn rules_by_target<'a>(&'a self, target: &'a str) -> impl Iterator<Item = Rule> + 'a {
-        self.rules()
-            .filter(move |rule| rule.targets().any(|t| t == target))
+    pub fn rules_by_target<'a>(&'a self, target: &'a str) -> impl Iterator<Item=Rule> + 'a {
+        self.rules().filter(move |rule| rule.targets().any(|t| t == target))
     }
 
-    pub fn variable_definitions(&self) -> impl Iterator<Item = VariableDefinition> {
-        self.syntax()
-            .children()
-            .filter_map(VariableDefinition::cast)
+    pub fn variable_definitions(&self) -> impl Iterator<Item=VariableDefinition> {
+        self.syntax().children().filter_map(VariableDefinition::cast)
     }
 
     pub fn add_rule(&mut self, target: &str) -> Rule {
@@ -425,64 +466,47 @@ impl Makefile {
 
         let syntax = SyntaxNode::new_root(builder.finish()).clone_for_update();
         let pos = self.0.children_with_tokens().count();
-        self.0
-            .splice_children(pos..pos, vec![syntax.clone().into()]);
+        self.0.splice_children(pos..pos, vec![syntax.clone().into()]);
         Rule(syntax)
     }
 }
 
 impl Rule {
-    pub fn targets(&self) -> impl Iterator<Item = String> {
-        self.syntax()
-            .children_with_tokens()
-            .take_while(|it| it.as_token().map_or(true, |t| t.kind() != COLON))
-            .filter_map(|it| it.as_token().map(|t| t.text().to_string()))
+    pub fn targets(&self) -> impl Iterator<Item=String> {
+        self.syntax().children_with_tokens().take_while(|it| it.as_token().map_or(true, |t| t.kind() != COLON)).filter_map(|it| it.as_token().map(|t| t.text().to_string()))
     }
 
-    pub fn prerequisites(&self) -> impl Iterator<Item = String> {
-        self.syntax()
-            .children()
-            .find(|it| it.kind() == EXPR)
-            .into_iter()
-            .flat_map(|it| {
-                it.children_with_tokens().filter_map(|it| {
-                    it.as_token().and_then(|t| {
-                        if t.kind() == IDENTIFIER {
-                            Some(t.text().to_string())
-                        } else {
-                            None
-                        }
-                    })
+    pub fn prerequisites(&self) -> impl Iterator<Item=String> {
+        self.syntax().children().find(|it| it.kind() == EXPR).into_iter().flat_map(|it| {
+            it.children_with_tokens().filter_map(|it| {
+                it.as_token().and_then(|t| {
+                    if t.kind() == IDENTIFIER {
+                        Some(t.text().to_string())
+                    } else {
+                        None
+                    }
                 })
             })
+        })
     }
 
-    pub fn recipes(&self) -> impl Iterator<Item = String> {
-        self.syntax()
-            .children()
-            .filter(|it| it.kind() == RECIPE)
-            .flat_map(|it| {
-                it.children_with_tokens().filter_map(|it| {
-                    it.as_token().and_then(|t| {
-                        if t.kind() == TEXT {
-                            Some(t.text().to_string())
-                        } else {
-                            None
-                        }
-                    })
+    pub fn recipes(&self) -> impl Iterator<Item=String> {
+        self.syntax().children().filter(|it| it.kind() == RECIPE).flat_map(|it| {
+            it.children_with_tokens().filter_map(|it| {
+                it.as_token().and_then(|t| {
+                    if t.kind() == TEXT {
+                        Some(t.text().to_string())
+                    } else {
+                        None
+                    }
                 })
             })
+        })
     }
 
     pub fn replace_command(&self, i: usize, line: &str) {
         // Find the RECIPE with index i, then replace the line in it
-        let index = self
-            .syntax()
-            .children()
-            .filter(|it| it.kind() == RECIPE)
-            .nth(i)
-            .expect("index out of bounds")
-            .index();
+        let index = self.syntax().children().filter(|it| it.kind() == RECIPE).nth(i).expect("index out of bounds").index();
 
         let mut builder = GreenNodeBuilder::new();
         builder.start_node(RECIPE.into());
@@ -492,17 +516,12 @@ impl Rule {
         builder.finish_node();
 
         let syntax = SyntaxNode::new_root(builder.finish()).clone_for_update();
-        self.0
-            .splice_children(index..index + 1, vec![syntax.into()]);
+        self.0.splice_children(index..index + 1, vec![syntax.into()]);
     }
 
     pub fn push_command(&self, line: &str) {
         // Find the latest RECIPE entry, then append the new line after it.
-        let index = self
-            .0
-            .children_with_tokens()
-            .filter(|it| it.kind() == RECIPE)
-            .last();
+        let index = self.0.children_with_tokens().filter(|it| it.kind() == RECIPE).last();
 
         let index = index.map_or_else(
             || self.0.children_with_tokens().count(),
