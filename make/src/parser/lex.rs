@@ -96,9 +96,6 @@ impl<'a> Lexer<'a> {
                     Some((SyntaxKind::TEXT, self.read_while(|c| !Self::is_newline(c))))
                 }
                 LineType::Other => match c {
-                    c if Self::is_whitespace(c) => {
-                        Some((SyntaxKind::WHITESPACE, self.read_while(Self::is_whitespace)))
-                    }
                     c if Self::is_valid_identifier_char(c) => {
                         let ident = self.read_while(Self::is_valid_identifier_char);
 

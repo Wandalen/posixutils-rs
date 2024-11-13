@@ -163,6 +163,15 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
             self.builder.finish_node();
         }
 
+        fn parse_macro_defintion(&mut self) {
+            self.builder.start_node(MACRODEF.into());
+            self.try_expect(EXPORT);
+            self.expect(IDENTIFIER);
+            self.expect(EQUALS);
+            self.parse_expr();
+            self.builder.finish_node();
+        }
+        
         fn parse_macro_call(&mut self) -> bool {
             enum Delims {
                 Paren,
@@ -189,7 +198,7 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
             if self.try_expect(IDENTIFIER) {
                 let (_, ident) = self.find(|(kind, _)| *kind == IDENTIFIER).unwrap();
                 if ident.len() > 1 {
-                    self.error(format!("Macro name `${ident}` is too long, use parenthesis  like this: `$({ident})`"));
+                    self.error(format!("Macro name `${ident}` is too long, use parenthesis like this: `$({ident})`"));
                 }
             }
 
@@ -393,12 +402,14 @@ macro_rules! ast_node {
 }
 
 ast_node!(Macro, MACRO);
+ast_node!(MacroDef, MACRO);
 ast_node!(Makefile, ROOT);
 ast_node!(Rule, RULE);
 ast_node!(Identifier, IDENTIFIER);
 ast_node!(VariableDefinition, VARIABLE);
 
 impl Macro {}
+impl MacroDef {}
 
 impl VariableDefinition {
     pub fn name(&self) -> Option<String> {

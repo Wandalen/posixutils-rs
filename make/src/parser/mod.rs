@@ -71,6 +71,7 @@ pub enum SyntaxKind {
     RECIPE,
     VARIABLE,
     EXPR,
+    MACRODEF,
     MACRO,
 }
 
