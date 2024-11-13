@@ -8,7 +8,7 @@
 //
 
 use std::{
-    collections::HashMap, fs::File, io::{BufRead, BufReader}, path::PathBuf, str::pattern::Pattern
+    collections::HashMap, fs::File, io::{BufRead, BufReader, Write}, path::PathBuf, str::pattern::Pattern
 };
 use libc::{regex_t, regcomp, regexec, REG_NOMATCH};
 
@@ -101,7 +101,9 @@ impl Args {
             input_sources: self.file,
             pattern_space: String::new(),
             hold_space: String::new(),
+            after_space: String::new(),
             current_line: 0,
+            has_replacements_since_t: false
         })
     }
 }
@@ -120,24 +122,40 @@ enum SedError {
     ParseError(String)
 }
 
-/// Range or position in input files 
-/// to which related commands may apply
-struct Address(Vec<usize>);
+/// Define line number or range limits of [`Address`] 
+/// for applying [`Command`]
+enum Index{
+    /// Line number
+    Number(usize),
+    /// Context related line number that 
+    /// calculated from this BRE match
+    Pattern(regex_t)
+}
+
+/// Address define line position or range for 
+/// applying [`Command`]
+struct Address{
+    /// List of [`Indices`] that defines line position or range
+    indices: Vec<Index>, 
+    /// Defines what range limits is passed 
+    /// in current processing file for current [`Command`]
+    passed: Option<(bool, bool)>
+}
 
 /// [`Command::SReplace`] optional flags
 enum SReplaceFlag{
     /// Substitute for the nth occurrence only of the 
     /// BRE found within the pattern space
-    ReplaceNth,                                   //n
+    ReplaceNth,                                                // n
     /// Globally substitute for all non-overlapping 
     /// instances of the BRE rather than just the first one
-    ReplaceAll,                                   //g
+    ReplaceAll,                                                // g
     /// Write the pattern space to standard output if 
     /// a replacement was made
-    PrintPatternIfReplace,                        //p
+    PrintPatternIfReplace,                                     // p
     /// Write. Append the pattern space to wfile if a 
     /// replacement was made
-    AppendToIfReplace(PathBuf)                    //w
+    AppendToIfReplace(PathBuf)                                 // w
 }
 
 /// Atomic parts of [`Script`], that can process input
@@ -145,80 +163,199 @@ enum SReplaceFlag{
 enum Command{
     /// Execute a list of sed editing commands only 
     /// when the pattern space is selected
-    Block(Address, Vec<Command>),                 // {
+    Block(Address, Vec<Command>),                              // {
     /// Write text to standard output as described previously
-    PrintTextAfter(Address, String),              // a
+    PrintTextAfter(Address, String),                           // a
     /// Branch to the : command verb bearing the label 
     /// argument. If label is not specified, branch to 
     /// the end of the script
-    BranchToLabel(Address, Option<String>),       // b
+    BranchToLabel(Address, Option<String>),                    // b
     /// Delete the pattern space. With a 0 or 1 address 
     /// or at the end of a 2-address range, place text 
     /// on the output and start the next cycle
-    DeletePatternAndPrintText(Address, String),   // c
+    DeletePatternAndPrintText(Address, String),                // c
     /// Delete the pattern space and start the next cycle (d)
     /// If the pattern space contains no <newline>, 
     /// delete the pattern space and start new cycle (D)
-    DeletePattern(Address, bool),                 // dD
+    DeletePattern(Address, bool),                              // dD
     /// Replace the contents of the pattern 
     /// space by the contents of the hold space
-    ReplacePatternWithHold(Address),              // g
+    ReplacePatternWithHold(Address),                           // g
     /// Append to the pattern space a <newline> 
     /// followed by the contents of the hold space
-    AppendHoldToPattern(Address),                 // G
+    AppendHoldToPattern(Address),                              // G
     /// Replace the contents of the hold space 
     /// with the contents of the pattern space
-    ReplaceHoldWithPattern(Address),              // h
+    ReplaceHoldWithPattern(Address),                           // h
     /// Append to the hold space a <newline> followed 
     /// by the contents of the pattern space
-    AppendPatternToHold(Address),                 // H
+    AppendPatternToHold(Address),                              // H
     /// Write text to standard output
-    PrintTextBefore(Address, String),             // i
+    PrintTextBefore(Address, String),                          // i
     /// Write the pattern space to standard 
     /// output in a visually unambiguous form
-    PrintPatternBinary(Address),                  // I
+    PrintPatternBinary(Address),                               // I
     /// Write the pattern space to standard output (n).
     /// Append the next line of input, less its 
     /// terminating <newline>, to the pattern space (N)
-    NPrint(Address, bool),                        // nN?       
+    NPrint(Address, bool),                                     // nN?       
     /// Write the pattern space to standard output (p).
     /// Write the pattern space, up to the first <newline>, 
     /// to standard output (P).
-    PrintPattern(Address, bool),                  // pP
+    PrintPattern(Address, bool),                               // pP
     /// Branch to the end of the script and quit without 
     /// starting a new cycle
-    Quit(Address),                                // q
+    Quit(Address),                                             // q
     /// Copy the contents of rfile to standard output
-    PrintFile(Address, PathBuf),                  // r
+    PrintFile(Address, PathBuf),                               // r
     /// Substitute the replacement string for instances 
     /// of the BRE in the pattern space
-    SReplace(regex_t, String, Vec<SReplaceFlag>), // s
+    SReplace(Address, regex_t, String, Vec<SReplaceFlag>),     // s
     /// Test. Branch to the : command verb bearing the 
     /// label if any substitutions have been made since 
     /// the most recent reading of an input line or 
     /// execution of a t
-    Test(Address, Option<String>),                // t
+    Test(Address, Option<String>),                             // t
     /// Append (write) the pattern space to wfile
-    AppendPatternToFile(Address, PathBuf),        // w
+    AppendPatternToFile(Address, PathBuf),                     // w
     /// Exchange the contents of the pattern and hold spaces
-    ExchangeSpaces(Address),                      // x
+    ExchangeSpaces(Address),                                   // x
     /// Replace all occurrences of characters in string1 
     /// with the corresponding characters in string2
-    YReplace(Address, String, String),            // y
+    YReplace(Address, String, String),                         // y
     /// Do nothing. This command bears a label to which 
     /// the b and t commands branch.
-    BearBranchLabel(String),                      // :
+    BearBranchLabel(String),                                   // :
     /// Write the following to standard output:
     /// "%d\n", <current line number>
-    PrintStandard(Address),                       // =
+    PrintStandard(Address),                                    // =
     /// Ignore remainder of the line (treat it as a comment)
-    IgnoreComment,                                // #                                       
+    IgnoreComment,                                             // #                                       
     /// Char sequence that can`t be recognised as `Command`
     Unknown
 }
 
+impl Command{
+    fn get_mut_address(&mut self) -> Option<(&mut Address, usize)>{
+        Some(match self{
+            Command::Block(address, ..) => (address, 2),
+            Command::PrintTextAfter(address, ..) => (address, 1),
+            Command::BranchToLabel(address, ..) => (address, 2),
+            Command::DeletePatternAndPrintText(address, ..) => (address, 2),
+            Command::DeletePattern(address, ..) => (address, 2),
+            Command::ReplacePatternWithHold(address) => (address, 2),
+            Command::AppendHoldToPattern(address) => (address, 2),
+            Command::ReplaceHoldWithPattern(address) => (address, 2),
+            Command::AppendPatternToHold(address) => (address, 2),
+            Command::PrintTextBefore(address, ..) => (address, 1),
+            Command::PrintPatternBinary(address) => (address, 2),
+            Command::NPrint(address, ..) => (address, 2),
+            Command::PrintPattern(address, ..) => (address, 2),
+            Command::Quit(address) => (address, 1),
+            Command::PrintFile(address, ..) => (address, 1),
+            Command::SReplace(address, ..) => (address, 2),
+            Command::Test(address, ..) => (address, 2),
+            Command::AppendPatternToFile(address, ..) => (address, 2),
+            Command::ExchangeSpaces(address) => (address, 2),
+            Command::YReplace(address, ..) => (address, 2),
+            Command::PrintStandard(address) => (address, 1),
+            _ => return None
+        })
+    }
+
+    /// If [`Command`]s attribute address is range then 
+    /// reset range limits pass
+    fn reset_address(&mut self){
+        let Some((address, _)) = self.get_mut_address() else{
+            return;
+        };
+        if let Some(range) = address.passed.as_mut(){
+            *range = (false, false);
+        }
+    }
+    
+    /// If address [`Command`] attribute is [`Address::Numeric`], 
+    /// check if it has less or equal integers count that [`Command`] 
+    /// can handle 
+    fn check_address(mut self) -> Result<Self, SedError>{
+        let Some((address, max_len)) = self.get_mut_address() else{
+            return Ok(self);
+        };
+        if address.indices.len() <= max_len{
+            Ok(self)
+        }else{
+            Err(SedError::ParseError())
+        }
+    }
+
+    /// Check if [`Command`] apply conditions are met for current line 
+    fn need_execute(&self, line_number: usize, line: &str) -> Result<bool, SedError>{
+        let Some((address, _)) = self.get_mut_address() else{
+            return Ok(true);
+        };
+
+        let mut range = (None, None);  
+        for i in [0, 1]{
+            if let Some(index) = address.indices.get(*i){
+                range[i] = match index{
+                    Index::Number(position) => position == line_number,
+                    Index::Pattern(re) => match_pattern(re, line)?
+                };
+            }
+        }
+
+        if let Some(passed) = address.passed.as_mut(){
+            let (Some(start_passed), Some(end_passed)) = range else{
+                return Err(SedError::);
+            };
+            if !passed.0 && start_passed{
+                passed.0 = true;
+            } 
+            if !passed.1 && end_passed{
+                passed.1 = true;
+            }
+            Ok(passed.0 && !passed.1)
+        }else if let Some(start_passed) = range.0{
+            Ok(start_passed)
+        }else{
+            Err(SedError::)
+        }
+    }
+}
+
+fn match_pattern(re: regex_t, haystack: &str) -> Result<bool, SedError>{
+    let c_input = CString::new(haystack)
+        .map_err(|_| SedError::ParseError())?;
+    let has_match = unsafe {
+        regexec(
+            &re as *const regex_t,
+            c_input.as_ptr(),
+            0,
+            ptr::null_mut(),
+            0,
+        )
+    };
+    Ok(has_match)
+    /*let has_match = if is_not {
+        has_match == REG_NOMATCH
+    } else {
+        has_match != REG_NOMATCH
+    };*/
+}
+
 /// Parse count argument of future [`Command`]
 fn parse_address(chars: &[char], i: &mut usize, address: &mut Option<Address>) {
+    let Some(ch) = chars.get(*i) else {
+        return Err(SedError::ParseError(()));
+    };
+
+    if ch.is_alphanumeric() || " \n;#=:{}".contains(&ch){
+        Err(SedError::ParseError())
+    }
+
+
+    
+    
     let mut address_str = String::new();
     loop {
         let Some(ch) = chars.get(*i) else {
@@ -233,6 +370,46 @@ fn parse_address(chars: &[char], i: &mut usize, address: &mut Option<Address>) {
     if let Ok(new_address) = address_str.parse::<usize>() {
         *address = Some(new_address);
     }
+
+    /*
+    *i += 1;
+    let first_position= *i + 1;
+    let Some(splitter) = chars.get(*i) else {
+        return Err(SedError::ParseError(()));
+    };
+    if splitter.is_alphanumeric() || " \n;".contains(&ch){
+        Err(SedError::ParseError())
+    }
+    *i += 1;
+    let splitters = chars.iter().enumerate().skip(*i)
+        .filter(|pair| pair.1 == splitter)
+        .map(|pair| pair.0)
+        .collect::<Vec<_>>();
+
+    if splitter == '/'{
+        splitters.retain(|j|
+            if let Some(previous_ch) = chars.get(s.checked_sub(1)){
+                previous_ch == '\\'
+            }else{
+                false
+            }
+        )
+    }
+
+    let Some(pattern) = raw_script.get(first_position..splitters[0]) else{
+        return Err(SedError::ParseError(()));
+    };
+
+    let Some(replacement) = raw_script.get((splitters[0] + 1)..splitters[1]) else{
+        return Err(SedError::ParseError(()));
+    };
+    *i = splitters[1] + 1;
+
+    Ok((pattern, replacement))
+    */
+
+
+
 }
 
 /// Parse text attribute of a, c, i [`Command`]s that formated as:
@@ -373,6 +550,9 @@ fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, Strin
     let Some(splitter) = chars.get(*i) else {
         return Err(SedError::ParseError(()));
     };
+    if splitter.is_alphanumeric() || " \n;".contains(&ch){
+        Err(SedError::ParseError())
+    }
     *i += 1;
     let splitters = chars.iter().enumerate().skip(*i)
         .filter(|pair| pair.1 == splitter)
@@ -517,70 +697,80 @@ impl Script {
         let mut address: Option<Address> = None;
         let chars = raw_script.chars().collect::<Vec<_>>();
         let mut i = 0;
+
+        if Some("#n") == chars.get(0..2){
+            commands.push(Command::IgnoreComment);
+            i += 2;
+        }
+
         loop{
             let Some(ch) = chars.get(i) else{ 
                 break; 
             };
             match *ch{
-                ch if ch.is_numeric() => {
-                    parse_address(&chars, &mut i, &mut address);
-                    continue;
-                },
+                ch if ch.is_numeric() => parse_address(&chars, &mut i, &mut address),
                 ' ' | '\n' | ';' => {},
                 '{' => parse_block(chars, &mut i)?,
                 'a' => if let Some(text) = parse_text_attribute(chars, &mut i){
-                    commands.push(Command::PrintTextAfter(address, text));
+                    commands.push(Command::PrintTextAfter(address, text).check_address()?);
                 }else{
                     return Err(SedError::ParseError(()));
                 },
                 'b' => {
                     try_next_blank(chars, &mut i)?;
-                    commands.push(Command::BranchToLabel(address, parse_word_attribute(&chars, &mut i)?));
+                    let label = parse_word_attribute(chars, &mut i)?;
+                    commands.push(Command::BranchToLabel(address, label).check_address()?);
                 },
                 'c' => if let Some(text) = parse_text_attribute(chars, &mut i){
-                    commands.push(Command::DeletePatternAndPrintText(address, text));
+                    commands.push(Command::DeletePatternAndPrintText(address, text).check_address()?);
                 }else{
                     return Err(SedError::ParseError(()));
                 },
-                'd' => commands.push(Command::DeletePattern(address, false)),
-                'D' => commands.push(Command::DeletePattern(address, true)),
-                'g' => commands.push(Command::ReplacePatternWithHold(address)),
-                'G' => commands.push(Command::AppendHoldToPattern(address)),
-                'h' => commands.push(Command::ReplaceHoldWithPattern(address)),
-                'H' => commands.push(Command::AppendPatternToHold(address)),
+                'd' => commands.push(Command::DeletePattern(address, false).check_address()?),
+                'D' => commands.push(Command::DeletePattern(address, true).check_address()?),
+                'g' => commands.push(Command::ReplacePatternWithHold(address).check_address()?),
+                'G' => commands.push(Command::AppendHoldToPattern(address).check_address()?),
+                'h' => commands.push(Command::ReplaceHoldWithPattern(address).check_address()?),
+                'H' => commands.push(Command::AppendPatternToHold(address).check_address()?),
                 'i' => if let Some(text) = parse_text_attribute(chars, &mut i){
-                    commands.push(Command::PrintTextBefore(address, text));
+                    commands.push(Command::PrintTextBefore(address, text).check_address()?);
                 }else{
                     return Err(SedError::ParseError(()));
                 },
-                'I' => commands.push(Command::PrintPatternBinary(address)),
-                'n' => commands.push(Command::NPrint(address, false)),
-                'N' => commands.push(Command::NPrint(address, true)),
-                'p' => commands.push(Command::PrintPattern(address, false)),
-                'P' => commands.push(Command::PrintPattern(address, true)),
-                'q' => commands.push(Command::Quit(address)),
-                'r' => commands.push(Command::PrintFile(address, parse_path_attribute(chars, &mut i)?)),
+                'I' => commands.push(Command::PrintPatternBinary(address).check_address()?),
+                'n' => commands.push(Command::NPrint(address, false).check_address()?),
+                'N' => commands.push(Command::NPrint(address, true).check_address()?),
+                'p' => commands.push(Command::PrintPattern(address, false).check_address()?),
+                'P' => commands.push(Command::PrintPattern(address, true).check_address()?),
+                'q' => commands.push(Command::Quit(address).check_address()?),
+                'r' => {
+                    let rfile = parse_path_attribute(chars, &mut i)?;
+                    commands.push(Command::PrintFile(address, rfile).check_address()?)
+                },
                 's' => {
                     let (pattern, replacement)= parse_replace_command(chars, &mut i)?;
                     let pattern = pattern;
                     let re = compile_regex(pattern)?;
                     let flags = parse_s_flags(chars, &mut i)?;
-                    commands.push(Command::SReplace(re, replacement.to_owned(), flags));
+                    commands.push(Command::SReplace(address, re, replacement.to_owned(), flags).check_address()?);
                 },
                 't' => {
                     try_next_blank(chars, &mut i)?;
-                    commands.push(Command::Test(address, parse_word_attribute(chars, &mut i)?));
+                    let label = parse_word_attribute(chars, &mut i)?;
+                    commands.push(Command::Test(address, label).check_address()?);
                 },
-                'w' => commands.push(Command::AppendPatternToFile(address, parse_path_attribute(chars, &mut i)?)),
-                'x' => commands.push(Command::ExchangeSpaces(address)),
+                'w' => {
+                    let wfile = parse_path_attribute(chars, &mut i)?;
+                    commands.push(Command::AppendPatternToFile(address, wfile).check_address()?)
+                },
+                'x' => commands.push(Command::ExchangeSpaces(address).check_address()?),
                 'y' => {
                     let (pattern, replacement)= parse_replace_command(chars, &mut i)?;
-                    commands.push(Command::YReplace(address, string1, string2));
+                    commands.push(Command::YReplace(address, string1, string2).check_address()?);
                 },
                 ':' => commands.push(Command::BearBranchLabel(parse_word_attribute(chars, &mut i)?)),
-                '=' => commands.push(Command::PrintStandard(address)),
+                '=' => commands.push(Command::PrintStandard(address).check_address()?),
                 '#' => {
-                    commands.push(Command::IgnoreComment);
                     i += 1;
                     while let Some(ch) = chars(i){
                         if ch == '\n'{
@@ -589,8 +779,8 @@ impl Script {
                         i += 1;
                     }
                 },
-                _ => return Err(err)
-            }
+                _ => parse_address(&chars, &mut i, &mut address)?
+            } 
             i += 1;
         }
 
@@ -598,49 +788,167 @@ impl Script {
     }
 }
 
+/// Set of states that are returned from [`Sed::execute`] 
+/// for controling [`Sed`] [`Script`] execution loop for 
+/// current input file 
+enum ControlFlowInstruction{
+    /// End [`Sed`] [`Command`] execution loop for current file
+    Break,
+    /// Skip end of [`Script`], go to next line of current input 
+    /// file and start again [`Script`], [`Sed`] cycle
+    Continue,
+    /// If string exist then go to label in [`Script`], else go 
+    /// to end of [`Script`] (end current cycle)
+    Goto(Option<String>)
+}
+
 /// Main program structure. Process input 
 /// files by [`Script`] [`Command`]s
 #[derive(Debug)] // TODO: debug only
 struct Sed {
+    /// Use extended regular expresions
     ere: bool,
+    /// Suppress default behavior of editing [`Command`]s 
+    /// to print result
     quiet: bool,
+    /// [`Script`] that applied for every line of every input file 
     script: Script,
+    /// List of input files that need process with [`Script`]
     input_sources: Vec<String>,
+    /// Buffer with current line of processed input file, 
+    /// but it can be changed with [`Command`]s in cycle limits.
+    /// Сleared every cycle
     pattern_space: String,
+    /// Buffer that can be filled with certain [`Command`]s during 
+    /// [`Script`] processing. It's not cleared after the cycle is 
+    /// complete
     hold_space: String,
-    current_line: usize 
+    /// Buffer that hold text for printing after cycle ending
+    after_space: String,
+    /// Current line of current processed input file
+    current_line: usize,
+    /// [`true`] if since last t at least one replacement [`Command`] 
+    /// was performed in cycle limits 
+    has_replacements_since_t: bool
 }
 
 impl Sed {
     /// Executes one command for `line` string argument 
     /// and updates [`Sed`] state
-    fn execute(&mut self, command: Command, line: &str) -> Result<(), SedError> {
-        match command{
-            Block(address, commands) => {},                     // {
-            PrintTextAfter(address, text) => {},                // a
-            BranchToLabel(address, label) => {},                // b
-            DeletePatternAndPrintText(address, text) => {},     // c
-            DeletePattern(address, to_first_line) => {},  // d
-            ReplacePatternWithHold(address) => {},              // g
-            AppendHoldToPattern(address) => {},                 // G
-            ReplaceHoldWithPattern(address) => {},              // h
-            AppendPatternToHold(address) => {},                 // H
-            PrintTextBefore(address, text) => {},               // i
-            PrintPatternBinary(address) => {},                  // I
-            NPrint(address, bool) => {},                        // nN?       
-            PrintPattern(address, bool) => {},                  // pP
-            Quit(address) => {},                                // q
-            PrintFile(address, rfile) => {},                    // r
-            SReplace(pattern, replacement, flags) => {},        // s
-            Test(address, label) => {},                         // t
-            AppendPatternToFile(address, wfile) => {},          // w
-            ExchangeSpaces(address) => {},                      // x
-            YReplace(address, string1, string2) => {},          // y
-            BearBranchLabel(label) => {},                       // :
-            PrintStandard(address) => {},                       // =
-            IgnoreComment => {},                       // #                                       
-            Unknown => {}
+    fn execute(&mut self, command: Command, line: &str) 
+        -> Result<Option<ControlFlowInstruction>, SedError> {
+        if !command.need_execute(self.current_line, line)?{
+            return Ok(None);
         }
+        let instruction = None;
+        match command{
+            Command::Block(address, commands) => {                              // {}
+                // x
+            },                     
+            Command::PrintTextAfter(address, text) => {                         // a
+                self.after_space += &text;
+            },                
+            Command::BranchToLabel(address, label) => {                         // b
+                instruction = Some(ControlFlowInstruction::Goto(label));
+            },                
+            Command::DeletePatternAndPrintText(address, text) => {              // c
+                // x
+                self.pattern_space.clear();
+                print!("{text}");
+            },     
+            Command::DeletePattern(address, to_first_line) => {                 // d
+                // x
+                if to_first_line{
+
+                }else{
+                    self.pattern_space.clear();
+                    instruction = Some(ControlFlowInstruction::Continue);
+                }
+            },  
+            Command::ReplacePatternWithHold(address) => {                       // g
+                self.pattern_space = self.hold_space;
+            },              
+            Command::AppendHoldToPattern(address) => {                          // G
+                self.pattern_space += "\n" + &self.hold_space;
+            },                 
+            Command::ReplaceHoldWithPattern(address) => {                       // h
+                self.hold_space = self.pattern_space; 
+            },              
+            Command::AppendPatternToHold(address) => {                          // H
+                self.hold_space += "\n" + &self.pattern_space;
+            },                 
+            Command::PrintTextBefore(address, text) => {                        // i
+                print!("{text}");
+            },               
+            Command::PrintPatternBinary(address) => {                           // I
+                // x
+            },                  
+            Command::NPrint(address, bool) => {                                 // nN?
+                // x
+            },                               
+            Command::PrintPattern(address, to_first_line) => {                 // pP
+                if to_first_line{
+                    let end = self.pattern_space.chars()
+                        .enumerate()
+                        .find(|(_, ch)| ch == '\n')
+                        .map(|pair| pair.0)
+                        .unwrap_or(self.pattern_space.len());
+                    print!("{}", self.pattern_space[0..end]);
+                }else{
+                    print!("{}", self.pattern_space);
+                }
+            },                  
+            Command::Quit(address) => {                                         // q
+                instruction = Some(ControlFlowInstruction::Break);
+            },                                
+            Command::PrintFile(address, rfile) => {                             // r
+                if let Ok(file) = File::open(rfile){
+                    let reader = BufReader::new(file);
+                    for line in reader.lines(){
+                        let Ok(line) = line else{
+                            break;
+                        };
+                        println!("{line}");
+                    }
+                }
+            },                    
+            Command::SReplace(pattern, replacement, flags) => {                 // s
+                // x
+                self.has_replacements_since_t = true;
+            },        
+            Command::Test(address, label) => {                                  // t
+                // x
+                if self.has_replacements_since_t{
+                    instruction = Some(ControlFlowInstruction::Goto(label));
+                }
+                self.has_replacements_since_t = false;
+            },                         
+            Command::AppendPatternToFile(address, wfile) => {                   // w
+                let mut file = std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(wfile).map_err(|err| SedError::Io(err))?;
+                file.write(self.pattern_space.as_bytes())
+                    .map_err(|err| SedError::Io(err))?;
+            },          
+            Command::ExchangeSpaces(address) => {                               // x
+                let tmp = self.hold_space;
+                self.hold_space = self.pattern_space;
+                self.pattern_space = tmp;
+            },                      
+            Command::YReplace(address, string1, string2) => {                   // y
+                // x
+                self.has_replacements_since_t = true;
+            },          
+            Command::PrintStandard(address) => {                                // =
+                println!("{}", self.current_line);
+            },                       
+            Command::IgnoreComment if !self.quiet => {                                // #  
+                self.quiet = true;
+            },                                                            
+            Command::Unknown => {},
+            _ => {}
+        }
+        Ok(instruction)
     }
 
     /// Executes all commands of [`Sed`]'s [`Script`] for `line` string argument 
@@ -675,7 +983,9 @@ impl Sed {
                         &line
                     };
 
+                    self.has_replacements_since_t = false;
                     self.pattern_space = trimmed.clone().to_string();
+                    self.after_space.clear();
                     if let Err(_) = self.process_line(trimmed) {
                         eprintln!("sed: PROCESS LINE ERROR!!!")
                     }
@@ -739,24 +1049,3 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     std::process::exit(exit_code);
 }
-
-
-
-/*
-let c_input = CString::new(haystack)
-    .map_err(|_| MoreError::StringParse(self.current_source.name()))?;
-let has_match = unsafe {
-    regexec(
-        &pattern as *const regex_t,
-        c_input.as_ptr(),
-        0,
-        ptr::null_mut(),
-        0,
-    )
-};
-let has_match = if is_not {
-    has_match == REG_NOMATCH
-} else {
-    has_match != REG_NOMATCH
-};
-*/
