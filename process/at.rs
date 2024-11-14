@@ -128,16 +128,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     }
     // }
 
-    // let time = Timespec::from_str(time)
-
-    let exit_code = match at(&queue, &Utc::now(), "echo \"asd\"") {
-        Ok(_) => 0,
-        Err(err) => {
-            eprint!("{}", err);
-            1
-        }
+    let time = match (time, timespec) {
+        (None, None) => print_err_and_exit(1, "You need `timespec` arg or `-t` flag"),
+        (None, Some(timespec)) => Timespec::from_str(&timespec)?
+            .to_date_time()
+            .ok_or("Failed to parse `timespec` did you set too big date?")?,
+        (Some(time), None) => time::parse_time_posix(&time)?,
+        (Some(_), Some(_)) => print_err_and_exit(
+            1,
+            "You can't specify time twice. Use only `timespec` arg or `-t` flag",
+        ),
     };
 
+    let _ = at(&queue, &time, "echo \"asd\"").inspect_err(|err| print_err_and_exit(1, err));
+
+    Ok(())
+}
+
+fn print_err_and_exit(exit_code: i32, err: impl std::fmt::Display) -> ! {
+    eprintln!("{}", err);
     process::exit(exit_code)
 }
 
@@ -363,94 +372,90 @@ fn user_info_by_name(name: &str) -> Option<passwd> {
 }
 
 mod time {
+    use chrono::{offset::LocalResult, DateTime, Datelike, TimeZone, Utc};
 
-    // TODO -t ARG - SHOULD BE SAME AS IN touch utility
-    // fn parse_tm_iso(time: &str) -> Result<DateTime<Utc>, Box<dyn std::error::Error>> {
-    //     let dt = DateTime::parse_from_rfc3339(time)?;
-    //     Ok(dt.into())
-    // }
+    // Copy from `touch`
+    pub fn parse_time_posix(time: &str) -> Result<DateTime<Utc>, Box<dyn std::error::Error>> {
+        let mut time = String::from(time);
+        let mut seconds = String::from("0");
 
-    // fn parse_tm_posix(time: &str) -> Result<DateTime<Utc>, Box<dyn std::error::Error>> {
-    //     let mut time = String::from(time);
-    //     let mut seconds = String::from("0");
+        // split into YYYYMMDDhhmm and [.SS] components
+        let mut tmp_time = String::new();
+        match time.split_once('.') {
+            Some((t, secs)) => {
+                tmp_time = t.to_string();
+                seconds = secs.to_string();
+            }
+            None => {}
+        }
+        if !tmp_time.is_empty() {
+            time = tmp_time;
+        }
 
-    //     // split into YYYYMMDDhhmm and [.SS] components
-    //     let mut tmp_time = String::new();
-    //     match time.split_once('.') {
-    //         Some((t, secs)) => {
-    //             tmp_time = t.to_string();
-    //             seconds = secs.to_string();
-    //         }
-    //         None => {}
-    //     }
-    //     if !tmp_time.is_empty() {
-    //         time = tmp_time;
-    //     }
+        // extract date and time elements, with length implying format
+        let tmp_year;
+        let (year_str, month_str, day_str, hour_str, minute_str) = match time.len() {
+            // format: MMDDhhmm[.SS]
+            8 => {
+                tmp_year = Utc::now().year().to_string();
+                (
+                    tmp_year.as_str(),
+                    &time[0..2],
+                    &time[2..4],
+                    &time[4..6],
+                    &time[6..8],
+                )
+            }
 
-    //     // extract date and time elements, with length implying format
-    //     let tmp_year;
-    //     let (year_str, month_str, day_str, hour_str, minute_str) = match time.len() {
-    //         // format: MMDDhhmm[.SS]
-    //         8 => {
-    //             tmp_year = Utc::now().year().to_string();
-    //             (
-    //                 tmp_year.as_str(),
-    //                 &time[0..2],
-    //                 &time[2..4],
-    //                 &time[4..6],
-    //                 &time[6..8],
-    //             )
-    //         }
+            // format: YYMMDDhhmm[.SS]
+            10 => {
+                let mut yearling = time[0..2].parse::<u32>()?;
+                if yearling <= 68 {
+                    yearling += 2000;
+                } else {
+                    yearling += 1900;
+                }
+                tmp_year = yearling.to_string();
+                (
+                    tmp_year.as_str(),
+                    &time[2..4],
+                    &time[4..6],
+                    &time[6..8],
+                    &time[8..10],
+                )
+            }
 
-    //         // format: YYMMDDhhmm[.SS]
-    //         10 => {
-    //             let mut yearling = time[0..2].parse::<u32>()?;
-    //             if yearling <= 68 {
-    //                 yearling += 2000;
-    //             } else {
-    //                 yearling += 1900;
-    //             }
-    //             tmp_year = yearling.to_string();
-    //             (
-    //                 tmp_year.as_str(),
-    //                 &time[2..4],
-    //                 &time[4..6],
-    //                 &time[6..8],
-    //                 &time[8..10],
-    //             )
-    //         }
+            // format: YYYYMMDDhhmm[.SS]
+            12 => (
+                &time[0..4],
+                &time[4..6],
+                &time[6..8],
+                &time[8..10],
+                &time[10..12],
+            ),
+            _ => {
+                return Err("Invalid time format".into());
+            }
+        };
 
-    //         // format: YYYYMMDDhhmm[.SS]
-    //         12 => (
-    //             &time[0..4],
-    //             &time[4..6],
-    //             &time[6..8],
-    //             &time[8..10],
-    //             &time[10..12],
-    //         ),
-    //         _ => {
-    //             return Err("Invalid time format".into());
-    //         }
-    //     };
+        // convert strings to integers
+        let year = year_str.parse::<i32>()?;
+        let month = month_str.parse::<u32>()?;
+        let day = day_str.parse::<u32>()?;
+        let hour = hour_str.parse::<u32>()?;
+        let minute = minute_str.parse::<u32>()?;
+        let secs = seconds.parse::<u32>()?;
 
-    //     // convert strings to integers
-    //     let year = year_str.parse::<i32>()?;
-    //     let month = month_str.parse::<u32>()?;
-    //     let day = day_str.parse::<u32>()?;
-    //     let hour = hour_str.parse::<u32>()?;
-    //     let minute = minute_str.parse::<u32>()?;
-    //     let secs = seconds.parse::<u32>()?;
+        // convert to DateTime and validate input
+        let res = Utc.with_ymd_and_hms(year, month, day, hour, minute, secs);
+        if res == LocalResult::None {
+            return Err("Invalid time".into());
+        }
 
-    //     // convert to DateTime and validate input
-    //     let res = Utc.with_ymd_and_hms(year, month, day, hour, minute, secs);
-    //     if res == LocalResult::None {
-    //         return Err("Invalid time".into());
-    //     }
-
-    //     // return parsed date
-    //     let dt = res.unwrap();
-    //     Ok(dt)
-    // }
+        // return parsed date
+        let dt = res.unwrap();
+        Ok(dt)
+    }
 }
 
 mod timespec {
@@ -485,6 +490,8 @@ mod timespec {
             writeln!(f, "Failed to parse token in str")
         }
     }
+
+    impl std::error::Error for TimespecParsingError {}
 
     #[derive(Debug, PartialEq)]
     pub enum IncPeriod {
