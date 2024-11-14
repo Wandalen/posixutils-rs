@@ -1447,6 +1447,7 @@ name = "posixutils-process"
 version = "0.2.2"
 dependencies = [
  "bindgen",
+ "chrono",
  "clap",
  "dirs 5.0.1",
  "gettext-rs",
