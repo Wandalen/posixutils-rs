@@ -1,14 +1,18 @@
+use chrono::{DateTime, Utc};
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::{getlogin, getpwnam, getpwuid, passwd, uid_t};
 use plib::PROJECT_NAME;
+use timespec::Timespec;
 
 use std::{
     env,
     ffi::{CStr, CString},
     io::{Read, Seek, Write},
+    os::unix::fs::PermissionsExt,
     path::PathBuf,
     process,
+    str::FromStr,
 };
 
 /*
@@ -22,11 +26,11 @@ use std::{
 
 */
 
-// TODO: Find proper file for this
-const JOB_FILE_NUMBER: &str = "~/todo";
+// TODO: Mac variant?
+const JOB_FILE_NUMBER: &str = "/var/spool/atjobs/.SEQ";
+const SPOOL_DIRECTORY: &str = "/home/ghuba/";
 
-// TODO: Mac variant
-const _SPOOL_DIRECTORY: &str = "/var/spool/atjobs/";
+const DAEMON_UID: u32 = 457;
 
 /// at - execute commands at a later time
 #[derive(Parser, Debug)]
@@ -43,6 +47,10 @@ const _SPOOL_DIRECTORY: &str = "/var/spool/atjobs/";
                   at -l [at_job_id...]"
 )]
 struct Args {
+    /// Submit the job to be run at the date and time specified.
+    #[arg(value_name = "TIMESPEC")]
+    timespec: Option<String>,
+
     /// Change the environment to what would be expected if the user actually logged in again (letter `l`).
     #[arg(short = 'l', long)]
     login: bool,
@@ -69,11 +77,98 @@ struct Args {
 
     /// Group ID or group name.
     #[arg(value_name = "GROUP", required = false)]
-    group: String,
+    group: Option<String>,
 
     /// Job IDs for reporting jobs scheduled for the invoking user.
     #[arg(value_name = "AT_JOB_ID", required = false)]
     at_job_ids: Vec<String>,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let Args {
+        timespec,
+        login,
+        file,
+        mail,
+        queue,
+        remove,
+        time,
+        group,
+        at_job_ids,
+    } = Args::try_parse().unwrap_or_else(|err| {
+        eprintln!("{}", err);
+        std::process::exit(1);
+    });
+
+    setlocale(LocaleCategory::LcAll, "");
+    textdomain(PROJECT_NAME)?;
+    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+
+    // if args.mail {
+    //     let real_uid = unsafe { libc::getuid() };
+    //     let mut mailname = get_login_name();
+
+    //     if mailname
+    //         .as_ref()
+    //         .and_then(|name| user_info_by_name(name))
+    //         .is_none()
+    //     {
+    //         if let Some(pass_entry) = user_info_by_uid(real_uid) {
+    //             mailname = unsafe {
+    //                 // Safely convert pw_name using CString, avoiding memory leaks.
+    //                 let cstr = CString::from_raw(pass_entry.pw_name as *mut i8);
+    //                 cstr.to_str().ok().map(|s| s.to_string())
+    //             };
+    //         }
+    //     }
+
+    //     match mailname {
+    //         Some(name) => println!("Mailname: {}", name),
+    //         None => println!("Failed to retrieve mailname."),
+    //     }
+    // }
+
+    // let time = Timespec::from_str(time)
+
+    let exit_code = match at(&queue, &Utc::now(), "echo \"asd\"") {
+        Ok(_) => 0,
+        Err(err) => {
+            eprint!("{}", err);
+            1
+        }
+    };
+
+    process::exit(exit_code)
+}
+
+fn at(
+    queue: &str,
+    execution_time: &DateTime<Utc>,
+    cmd: impl Into<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let jobno = next_job_id()?;
+    let job_filename = job_file_name(jobno, queue, execution_time)
+        .ok_or("Failed to generate file name for job")?;
+
+    let user = User::new().ok_or("Failed to get current user")?;
+
+    let job = Job::new(&user, std::env::current_dir()?, std::env::vars(), cmd).into_script();
+
+    let mut file_opt = std::fs::OpenOptions::new();
+    file_opt.read(true).write(true).create_new(true);
+
+    let file_path = PathBuf::from(format!("{SPOOL_DIRECTORY}/{job_filename}"));
+
+    let mut file = file_opt
+        .open(&file_path)
+        .map_err(|e| format!("Failed to create file with job. Reason: {e}"))?;
+
+    file.write_all(job.as_bytes())?;
+
+    std::os::unix::fs::chown(file_path, Some(user.uid), Some(user.gid))?;
+    file.set_permissions(std::fs::Permissions::from_mode(0o700))?;
+
+    Ok(())
 }
 
 /// Structure to represent future job or script to be saved in [`SPOOL_DIRECTORY`]
@@ -94,19 +189,20 @@ impl Job {
             uid,
             gid,
             name,
-        }: User,
+        }: &User,
+        call_place: PathBuf,
         env: std::env::Vars,
         cmd: impl Into<String>,
-    ) -> Option<Self> {
-        Some(Self {
-            shell,
-            user_uid: uid,
-            user_gid: gid,
-            user_name: name,
+    ) -> Self {
+        Self {
+            shell: shell.to_owned(),
+            user_uid: *uid,
+            user_gid: *gid,
+            user_name: name.to_owned(),
             env,
-            call_place: std::env::current_dir().ok()?,
+            call_place,
             cmd: cmd.into(),
-        })
+        }
     }
 
     pub fn into_script(self) -> String {
@@ -133,40 +229,68 @@ impl Job {
     }
 }
 
-fn at() -> Result<(), Box<dyn std::error::Error>> {
-    // let _jobno = next_job_id().inspect_err(|_| eprintln!("Cannot generate job number"))?;
+/// Return name for job number
+///
+/// None if DateTime < [DateTime::UNIX_EPOCH]
+fn job_file_name(next_job: u32, queue: &str, time: &DateTime<Utc>) -> Option<String> {
+    let duration = time.signed_duration_since(DateTime::UNIX_EPOCH);
+    let duration_seconds = u32::try_from(duration.num_seconds()).ok()? / 60;
 
-    let user = User::new().ok_or("todo")?;
+    let result = format!("{queue}{next_job:05x}{duration_seconds:08x}");
 
-    let job = Job::new(user, std::env::vars(), "")
-        .ok_or("todo")?
-        .into_script();
-
-    println!("{job}",);
-
-    Ok(())
+    Some(result)
 }
 
-fn next_job_id() -> Result<u32, std::io::Error> {
+#[derive(Debug)]
+pub enum NextJobError {
+    Io(std::io::Error),
+    FromStr(std::num::ParseIntError),
+}
+
+impl std::fmt::Display for NextJobError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error reading id of next job. Reason: ")?;
+        match self {
+            NextJobError::Io(err) => writeln!(f, "{err}"),
+            NextJobError::FromStr(err) => writeln!(f, "invalid number - {err}"),
+        }
+    }
+}
+
+impl std::error::Error for NextJobError {}
+
+fn next_job_id() -> Result<u32, NextJobError> {
     let mut file_opt = std::fs::OpenOptions::new();
     file_opt.read(true).write(true);
 
-    let mut buf = [0_u8; 4];
+    let mut buf = String::new();
 
     let (next_job_id, mut file) = match file_opt.open(JOB_FILE_NUMBER) {
         Ok(mut file) => {
-            file.read_exact(&mut buf)?;
-            file.rewind()?;
+            file.read_to_string(&mut buf)
+                .map_err(|e| NextJobError::Io(e))?;
+            file.rewind().map_err(|e| NextJobError::Io(e))?;
 
-            (u32::from_be_bytes(buf), file)
+            (
+                u32::from_str_radix(buf.trim_end_matches("\n"), 16)
+                    .map_err(|e| NextJobError::FromStr(e))?,
+                file,
+            )
         }
         Err(err) => match err.kind() {
-            std::io::ErrorKind::NotFound => (0, std::fs::File::create_new(JOB_FILE_NUMBER)?),
-            _ => Err(err)?,
+            std::io::ErrorKind::NotFound => (
+                0,
+                std::fs::File::create_new(JOB_FILE_NUMBER).map_err(|e| NextJobError::Io(e))?,
+            ),
+            _ => Err(NextJobError::Io(err))?,
         },
     };
 
-    file.write_all(&(1 + next_job_id).to_be_bytes())?;
+    // Limit range of jobs to 2^20 jobs
+    let next_job_id = (1 + next_job_id) % 0xfffff;
+
+    file.write_all(format!("{next_job_id:05x}").as_bytes())
+        .map_err(|e| NextJobError::Io(e))?;
 
     Ok(next_job_id)
 }
@@ -236,51 +360,6 @@ fn user_info_by_name(name: &str) -> Option<passwd> {
     } else {
         Some(unsafe { *pw_ptr })
     }
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::try_parse().unwrap_or_else(|err| {
-        eprintln!("{}", err);
-        std::process::exit(1);
-    });
-
-    setlocale(LocaleCategory::LcAll, "");
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
-
-    // if args.mail {
-    //     let real_uid = unsafe { libc::getuid() };
-    //     let mut mailname = get_login_name();
-
-    //     if mailname
-    //         .as_ref()
-    //         .and_then(|name| user_info_by_name(name))
-    //         .is_none()
-    //     {
-    //         if let Some(pass_entry) = user_info_by_uid(real_uid) {
-    //             mailname = unsafe {
-    //                 // Safely convert pw_name using CString, avoiding memory leaks.
-    //                 let cstr = CString::from_raw(pass_entry.pw_name as *mut i8);
-    //                 cstr.to_str().ok().map(|s| s.to_string())
-    //             };
-    //         }
-    //     }
-
-    //     match mailname {
-    //         Some(name) => println!("Mailname: {}", name),
-    //         None => println!("Failed to retrieve mailname."),
-    //     }
-    // }
-
-    let exit_code = match at() {
-        Ok(_) => 0,
-        Err(err) => {
-            eprint!("{}", err);
-            1
-        }
-    };
-
-    process::exit(exit_code)
 }
 
 mod time {
@@ -1892,7 +1971,7 @@ mod tokens {
                 err,
                 input: s.to_owned(),
             })?;
-            if year < 1000 || year > 9999 {
+            if year < 1970 || year > 9999 {
                 // it should be 4 number, so yeah...
                 Err(TokenParsingError::YearNumberInvalid)?
             }
