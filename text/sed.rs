@@ -8,13 +8,18 @@
 //
 
 use std::{
-    collections::HashMap, fs::File, io::{BufRead, BufReader, Write}, path::PathBuf, str::pattern::Pattern
+    collections::HashMap, fs::File, io::{BufRead, BufReader, Write}, 
+    path::PathBuf, str::pattern::Pattern
 };
-use libc::{regex_t, regcomp, regexec, REG_NOMATCH};
+use libc::{
+    regex_t, regcomp, regexec, regmatch_t, REG_NOMATCH, 
+    winsize, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, TIOCGWINSZ
+};
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
+use rand::rngs;
 
 #[derive(Parser, Debug)]
 #[command(version, about = gettext("sed - stream editor"))]
@@ -139,14 +144,29 @@ struct Address{
     indices: Vec<Index>, 
     /// Defines what range limits is passed 
     /// in current processing file for current [`Command`]
-    passed: Option<(bool, bool)>
+    passed: Option<(bool, bool)>,
+    on_limits: Option<(bool, bool)>
 }
 
-/// [`Command::SReplace`] optional flags
-enum SReplaceFlag{
+impl Address{
+    fn is_loop_inside_range(&self) -> Option<bool>{
+        self.passsed.map(|(s,e)| s && !e)
+    }
+
+    fn is_loop_on_start(&self) -> Option<bool>{
+        self.on_limits.map(|(s, _)| s)
+    }
+
+    fn is_loop_on_end(&self) -> Option<bool>{
+        self.on_limits.map(|(_, e)| e)
+    }
+}
+
+/// [`Command::Replace`] optional flags
+enum ReplaceFlag{
     /// Substitute for the nth occurrence only of the 
     /// BRE found within the pattern space
-    ReplaceNth,                                                // n
+    ReplaceNth(usize),                                         // n
     /// Globally substitute for all non-overlapping 
     /// instances of the BRE rather than just the first one
     ReplaceAll,                                                // g
@@ -177,7 +197,7 @@ enum Command{
     /// Delete the pattern space and start the next cycle (d)
     /// If the pattern space contains no <newline>, 
     /// delete the pattern space and start new cycle (D)
-    DeletePattern(Address, bool),                              // dD
+    DeletePattern(Address, bool),                              // d/D
     /// Replace the contents of the pattern 
     /// space by the contents of the hold space
     ReplacePatternWithHold(Address),                           // g
@@ -195,14 +215,17 @@ enum Command{
     /// Write the pattern space to standard 
     /// output in a visually unambiguous form
     PrintPatternBinary(Address),                               // I
-    /// Write the pattern space to standard output (n).
+    /// Write the pattern space to standard output 
+    /// and replace pattern space with next line,
+    /// then continue current cycle
+    PrintPatternAndReplaceWithNext(Address),                   // n 
     /// Append the next line of input, less its 
-    /// terminating <newline>, to the pattern space (N)
-    NPrint(Address, bool),                                     // nN?       
+    /// terminating <newline>, to the pattern space
+    AppendNextToPattern(Address),                              // N
     /// Write the pattern space to standard output (p).
     /// Write the pattern space, up to the first <newline>, 
     /// to standard output (P).
-    PrintPattern(Address, bool),                               // pP
+    PrintPattern(Address, bool),                               // p/P
     /// Branch to the end of the script and quit without 
     /// starting a new cycle
     Quit(Address),                                             // q
@@ -210,7 +233,7 @@ enum Command{
     PrintFile(Address, PathBuf),                               // r
     /// Substitute the replacement string for instances 
     /// of the BRE in the pattern space
-    SReplace(Address, regex_t, String, Vec<SReplaceFlag>),     // s
+    Replace(Address, regex_t, String, Vec<SReplaceFlag>),     // s
     /// Test. Branch to the : command verb bearing the 
     /// label if any substitutions have been made since 
     /// the most recent reading of an input line or 
@@ -222,7 +245,7 @@ enum Command{
     ExchangeSpaces(Address),                                   // x
     /// Replace all occurrences of characters in string1 
     /// with the corresponding characters in string2
-    YReplace(Address, String, String),                         // y
+    ReplaceCharSet(Address, String, String),                   // y
     /// Do nothing. This command bears a label to which 
     /// the b and t commands branch.
     BearBranchLabel(String),                                   // :
@@ -249,15 +272,15 @@ impl Command{
             Command::AppendPatternToHold(address) => (address, 2),
             Command::PrintTextBefore(address, ..) => (address, 1),
             Command::PrintPatternBinary(address) => (address, 2),
-            Command::NPrint(address, ..) => (address, 2),
+            Command::PrintPatternAndReplaceWithNext(address, ..) => (address, 2),
             Command::PrintPattern(address, ..) => (address, 2),
             Command::Quit(address) => (address, 1),
             Command::PrintFile(address, ..) => (address, 1),
-            Command::SReplace(address, ..) => (address, 2),
+            Command::Replace(address, ..) => (address, 2),
             Command::Test(address, ..) => (address, 2),
             Command::AppendPatternToFile(address, ..) => (address, 2),
             Command::ExchangeSpaces(address) => (address, 2),
-            Command::YReplace(address, ..) => (address, 2),
+            Command::ReplaceCharSet(address, ..) => (address, 2),
             Command::PrintStandard(address) => (address, 1),
             _ => return None
         })
@@ -271,6 +294,9 @@ impl Command{
         };
         if let Some(range) = address.passed.as_mut(){
             *range = (false, false);
+        }
+        if let Some(limits) = address.on_limits.as_mut(){
+            *limits = (false, false);
         }
     }
     
@@ -299,15 +325,29 @@ impl Command{
             if let Some(index) = address.indices.get(*i){
                 range[i] = match index{
                     Index::Number(position) => position == line_number,
-                    Index::Pattern(re) => match_pattern(re, line)?
+                    Index::Pattern(re) => !(match_pattern(re, line)?.is_empty())
                 };
             }
         }
 
+        let (Some(start_passed), Some(end_passed)) = range else{
+            return Err(SedError::);
+        };
+
+        let old_passed = address.passed;
+        if let Some(on_limits) = address.on_limits.as_mut(){
+            if let Some((is_start_already_passed, is_end_already_passed)) = old_passed{
+                *on_limits = (false, false);
+                if start_passed && !is_start_already_passed{
+                    on_limits.0 = true;
+                } 
+                if end_passed && !is_end_already_passed{
+                    on_limits.1 = true;
+                }
+            }
+        }
+
         if let Some(passed) = address.passed.as_mut(){
-            let (Some(start_passed), Some(end_passed)) = range else{
-                return Err(SedError::);
-            };
             if !passed.0 && start_passed{
                 passed.0 = true;
             } 
@@ -323,24 +363,23 @@ impl Command{
     }
 }
 
-fn match_pattern(re: regex_t, haystack: &str) -> Result<bool, SedError>{
+fn match_pattern(re: regex_t, haystack: &str) -> Result<Vec<std::ops::Range<usize>>, SedError>{
     let c_input = CString::new(haystack)
         .map_err(|_| SedError::ParseError())?;
+    let mut pmatch: [regmatch_t; haystack.len()] = unsafe { MaybeUninit::zeroed().assume_init() };
     let has_match = unsafe {
         regexec(
             &re as *const regex_t,
             c_input.as_ptr(),
-            0,
-            ptr::null_mut(),
+            haystack.len(),
+            pmatch.as_mut_ptr(),
             0,
         )
     };
-    Ok(has_match)
-    /*let has_match = if is_not {
-        has_match == REG_NOMATCH
-    } else {
-        has_match != REG_NOMATCH
-    };*/
+    let match_subranges = pmatch.to_vec().iter()
+        .filter(|m| m.rm_so != 0 && m.rm_eo != 0)
+        .map(|m| m.rm_so..m.rm_eo).collect();
+    Ok(match_subranges)
 }
 
 /// Parse count argument of future [`Command`]
@@ -581,8 +620,8 @@ fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, Strin
     Ok((pattern, replacement))
 }
 
-/// Parse [`Command::SReplace`] flags
-fn parse_s_flags(chars: &[char], i: &mut usize) -> Result<Vec<SReplaceFlag>, SedError>{
+/// Parse [`Command::Replace`] flags
+fn parse_replace_flags(chars: &[char], i: &mut usize) -> Result<Vec<ReplaceFlag>, SedError>{
     let mut flags = vec![];
     let mut flag_map= HashMap::from([
         ('n', 0),
@@ -593,31 +632,32 @@ fn parse_s_flags(chars: &[char], i: &mut usize) -> Result<Vec<SReplaceFlag>, Sed
     let mut w_start_position = None;
     while let Some(ch) = chars.get(*i){
         match ch{
-            'n' => {
+            _ if ch.is_numeric() => {
+                let n = 
                 flag_map.get_mut(&'n').unwrap() += 1;
-                flags.push(SReplaceFlag::ReplaceNth);
+                flags.push(ReplaceFlag::ReplaceNth(n));
             },
             'g' => {
                 flag_map.get_mut(&'g').unwrap() += 1;
-                flags.push(SReplaceFlag::ReplaceAll)
+                flags.push(ReplaceFlag::ReplaceAll)
             },
             'p' => {
                 flag_map.get_mut(&'p').unwrap() += 1;
-                flags.push(SReplaceFlag::PrintPatternIfReplace)
+                flags.push(ReplaceFlag::PrintPatternIfReplace)
             },
             'w' => {
                 if w_start_position.is_none(){
                     w_start_position = Some(*i);
                 }
                 flag_map.get_mut(&'w').unwrap() += 1;
-                flags.push(SReplaceFlag::AppendToIfReplace("".to_string()))
+                flags.push(ReplaceFlag::AppendToIfReplace("".to_string()))
             },
             _ => break
         }
         *i += 1;
     }
 
-    let eq_w = |f| if let SReplaceFlag::AppendToIfReplace(_) = f{
+    let eq_w = |f| if let ReplaceFlag::AppendToIfReplace(_) = f{
         true
     }else { 
         false 
@@ -630,9 +670,12 @@ fn parse_s_flags(chars: &[char], i: &mut usize) -> Result<Vec<SReplaceFlag>, Sed
     }
     if let Some(w_start_position) = w_start_position{
         *i = w_start_position;
-        flags.resize_with(w_flags_position - 1, || SReplaceFlag::ReplaceNth);
+        flags.resize_with(w_flags_position - 1, || ReplaceFlag::ReplaceNth);
         let path = parse_path_attribute(chars, i)?;
-        flags.push(SReplaceFlag::AppendToIfReplace(path));
+        flags.push(ReplaceFlag::AppendToIfReplace(path));
+    }
+    if flags.contains(&ReplaceFlag::ReplaceNth) && flags.contains(&ReplaceFlag::ReplaceAll){
+        return Err(SedError::);
     }
     Ok(flags)
 }
@@ -681,6 +724,54 @@ fn compile_regex(pattern: String) -> Result<regex_t, SedError> {
         Ok(regex)
     } else {
         Err(SedError::ParseError(pattern))
+    }
+}
+
+fn screen_width() -> Option<usize>{
+    let mut ws: winsize = std::ptr::null_mut();
+    if ( ioctl( STDIN_FILENO , TIOCGWINSZ, &mut ws ) != 0 &&
+         ioctl( STDOUT_FILENO, TIOCGWINSZ, &mut ws ) != 0 &&
+         ioctl( STDERR_FILENO, TIOCGWINSZ, &mut ws ) != 0 ) {
+      return None;
+    }
+    Some(ws.ws_col as usize)
+}
+
+fn print_multiline_binary(line: &str){
+    let line = line.chars().map(|ch| {
+        if ch.is_ascii() && b"\n\x07\x08\x0B\x0C".contains(&(ch as u8)){
+            std::acsii::escape_default(ch as u8).collect::<&[char]>()
+        }else if b"\x07\x08\x0B\x0C".contains(&(ch as u8)){
+            match ch as u8{
+                b'\x07' => &['\\', 'a'],
+                b'\x08' => &['\\', 'b'],
+                b'\x0B' => &['\\', 'v'],
+                b'\x0C' => &['\\', 'f'],
+                _ => unreachable!()
+            }
+        }else{
+            &[ch]
+        }
+    }).flatten().collect::<&str>();
+    if let Some(width) = screen_width(){
+        if width >= 1{
+            let chunks = line.chars().collect::<Vec<_>>()
+                .chunks(width - 1)
+                .peekable();
+            loop{
+                let Some(chunk) = chunks.next() else    {
+                    break;
+                };
+                print!("{}", chunk.iter().collect::<&str>());
+                if chunks.peek().is_some(){
+                    println!("\\");
+                }else{
+                    println!("$");
+                }
+            }
+        }
+    }else{
+        println!("{}$", line);
     }
 }
 
@@ -738,8 +829,8 @@ impl Script {
                     return Err(SedError::ParseError(()));
                 },
                 'I' => commands.push(Command::PrintPatternBinary(address).check_address()?),
-                'n' => commands.push(Command::NPrint(address, false).check_address()?),
-                'N' => commands.push(Command::NPrint(address, true).check_address()?),
+                'n' => commands.push(Command::PrintPatternAndReplaceWithNext(address).check_address()?),
+                'N' => commands.push(Command::AppendNextToPattern(address).check_address()?),
                 'p' => commands.push(Command::PrintPattern(address, false).check_address()?),
                 'P' => commands.push(Command::PrintPattern(address, true).check_address()?),
                 'q' => commands.push(Command::Quit(address).check_address()?),
@@ -751,8 +842,8 @@ impl Script {
                     let (pattern, replacement)= parse_replace_command(chars, &mut i)?;
                     let pattern = pattern;
                     let re = compile_regex(pattern)?;
-                    let flags = parse_s_flags(chars, &mut i)?;
-                    commands.push(Command::SReplace(address, re, replacement.to_owned(), flags).check_address()?);
+                    let flags = parse_replace_flags(chars, &mut i)?;
+                    commands.push(Command::Replace(address, re, replacement.to_owned(), flags).check_address()?);
                 },
                 't' => {
                     try_next_blank(chars, &mut i)?;
@@ -766,7 +857,7 @@ impl Script {
                 'x' => commands.push(Command::ExchangeSpaces(address).check_address()?),
                 'y' => {
                     let (pattern, replacement)= parse_replace_command(chars, &mut i)?;
-                    commands.push(Command::YReplace(address, string1, string2).check_address()?);
+                    commands.push(Command::ReplaceCharSet(address, string1, string2).check_address()?);
                 },
                 ':' => commands.push(Command::BearBranchLabel(parse_word_attribute(chars, &mut i)?)),
                 '=' => commands.push(Command::PrintStandard(address).check_address()?),
@@ -799,7 +890,13 @@ enum ControlFlowInstruction{
     Continue,
     /// If string exist then go to label in [`Script`], else go 
     /// to end of [`Script`] (end current cycle)
-    Goto(Option<String>)
+    Goto(Option<String>),
+    /// Not read next line in current input file and start new cycle
+    NotReadNext,
+    /// Read next line in current input file and continue current cycle
+    ReadNext,
+    /// Append next line to current pattern space and continue current cycle  
+    AppendNext
 }
 
 /// Main program structure. Process input 
@@ -835,58 +932,109 @@ struct Sed {
 impl Sed {
     /// Executes one command for `line` string argument 
     /// and updates [`Sed`] state
-    fn execute(&mut self, command: Command, line: &str) 
+    fn execute(&mut self, command: Command) 
         -> Result<Option<ControlFlowInstruction>, SedError> {
-        if !command.need_execute(self.current_line, line)?{
-            return Ok(None);
-        }
         let instruction = None;
         match command{
             Command::Block(address, commands) => {                              // {}
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 // x
             },                     
             Command::PrintTextAfter(address, text) => {                         // a
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 self.after_space += &text;
             },                
             Command::BranchToLabel(address, label) => {                         // b
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 instruction = Some(ControlFlowInstruction::Goto(label));
             },                
             Command::DeletePatternAndPrintText(address, text) => {              // c
-                // x
-                self.pattern_space.clear();
-                print!("{text}");
+                let need_execute = !command.need_execute(self.current_line, &self.pattern_space)?;
+                let need_execute = match address.indices.len(){
+                    0 | 1 | 2 if need_execute => true, 
+                    2 if !need_execute && address.on_limits == Some((false, true)) => true,
+                    0 | 1 | 2 => false, 
+                    _ => unreachable!()
+                };
+                if need_execute{
+                    self.pattern_space.clear();
+                    print!("{text}");
+                }
             },     
             Command::DeletePattern(address, to_first_line) => {                 // d
-                // x
-                if to_first_line{
-
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
+                if to_first_line && self.pattern_space.contains('\n'){
+                    self.pattern_space = self.pattern_space.chars()
+                        .skip_while(|ch| ch == '\n').collect::<String>();
+                    instruction = Some(ControlFlowInstruction::NotReadNext);
                 }else{
                     self.pattern_space.clear();
                     instruction = Some(ControlFlowInstruction::Continue);
                 }
             },  
             Command::ReplacePatternWithHold(address) => {                       // g
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 self.pattern_space = self.hold_space;
             },              
             Command::AppendHoldToPattern(address) => {                          // G
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 self.pattern_space += "\n" + &self.hold_space;
             },                 
             Command::ReplaceHoldWithPattern(address) => {                       // h
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 self.hold_space = self.pattern_space; 
             },              
             Command::AppendPatternToHold(address) => {                          // H
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 self.hold_space += "\n" + &self.pattern_space;
             },                 
             Command::PrintTextBefore(address, text) => {                        // i
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 print!("{text}");
             },               
             Command::PrintPatternBinary(address) => {                           // I
-                // x
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
+                print_multiline_binary(&self.pattern_space);
             },                  
-            Command::NPrint(address, bool) => {                                 // nN?
-                // x
-            },                               
+            Command::PrintPatternAndReplaceWithNext(address) => {                                 // nN?
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
+                if !self.quiet{
+                    println!("{}", self.pattern_space);
+                }
+                instruction = Some(ControlFlowInstruction::ReadNext);
+            }, 
+            Command::AppendNextToPattern(address) => {                                 // nN?
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
+                instruction = Some(ControlFlowInstruction::AppendNext);
+            },                                
             Command::PrintPattern(address, to_first_line) => {                 // pP
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 if to_first_line{
                     let end = self.pattern_space.chars()
                         .enumerate()
@@ -899,9 +1047,15 @@ impl Sed {
                 }
             },                  
             Command::Quit(address) => {                                         // q
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 instruction = Some(ControlFlowInstruction::Break);
             },                                
             Command::PrintFile(address, rfile) => {                             // r
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 if let Ok(file) = File::open(rfile){
                     let reader = BufReader::new(file);
                     for line in reader.lines(){
@@ -912,18 +1066,56 @@ impl Sed {
                     }
                 }
             },                    
-            Command::SReplace(pattern, replacement, flags) => {                 // s
-                // x
+            Command::Replace(address, re, replacement, flags) => {                 // s
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
+                let match_subranges= match_pattern(re, line)?;
+                if !flags.contains(ReplaceFlag::ReplaceNth) && !flags.contains(ReplaceFlag::ReplaceAll){
+
+                }else if let Some(ReplaceFlag::ReplaceNth(n)) = flags.contains(ReplaceFlag::ReplaceNth){
+                    let skip = match_subranges.len() - n; 
+                    let substring= match_subranges.iter().rev()
+                        .skip(skip);
+                    for range in substrings{
+                        self.pattern_space = self.pattern_space.replace_range(range, &replacement); 
+                    }
+                }else if flags.contains(ReplaceFlag::ReplaceAll){
+                    for range in match_subranges.iter().rev(){
+                        self.pattern_space = self.pattern_space.replace_range(range, &replacement); 
+                    }
+                }
+                if flags.contains(ReplaceFlag::ReplaceNth){
+                    print!("{}", self.pattern_space);
+                }
+
+
+                // TODO:
+                // - \<number> \\<number>
+                // - & \&
+                // - \? \? 
+                // - text\ntext -> 
+                //   text\
+                //   text
+                // - Заміна вважається виконаною, навіть якщо рядок заміни ідентичний рядку, який 
+                //   він замінює. Будь-який <зворотний слеш>, який використовується для зміни значення 
+                //   за замовчуванням наступного символу, має бути вилучено з BRE або заміни перед 
+                //   оцінкою BRE або використанням заміни.
                 self.has_replacements_since_t = true;
             },        
             Command::Test(address, label) => {                                  // t
-                // x
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 if self.has_replacements_since_t{
                     instruction = Some(ControlFlowInstruction::Goto(label));
                 }
                 self.has_replacements_since_t = false;
             },                         
             Command::AppendPatternToFile(address, wfile) => {                   // w
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 let mut file = std::fs::OpenOptions::new()
                     .append(true)
                     .open(wfile).map_err(|err| SedError::Io(err))?;
@@ -931,15 +1123,30 @@ impl Sed {
                     .map_err(|err| SedError::Io(err))?;
             },          
             Command::ExchangeSpaces(address) => {                               // x
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 let tmp = self.hold_space;
                 self.hold_space = self.pattern_space;
                 self.pattern_space = tmp;
             },                      
-            Command::YReplace(address, string1, string2) => {                   // y
-                // x
+            Command::ReplaceCharSet(address, string1, string2) => {                   // y
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
+                if string1.len() != string2.len(){
+                    return Err(SedError::()); 
+                }
+                for (a, b) in string1.chars().zip(string2.chars()){
+                    self.pattern_space = self.pattern_space.replace(a, b);
+                }
+                self.pattern_space = self.pattern_space.replace("\\n", "\n");
                 self.has_replacements_since_t = true;
             },          
             Command::PrintStandard(address) => {                                // =
+                if !command.need_execute(self.current_line, &self.pattern_space)?{
+                    return Ok(None);
+                }
                 println!("{}", self.current_line);
             },                       
             Command::IgnoreComment if !self.quiet => {                                // #  
@@ -952,11 +1159,13 @@ impl Sed {
     }
 
     /// Executes all commands of [`Sed`]'s [`Script`] for `line` string argument 
-    fn process_line(&mut self, line: &str) -> Result<(), SedError> {
+    fn process_line(&mut self) -> Result<(), SedError> {
         if !self.quiet {
             for command in self.script.0{
-                self.execute(command, line)?;
+                self.execute(command)?;
             }
+            print!("{}", self.pattern_space);
+            println!("{}", self.after_space);
         }
 
         Ok(())
@@ -986,7 +1195,7 @@ impl Sed {
                     self.has_replacements_since_t = false;
                     self.pattern_space = trimmed.clone().to_string();
                     self.after_space.clear();
-                    if let Err(_) = self.process_line(trimmed) {
+                    if let Err(_) = self.process_line() {
                         eprintln!("sed: PROCESS LINE ERROR!!!")
                     }
                     self.current_line += 1;
