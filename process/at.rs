@@ -8,9 +8,10 @@ use timespec::Timespec;
 use std::{
     env,
     ffi::{CStr, CString},
-    io::{Read, Seek, Write},
+    fs::File,
+    io::{BufRead, Read, Seek, Write},
     os::unix::fs::PermissionsExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
     str::FromStr,
 };
@@ -57,7 +58,7 @@ struct Args {
 
     /// Specifies the pathname of a file to be used as the source of the at-job, instead of standard input.
     #[arg(short = 'f', long, value_name = "FILE")]
-    file: Option<String>,
+    file: Option<PathBuf>,
 
     /// Send mail to the invoking user after the at-job has run.
     #[arg(short = 'm', long)]
@@ -140,7 +141,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     };
 
-    let _ = at(&queue, &time, "echo \"asd\"").inspect_err(|err| print_err_and_exit(1, err));
+    let cmd = match file {
+        Some(path) => {
+            let path = match path.is_absolute() {
+                true => path,
+                false => std::env::current_dir().ok().unwrap_or_default().join(path),
+            };
+
+            let mut file = File::open(path)
+                .map_err(|e| format!("Failed to open command file. Reason: {e}"))?;
+
+            let mut buf = String::new();
+
+            file.read_to_string(&mut buf)
+                .map_err(|e| format!("Failed to read command file. Reason: {e}"))?;
+
+            buf
+        }
+        None => {
+            let stdout = std::io::stdout();
+            let mut stdout_lock = stdout.lock();
+
+            // TODO: Correct formating
+            writeln!(&mut stdout_lock, "{}", time.to_rfc2822())?;
+            write!(&mut stdout_lock, "at> ")?;
+            stdout_lock.flush()?;
+
+            let stdin = std::io::stdin();
+            let mut stdin_lock = stdin.lock();
+
+            let mut result = Vec::new();
+            let mut buf = String::new();
+
+            while stdin_lock.read_line(&mut buf)? != 0 {
+                write!(&mut stdout_lock, "at> ")?;
+                stdout_lock.flush()?;
+
+                result.push(buf.to_owned());
+            }
+
+            write!(&mut stdout_lock, "<EOT>\n")?;
+            stdout_lock.flush()?;
+
+            result.join("\n")
+        }
+    };
+
+    let _ = at(&queue, &time, cmd).inspect_err(|err| print_err_and_exit(1, err));
 
     Ok(())
 }
