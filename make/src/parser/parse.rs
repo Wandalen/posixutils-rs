@@ -406,12 +406,11 @@ ast_node!(MacroDef, MACRODEF);
 ast_node!(Makefile, ROOT);
 ast_node!(Rule, RULE);
 ast_node!(Identifier, IDENTIFIER);
-ast_node!(VariableDefinition, VARIABLE);
 
 impl Macro {}
 impl MacroDef {}
 
-impl VariableDefinition {
+impl MacroDef {
     pub fn name(&self) -> Option<String> {
         self.syntax().children_with_tokens().find_map(|it| {
             it.as_token().and_then(|it| {
@@ -463,8 +462,8 @@ impl Makefile {
         self.rules().filter(move |rule| rule.targets().any(|t| t == target))
     }
 
-    pub fn variable_definitions(&self) -> impl Iterator<Item=VariableDefinition> {
-        self.syntax().children().filter_map(VariableDefinition::cast)
+    pub fn variable_definitions(&self) -> impl Iterator<Item=MacroDef> {
+        self.syntax().children().filter_map(MacroDef::cast)
     }
 
     pub fn add_rule(&mut self, target: &str) -> Rule {

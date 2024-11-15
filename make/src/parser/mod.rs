@@ -10,7 +10,7 @@ pub mod lex;
 pub mod parse;
 pub mod preprocessor;
 
-pub use parse::{Identifier, Makefile, Rule, VariableDefinition};
+pub use parse::{Identifier, Makefile, Rule, MacroDef};
 
 /// Let's start with defining all kinds of tokens and
 /// composite nodes.
