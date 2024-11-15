@@ -52,15 +52,15 @@ rule: prerequisite
             .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "VARIABLE"),
-                (WHITESPACE, " "),
+                
                 (EQUALS, "="),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "value"),
                 (NEWLINE, "\n"),
                 (NEWLINE, "\n"),
                 (IDENTIFIER, "rule"),
                 (COLON, ":"),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "prerequisite"),
                 (NEWLINE, "\n"),
                 (INDENT, "\t"),
@@ -92,7 +92,7 @@ rule: prerequisite
             .collect::<Vec<_>>(),
             vec![
                 (EXPORT, "export"),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "VARIABLE"),
                 (NEWLINE, "\n"),
             ]
@@ -109,12 +109,12 @@ rule: prerequisite
             .collect::<Vec<_>>(),
             vec![
                 (EXPORT, "export"),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "VARIABLE"),
-                (WHITESPACE, " "),
+                
                 (COLON, ":"),
                 (EQUALS, "="),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "value"),
                 (NEWLINE, "\n"),
             ]
@@ -131,7 +131,7 @@ rule: prerequisite
             .collect::<Vec<_>>(),
             [
                 (INCLUDE, "include"),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "FILENAME"),
                 (NEWLINE, "\n")
             ]
@@ -151,9 +151,9 @@ rule: prerequisite
             vec![
                 (IDENTIFIER, "rule"),
                 (COLON, ":"),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "prerequisite1"),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "prerequisite2"),
                 (NEWLINE, "\n"),
                 (INDENT, "\t"),
@@ -173,10 +173,10 @@ rule: prerequisite
                 .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "VARIABLE"),
-                (WHITESPACE, " "),
+                
                 (QUESTION, "?"),
                 (EQUALS, "="),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "value"),
                 (NEWLINE, "\n"),
             ]
@@ -194,11 +194,11 @@ endif
             .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "ifneq"),
-                (WHITESPACE, " "),
+                
                 (LPAREN, "("),
                 (IDENTIFIER, "a"),
                 (COMMA, ","),
-                (WHITESPACE, " "),
+                
                 (IDENTIFIER, "b"),
                 (RPAREN, ")"),
                 (NEWLINE, "\n"),
@@ -217,9 +217,9 @@ endif
                 .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "VARIABLE"),
-                (WHITESPACE, " "),
+                
                 (EQUALS, "="),
-                (WHITESPACE, " "),
+                
                 (DOLLAR, "$"),
                 (LPAREN, "("),
                 (IDENTIFIER, "value"),
@@ -238,9 +238,9 @@ endif
                 .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "VARIABLE"),
-                (WHITESPACE, " "),
+                
                 (EQUALS, "="),
-                (WHITESPACE, " "),
+                
                 (DOLLAR, "$"),
                 (LPAREN, "("),
                 (IDENTIFIER, "value"),
@@ -365,16 +365,14 @@ rule: dependency
         let node = parsed.clone().unwrap().syntax();
         assert_eq!(
             format!("{:#?}", node),
-            r#"ROOT@0..40
-  RULE@0..40
+            r#"ROOT@0..38
+  RULE@0..38
     IDENTIFIER@0..4 "rule"
     COLON@4..5 ":"
-    WHITESPACE@5..6 " "
-    EXPR@6..29
-      IDENTIFIER@6..17 "dependency1"
-      WHITESPACE@17..18 " "
-      IDENTIFIER@18..29 "dependency2"
-    NEWLINE@29..30 "\n"
+    EXPR@6..27
+      IDENTIFIER@6..16 "dependency1"
+      IDENTIFIER@18..27 "dependency2"
+    NEWLINE@27..28 "\n"
     RECIPE@30..39
       INDENT@30..31 "\t"
       TEXT@31..38 "command"

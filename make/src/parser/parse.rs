@@ -402,7 +402,7 @@ macro_rules! ast_node {
 }
 
 ast_node!(Macro, MACRO);
-ast_node!(MacroDef, MACRO);
+ast_node!(MacroDef, MACRODEF);
 ast_node!(Makefile, ROOT);
 ast_node!(Rule, RULE);
 ast_node!(Identifier, IDENTIFIER);
@@ -561,7 +561,6 @@ impl FromStr for Makefile {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let processed = preprocess(s).map_err(|e| ParseError(vec![e.to_string()]))?;
-        parse(&processed).map(|node| node.root())
+        parse(s).map(|node| node.root())
     }
 }
