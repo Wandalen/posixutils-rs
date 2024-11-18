@@ -107,8 +107,10 @@ impl Args {
             pattern_space: String::new(),
             hold_space: String::new(),
             after_space: String::new(),
+            current_file: None,
             current_line: 0,
-            has_replacements_since_t: false
+            has_replacements_since_t: false,
+            last_regex: None
         })
     }
 }
@@ -132,6 +134,10 @@ enum SedError {
 enum Index{
     /// Line number
     Number(usize),
+    /// Line number relative to current 
+    Relative(isize),
+    /// Last line
+    Last(),
     /// Context related line number that 
     /// calculated from this BRE match
     Pattern(regex_t)
@@ -149,6 +155,21 @@ struct Address{
 }
 
 impl Address{
+    fn new(indices: Vec<Index>) -> Result<Self, SedError>{
+        let state = match indices.len() > 2{
+            return Err(SedError::);
+        }else if indices.len() == 2{
+            Some((false, false))
+        }else{
+            None
+        };
+        Ok(Self{
+            indices,
+            passed: state,
+            on_limits: state,
+        })
+    }
+
     fn is_loop_inside_range(&self) -> Option<bool>{
         self.passsed.map(|(s,e)| s && !e)
     }
@@ -384,13 +405,69 @@ fn match_pattern(re: regex_t, haystack: &str) -> Result<Vec<std::ops::Range<usiz
 
 /// Parse count argument of future [`Command`]
 fn parse_address(chars: &[char], i: &mut usize, address: &mut Option<Address>) {
-    let Some(ch) = chars.get(*i) else {
-        return Err(SedError::ParseError(()));
-    };
+    let mut new_address = Address::new(vec![])?;
 
-    if ch.is_alphanumeric() || " \n;#=:{}".contains(&ch){
-        Err(SedError::ParseError())
+    loop{
+        let Some(ch) = chars.get(*i) else {
+            return Err(SedError::ParseError(()));
+        };
+        match ch{
+            ch if ch.is_numeric() => {
+                while ch.is_numeric(){
+
+                }
+            },
+            '\\' => {
+                i += 1;
+                let Some(ch) = chars.get(*i) else {
+                    return Err(SedError::ParseError(()));
+                };
+
+                if "\\\n".contains(ch){
+                    return Err(SedError::ParseError(()));
+                }
+
+                let splliter = ch;
+                let Some(next_position) = chars.iter().enumerate().skip(*i)
+                    .find(|pair| pair.1 == splitter)
+                    .map(|pair| pair.0) else{
+                    return Err(SedError::)
+                };
+                /*.map(|pair| if let Some((position, _)) = pair{
+                    Some(position)
+                }else{
+                    None
+                })*/
+
+                let Some(pattern) = raw_script.get(first_position..splitters[0]) else{
+                    return Err(SedError::ParseError(()));
+                };
+
+                if pattern.contains('\n'){
+                    return Err(SedError::ParseError(()));
+                }
+            },
+            '$' => {
+
+            },
+            '+' => {
+
+            },
+            '-' => {
+                
+            },
+            ';' => {
+
+            },
+            ',' => {
+
+            },
+            _ => break
+        }
+        i += 1;
     }
+
+    address = Some(new_address);
 
 
     
@@ -799,7 +876,7 @@ impl Script {
                 break; 
             };
             match *ch{
-                ch if ch.is_numeric() => parse_address(&chars, &mut i, &mut address),
+                ch if ch.is_numeric() || "\\,+$".contains(ch) => parse_address(&chars, &mut i, &mut address),
                 ' ' | '\n' | ';' => {},
                 '{' => parse_block(chars, &mut i)?,
                 'a' => if let Some(text) = parse_text_attribute(chars, &mut i){
@@ -870,9 +947,20 @@ impl Script {
                         i += 1;
                     }
                 },
-                _ => parse_address(&chars, &mut i, &mut address)?
+                _ => return Err(SedError::)
             } 
             i += 1;
+        }
+
+        let labels = commands.filter_map(|cmd| if let Command::BearBranchLabel(label) = cmd{
+            Some(label)
+        }else{
+            None
+        }).collect::<Vec<_>>();
+        
+        let labels_set = labels.iter().collect::<HashSet<_>>();
+        if labels.len() > labels_set.len(){
+            return Err(SedError::ParseError());
         }
 
         Ok(Script(commands))
@@ -922,11 +1010,15 @@ struct Sed {
     hold_space: String,
     /// Buffer that hold text for printing after cycle ending
     after_space: String,
+    /// Current processed input file
+    current_file: Option<Box<dyn BufRead>>,
     /// Current line of current processed input file
     current_line: usize,
     /// [`true`] if since last t at least one replacement [`Command`] 
     /// was performed in cycle limits 
-    has_replacements_since_t: bool
+    has_replacements_since_t: bool,
+    /// Last regex_t in applied [`Command`]  
+    last_regex: Option<regex_t>
 }
 
 impl Sed {
@@ -1147,7 +1239,9 @@ impl Sed {
                 if !command.need_execute(self.current_line, &self.pattern_space)?{
                     return Ok(None);
                 }
-                println!("{}", self.current_line);
+                if !self.quite{
+                    println!("{}", self.current_line);
+                }
             },                       
             Command::IgnoreComment if !self.quiet => {                                // #  
                 self.quiet = true;
@@ -1158,50 +1252,98 @@ impl Sed {
         Ok(instruction)
     }
 
-    /// Executes all commands of [`Sed`]'s [`Script`] for `line` string argument 
-    fn process_line(&mut self) -> Result<(), SedError> {
-        if !self.quiet {
-            for command in self.script.0{
-                self.execute(command)?;
-            }
-            print!("{}", self.pattern_space);
-            println!("{}", self.after_space);
+    fn read_line(&mut self) -> Result<String, SedError>{
+        let Some(current_file) = self.current_file.as_mut() else{
+            return Err(SedError::); 
+        };
+        let mut line = String::new();
+        match current_file.read_line(&mut line) {
+            Ok(bytes_read) => if bytes_read > 0 {
+                line.strip_suffix("\n");
+            },
+            Err(_) => return Err(SedError::),
         }
+        Ok(line)
+    }
 
-        Ok(())
+    /// Executes all commands of [`Sed`]'s [`Script`] for `line` string argument 
+    fn process_line(&mut self) -> Result<Option<ControlFlowInstruction>, SedError> {
+        let mut global_instruction = None;
+        let mut i = 0;
+        loop{
+            let Some(command) = self.script.0.get(i) else{
+                break;
+            };
+
+            if let Some(instruction) = self.execute(command)?{
+                global_instruction = None;
+                match instruction{
+                    ControlFlowInstruction::Goto(label) => if let Some(label) = label{
+                        let label_position = self.script.0.iter()
+                        .find(|cmd| if let Command::BearBranchLabel(l) = cmd{
+                            label == l 
+                        }else{
+                            false
+                        });
+                        if let Some(label_position) = label_position{
+                            i = label_position;
+                        }else{
+                            break;
+                        }
+                    }else{
+                        break;
+                    },
+                    ControlFlowInstruction::Break => {
+                        global_instruction = Some(ControlFlowInstruction::Break);
+                        break;
+                    },
+                    ControlFlowInstruction::Continue => break,
+                    ControlFlowInstruction::NotReadNext => i = 0,
+                    ControlFlowInstruction::AppendNext => {
+                        let line = self.read_line()?;
+                        if line.is_empty() {
+                            break;
+                        }
+                        self.pattern_space += &line;
+                    },
+                    ControlFlowInstruction::ReadNext => {
+                        let line = self.read_line()?;
+                        if line.is_empty() {
+                            break;
+                        }
+                        self.pattern_space = line;
+                    }
+                }
+            }
+
+            i += 1;
+        }
+        if !self.quite{
+            print!("{}", self.pattern_space);
+        }
+        println!("{}", self.after_space);
+
+        Ok(global_instruction)
     }
 
     /// Executes all commands of [`Sed`]'s [`Script`] 
     /// for all content of `reader` file argument 
-    fn process_input(&mut self, mut reader: Box<dyn BufRead>) -> Result<(), SedError> {
+    fn process_input(&mut self) -> Result<(), SedError> {
         self.pattern_space.clear();
         self.hold_space.clear();
         self.current_line = 0;
         loop {
-            let mut line = String::new();
-            match reader.read_line(&mut line) {
-                Ok(bytes_read) => {
-                    if bytes_read == 0 {
-                        break;
-                    }
-
-                    // TODO: alternative way to remove <newline>?
-                    let trimmed = if line.ends_with('\n') {
-                        &line[..line.len() - 1]
-                    } else {
-                        &line
-                    };
-
-                    self.has_replacements_since_t = false;
-                    self.pattern_space = trimmed.clone().to_string();
-                    self.after_space.clear();
-                    if let Err(_) = self.process_line() {
-                        eprintln!("sed: PROCESS LINE ERROR!!!")
-                    }
-                    self.current_line += 1;
-                }
-                Err(_) => eprintln!("sed: READ LINE ERRROR!!!"),
+            let line = self.read_line()?;
+            if line.is_empty() {
+                break;
             }
+            self.has_replacements_since_t = false;
+            self.after_space.clear();
+            self.pattern_space = line;
+            if Some(ControlFlowInstruction::Break) == self.process_line()?{
+                break;
+            }
+            self.current_line += 1;
         }
 
         Ok(())
@@ -1213,7 +1355,7 @@ impl Sed {
         println!("SED: {self:?}");
 
         for input in self.input_sources.drain(..).collect::<Vec<_>>() {
-            let reader: Box<dyn BufRead> = if input == "-" {
+            self.current_file = Some(if input == "-" {
                 println!("Handling STDIN");
                 Box::new(BufReader::new(std::io::stdin()))
             } else {
@@ -1225,8 +1367,8 @@ impl Sed {
                         continue;
                     }
                 }
-            };
-            match self.process_input(reader) {
+            });
+            match self.process_input() {
                 Ok(_) => {}
                 Err(err) => {
                     eprintln!("sed: {input}: {err}")
