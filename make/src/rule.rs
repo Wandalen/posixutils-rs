@@ -35,7 +35,7 @@ use std::{
     time::SystemTime,
 };
 use target::Target;
-use crate::parser::MacroDef;
+// use crate::parser::MacroDef;
 
 type LazyArcMutex<T> = LazyLock<Arc<Mutex<T>>>;
 

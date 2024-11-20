@@ -111,7 +111,7 @@ impl Make {
         for prerequisite in &newer_prerequisites {
             self.build_target(prerequisite)?;
         }
-        rule.run(&self.config, target, up_to_date)?;
+        rule.run(&self.config, &[], target, up_to_date)?;
 
         Ok(true)
     }

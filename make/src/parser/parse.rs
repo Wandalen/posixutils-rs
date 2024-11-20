@@ -76,7 +76,6 @@ use rowan::GreenNode;
 
 
 use super::SyntaxKind;
-use crate::parser::preprocessor::preprocess;
 /// You can construct GreenNodes by hand, but a builder
 /// is helpful for top-down parsers: it maintains a stack
 /// of currently in-progress nodes
@@ -145,7 +144,7 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
             self.builder.start_node(RECIPE.into());
             self.expect(INDENT);
             self.expect(TEXT);
-            self.expect(NEWLINE);
+            self.try_expect(NEWLINE);
             self.builder.finish_node();
         }
 
@@ -157,7 +156,7 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
                 self.expect(IDENTIFIER);
                 self.skip_ws();
             }
-            self.expect(NEWLINE);
+            self.try_expect(NEWLINE);
             self.builder.token(IDENTIFIER.into(), "variables.mk");
             dbg!(&self.builder);
             self.builder.finish_node();
@@ -235,7 +234,7 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
             }
             self.skip_ws();
             self.parse_expr();
-            self.expect(NEWLINE);
+            self.try_expect(NEWLINE);
             loop {
                 match self.current() {
                     Some(INDENT) => {
@@ -451,6 +450,7 @@ impl Makefile {
         r.read_to_string(&mut buf)?;
 
         let parsed = parse(&buf)?;
+        println!("{:#?}", parsed.syntax());
         Ok(parsed.root())
     }
 
