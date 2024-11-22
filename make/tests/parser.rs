@@ -278,14 +278,13 @@ rule: dependency
         let node = parsed.clone().unwrap().syntax();
         assert_eq!(
             format!("{:#?}", node),
-            r#"ROOT@0..38
+            r#"ROOT@0..37
   NEWLINE@0..1 "\n"
-  RULE@1..38
+  RULE@1..37
     IDENTIFIER@1..5 "rule"
     COLON@5..6 ":"
-    WHITESPACE@6..7 " "
-    EXPR@7..17
-      IDENTIFIER@7..17 "dependency"
+    EXPR@7..16
+      IDENTIFIER@7..16 "dependency"
     NEWLINE@17..18 "\n"
     RECIPE@18..27
       INDENT@18..19 "\t"

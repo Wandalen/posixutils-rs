@@ -380,10 +380,7 @@ mod target_behavior {
             &["-f", "tests/makefiles/target_behavior/no_targets.mk"],
             "",
             "make: parse error:  *** No targets. Stop.\n\n",
-            ErrorCode::ParserError {
-                constraint: ParseError(vec![]),
-            }
-            .into(),
+            6,
         );
     }
 
