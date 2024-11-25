@@ -458,6 +458,10 @@ impl Makefile {
         self.syntax().children().filter_map(Rule::cast)
     }
 
+    pub fn macros(&self) -> impl Iterator<Item=MacroDef> {
+        self.syntax().children().filter_map(MacroDef::cast)
+    }
+
     pub fn rules_by_target<'a>(&'a self, target: &'a str) -> impl Iterator<Item=Rule> + 'a {
         self.rules().filter(move |rule| rule.targets().any(|t| t == target))
     }

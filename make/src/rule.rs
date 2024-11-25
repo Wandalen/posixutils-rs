@@ -90,6 +90,7 @@ impl Rule {
             terminate: global_terminate,
             precious: global_precious,
             rules: _,
+            ref macros,
         } = *global_config;
         let Config {
             ignore: rule_ignore,
@@ -97,6 +98,10 @@ impl Rule {
             precious: rule_precious,
             phony: _,
         } = self.config;
+        
+        for macr in macros {
+            println!("{macr:?}");
+        }
 
         let files = match target {
             Target::Inference { from, to, .. } => find_files_with_extension(from)?
@@ -171,7 +176,7 @@ impl Rule {
                         .unwrap_or(DEFAULT_SHELL),
                 );
 
-                self.init_env(env_macros, &mut command, macros);
+                // self.init_env(env_macros, &mut command, macros);
                 let recipe =
                     self.substitute_internal_macros(target, recipe, &inout, self.prerequisites());
                 command.args(["-c", recipe.as_ref()]);
@@ -267,24 +272,24 @@ impl Rule {
         Recipe::new(result)
     }
 
-    /// A helper function to initialize env vars for shell commands.
-    fn init_env(&self, env_macros: bool, command: &mut Command, variables: &[MacroDef]) {
-        let mut macros: HashMap<String, String> = variables
-            .iter()
-            .map(|v| {
-                (
-                    v.name().unwrap_or_default(),
-                    v.raw_value().unwrap_or_default(),
-                )
-            })
-            .collect();
-
-        if env_macros {
-            let env_vars: HashMap<String, String> = std::env::vars().collect();
-            macros.extend(env_vars);
-        }
-        command.envs(macros);
-    }
+    // A helper function to initialize env vars for shell commands.
+    // fn init_env(&self, env_macros: bool, command: &mut Command, variables: &[MacroDef]) {
+    //     let mut macros: HashMap<String, String> = variables
+    //         .iter()
+    //         .map(|v| {
+    //             (
+    //                 v.name().unwrap_or_default(),
+    //                 v.raw_value().unwrap_or_default(),
+    //             )
+    //         })
+    //         .collect();
+    // 
+    //     if env_macros {
+    //         let env_vars: HashMap<String, String> = std::env::vars().collect();
+    //         macros.extend(env_vars);
+    //     }
+    //     command.envs(macros);
+    // }
 }
 
 impl From<ParsedRule> for Rule {

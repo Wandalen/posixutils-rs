@@ -183,10 +183,14 @@ impl Make {
 impl TryFrom<(Makefile, Config)> for Make {
     type Error = ErrorCode;
 
-    fn try_from((makefile, config): (Makefile, Config)) -> Result<Self, Self::Error> {
+    fn try_from((makefile, mut config): (Makefile, Config)) -> Result<Self, Self::Error> {
         let mut rules = vec![];
         let mut special_rules = vec![];
         let mut inference_rules = vec![];
+        
+        for macr in makefile.macros() {
+            config.macros.insert(macr.name().unwrap(), macr.raw_value().unwrap());
+        }
 
         for rule in makefile.rules() {
             let rule = Rule::from(rule);

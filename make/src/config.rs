@@ -36,6 +36,7 @@ pub struct Config {
     pub precious: bool,
 
     pub rules: BTreeMap<String, BTreeSet<String>>,
+    pub macros: BTreeMap<String, String>,
 }
 
 impl Default for Config {
@@ -113,6 +114,7 @@ impl Default for Config {
                     .collect::<BTreeSet<String>>(),
             )
             ]),
+            macros: BTreeMap::new()
         }
     }
 }
