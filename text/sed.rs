@@ -137,17 +137,22 @@ enum Index{
     /// Line number relative to current 
     Relative(isize),
     /// Last line
-    Last(),
+    Last,
     /// Context related line number that 
     /// calculated from this BRE match
     Pattern(regex_t)
 }
 
+/// List of [`Index`]s that defines line position or range
+struct AddressRange(Vec<Index>);
+
 /// Address define line position or range for 
 /// applying [`Command`]
 struct Address{
-    /// List of [`Indices`] that defines line position or range
-    indices: Vec<Index>, 
+    /// List of [`AddressRange`]s. If conditions for every 
+    /// item in this list are met then [`Command`] with 
+    /// this [`Address`] is processed
+    conditions: Vec<AddressRange>, 
     /// Defines what range limits is passed 
     /// in current processing file for current [`Command`]
     passed: Option<(bool, bool)>,
@@ -343,11 +348,19 @@ impl Command{
 
         let mut range = (None, None);  
         for i in [0, 1]{
-            if let Some(index) = address.indices.get(*i){
-                range[i] = match index{
-                    Index::Number(position) => position == line_number,
-                    Index::Pattern(re) => !(match_pattern(re, line)?.is_empty())
-                };
+            let mut conditions_match = vec![];  
+            for rng in address.conditions{
+                if let Some(index) = address.indices.get(*i){
+                    conditions_match.push(match index{
+                        Index::Number(position) => position == line_number,
+                        Index::Pattern(re) => !(match_pattern(re, line)?.is_empty())
+                    });
+                }
+            }
+
+            if !conditions_match.is_empty(){
+                range[i] = Some(!conditions_match.iter()
+                    .any(|c| c == false))
             }
         }
 
@@ -865,6 +878,8 @@ impl Script {
         let mut address: Option<Address> = None;
         let chars = raw_script.chars().collect::<Vec<_>>();
         let mut i = 0;
+        let mut last_commands_count = 0; 
+        let mut command_added = false;
 
         if Some("#n") == chars.get(0..2){
             commands.push(Command::IgnoreComment);
@@ -876,8 +891,10 @@ impl Script {
                 break; 
             };
             match *ch{
+                ' ' => {},
+                '\n' | ';' => command_added = false,
+                ch if command_added => return Err(SedError::ParseError()), 
                 ch if ch.is_numeric() || "\\,+$".contains(ch) => parse_address(&chars, &mut i, &mut address),
-                ' ' | '\n' | ';' => {},
                 '{' => parse_block(chars, &mut i)?,
                 'a' => if let Some(text) = parse_text_attribute(chars, &mut i){
                     commands.push(Command::PrintTextAfter(address, text).check_address()?);
@@ -947,8 +964,12 @@ impl Script {
                         i += 1;
                     }
                 },
-                _ => return Err(SedError::)
+                _ => return Err(SedError::ParseError())
             } 
+            if last_commands_count < commands.len(){
+                last_commands_count = commands.len();
+                command_added = true;
+            }
             i += 1;
         }
 
@@ -963,8 +984,41 @@ impl Script {
             return Err(SedError::ParseError());
         }
 
+        commands = flatten_commands(commands);
+
         Ok(Script(commands))
     }
+}
+
+fn flatten_commands(mut commands: Vec<Command>) -> Vec<Command>{
+    let is_block= |cmd|{
+        if let Command::Block(..) = cmd{
+            true
+        }else {
+            false 
+        }
+    };
+
+    while commands.iter().any(is_block){
+        let blocks = commands.iter().enumerate().filter_map(|(i, cmd)|{
+            if let Command::Block(block_address, block_commands) = cmd{
+                block_commands.clone().iter_mut().for_each(|cmd|{
+                    if let Some((address, _)) = cmd.get_mut_address(){
+                        address.conditions.extend(block_address.conditions);
+                    }
+                });
+                Some((i, block_commands))
+            }else {
+                None; 
+            }
+        }).collect::<Vec<_>>();
+
+        for (i, block_commands) in blocks.iter().rev(){
+            commands.splice(i..i, block_commands);
+        }
+    }
+
+    commands
 }
 
 /// Set of states that are returned from [`Sed::execute`] 
@@ -1027,13 +1081,7 @@ impl Sed {
     fn execute(&mut self, command: Command) 
         -> Result<Option<ControlFlowInstruction>, SedError> {
         let instruction = None;
-        match command{
-            Command::Block(address, commands) => {                              // {}
-                if !command.need_execute(self.current_line, &self.pattern_space)?{
-                    return Ok(None);
-                }
-                // x
-            },                     
+        match command{                     
             Command::PrintTextAfter(address, text) => {                         // a
                 if !command.need_execute(self.current_line, &self.pattern_space)?{
                     return Ok(None);
@@ -1247,6 +1295,7 @@ impl Sed {
                 self.quiet = true;
             },                                                            
             Command::Unknown => {},
+            Command::Block(..) => return Err(SedError::),
             _ => {}
         }
         Ok(instruction)
@@ -1280,11 +1329,11 @@ impl Sed {
                 match instruction{
                     ControlFlowInstruction::Goto(label) => if let Some(label) = label{
                         let label_position = self.script.0.iter()
-                        .find(|cmd| if let Command::BearBranchLabel(l) = cmd{
-                            label == l 
-                        }else{
-                            false
-                        });
+                            .position(|cmd| if let Command::BearBranchLabel(l) = cmd{
+                                label == l 
+                            }else{
+                                false
+                            });
                         if let Some(label_position) = label_position{
                             i = label_position;
                         }else{
