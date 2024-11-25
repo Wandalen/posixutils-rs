@@ -7,7 +7,7 @@
 //
 
 mod preprocess {
-    use posixutils_make::parser::preprocessor::preprocess;
+    use posixutils_make::parser::preprocessor::{generate_macro_table, preprocess};
 
     #[test]
     fn test_macros_simple() {
@@ -24,7 +24,8 @@ all:
 all:
 	var ok var ok ok
 "#;
-        let Ok(result) = preprocess(MACROS) else {
+        let table = generate_macro_table(MACROS).unwrap();
+        let Ok(result) = preprocess(MACROS, &table) else {
             panic!("Test must be preprocessed without an error")
         };
         assert_eq!(result, EXPECTED);
@@ -256,7 +257,7 @@ endif
 }
 
 mod parse {
-    use posixutils_make::parser::preprocessor::preprocess;
+    use posixutils_make::parser::preprocessor::{generate_macro_table, preprocess};
     use posixutils_make::parser::{parse::parse, Makefile};
     use rowan::ast::AstNode;
 
@@ -269,7 +270,8 @@ rule: dependency
 	${VARIABLE}
 
 "#;
-        let Ok(processed) = preprocess(SIMPLE) else {
+        let table = generate_macro_table(SIMPLE).unwrap();
+        let Ok(processed) = preprocess(SIMPLE, &table) else {
             panic!("Must be preprocessed without an error")
         };
         let parsed = parse(&processed);
@@ -315,7 +317,8 @@ rule: dependency
     fn test_parse_export_assign() {
         const EXPORT: &str = r#"export VARIABLE := value
 "#;
-        let Ok(processed) = preprocess(EXPORT).map_err(|e| println!("{e:?}")) else {
+        let table = generate_macro_table(EXPORT).unwrap();
+        let Ok(processed) = preprocess(EXPORT, &table).map_err(|e| println!("{e:?}")) else {
             panic!("Must be preprocessed without an error")
         };
         let parsed = parse(&processed);

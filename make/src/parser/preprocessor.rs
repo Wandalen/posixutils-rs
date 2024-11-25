@@ -77,7 +77,7 @@ fn take_till_eol(letters: &mut Peekable<impl Iterator<Item = char>>) -> String {
 
 /// Searches for all the lines in makefile that resemble macro definition
 /// and creates hashtable from macro names and bodies
-fn generate_macro_table(
+pub fn generate_macro_table(
     source: &str,
 ) -> std::result::Result<HashMap<String, String>, PreprocError> {
     let macro_defs = source.lines().filter(|line| line.contains('=') && line.strip_prefix('\t').is_none());
@@ -414,20 +414,13 @@ fn remove_variables(source: &str) -> String {
 }
 
 /// Processes `include`s and macros
-pub fn preprocess(source: &str) -> Result<String> {
+pub fn preprocess(source: &str, table: &HashMap<String, String>) -> Result<String> {
     let mut source = source.to_string();
-    let mut includes = 1;
-    let mut table = generate_macro_table(&source)?;
-
-    while includes > 0 {
-        (source, includes) = process_include_lines(&source, &HashMap::new());
-        table = generate_macro_table(&source)?;
-    }
 
     source = remove_variables(&source);
 
     loop {
-        let (result, substitutions) = substitute(&source, &table)?;
+        let (result, substitutions) = substitute(&source, table)?;
         if substitutions == 0 {
             break Ok(result);
         } else {

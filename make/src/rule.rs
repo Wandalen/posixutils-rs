@@ -35,6 +35,7 @@ use std::{
     time::SystemTime,
 };
 use target::Target;
+use crate::parser::preprocessor::preprocess;
 // use crate::parser::MacroDef;
 
 type LazyArcMutex<T> = LazyLock<Arc<Mutex<T>>>;
@@ -177,8 +178,9 @@ impl Rule {
                 );
 
                 // self.init_env(env_macros, &mut command, macros);
+                let recipe = self.substitute_general_macros(recipe, macros);
                 let recipe =
-                    self.substitute_internal_macros(target, recipe, &inout, self.prerequisites());
+                    self.substitute_internal_macros(target, &recipe, &inout, self.prerequisites());
                 command.args(["-c", recipe.as_ref()]);
 
                 let status = match command.status() {
@@ -224,6 +226,16 @@ impl Rule {
         }
 
         Ok(())
+    }
+
+    fn substitute_general_macros<'a>(
+        &self,
+        recipe: &Recipe,
+        macros: &HashMap<String, String>
+    ) -> Recipe {
+        let recipe = recipe.inner();
+        let result = preprocess(recipe, macros).unwrap();
+        Recipe::new(result)
     }
 
     fn substitute_internal_macros<'a>(
