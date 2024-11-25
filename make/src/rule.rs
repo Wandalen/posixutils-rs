@@ -99,10 +99,6 @@ impl Rule {
             precious: rule_precious,
             phony: _,
         } = self.config;
-        
-        for macr in macros {
-            println!("{macr:?}");
-        }
 
         let files = match target {
             Target::Inference { from, to, .. } => find_files_with_extension(from)?

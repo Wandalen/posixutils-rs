@@ -255,7 +255,10 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
         fn parse(mut self) -> Parse {
             self.builder.start_node(ROOT.into());
             loop {
-                match self.find(|&&(k, _)| k == COLON || k == NEWLINE || k == INCLUDE) {
+                match self.find(|&&(k, _)| k == COLON || k == NEWLINE || k == INCLUDE || k == EQUALS) {
+                    Some((EQUALS, "=")) => {
+                        self.parse_macro_defintion()
+                    }
                     Some((COLON, ":")) => {
                         self.parse_rule();
                     }
@@ -450,7 +453,6 @@ impl Makefile {
         r.read_to_string(&mut buf)?;
 
         let parsed = parse(&buf)?;
-        println!("{:#?}", parsed.syntax());
         Ok(parsed.root())
     }
 
