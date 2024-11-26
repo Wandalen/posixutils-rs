@@ -66,7 +66,9 @@ fn take_till_eol(letters: &mut Peekable<impl Iterator<Item = char>>) -> String {
 
     while let Some(letter) = letters.peek() {
         if matches!(letter, '\n' | '#') {
-            if !content.ends_with('\\') { break; }
+            if !content.ends_with('\\') {
+                break;
+            }
         };
         content.push(*letter);
         letters.next();
@@ -80,7 +82,9 @@ fn take_till_eol(letters: &mut Peekable<impl Iterator<Item = char>>) -> String {
 pub fn generate_macro_table(
     source: &str,
 ) -> std::result::Result<HashMap<String, String>, PreprocError> {
-    let macro_defs = source.lines().filter(|line| line.contains('=') && line.strip_prefix('\t').is_none());
+    let macro_defs = source
+        .lines()
+        .filter(|line| line.contains('=') && line.strip_prefix('\t').is_none());
     let mut macro_table = HashMap::<String, String>::new();
 
     for def in macro_defs {
@@ -96,8 +100,10 @@ pub fn generate_macro_table(
 
         let mut text = def.chars().peekable();
         let line = take_till_eol(&mut text);
-        if line.is_empty() || line.split_whitespace().next().is_none() { continue; }
-        
+        if line.is_empty() || line.split_whitespace().next().is_none() {
+            continue;
+        }
+
         let mut text = line.chars().peekable();
 
         let mut macro_name = get_ident(&mut text)?;
@@ -166,10 +172,7 @@ pub fn generate_macro_table(
             }
             Operator::Bang => {
                 macro_body = substitute(&macro_body, &macro_table)?.0;
-                let Ok(result) = Command::new("sh")
-                    .args(["-c", &macro_body])
-                    .output()
-                else {
+                let Ok(result) = Command::new("sh").args(["-c", &macro_body]).output() else {
                     Err(PreprocError::CommandFailed)?
                 };
                 macro_body = String::from_utf8_lossy(&result.stdout).to_string();
@@ -212,82 +215,103 @@ fn detect_function(s: impl AsRef<str>) -> Option<MacroFunction> {
         _ => None,
     }
 }
-fn parse_function(f: MacroFunction, src: &mut Peekable<impl Iterator<Item = char>>, table: &HashMap<String, String>) -> Result<String> {
+fn parse_function(
+    f: MacroFunction,
+    src: &mut Peekable<impl Iterator<Item = char>>,
+    table: &HashMap<String, String>,
+) -> Result<String> {
     let mut args = String::new();
     while let Some(&c) = src.peek() {
-        if c == ')' || c == '}' { break; }
+        if c == ')' || c == '}' {
+            break;
+        }
         args.push(c);
         src.next();
     }
-    
+
     match f {
         MacroFunction::FilterOut => {
             let mut args = args.split(',');
-            let Some(pattern) = args.next() else { Err(PreprocError::CommandFailed)? };
+            let Some(pattern) = args.next() else {
+                Err(PreprocError::CommandFailed)?
+            };
             let (pattern, _) = substitute(pattern, table)?;
-            let Some(text) = args.next() else { Err(PreprocError::CommandFailed)? };
+            let Some(text) = args.next() else {
+                Err(PreprocError::CommandFailed)?
+            };
             let (text, _) = substitute(text, table)?;
-            
+
             let patterns = pattern.split_whitespace();
             let words = text.split_whitespace();
             let pattern_set = HashSet::<&str>::from_iter(patterns);
-            
+
             let result = words
                 .filter(|s| pattern_set.contains(s))
                 .fold(String::new(), |acc, s| acc + s);
-            
+
             Ok(result)
-        },
+        }
         MacroFunction::Shell => {
             let output = Command::new("sh").args(["-c", &args]).output();
-            let mut result = output.into_iter()
+            let mut result = output
+                .into_iter()
                 .filter_map(|x| String::from_utf8(x.stdout).ok());
             result.next().ok_or(PreprocError::CommandFailed)
-        },
+        }
         MacroFunction::If => {
             let mut args = args.split(',');
-            let Some(cond    ) = args.next() else { Err(PreprocError::CommandFailed)? };
-            let Some(on_true ) = args.next() else { Err(PreprocError::CommandFailed)? };
+            let Some(cond) = args.next() else {
+                Err(PreprocError::CommandFailed)?
+            };
+            let Some(on_true) = args.next() else {
+                Err(PreprocError::CommandFailed)?
+            };
             let on_false = args.next();
-            
-            let (result,_) = substitute(cond, table)?;
+
+            let (result, _) = substitute(cond, table)?;
             let cond = result.split_whitespace().next().is_none();
             let (output, _) = if cond {
                 substitute(on_true, table)?
             } else {
-                on_false.iter()
+                on_false
+                    .iter()
                     .flat_map(|x| substitute(x, table))
-                    .next().unwrap_or_default()
+                    .next()
+                    .unwrap_or_default()
             };
-            
+
             Ok(output)
         }
         MacroFunction::And => {
             let args = args.split(',');
             let expanded = args.map(|x| substitute(x, table));
-            let is_true = expanded.clone().all(|x|
+            let is_true = expanded.clone().all(|x| {
                 if let Ok((s, _)) = x {
                     s.split_whitespace().next().is_some()
                 } else {
                     false
                 }
-            );
-            
+            });
+
             let (result, _) = expanded.last().ok_or(PreprocError::CommandFailed)??;
             Ok(if is_true { result } else { String::new() })
         }
         MacroFunction::Or => {
             let args = args.split(',');
             let expanded = args.map(|x| substitute(x, table));
-            let chosen = expanded.clone().find(|x|
+            let chosen = expanded.clone().find(|x| {
                 if let Ok((s, _)) = x {
                     s.split_whitespace().next().is_some()
                 } else {
                     false
                 }
-            );
-            
-            Ok(if let Some(x) = chosen { x?.0 } else { String::new() })
+            });
+
+            Ok(if let Some(x) = chosen {
+                x?.0
+            } else {
+                String::new()
+            })
         }
     }
 }
@@ -337,16 +361,20 @@ fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, 
                 let Ok(macro_name) = get_ident(&mut letters) else {
                     Err(PreprocError::BadMacroName)?
                 };
-                
+
                 if let Some(name) = detect_function(&macro_name) {
                     let macro_body = parse_function(name, &mut letters, table)?;
                     result.push_str(&macro_body);
                     substitutions += 1;
                     continue;
                 }
-                
+
                 skip_blank(&mut letters);
-                while let Some(c) = letters.peek() { if *c == '}' || *c == ')' { break; } }
+                while let Some(c) = letters.peek() {
+                    if *c == '}' || *c == ')' {
+                        break;
+                    }
+                }
                 let Some(finilizer) = letters.next() else {
                     Err(PreprocError::UnexpectedEOF)?
                 };

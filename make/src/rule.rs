@@ -12,10 +12,11 @@ pub mod prerequisite;
 pub mod recipe;
 pub mod target;
 
+use crate::parser::preprocessor::preprocess;
 use crate::{
     config::Config as GlobalConfig,
     error_code::ErrorCode::{self, *},
-    parser::{Rule as ParsedRule, MacroDef},
+    parser::{MacroDef, Rule as ParsedRule},
     signal_handler, DEFAULT_SHELL, DEFAULT_SHELL_VAR,
 };
 use config::Config;
@@ -35,7 +36,6 @@ use std::{
     time::SystemTime,
 };
 use target::Target;
-use crate::parser::preprocessor::preprocess;
 // use crate::parser::MacroDef;
 
 type LazyArcMutex<T> = LazyLock<Arc<Mutex<T>>>;
@@ -227,7 +227,7 @@ impl Rule {
     fn substitute_general_macros<'a>(
         &self,
         recipe: &Recipe,
-        macros: &HashMap<String, String>
+        macros: &HashMap<String, String>,
     ) -> Recipe {
         let recipe = recipe.inner();
         let result = preprocess(recipe, macros).unwrap();
@@ -291,7 +291,7 @@ impl Rule {
     //             )
     //         })
     //         .collect();
-    // 
+    //
     //     if env_macros {
     //         let env_vars: HashMap<String, String> = std::env::vars().collect();
     //         macros.extend(env_vars);

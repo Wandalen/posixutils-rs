@@ -53,15 +53,12 @@ rule: prerequisite
             .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "VARIABLE"),
-                
                 (EQUALS, "="),
-                
                 (IDENTIFIER, "value"),
                 (NEWLINE, "\n"),
                 (NEWLINE, "\n"),
                 (IDENTIFIER, "rule"),
                 (COLON, ":"),
-                
                 (IDENTIFIER, "prerequisite"),
                 (NEWLINE, "\n"),
                 (INDENT, "\t"),
@@ -93,7 +90,6 @@ rule: prerequisite
             .collect::<Vec<_>>(),
             vec![
                 (EXPORT, "export"),
-                
                 (IDENTIFIER, "VARIABLE"),
                 (NEWLINE, "\n"),
             ]
@@ -110,12 +106,9 @@ rule: prerequisite
             .collect::<Vec<_>>(),
             vec![
                 (EXPORT, "export"),
-                
                 (IDENTIFIER, "VARIABLE"),
-                
                 (COLON, ":"),
                 (EQUALS, "="),
-                
                 (IDENTIFIER, "value"),
                 (NEWLINE, "\n"),
             ]
@@ -132,7 +125,6 @@ rule: prerequisite
             .collect::<Vec<_>>(),
             [
                 (INCLUDE, "include"),
-                
                 (IDENTIFIER, "FILENAME"),
                 (NEWLINE, "\n")
             ]
@@ -152,9 +144,7 @@ rule: prerequisite
             vec![
                 (IDENTIFIER, "rule"),
                 (COLON, ":"),
-                
                 (IDENTIFIER, "prerequisite1"),
-                
                 (IDENTIFIER, "prerequisite2"),
                 (NEWLINE, "\n"),
                 (INDENT, "\t"),
@@ -174,10 +164,8 @@ rule: prerequisite
                 .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "VARIABLE"),
-                
                 (QUESTION, "?"),
                 (EQUALS, "="),
-                
                 (IDENTIFIER, "value"),
                 (NEWLINE, "\n"),
             ]
@@ -195,11 +183,9 @@ endif
             .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "ifneq"),
-                
                 (LPAREN, "("),
                 (IDENTIFIER, "a"),
                 (COMMA, ","),
-                
                 (IDENTIFIER, "b"),
                 (RPAREN, ")"),
                 (NEWLINE, "\n"),
@@ -218,9 +204,7 @@ endif
                 .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "VARIABLE"),
-                
                 (EQUALS, "="),
-                
                 (DOLLAR, "$"),
                 (LPAREN, "("),
                 (IDENTIFIER, "value"),
@@ -239,9 +223,7 @@ endif
                 .collect::<Vec<_>>(),
             vec![
                 (IDENTIFIER, "VARIABLE"),
-                
                 (EQUALS, "="),
-                
                 (DOLLAR, "$"),
                 (LPAREN, "("),
                 (IDENTIFIER, "value"),

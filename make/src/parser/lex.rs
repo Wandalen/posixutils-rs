@@ -64,7 +64,9 @@ impl<'a> Lexer<'a> {
     /// - `None` if the input is exhausted.
     ///
     fn next_token(&mut self) -> Option<(SyntaxKind, String)> {
-        while matches!(self.input.peek(), Some(' ')) { self.input.next(); }
+        while matches!(self.input.peek(), Some(' ')) {
+            self.input.next();
+        }
         if let Some(&c) = self.input.peek() {
             match (c, self.line_type) {
                 ('\t', None) => {

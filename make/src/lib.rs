@@ -20,7 +20,7 @@ use std::{
     time::SystemTime,
 };
 
-use parser::{Makefile, MacroDef};
+use parser::{MacroDef, Makefile};
 
 use crate::special_target::InferenceTarget;
 use config::Config;
@@ -187,9 +187,11 @@ impl TryFrom<(Makefile, Config)> for Make {
         let mut rules = vec![];
         let mut special_rules = vec![];
         let mut inference_rules = vec![];
-        
+
         for macr in makefile.macros() {
-            config.macros.insert(macr.name().unwrap(), macr.raw_value().unwrap());
+            config
+                .macros
+                .insert(macr.name().unwrap(), macr.raw_value().unwrap());
         }
 
         for rule in makefile.rules() {

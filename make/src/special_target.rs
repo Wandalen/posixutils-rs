@@ -76,7 +76,7 @@ impl InferenceTarget {
     }
 }
 
-pub struct PatterTarget(String);  
+pub struct PatterTarget(String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Error {
