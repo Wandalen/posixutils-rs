@@ -285,18 +285,18 @@ rule: dependency
   RULE@1..37
     IDENTIFIER@1..5 "rule"
     COLON@5..6 ":"
-    EXPR@7..16
-      IDENTIFIER@7..16 "dependency"
-    NEWLINE@17..18 "\n"
-    RECIPE@18..27
-      INDENT@18..19 "\t"
-      TEXT@19..26 "command"
-      NEWLINE@26..27 "\n"
-    RECIPE@27..37
-      INDENT@27..28 "\t"
-      TEXT@28..36 "command2"
-      NEWLINE@36..37 "\n"
-    NEWLINE@37..38 "\n"
+    EXPR@6..16
+      IDENTIFIER@6..16 "dependency"
+    NEWLINE@16..17 "\n"
+    RECIPE@17..26
+      INDENT@17..18 "\t"
+      TEXT@18..25 "command"
+      NEWLINE@25..26 "\n"
+    RECIPE@26..36
+      INDENT@26..27 "\t"
+      TEXT@27..35 "command2"
+      NEWLINE@35..36 "\n"
+    NEWLINE@36..37 "\n"
 "#
         );
 
@@ -371,15 +371,15 @@ rule: dependency
   RULE@0..38
     IDENTIFIER@0..4 "rule"
     COLON@4..5 ":"
-    EXPR@6..27
-      IDENTIFIER@6..16 "dependency1"
-      IDENTIFIER@18..27 "dependency2"
+    EXPR@5..27
+      IDENTIFIER@5..16 "dependency1"
+      IDENTIFIER@16..27 "dependency2"
     NEWLINE@27..28 "\n"
-    RECIPE@30..39
-      INDENT@30..31 "\t"
-      TEXT@31..38 "command"
-      NEWLINE@38..39 "\n"
-    NEWLINE@39..40 "\n"
+    RECIPE@28..37
+      INDENT@28..29 "\t"
+      TEXT@29..36 "command"
+      NEWLINE@36..37 "\n"
+    NEWLINE@37..38 "\n"
 "#
         );
         let root = parsed.unwrap().root().clone_for_update();
