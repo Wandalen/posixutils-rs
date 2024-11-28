@@ -47,6 +47,7 @@ const DAEMON_UID: u32 = 457;
                   at -l -q queuename\n\
                   at -l [at_job_id...]"
 )]
+
 struct Args {
     /// Submit the job to be run at the date and time specified.
     #[arg(value_name = "TIMESPEC")]
@@ -508,7 +509,9 @@ mod time {
 mod timespec {
     use std::{num::NonZero, str::FromStr};
 
-    use chrono::{DateTime, Datelike, Days, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Utc};
+    use chrono::{
+        DateTime, Datelike, Days, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, TimeZone, Utc,
+    };
 
     use crate::tokens::{
         AmPm, DayNumber, DayOfWeek, Hr24Clock, Hr24ClockHour, Minute, Month, TimezoneName,
@@ -756,7 +759,7 @@ mod timespec {
         Noon,
         Hr24clockHour(Hr24Clock),
         Hr24clockHourTimezone {
-            hour: Hr24Clock,
+            hr24_clock: Hr24Clock,
             timezone: TimezoneName,
         },
         Hr24clockHourMinute {
@@ -800,10 +803,19 @@ mod timespec {
 
                     NaiveTime::from_hms_opt(hour.into(), minute.into(), 0)
                 }
-                Time::Hr24clockHourTimezone { hour, timezone } => {
-                    let Hr24Clock([hour, minute]) = *hour;
+                Time::Hr24clockHourTimezone {
+                    hr24_clock,
+                    timezone,
+                } => {
+                    let Hr24Clock([hour, minute]) = *hr24_clock;
 
-                    NaiveTime::from_hms_opt(hour.into(), minute.into(), 0)
+                    if let Some(tz) = timezone.to_timezone() {
+                        let utc_time = Utc.ymd(1970, 1, 1).and_hms(hour.into(), minute.into(), 0);
+                        let local_time = utc_time.with_timezone(&tz);
+                        Some(local_time.time())
+                    } else {
+                        None
+                    }
                 }
                 Time::Hr24clockHourMinute { hour, minute } => {
                     let Hr24ClockHour(hour) = *hour;
@@ -819,7 +831,13 @@ mod timespec {
                     let Hr24ClockHour(hour) = *hour;
                     let Minute(minute) = *minute;
 
-                    NaiveTime::from_hms_opt(hour.into(), minute.into(), 0)
+                    if let Some(tz) = timezone.to_timezone() {
+                        let utc_time = Utc.ymd(1970, 1, 1).and_hms(hour.into(), minute.into(), 0);
+                        let local_time = utc_time.with_timezone(&tz);
+                        Some(local_time.time())
+                    } else {
+                        None
+                    }
                 }
                 Time::WallclockHour { clock, am } => {
                     let WallClock { hour, minutes } = *clock;
@@ -840,14 +858,19 @@ mod timespec {
                 } => {
                     let WallClock { hour, minutes } = *clock;
 
-                    chrono::NaiveTime::from_hms_opt(
-                        u32::from(match am {
+                    if let Some(tz) = timezone.to_timezone() {
+                        let hour_24 = match am {
                             AmPm::Am => hour.get(),
                             AmPm::Pm => hour.get() + 12,
-                        }),
-                        u32::from(minutes),
-                        0,
-                    )
+                        };
+                        let utc_time =
+                            Utc.ymd(1970, 1, 1)
+                                .and_hms(hour_24.into(), minutes.into(), 0);
+                        let local_time = utc_time.with_timezone(&tz);
+                        Some(local_time.time())
+                    } else {
+                        None
+                    }
                 }
                 Time::WallclockHourMinute { clock, minute, am } => {
                     let WallClockHour(hour) = *clock;
@@ -871,14 +894,19 @@ mod timespec {
                     let WallClockHour(hour) = *clock;
                     let Minute(minutes) = *minute;
 
-                    chrono::NaiveTime::from_hms_opt(
-                        u32::from(match am {
+                    if let Some(tz) = timezone.to_timezone() {
+                        let hour_24 = match am {
                             AmPm::Am => hour.get(),
                             AmPm::Pm => hour.get() + 12,
-                        }),
-                        u32::from(minutes),
-                        0,
-                    )
+                        };
+                        let utc_time =
+                            Utc.ymd(1970, 1, 1)
+                                .and_hms(hour_24.into(), minutes.into(), 0);
+                        let local_time = utc_time.with_timezone(&tz);
+                        Some(local_time.time())
+                    } else {
+                        None
+                    }
                 }
             }
         }
@@ -981,11 +1009,14 @@ mod timespec {
                 }
             }
 
-            if let Ok(hour) = Hr24Clock::from_str(&number) {
+            if let Ok(hr24_clock) = Hr24Clock::from_str(&number) {
                 let timezone = TimezoneName::from_str(&other);
 
                 if let Ok(timezone) = timezone {
-                    return Ok(Self::Hr24clockHourTimezone { hour, timezone });
+                    return Ok(Self::Hr24clockHourTimezone {
+                        hr24_clock,
+                        timezone,
+                    });
                 }
             }
 
@@ -1292,7 +1323,7 @@ mod timespec {
 
             assert_eq!(
                 Ok(Time::Hr24clockHourTimezone {
-                    hour: Hr24Clock([14, 53]),
+                    hr24_clock: Hr24Clock([14, 53]),
                     timezone: TimezoneName("UTC".to_owned())
                 }),
                 actual
@@ -1305,7 +1336,7 @@ mod timespec {
 
             assert_eq!(
                 Ok(Time::Hr24clockHourTimezone {
-                    hour: Hr24Clock([14, 00]),
+                    hr24_clock: Hr24Clock([14, 00]),
                     timezone: TimezoneName("UTC".to_owned())
                 }),
                 actual
@@ -1469,7 +1500,7 @@ mod timespec {
 
             assert_eq!(
                 Ok(Timespec::Time(Time::Hr24clockHourTimezone {
-                    hour: Hr24Clock([14, 00]),
+                    hr24_clock: Hr24Clock([14, 00]),
                     timezone: TimezoneName("UTC".to_owned())
                 })),
                 actual
@@ -1629,6 +1660,8 @@ mod timespec {
 
 mod tokens {
     use std::{num::NonZero, str::FromStr};
+
+    use chrono_tz::Tz;
 
     #[derive(Debug, PartialEq)]
     pub enum TokenParsingError {
@@ -2048,6 +2081,16 @@ mod tokens {
             match s == &tz {
                 true => Ok(Self(tz)), // TODO: Seems like implementation only reads UTC, but it should be influenced by TZ variable
                 false => Err(TokenParsingError::TimezonePatternNotFound(tz)),
+            }
+        }
+    }
+
+    impl TimezoneName {
+        /// Returns the time zone based on the string (so far only UTC)
+        pub fn to_timezone(&self) -> Option<Tz> {
+            match self.0.as_str() {
+                "UTC" => Some(chrono_tz::UTC), // Only UTC is currently supported
+                _ => None, // For other time zones, the implementation has not yet been added
             }
         }
     }
