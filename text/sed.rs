@@ -9,17 +9,16 @@
 
 use std::{
     collections::{HashMap, HashSet}, fs::File, io::{BufRead, BufReader, Write}, 
-    path::PathBuf, str::pattern::Pattern
+    path::PathBuf, mem::MaybeUninit, ffi::CString
 };
 use libc::{
-    regex_t, regcomp, regexec, regmatch_t, REG_NOMATCH, 
+    regex_t, regcomp, regexec, regmatch_t, ioctl,
     winsize, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, TIOCGWINSZ
 };
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use plib::PROJECT_NAME;
-use rand::rngs;
 
 #[derive(Parser, Debug)]
 #[command(version, about = gettext("sed - stream editor"))]
@@ -71,7 +70,7 @@ impl Args {
             }
         }
 
-        Ok(raw_scripts.join('\n'))
+        Ok(raw_scripts.join("\n"))
     }
 
     /// Creates [`Sed`] from [`Args`], if [`Script`] 
@@ -85,8 +84,8 @@ impl Args {
             } else {
                 // Neither [-e script] nor [-f script_file] is supplied and [file...] is not empty
                 // then consider first [file...] as single script.
-                for raw_script in self.file.remove(0).split('\n') {
-                    script.push_str(raw_script);
+                for raw_script_line in self.file.remove(0).split('\n') {
+                    raw_script.push_str(raw_script_line);
                 }
             }
         }
@@ -131,6 +130,7 @@ enum SedError {
 
 /// Define line number or range limits of [`Address`] 
 /// for applying [`Command`]
+#[derive(Clone)]
 enum AddressToken{
     /// Line number
     Number(usize),
@@ -145,6 +145,7 @@ enum AddressToken{
 }
 
 /// List of [`AddressToken`]s that defines line position or range
+#[derive(Clone)]
 struct AddressRange(Vec<AddressToken>);
 
 /// Address define line position or range for 
@@ -183,7 +184,7 @@ impl Address{
     }
 
     fn is_loop_inside_range(&self) -> Option<bool>{
-        self.passsed.map(|(s,e)| s && !e)
+        self.passed.map(|(s,e)| s && !e)
     }
 
     fn is_loop_on_start(&self) -> Option<bool>{
@@ -196,104 +197,106 @@ impl Address{
 }
 
 /// [`Command::Replace`] optional flags
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd)]
 enum ReplaceFlag{
     /// Substitute for the nth occurrence only of the 
     /// BRE found within the pattern space
-    ReplaceNth(usize),                                                        // n
+    ReplaceNth(usize),                                                                // n
     /// Globally substitute for all non-overlapping 
     /// instances of the BRE rather than just the first one
-    ReplaceAll,                                                               // g
+    ReplaceAll,                                                                       // g
     /// Write the pattern space to standard output if 
     /// a replacement was made
-    PrintPatternIfReplace,                                                    // p
+    PrintPatternIfReplace,                                                            // p
     /// Write. Append the pattern space to wfile if a 
     /// replacement was made
-    AppendToIfReplace(PathBuf)                                                // w
+    AppendToIfReplace(PathBuf)                                                        // w
 }
 
 /// Atomic parts of [`Script`], that can process input
 /// files line by line
+#[derive(Debug)]
 enum Command{
     /// Execute a list of sed editing commands only 
     /// when the pattern space is selected
-    Block(Address, Vec<Command>),                                             // {
+    Block(Option<Address>, Vec<Command>),                                             // {
     /// Write text to standard output as described previously
-    PrintTextAfter(Address, String),                                          // a
+    PrintTextAfter(Option<Address>, String),                                          // a
     /// Branch to the : command verb bearing the label 
     /// argument. If label is not specified, branch to 
     /// the end of the script
-    BranchToLabel(Address, Option<String>),                                   // b
+    BranchToLabel(Option<Address>, Option<String>),                                   // b
     /// Delete the pattern space. With a 0 or 1 address 
     /// or at the end of a 2-address range, place text 
     /// on the output and start the next cycle
-    DeletePatternAndPrintText(Address, String),                               // c
+    DeletePatternAndPrintText(Option<Address>, String),                               // c
     /// Delete the pattern space and start the next cycle (d)
     /// If the pattern space contains no <newline>, 
     /// delete the pattern space and start new cycle (D)
-    DeletePattern(Address, bool),                                             // d/D
+    DeletePattern(Option<Address>, bool),                                             // d/D
     /// Replace the contents of the pattern 
     /// space by the contents of the hold space
-    ReplacePatternWithHold(Address),                                          // g
+    ReplacePatternWithHold(Option<Address>),                                          // g
     /// Append to the pattern space a <newline> 
     /// followed by the contents of the hold space
-    AppendHoldToPattern(Address),                                             // G
+    AppendHoldToPattern(Option<Address>),                                             // G
     /// Replace the contents of the hold space 
     /// with the contents of the pattern space
-    ReplaceHoldWithPattern(Address),                                          // h
+    ReplaceHoldWithPattern(Option<Address>),                                          // h
     /// Append to the hold space a <newline> followed 
     /// by the contents of the pattern space
-    AppendPatternToHold(Address),                                             // H
+    AppendPatternToHold(Option<Address>),                                             // H
     /// Write text to standard output
-    PrintTextBefore(Address, String),                                         // i
+    PrintTextBefore(Option<Address>, String),                                         // i
     /// Write the pattern space to standard 
     /// output in a visually unambiguous form
-    PrintPatternBinary(Address),                                              // I
+    PrintPatternBinary(Option<Address>),                                              // I
     /// Write the pattern space to standard output 
     /// and replace pattern space with next line,
     /// then continue current cycle
-    PrintPatternAndReplaceWithNext(Address),                                  // n 
+    PrintPatternAndReplaceWithNext(Option<Address>),                                  // n 
     /// Append the next line of input, less its 
     /// terminating <newline>, to the pattern space
-    AppendNextToPattern(Address),                                             // N
+    AppendNextToPattern(Option<Address>),                                             // N
     /// Write the pattern space to standard output (p).
     /// Write the pattern space, up to the first <newline>, 
     /// to standard output (P).
-    PrintPattern(Address, bool),                                              // p/P
+    PrintPattern(Option<Address>, bool),                                              // p/P
     /// Branch to the end of the script and quit without 
     /// starting a new cycle
-    Quit(Address),                                                            // q
+    Quit(Option<Address>),                                                            // q
     /// Copy the contents of rfile to standard output
-    PrintFile(Address, PathBuf),                                              // r
+    PrintFile(Option<Address>, PathBuf),                                              // r
     /// Substitute the replacement string for instances 
     /// of the BRE in the pattern space
-    Replace(Address, Vec<String>, regex_t, String, Vec<SReplaceFlag>),     // s
+    Replace(Option<Address>, Vec<String>, regex_t, String, Vec<ReplaceFlag>),         // s
     /// Test. Branch to the : command verb bearing the 
     /// label if any substitutions have been made since 
     /// the most recent reading of an input line or 
     /// execution of a t
-    Test(Address, Option<String>),                                            // t
+    Test(Option<Address>, Option<String>),                                            // t
     /// Append (write) the pattern space to wfile 
-    AppendPatternToFile(Address, PathBuf),                                    // w
+    AppendPatternToFile(Option<Address>, PathBuf),                                    // w
     /// Exchange the contents of the pattern and hold spaces
-    ExchangeSpaces(Address),                                                  // x
+    ExchangeSpaces(Option<Address>),                                                  // x
     /// Replace all occurrences of characters in string1 
     /// with the corresponding characters in string2
-    ReplaceCharSet(Address, String, String),                                  // y
+    ReplaceCharSet(Option<Address>, String, String),                                  // y
     /// Do nothing. This command bears a label to which 
     /// the b and t commands branch.
-    BearBranchLabel(String),                                                  // :
+    BearBranchLabel(String),                                                          // :
     /// Write the following to standard output:
     /// "%d\n", <current line number>
-    PrintStandard(Address),                                                   // =
+    PrintStandard(Option<Address>),                                                   // =
     /// Ignore remainder of the line (treat it as a comment)
-    IgnoreComment,                                                            // #                                       
+    IgnoreComment,                                                                    // #                                       
     /// Char sequence that can`t be recognised as `Command`
     Unknown
 }
 
 impl Command{
     fn get_mut_address(&mut self) -> Option<(&mut Address, usize)>{
-        Some(match self{
+        let (address, i) = match self{
             Command::Block(address, ..) => (address, 2),
             Command::PrintTextAfter(address, ..) => (address, 1),
             Command::BranchToLabel(address, ..) => (address, 2),
@@ -316,7 +319,13 @@ impl Command{
             Command::ReplaceCharSet(address, ..) => (address, 2),
             Command::PrintStandard(address) => (address, 1),
             _ => return None
-        })
+        };
+        
+        if let Some(address) = address{
+            Some((address, i))
+        } else{
+            None
+        }
     }
 
     /// If [`Command`]s attribute address is range then 
@@ -335,12 +344,12 @@ impl Command{
     
     /// If [`Command`] address has more [`AddressToken`] 
     /// then it can have, return error
-    fn check_address(&self) -> Result<(), SedError>{
+    fn check_address(&mut self) -> Result<(), SedError>{
         let Some((address, max_len)) = self.get_mut_address() else{
             return Ok(());
         };
-        for condition in address.conditions{
-            if address.condition.len() > max_len{
+        for condition in &address.conditions{
+            if condition.0.len() > max_len{
                 return Err(SedError::ParseError("".to_string()));
             }
         }
@@ -353,27 +362,27 @@ impl Command{
             return Ok(true);
         };
 
-        let mut range = (None, None);  
+        let mut range = [None, None];  
         for i in [0, 1]{
             let mut conditions_match = vec![];  
             for rng in address.conditions{
-                if let Some(index) = address.indices.get(*i){
+                if let Some(index) = rng.0.get(i){
                     conditions_match.push(match index{
                         AddressToken::Number(position) => position == line_number,
                         AddressToken::Pattern(re) => !(match_pattern(re, line)?.is_empty()),
-                        AddressToken::Last => {},
-                        _ => {}
+                        AddressToken::Last => { unimplemented!() },
+                        _ => unreachable!()
                     });
                 }
             }
 
             if !conditions_match.is_empty(){
                 range[i] = Some(!conditions_match.iter()
-                    .any(|c| c == false))
+                    .any(|c| *c == false))
             }
         }
 
-        let (Some(start_passed), Some(end_passed)) = range else{
+        let [Some(start_passed), Some(end_passed)] = range else{
             unreachable!()
         };
 
@@ -398,7 +407,7 @@ impl Command{
                 passed.1 = true;
             }
             Ok(passed.0 && !passed.1)
-        }else if let Some(start_passed) = range.0{
+        }else if let Some(start_passed) = range[0]{
             Ok(start_passed)
         }else{
             unreachable!()
@@ -408,9 +417,10 @@ impl Command{
 
 /// 
 fn match_pattern(re: regex_t, haystack: &str) -> Result<Vec<std::ops::Range<usize>>, SedError>{
+    let match_size = haystack.len();
     let c_input = CString::new(haystack)
         .map_err(|_| SedError::ParseError("".to_string()))?;
-    let mut pmatch: [regmatch_t; haystack.len()] = unsafe { MaybeUninit::zeroed().assume_init() };
+    let mut pmatch: [regmatch_t; match_size] = unsafe { MaybeUninit::zeroed().assume_init() };
     let has_match = unsafe {
         regexec(
             &re as *const regex_t,
@@ -420,7 +430,7 @@ fn match_pattern(re: regex_t, haystack: &str) -> Result<Vec<std::ops::Range<usiz
             0,
         )
     };
-    let match_subranges = pmatch.to_vec().iter()
+    let mut match_subranges = pmatch.to_vec().iter()
         .filter(|m| m.rm_so != 0 && m.rm_eo != 0)
         .map(|m| m.rm_so..m.rm_eo).collect();
     Ok(match_subranges)
@@ -439,8 +449,8 @@ fn parse_number(
         if !ch.is_ascii_digit(){
             break;
         }
-        number_str.push(ch);
-        i += 1;
+        number_str.push(*ch);
+        *i += 1;
     }
 
     if number_str.is_empty(){
@@ -464,11 +474,11 @@ fn parse_pattern_index(
         return Err(SedError::ParseError("".to_string()));
     };
 
-    if "\\\n".contains(ch){
+    if "\\\n".contains(*ch){
         return Err(SedError::ParseError("".to_string()));
     }
 
-    let splliter = ch;
+    let splitter = ch;
     let next_position = None;
     let mut j = *i;
     while j < chars.len(){
@@ -479,7 +489,7 @@ fn parse_pattern_index(
             let Some(previous) = chars.get(j - 1) else {
                 return Err(SedError::ParseError("".to_string()));
             };
-            if previous == '\\'{
+            if *previous == '\\'{
                 continue;
             }
             next_position = Some(j);
@@ -491,7 +501,7 @@ fn parse_pattern_index(
         return Err(SedError::ParseError("".to_string()))
     };
 
-    let Some(pattern) = raw_script.get((*i+1)..next_position) else{
+    let Some(pattern) = chars.get((*i+1)..next_position) else{
         return Err(SedError::ParseError("".to_string()));
     };
 
@@ -499,7 +509,7 @@ fn parse_pattern_index(
         return Err(SedError::ParseError("".to_string()));
     }
 
-    let re= compile_regex(pattern)?;
+    let re= compile_regex(pattern.iter().collect::<String>())?;
 
     tokens.push(AddressToken::Pattern(re));
     Ok(())
@@ -523,12 +533,12 @@ fn to_address_tokens(chars: &[char], i: &mut usize)
             },
             '\\' => parse_pattern_index(chars, i, &mut tokens)?,
             '$' => tokens.push(AddressToken::Last),
-            ',' => tokens.push(AddressToken::Delimiter(ch)),
+            ',' => tokens.push(AddressToken::Delimiter(*ch)),
             ' ' => {
                 let Some(ch) = chars.get(*i) else {
                     return Err(SedError::ParseError("".to_string()));
                 };
-                if "\\,$".contains(ch) || ch.is_ascii_digit(){
+                if "\\,$".contains(*ch) || ch.is_ascii_digit(){
                     return Err(SedError::ParseError("".to_string()));
                 }else{
                     break;
@@ -538,7 +548,7 @@ fn to_address_tokens(chars: &[char], i: &mut usize)
                 break
             }
         }
-        i += 1;
+        *i += 1;
     }
 
     Ok(tokens)
@@ -558,14 +568,19 @@ fn tokens_to_address(tokens: Vec<AddressToken>) -> Result<Option<Address>, SedEr
         return Err(SedError::ParseError("".to_string()));
     }
 
-    let mut range = AddressRange(token_ranges.flatten().collect());
+    let range = AddressRange(token_ranges.flatten().cloned().collect());
     Address::new(vec![range])
 }
 
 /// Parse count argument of future [`Command`]
-fn parse_address(chars: &[char], i: &mut usize, address: &mut Option<Address>) {
+fn parse_address(
+    chars: &[char], 
+    i: &mut usize, 
+    address: &mut Option<Address>
+) -> Result<(), SedError>{
     let tokens = to_address_tokens(chars, i)?;
     *address = tokens_to_address(tokens)?;
+    Ok(())
 }
 
 /// Parse text attribute of a, c, i [`Command`]s that formated as:
@@ -573,10 +588,10 @@ fn parse_address(chars: &[char], i: &mut usize, address: &mut Option<Address>) {
 /// text
 fn parse_text_attribute(chars: &[char], i: &mut usize) -> Option<String>{
     *i += 1;
-    let Some(ch) = chars.get(i) else {
+    let Some(ch) = chars.get(*i) else {
         return None;
     };
-    if ch != '\\'{
+    if *ch != '\\'{
         return None;
     }
     *i += 1;
@@ -584,10 +599,10 @@ fn parse_text_attribute(chars: &[char], i: &mut usize) -> Option<String>{
         let Some(ch) = chars.get(*i) else {
             break;
         };
-        if ch == ' '{
+        if *ch == ' '{
             continue;
         }
-        if ch == '\n'{
+        if *ch == '\n'{
             *i += 1;
             break;
         }
@@ -598,11 +613,11 @@ fn parse_text_attribute(chars: &[char], i: &mut usize) -> Option<String>{
         let Some(ch) = chars.get(*i) else {
             break;
         };
-        if ch == '\n'{
+        if *ch == '\n'{
             *i += 1;
             break;
         }
-        text.push(ch);
+        text.push(*ch);
         *i += 1;
     }
     if text.is_empty(){
@@ -615,47 +630,56 @@ fn parse_text_attribute(chars: &[char], i: &mut usize) -> Option<String>{
 /// Parse label, xfile attributes of b, r, t, w [`Command`]s that formated as:
 /// b [label], r  rfile
 fn parse_word_attribute(chars: &[char], i: &mut usize) -> Result<Option<String>, SedError>{
+    let mut label = String::new();
     loop{
-        let ch = *chars[i];
+        let Some(ch) = *chars[*i] else{
+            return Err(SedError::ParseError("".to_string()));
+        };
         match ch{
             '\n' | ' ' | ';' => break,
-            '_' => {},
+            '_' => label.push(ch),
             _ if ch.is_whitespace() || ch.is_control() || ch.is_ascii_punctuation() => {
                 return Err(SedError::ParseError("".to_string()));
             },
-            _ => {}
+            _ => label.push(ch)
         }
-        i += 1;
-        if i < *chars.len(){
+        *i += 1;
+        if *i < chars.len(){
             break;
         }
     }
+    Ok(if label.is_empty(){
+        None
+    } else{
+        Some(label)
+    })
 }
 
 /// Parse rfile attribute of r [`Command`]
 fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedError>{
     try_next_blank(chars, i)?;
     let start = *i; 
+    let mut path = String::new();
     loop{
-        let ch = *chars[*i];
+        let ch = chars[*i];
         match ch{
             '\n' | ' ' | ';' => {
                 *i += 1;
                 break;
             },
-            '_' | '/' | '\\' | ':' => {},
+            '_' | '/' | '\\' | ':' => path.push(ch),
             _ if ch.is_whitespace() || ch.is_control() || ch.is_ascii_punctuation() => {
                 return Err(SedError::ParseError("".to_string()));
             },
-            _ => {}
+            _ => path.push(ch)
         }
         *i += 1;
-        if i >= *chars.len(){
+        if *i >= chars.len(){
             break;
         }
     }
 
-    let rfile= PathBuf::from(chars[start..i]);
+    let rfile= PathBuf::from(&chars[start..*i]);
     if rfile.exists() && rfile.is_file(){
         Ok(rfile)
     }else{
@@ -664,15 +688,15 @@ fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedErr
 }
 
 /// Parse `{ ... }` like [`Script`] part
-fn parse_block(chars: &[char], i: &mut usize) -> Result<(), SedError>{
+fn parse_block(chars: &[char], i: &mut usize) -> Result<Vec<Commands>, SedError>{
     let block_limits = chars.iter().enumerate().skip(*i)
-        .filter(|pair| pair.1 == '{' || pair.1 == '}')
+        .filter(|pair| *pair.1 == '{' || *pair.1 == '}')
         .collect::<Vec<_>>();
 
-    let j = 1;
-    let k = 0;
+    let mut j = 1;
+    let mut k = 0;
     loop{
-        match chars[k].1{
+        match chars[k]{
             '{' => j += 1,
             '}' => j -= 1,
             _ => {}
@@ -686,16 +710,16 @@ fn parse_block(chars: &[char], i: &mut usize) -> Result<(), SedError>{
         }
     }
 
-    if k < block_limits.len(){
-        match Script::parse(raw_script[(*i + 1)..block_limits[k].0]){
-            Ok(subscript) => commands.push(Command::Block(address, subscript.0)),
+    let commands = if k < block_limits.len(){
+        match Script::parse(&chars[(*i + 1)..block_limits[k].0]){
+            Ok(subscript) => subscript.0,
             Err(err) => return Err(SedError::ParseError("".to_string()))
         }
     }else{
         return Err(SedError::ParseError("".to_string()));
-    }
+    };
     *i = k + 1;
-    Ok(())
+    Ok(commands)
 }
 
 /// Parse s, y [`Command`]s that formated as:
@@ -706,8 +730,8 @@ fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, Strin
     let Some(splitter) = chars.get(*i) else {
         return Err(SedError::ParseError("".to_string()));
     };
-    if splitter.is_alphanumeric() || " \n;".contains(&ch){
-        Err(SedError::ParseError("".to_string()))
+    if splitter.is_alphanumeric() || " \n;".contains(*splitter){
+        return Err(SedError::ParseError("".to_string()));
     }
     *i += 1;
     let splitters = chars.iter().enumerate().skip(*i)
@@ -715,26 +739,26 @@ fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, Strin
         .map(|pair| pair.0)
         .collect::<Vec<_>>();
 
-    if splitter == '/'{
+    if *splitter == '/'{
         splitters.retain(|j|
-            if let Some(previous_ch) = chars.get(s.checked_sub(1)){
-                previous_ch == '\\'
+            if let Some(previous_ch) = chars.get(j.checked_sub(1)){
+                *previous_ch == '\\'
             }else{
                 false
             }
         )
     }
 
-    let Some(pattern) = raw_script.get(first_position..splitters[0]) else{
+    let Some(pattern) = chars.get(first_position..splitters[0]) else{
         return Err(SedError::ParseError("".to_string()));
     };
 
-    let Some(replacement) = raw_script.get((splitters[0] + 1)..splitters[1]) else{
+    let Some(replacement) = chars.get((splitters[0] + 1)..splitters[1]) else{
         return Err(SedError::ParseError("".to_string()));
     };
     *i = splitters[1] + 1;
 
-    Ok((pattern, replacement))
+    Ok((pattern.to_owned(), replacement.to_owned()))
 }
 
 /// Parse [`Command::Replace`] flags
@@ -751,23 +775,23 @@ fn parse_replace_flags(chars: &[char], i: &mut usize) -> Result<Vec<ReplaceFlag>
         match ch{
             _ if ch.is_numeric() => {
                 let n = 
-                flag_map.get_mut(&'n').unwrap() += 1;
+                *flag_map.get_mut(&'n').unwrap() += 1;
                 flags.push(ReplaceFlag::ReplaceNth(n));
             },
             'g' => {
-                flag_map.get_mut(&'g').unwrap() += 1;
+                *flag_map.get_mut(&'g').unwrap() += 1;
                 flags.push(ReplaceFlag::ReplaceAll)
             },
             'p' => {
-                flag_map.get_mut(&'p').unwrap() += 1;
+                *flag_map.get_mut(&'p').unwrap() += 1;
                 flags.push(ReplaceFlag::PrintPatternIfReplace)
             },
             'w' => {
                 if w_start_position.is_none(){
                     w_start_position = Some(*i);
                 }
-                flag_map.get_mut(&'w').unwrap() += 1;
-                flags.push(ReplaceFlag::AppendToIfReplace("".to_string()))
+                *flag_map.get_mut(&'w').unwrap() += 1;
+                flags.push(ReplaceFlag::AppendToIfReplace(PathBuf::new()))
             },
             _ => break
         }
@@ -779,19 +803,26 @@ fn parse_replace_flags(chars: &[char], i: &mut usize) -> Result<Vec<ReplaceFlag>
     }else { 
         false 
     };
-    let w_flags_position = flags.iter().position(eq_w);
-    let is_w_last = w_flags_position.unwrap() < (flags.len() - 1);
-    if (w_flags_position.is_some() && !is_w_last) 
-        || (flag_map.keys().any(|k| k > 1) && is_w_last){
+    let w_start_position = flags.iter().cloned().position(eq_w);
+    let is_w_last = || w_start_position.unwrap() < (flags.len() - 1);
+    if (w_start_position.is_some() && !is_w_last()) 
+        || (flag_map.values().any(|k| *k > 1) && is_w_last()){
         return Err(SedError::ParseError("".to_string()));
     }
     if let Some(w_start_position) = w_start_position{
         *i = w_start_position;
-        flags.resize_with(w_flags_position - 1, || ReplaceFlag::ReplaceNth);
+        flags.resize_with(w_start_position - 1, || ReplaceFlag::ReplaceNth(0));
         let path = parse_path_attribute(chars, i)?;
         flags.push(ReplaceFlag::AppendToIfReplace(path));
     }
-    if flags.contains(&ReplaceFlag::ReplaceNth) && flags.contains(&ReplaceFlag::ReplaceAll){
+
+    let is_replace_nth = |f| if let ReplaceFlag::ReplaceNth(_) = f { 
+        true 
+    } else { 
+        false 
+    };
+
+    if flags.iter().any(is_replace_nth) && flags.contains(&ReplaceFlag::ReplaceAll){
         return Err(SedError::ParseError("".to_string()));
     }
     Ok(flags)
@@ -805,7 +836,7 @@ fn try_next_blank(chars: &[char], i: &mut usize) -> Result<(), SedError>{
         return Err(SedError::ParseError("".to_string()));
     };
 
-    if ch != ' '{
+    if *ch != ' '{
         return Err(SedError::ParseError("".to_string()));
     }
 
@@ -846,9 +877,9 @@ fn compile_regex(pattern: String) -> Result<regex_t, SedError> {
 
 fn screen_width() -> Option<usize>{
     let mut ws: winsize = std::ptr::null_mut();
-    if ( ioctl( STDIN_FILENO , TIOCGWINSZ, &mut ws ) != 0 &&
-         ioctl( STDOUT_FILENO, TIOCGWINSZ, &mut ws ) != 0 &&
-         ioctl( STDERR_FILENO, TIOCGWINSZ, &mut ws ) != 0 ) {
+    if ioctl( STDIN_FILENO , TIOCGWINSZ, &mut ws ) != 0 &&
+        ioctl( STDOUT_FILENO, TIOCGWINSZ, &mut ws ) != 0 &&
+        ioctl( STDERR_FILENO, TIOCGWINSZ, &mut ws ) != 0 {
       return None;
     }
     Some(ws.ws_col as usize)
@@ -857,29 +888,29 @@ fn screen_width() -> Option<usize>{
 fn print_multiline_binary(line: &str){
     let line = line.chars().map(|ch| {
         if ch.is_ascii() && b"\n\x07\x08\x0B\x0C".contains(&(ch as u8)){
-            std::acsii::escape_default(ch as u8).collect::<&[char]>()
+            std::ascii::escape_default(ch as u8).collect::<Vec<char>>()
         }else if b"\x07\x08\x0B\x0C".contains(&(ch as u8)){
             match ch as u8{
-                b'\x07' => &['\\', 'a'],
-                b'\x08' => &['\\', 'b'],
-                b'\x0B' => &['\\', 'v'],
-                b'\x0C' => &['\\', 'f'],
+                b'\x07' => vec!['\\', 'a'],
+                b'\x08' => vec!['\\', 'b'],
+                b'\x0B' => vec!['\\', 'v'],
+                b'\x0C' => vec!['\\', 'f'],
                 _ => unreachable!()
             }
         }else{
-            &[ch]
+            vec![ch]
         }
-    }).flatten().collect::<&str>();
+    }).flatten().collect::<String>();
     if let Some(width) = screen_width(){
         if width >= 1{
-            let chunks = line.chars().collect::<Vec<_>>()
+            let mut chunks = line.chars().collect::<Vec<_>>()
                 .chunks(width - 1)
                 .peekable();
             loop{
                 let Some(chunk) = chunks.next() else    {
                     break;
                 };
-                print!("{}", chunk.iter().collect::<&str>());
+                print!("{}", chunk.iter().collect::<String>());
                 if chunks.peek().is_some(){
                     println!("\\");
                 }else{
@@ -895,15 +926,15 @@ fn print_multiline_binary(line: &str){
 fn get_groups_strings(pattern: String) -> Result<Vec<String>, SedError>{
     let limits_positions = pattern.chars().collect::<Vec<_>>()
         .windows(2).enumerate().filter_map(|(i, chars)|{
-            if chars[0] == "\\" && "()".contains(chars[1]){
+            if chars[0] == '\\' && "()".contains(chars[1]){
                 return Some((i + 1, chars[1]));
             }
             None
         }).collect::<Vec<_>>();
 
-    let a = limits_positions.iter().filter(|(i, ch)| ch == '(' )
+    let a = limits_positions.iter().filter(|(i, ch)| *ch == '(' )
         .all(|(i, ch)| i % 2 == 0 );
-    let b = limits_positions.iter().filter(|(i, ch)| ch == ')' )
+    let b = limits_positions.iter().filter(|(i, ch)| *ch == ')' )
         .all(|(i, ch)| i % 2 == 1 );
     if !a || !b{
         return Err(SedError::ParseError("".to_string()));
@@ -915,8 +946,8 @@ fn get_groups_strings(pattern: String) -> Result<Vec<String>, SedError>{
         .collect::<Vec<_>>();
 
     let groups = ranges.iter().filter_map(|(a, b)|{
-        pattern.get(a..b)
-    }).collect::<Vec<_>>();
+        pattern.get(*a..*b)
+    }).collect::<Vec<String>>();
 
     if groups.len() <= 9{
         Ok(groups)
@@ -936,12 +967,12 @@ impl Script {
     fn parse(raw_script: impl AsRef<str>) -> Result<Script, SedError> {
         let mut commands = vec![];
         let mut address: Option<Address> = None;
-        let chars = raw_script.chars().collect::<Vec<_>>();
+        let chars = raw_script.as_ref().chars().collect::<Vec<_>>();
         let mut i = 0;
         let mut last_commands_count = 0; 
         let mut command_added = false;
 
-        if Some("#n") == chars.get(0..2){
+        if Some(&['#','n']) == chars.get(0..2){
             commands.push(Command::IgnoreComment);
             i += 2;
         }
@@ -957,19 +988,19 @@ impl Script {
                     command_added = false
                 },
                 ch if command_added => return Err(SedError::ParseError("".to_string())), 
-                ch if ch.is_ascii_digit() || "\\$".contains(ch) => parse_address(&chars, &mut i, &mut address),
-                '{' => parse_block(chars, &mut i)?,
-                'a' => if let Some(text) = parse_text_attribute(chars, &mut i){
+                ch if ch.is_ascii_digit() || "\\$".contains(ch) => parse_address(&chars, &mut i, &mut address)?,
+                '{' => commands.push(Command::Block(address, parse_block(&chars, &mut i)?)),
+                'a' => if let Some(text) = parse_text_attribute(&chars, &mut i){
                     commands.push(Command::PrintTextAfter(address, text));
                 }else{
                     return Err(SedError::ParseError("".to_string()));
                 },
                 'b' => {
-                    try_next_blank(chars, &mut i)?;
-                    let label = parse_word_attribute(chars, &mut i)?;
+                    try_next_blank(&chars, &mut i)?;
+                    let label = parse_word_attribute(&chars, &mut i)?;
                     commands.push(Command::BranchToLabel(address, label));
                 },
-                'c' => if let Some(text) = parse_text_attribute(chars, &mut i){
+                'c' => if let Some(text) = parse_text_attribute(&chars, &mut i){
                     commands.push(Command::DeletePatternAndPrintText(address, text));
                 }else{
                     return Err(SedError::ParseError("".to_string()));
@@ -980,7 +1011,7 @@ impl Script {
                 'G' => commands.push(Command::AppendHoldToPattern(address)),
                 'h' => commands.push(Command::ReplaceHoldWithPattern(address)),
                 'H' => commands.push(Command::AppendPatternToHold(address)),
-                'i' => if let Some(text) = parse_text_attribute(chars, &mut i){
+                'i' => if let Some(text) = parse_text_attribute(&chars, &mut i){
                     commands.push(Command::PrintTextBefore(address, text));
                 }else{
                     return Err(SedError::ParseError("".to_string()));
@@ -992,40 +1023,45 @@ impl Script {
                 'P' => commands.push(Command::PrintPattern(address, true)),
                 'q' => commands.push(Command::Quit(address)),
                 'r' => {
-                    let rfile = parse_path_attribute(chars, &mut i)?;
+                    let rfile = parse_path_attribute(&chars, &mut i)?;
                     commands.push(Command::PrintFile(address, rfile))
                 },
                 's' => {
-                    let (pattern, replacement)= parse_replace_command(chars, &mut i)?;
+                    let (pattern, replacement)= parse_replace_command(&chars, &mut i)?;
                     let pattern = pattern;
                     let groups = get_groups_strings(pattern.clone())?;
                     let re = compile_regex(pattern)?;
-                    let flags = parse_replace_flags(chars, &mut i)?;
+                    let flags = parse_replace_flags(&chars, &mut i)?;
                     commands.push(Command::Replace(address, groups, re, replacement.to_owned(), flags));
                 },
                 't' => {
-                    try_next_blank(chars, &mut i)?;
-                    let label = parse_word_attribute(chars, &mut i)?;
+                    try_next_blank(&chars, &mut i)?;
+                    let label = parse_word_attribute(&chars, &mut i)?;
                     commands.push(Command::Test(address, label));
                 },
                 'w' => {
-                    let wfile = parse_path_attribute(chars, &mut i)?;
+                    let wfile = parse_path_attribute(&chars, &mut i)?;
                     commands.push(Command::AppendPatternToFile(address, wfile))
                 },
                 'x' => commands.push(Command::ExchangeSpaces(address)),
                 'y' => {
-                    let (string1, string2)= parse_replace_command(chars, &mut i)?;
+                    let (string1, string2)= parse_replace_command(&chars, &mut i)?;
                     if string1.chars().collect::<HashSet<_>>().len() != 
                         string2.chars().collect::<HashSet<_>>().len(){
                         return Err(SedError::ParseError("".to_string())); 
                     }
                     commands.push(Command::ReplaceCharSet(address, string1, string2));
                 },
-                ':' => commands.push(Command::BearBranchLabel(parse_word_attribute(chars, &mut i)?)),
+                ':' => {
+                    let Some(label) = parse_word_attribute(&chars, &mut i)? else {
+                        return Err(SedError::ParseError("".to_string()));
+                    };
+                    commands.push(Command::BearBranchLabel(label))
+                },
                 '=' => commands.push(Command::PrintStandard(address)),
                 '#' => {
                     i += 1;
-                    while let Some(ch) = chars(i){
+                    while let Some(ch) = chars.get(i){
                         if ch == '\n'{
                             break;
                         } 
@@ -1041,7 +1077,7 @@ impl Script {
             i += 1;
         }
 
-        let labels = commands.filter_map(|cmd| if let Command::BearBranchLabel(label) = cmd{
+        let labels = commands.iter().filter_map(|cmd| if let Command::BearBranchLabel(label) = cmd{
             Some(label)
         }else{
             None
@@ -1062,7 +1098,7 @@ impl Script {
 }
 
 fn flatten_commands(mut commands: Vec<Command>) -> Vec<Command>{
-    let is_block= |cmd|{
+    let is_block= |cmd: &Command|{
         if let Command::Block(..) = cmd{
             true
         }else {
@@ -1075,7 +1111,7 @@ fn flatten_commands(mut commands: Vec<Command>) -> Vec<Command>{
             if let Command::Block(block_address, block_commands) = cmd{
                 block_commands.clone().iter_mut().for_each(|cmd|{
                     if let Some((address, _)) = cmd.get_mut_address(){
-                        address.conditions.extend(block_address.conditions);
+                        address.conditions.extend(address.conditions);
                     }
                 });
                 Some((i, block_commands))
@@ -1097,7 +1133,7 @@ fn execute_replace(pattern_space: &mut String, command: Command) -> Result<(), S
     let Command::Replace(address, groups, re, replacement, flags) = command else{
         unreachable!();
     };
-    let match_subranges= match_pattern(re, line)?;
+    let match_subranges = match_pattern(re, pattern_space)?;
     let pairs = replacement.chars()
         .collect::<Vec<_>>()
         .windows(2)
@@ -1120,14 +1156,14 @@ fn execute_replace(pattern_space: &mut String, command: Command) -> Result<(), S
     let mut group_positions = 
         pairs.filter_map(|(i, chars)|{
             if chars[0] != '\\' && chars[1].is_ascii_digit(){
-                return Some((i + 1, chars[1].to_digit(10).unwrap()));
+                return Some((i + 1, chars[1].to_digit(10).unwrap() as usize));
             }
             None
         }).rev().collect::<Vec<_>>();
 
     if let Some(ch) = replacement.chars().next(){
         if ch.is_ascii_digit() {
-            group_positions.push((0, ch));
+            group_positions.push((0, ch.to_digit(10).unwrap() as usize));
         }
     }
 
@@ -1137,21 +1173,28 @@ fn execute_replace(pattern_space: &mut String, command: Command) -> Result<(), S
             local_replacement.replace_range(position..(position+1), *pattern_space.get(range).unwrap());
         }
         for (position, group) in group_positions{
-            local_replacement.replace_range(position..(position+1), groups.get(group).unwrap_or_default());
+            local_replacement.replace_range(position..(position+1), groups.get(group).unwrap_or(&"".to_string()));
         }
         pattern_space.replace_range(range, &local_replacement); 
     };
+
+    let is_replace_n = |f| {
+        let ReplaceFlag::ReplaceNth(_) = f else {
+            false
+        };
+        true
+    };
     
-    if !flags.contains(ReplaceFlag::ReplaceNth) && !flags.contains(ReplaceFlag::ReplaceAll){
+    if !flags.iter().any(is_replace_n) && !flags.contains(&ReplaceFlag::ReplaceAll){
         update_pattern_space(match_subranges[0]);
-    }else if let Some(ReplaceFlag::ReplaceNth(n)) = flags.contains(ReplaceFlag::ReplaceNth){
+    }else if let Some(ReplaceFlag::ReplaceNth(n)) = flags.iter().filter(is_replace_n).next(){
         let skip = match_subranges.len() - n; 
-        let substring= match_subranges.iter().rev()
+        let substrings= match_subranges.iter().rev()
             .skip(skip);
         for range in substrings{
             update_pattern_space(range);
         }
-    }else if flags.contains(ReplaceFlag::ReplaceAll){
+    }else if flags.contains(&ReplaceFlag::ReplaceAll){
         for range in match_subranges.iter().rev(){
             update_pattern_space(range);
         }
@@ -1166,15 +1209,15 @@ fn execute_replace(pattern_space: &mut String, command: Command) -> Result<(), S
         i += 1;
     }
 
-    if flags.contains(ReplaceFlag::PrintPatternIfReplace) && !match_subranges.is_empty(){
+    if flags.contains(&ReplaceFlag::PrintPatternIfReplace) && !match_subranges.is_empty(){
         print!("{}", *pattern_space);
     }
 
     if let Some(wfile) = flags.iter().find_map(|flag| {
         let ReplaceFlag::AppendToIfReplace(wfile) = flag else{
-            return Some(wfile);
+            return None;
         };
-        None
+        Some(wfile)
     }){
         let mut file = std::fs::OpenOptions::new()
             .append(true)
@@ -1218,7 +1261,6 @@ enum ControlFlowInstruction{
 
 /// Main program structure. Process input 
 /// files by [`Script`] [`Command`]s
-#[derive(Debug)] // TODO: debug only
 struct Sed {
     /// Use extended regular expresions
     ere: bool,
@@ -1255,7 +1297,7 @@ impl Sed {
     /// and updates [`Sed`] state
     fn execute(&mut self, command: Command) 
         -> Result<Option<ControlFlowInstruction>, SedError> {
-        let instruction = None;
+        let mut instruction = None;
         match command{                     
             Command::PrintTextAfter(address, text) => { // a
                 if !command.need_execute(self.current_line, &self.pattern_space)?{
@@ -1270,13 +1312,15 @@ impl Sed {
                 instruction = Some(ControlFlowInstruction::Goto(label));
             },                
             Command::DeletePatternAndPrintText(address, text) => { // c
-                let need_execute = !command.need_execute(self.current_line, &self.pattern_space)?;
-                let need_execute = match address.indices.len(){
-                    0 | 1 | 2 if need_execute => true, 
-                    2 if !need_execute && address.on_limits == Some((false, true)) => true,
-                    0 | 1 | 2 => false, 
-                    _ => unreachable!()
-                };
+                let mut need_execute = !command.need_execute(self.current_line, &self.pattern_space)?;
+                if let Some(address) = address{
+                    need_execute = match address.conditions.len(){
+                        0 | 1 | 2 if need_execute => true, 
+                        2 if !need_execute && address.on_limits == Some((false, true)) => true,
+                        0 | 1 | 2 => false, 
+                        _ => unreachable!()
+                    };
+                }
                 if need_execute{
                     self.pattern_space.clear();
                     print!("{text}");
@@ -1288,7 +1332,7 @@ impl Sed {
                 }
                 if to_first_line && self.pattern_space.contains('\n'){
                     self.pattern_space = self.pattern_space.chars()
-                        .skip_while(|ch| ch == '\n').collect::<String>();
+                        .skip_while(|ch| *ch == '\n').collect::<String>();
                     instruction = Some(ControlFlowInstruction::NotReadNext);
                 }else{
                     self.pattern_space.clear();
@@ -1305,7 +1349,7 @@ impl Sed {
                 if !command.need_execute(self.current_line, &self.pattern_space)?{
                     return Ok(None);
                 }
-                self.pattern_space += "\n" + &self.hold_space;
+                self.pattern_space = self.pattern_space + "\n" + &self.hold_space;
             },                 
             Command::ReplaceHoldWithPattern(address) => { // h
                 if !command.need_execute(self.current_line, &self.pattern_space)?{
@@ -1317,7 +1361,7 @@ impl Sed {
                 if !command.need_execute(self.current_line, &self.pattern_space)?{
                     return Ok(None);
                 }
-                self.hold_space += "\n" + &self.pattern_space;
+                self.hold_space = self.hold_space + "\n" + &self.pattern_space;
             },                 
             Command::PrintTextBefore(address, text) => { // i
                 if !command.need_execute(self.current_line, &self.pattern_space)?{
@@ -1353,10 +1397,10 @@ impl Sed {
                 if to_first_line{
                     let end = self.pattern_space.chars()
                         .enumerate()
-                        .find(|(_, ch)| ch == '\n')
+                        .find(|(_, ch)| *ch == '\n')
                         .map(|pair| pair.0)
                         .unwrap_or(self.pattern_space.len());
-                    print!("{}", self.pattern_space[0..end]);
+                    print!("{}", &self.pattern_space[0..end]);
                 }else{
                     print!("{}", self.pattern_space);
                 }
@@ -1420,7 +1464,7 @@ impl Sed {
                     return Ok(None);
                 }
                 for (a, b) in string1.chars().zip(string2.chars()){
-                    self.pattern_space = self.pattern_space.replace(a, b);
+                    self.pattern_space = self.pattern_space.replace(a, &b.to_string());
                 }
                 self.pattern_space = self.pattern_space.replace("\\n", "\n");
                 self.has_replacements_since_t = true;
@@ -1429,7 +1473,7 @@ impl Sed {
                 if !command.need_execute(self.current_line, &self.pattern_space)?{
                     return Ok(None);
                 }
-                if !self.quite{
+                if !self.quiet{
                     println!("{}", self.current_line);
                 }
             },                       
@@ -1472,7 +1516,7 @@ impl Sed {
                     ControlFlowInstruction::Goto(label) => if let Some(label) = label{
                         let label_position = self.script.0.iter()
                             .position(|cmd| if let Command::BearBranchLabel(l) = cmd{
-                                label == l 
+                                label == *l 
                             }else{
                                 false
                             });
@@ -1509,7 +1553,7 @@ impl Sed {
 
             i += 1;
         }
-        if !self.quite{
+        if !self.quiet{
             print!("{}", self.pattern_space);
         }
         println!("{}", self.after_space);
@@ -1531,7 +1575,7 @@ impl Sed {
             self.has_replacements_since_t = false;
             self.after_space.clear();
             self.pattern_space = line;
-            if Some(ControlFlowInstruction::Break) == self.process_line()?{
+            if let Some(ControlFlowInstruction::Break) = self.process_line()?{
                 break;
             }
             self.current_line += 1;
@@ -1543,8 +1587,6 @@ impl Sed {
     /// Main [`Sed`] function. Executes all commands of 
     /// own [`Script`] for all content of all input files 
     fn sed(&mut self) -> Result<(), SedError> {
-        println!("SED: {self:?}");
-
         for input in self.input_sources.drain(..).collect::<Vec<_>>() {
             self.current_file = Some(if input == "-" {
                 println!("Handling STDIN");
