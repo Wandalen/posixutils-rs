@@ -27,10 +27,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn is_whitespace(c: char) -> bool {
-        c == ' ' || c == '\t'
-    }
-
     fn is_newline(c: char) -> bool {
         c == '\n' || c == '\r'
     }

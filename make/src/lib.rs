@@ -20,7 +20,7 @@ use std::{
     time::SystemTime,
 };
 
-use parser::{MacroDef, Makefile};
+use parser::Makefile;
 
 use crate::special_target::InferenceTarget;
 use config::Config;
@@ -40,7 +40,6 @@ const DEFAULT_SHELL: &str = "/bin/sh";
 pub struct Make {
     rules: Vec<Rule>,
     default_rule: Option<Rule>, // .DEFAULT
-    macros: Vec<MacroDef>,
     pub config: Config,
 }
 
@@ -111,7 +110,7 @@ impl Make {
         for prerequisite in &newer_prerequisites {
             self.build_target(prerequisite)?;
         }
-        rule.run(&self.config, &[], target, up_to_date)?;
+        rule.run(&self.config, target, up_to_date)?;
 
         Ok(true)
     }
@@ -211,7 +210,6 @@ impl TryFrom<(Makefile, Config)> for Make {
 
         let mut make = Self {
             rules,
-            macros: makefile.variable_definitions().collect(),
             default_rule: None,
             config,
         };

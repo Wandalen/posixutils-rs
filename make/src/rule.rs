@@ -16,7 +16,7 @@ use crate::parser::preprocessor::preprocess;
 use crate::{
     config::Config as GlobalConfig,
     error_code::ErrorCode::{self, *},
-    parser::{MacroDef, Rule as ParsedRule},
+    parser::Rule as ParsedRule,
     signal_handler, DEFAULT_SHELL, DEFAULT_SHELL_VAR,
 };
 use config::Config;
@@ -74,7 +74,6 @@ impl Rule {
     pub fn run(
         &self,
         global_config: &GlobalConfig,
-        macros: &[MacroDef],
         target: &Target,
         up_to_date: bool,
     ) -> Result<(), ErrorCode> {
@@ -83,7 +82,7 @@ impl Rule {
             dry_run: global_dry_run,
             silent: global_silent,
             touch: global_touch,
-            env_macros: global_env_macros,
+            env_macros: _,
             quit: global_quit,
             clear: _,
             print: global_print,
@@ -127,7 +126,6 @@ impl Rule {
                 let silent = global_silent || rule_silent || recipe_silent;
                 let force_run = recipe_force_run;
                 let touch = global_touch;
-                let env_macros = global_env_macros;
                 let quit = global_quit;
                 let print = global_print;
                 let precious = global_precious || rule_precious;
