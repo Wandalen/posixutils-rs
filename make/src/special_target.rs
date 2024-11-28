@@ -331,4 +331,5 @@ impl Processor<'_> {
 
         Ok(())
     }
+    fn process_percent(mut self) -> Result<(), Error> { Ok(()) }
 }

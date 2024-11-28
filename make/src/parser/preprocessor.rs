@@ -259,10 +259,10 @@ fn parse_function<'a>(
 
             let patterns = pattern.split_whitespace();
             let words = text.split_whitespace();
-            let pattern_set = HashSet::<&str>::from_iter(patterns);
-
+            let pattern_set = HashSet::<&str>::from_iter(patterns.clone());
+            
             let result = words
-                .filter(|s| pattern_set.contains(s))
+                .filter(|s| !pattern_set.contains(s))
                 .fold(String::new(), |acc, s| acc + s);
 
             Ok(result)

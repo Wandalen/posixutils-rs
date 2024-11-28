@@ -133,7 +133,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let target_list = targets
         .iter()
         .filter_map(|x| x.clone().into_string().ok())
-        .fold(String::new(), |acc, x| acc + &x);
+        .fold(String::new(), |acc, x| acc + " " + &x);
 
     let mut status_code = 0;
 
@@ -154,7 +154,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print,
         precious: false,
         terminate,
-        macros: HashMap::from([(String::from("MAKECMDGOALS"), target_list)]),
+        macros: HashMap::from([
+            (String::from("MAKECMDGOALS"), target_list),
+        ]),
         ..Default::default()
     };
 
