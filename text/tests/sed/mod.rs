@@ -461,10 +461,23 @@ sed [-n] -e '' -f -f -e '' -f -f -e '' [file]
 
 sed [-n] -e '' -e '' -f -e '' -e '' -f [file]
 
++ ngpw wfile
+- ngpw
+- ngpwngp
+- ngpw wfilengp
+- ngpw wfile ngp
++ ngpw wfile ;ngp
++ ngpw wfile; ngp
++ ngpw wfile\n ngp
+
 {}
 
 
-
+{ {{}}{{{}}}{{}} }
+{ {{}}{{{}}}{{}} }}
+{{ {{}}{{{}}}{{}} }
+{{
+}}
 
 0,
 0,0,
@@ -635,32 +648,33 @@ p;p;p
 1,3 { p ; p } ; 1,2 { p ; p } ; {p ; p}
 2,4 !p
 2,4 !{p}
-1,+3p
-/5/,+3p
 
-7, p
-7,5, p
 7,5,9 p
 7,9 p
-7,+ p
-, p
-,7 p
-,, p
-,; p
 7; p
 7;5; p
 7;5;9; p
 7;5,9 p
 7;$;4 p
 7;9 p
-7;+ p
 ; p
 ;7 p
 ;; p
+/pattern/- p
+
+1,+3p
+/5/,+3p
+7, p
+7,5, p
+7,+ p
+, p
+,7 p
+,, p
+,; p
 ;, p
+7;+ p
 +++ p
 -2 p
-/pattern/- p
 3 ---- 2
 1 2 3 p
 
@@ -833,5 +847,452 @@ n,$p
 s/old_pattern/new_pattern/i
 5!s/life/love/
 /is/ s/live/love/
+
+*/
+
+/*
+
+Complete list of command features for check:
+1) delimiters handling
+2) args handling
+3) all use cases in/out
+4) ?
+
+script "pattern space before" "pattern space after" "hold space before" "hold space after"
+
+// base (args, input files etc)
+
+correct:
+
+
+wrong: 
+
+
+// delimiter
+
+correct:
+;;;;
+;\n;\n;;
+;\\;\\;;
+
+wrong: 
+gh
+g h
+g; h \n gh \n g h ; gh \\
+
+// {}
+
+correct:
+{}
+{ }
+{ \n \n \n }
+{ { \n } {} {\n} { } }
+{ { { { { { { { {} } } } } } } } }
+
+wrong: 
+{
+}
+{ { { { { { {} } } } } } } } }
+{ { { { { { { { {} } } } } } }
+
+// a
+
+correct:
+a\\text
+a\\   text\\in\\sed
+a\ text text ; text 
+
+wrong:
+a\
+a\\ 
+a  \text
+a\text
+a\text\in\sed
+a\ text text \n text 
+
+// b
+
+correct:
+b
+b label
+b; :label
+b label; :label
+:label; b label - infinite loop
+b label1
+b lab2el1abc
+b loop_
+b _start
+b my_label
+
+wrong: 
+b #%$?@&*;
+b label#
+b 1label
+b 1234
+b g
+b; label
+b :label
+b label :label
+:label b label
+
+// c
+
+correct:
+c\\text
+c\\   text\\in\\sed
+c\ text text ; text
+c\r "a\nb\nc" "\n\nr"
+0 c\r "a\nb\nc" "r\nb\nc"
+0,2 c\r "a\nb\nc\nd" "\n\nr\nd"
+
+wrong: 
+c\
+c\\ 
+c  \text
+c\text
+c\text\in\sed
+c\ text text \n text 
+
+// d
+
+correct:
+d "abc\ndfg" ""
+d "abcdfg" "" 
+d; d - useless
+
+wrong: 
+d b
+d d
+dd
+
+// D
+
+correct:
+D "abc\ndfg" "dfg" 
+D "abcdfg" ""
+
+wrong: 
+D b
+D D
+DD
+
+// g
+
+correct:
+0 h; 1 g "abc\n123" "abc\nabc" "" "abc" 
+
+wrong: 
+g g
+
+// G
+
+correct:
+0 h; 1 G "abc\n123" "abc\n123\nabc" "" "abc" 
+
+wrong: 
+G G
+
+// h
+
+correct:
+0 h; 1 h "abc\n123" "abc\n123" "" "123\n" 
+
+wrong: 
+h g
+h h
+hh
+
+// H
+
+correct:
+0 H; 1 H "abc\n123" "abc\n123" "" "abc\n123\n" 
+
+wrong: 
+H g
+H H
+HH
+
+// i
+
+correct:
+
+
+wrong: 
+
+
+// I
+
+correct:
+
+
+wrong: 
+I g
+I I
+II
+
+// n
+
+correct:
+
+
+wrong: 
+n g
+n n
+nn
+
+// N
+
+correct:
+
+
+wrong: 
+N g
+N N
+NN
+
+// p
+
+correct:
+
+
+wrong: 
+p g
+p p
+pp
+
+// P
+
+correct:
+
+
+wrong: 
+P g
+P P
+PP
+
+// q
+
+correct:
+q
+q; q - useless 
+
+wrong: 
+q g
+q q
+qq
+
+// r
+
+correct:
+
+
+wrong: 
+
+
+// s
+
+correct:
+
+
+wrong: 
+
+
+// s n
+
+correct:
+
+
+wrong: 
+
+
+// s g
+
+correct:
+
+
+wrong: 
+
+
+// s p
+
+correct:
+
+
+wrong: 
+
+
+// s w
+
+correct:
+
+
+wrong: 
+
+
+// s n g
+
+correct:
+
+
+wrong: 
+
+
+// s n p
+
+correct:
+
+
+wrong: 
+
+
+// s n w
+
+correct:
+
+
+wrong: 
+
+
+// s g p
+
+correct:
+
+
+wrong: 
+
+
+// s g w
+
+correct:
+
+
+wrong: 
+
+
+// s p w
+
+correct:
+
+
+wrong: 
+
+
+// t
+
+correct:
+
+
+wrong: 
+
+
+// w
+
+correct:
+
+
+wrong: 
+
+
+// x
+
+correct:
+h; s/.* /abc/; x "abc" "abc" "" "abc" 
+
+wrong: 
+x h
+x x
+xx
+
+// y
+
+correct:
+
+
+wrong: 
+
+
+// :
+
+correct:
+:label1
+:loop
+:_start
+:my_label
+
+wrong: 
+:1label
+:1234 
+
+// =
+
+correct:
+=
+
+wrong: 
+= g
+= =
+==
+
+// #
+
+correct:
+{ #\\ }
+{ #\n }
+\n#h "abc" "abc" "" "abc" 
+
+wrong: 
+{ # }
+{ \\# }
+{ \n# }
+a\text#abc\ntext
+a\#text\ntext
+
+// address
+
+correct:
+
+
+wrong: 
+
+
+// address BRE
+
+correct:
+
+
+wrong: 
+
+
+// s BRE
+
+correct:
+
+
+wrong: 
+
+
+// special chararacters
+
+correct:
+
+
+wrong: 
+
+
+// combinations
+
+correct:
+
+
+wrong: 
+
+
+// other
+
+correct:
+
+
+wrong: 
+
 
 */
