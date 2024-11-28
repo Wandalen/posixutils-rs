@@ -236,7 +236,7 @@ impl Rule {
         target: &Target,
         macros: &HashMap<String, String>,
         files: &(PathBuf, PathBuf),
-        mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
+        prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
     ) -> Recipe {
         let recipe = recipe.inner();
         let result = preprocess(recipe, macros, target, files, prereqs).unwrap();

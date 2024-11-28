@@ -371,7 +371,7 @@ mod macros {
 mod target_behavior {
     use super::*;
     use libc::{kill, SIGINT};
-    use posixutils_make::parser::parse::ParseError;
+
     use std::{thread, time::Duration};
 
     #[test]

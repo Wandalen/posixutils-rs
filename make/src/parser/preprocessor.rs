@@ -67,10 +67,8 @@ fn take_till_eol(letters: &mut Peekable<impl Iterator<Item = char>>) -> String {
     let mut content = String::new();
 
     while let Some(letter) = letters.peek() {
-        if matches!(letter, '\n' | '#') {
-            if !content.ends_with('\\') {
-                break;
-            }
+        if matches!(letter, '\n' | '#') && !content.ends_with('\\') {
+            break;
         };
         content.push(*letter);
         letters.next();
@@ -85,7 +83,7 @@ pub fn generate_macro_table<'a>(
     source: &str,
     target: &Target,
     files: &(PathBuf, PathBuf),
-    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
+    prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
 ) -> std::result::Result<HashMap<String, String>, PreprocError> {
     let macro_defs = source
         .lines()
@@ -230,11 +228,11 @@ fn parse_function<'a>(
     table: &HashMap<String, String>,
     target: &Target,
     files: &(PathBuf, PathBuf),
-    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
+    prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
 ) -> Result<String> {
     let mut args = String::new();
     let mut counter = 0;
-    while let Some(c) = src.next() {
+    for c in src.by_ref() {
         if c == '(' || c == '{' {
             counter += 1;
         }
@@ -456,7 +454,7 @@ fn process_include_lines<'a>(
     table: &HashMap<String, String>,
     target: &Target,
     files: &(PathBuf, PathBuf),
-    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
+    prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
 ) -> (String, usize) {
     let mut counter = 0;
     let result = source
@@ -500,7 +498,7 @@ pub fn preprocess<'a>(
     table: &HashMap<String, String>,
     target: &Target,
     files: &(PathBuf, PathBuf),
-    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
+    prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
 ) -> Result<String> {
     let mut source = source.to_string();
 

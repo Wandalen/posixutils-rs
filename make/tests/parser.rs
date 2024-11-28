@@ -7,7 +7,6 @@
 //
 
 mod preprocess {
-    use posixutils_make::parser::preprocessor::{generate_macro_table, preprocess};
 
     //     #[test]
     //     fn test_macros_simple() {
@@ -239,7 +238,7 @@ endif
     }
 
     mod parse {
-        use posixutils_make::parser::preprocessor::{generate_macro_table, preprocess};
+
         use posixutils_make::parser::{parse::parse, Makefile};
         use rowan::ast::AstNode;
 

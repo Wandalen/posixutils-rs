@@ -18,7 +18,7 @@ use posixutils_make::{
     parser::{preprocessor::ENV_MACROS, Makefile},
     Make,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{
     collections::{BTreeMap, BTreeSet},
