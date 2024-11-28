@@ -26,7 +26,6 @@ pub enum SpecialTarget {
     SccsGet,
     Silent,
     Suffixes,
-    Percent
 }
 use crate::config::Config;
 use gettextrs::gettext;
@@ -34,9 +33,9 @@ use SpecialTarget::*;
 
 impl SpecialTarget {
     // could be automated with `strum`
-    pub const COUNT: usize = 9;
+    pub const COUNT: usize = 8;
     pub const VARIANTS: [Self; Self::COUNT] = [
-        Default, Ignore, Posix, Precious, SccsGet, Silent, Suffixes, Phony, Percent
+        Default, Ignore, Posix, Precious, SccsGet, Silent, Suffixes, Phony,
     ];
 }
 
@@ -51,7 +50,6 @@ impl AsRef<str> for SpecialTarget {
             Silent => ".SILENT",
             Suffixes => ".SUFFIXES",
             Phony => ".PHONY",
-            Percent => "%",
         }
     }
 }
