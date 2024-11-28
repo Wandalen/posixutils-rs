@@ -174,7 +174,13 @@ impl Rule {
                 );
 
                 // self.init_env(env_macros, &mut command, macros);
-                let recipe = self.substitute_general_macros(recipe, target, macros, &inout, self.prerequisites());
+                let recipe = self.substitute_general_macros(
+                    recipe,
+                    target,
+                    macros,
+                    &inout,
+                    self.prerequisites(),
+                );
                 let recipe =
                     self.substitute_internal_macros(target, &recipe, &inout, self.prerequisites());
                 command.args(["-c", recipe.as_ref()]);
@@ -230,7 +236,7 @@ impl Rule {
         target: &Target,
         macros: &HashMap<String, String>,
         files: &(PathBuf, PathBuf),
-        mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone
+        mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
     ) -> Recipe {
         let recipe = recipe.inner();
         let result = preprocess(recipe, macros, target, files, prereqs).unwrap();

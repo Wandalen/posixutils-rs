@@ -1,3 +1,5 @@
+use crate::rule::prerequisite::Prerequisite;
+use crate::rule::target::Target;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::fs;
@@ -6,8 +8,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Acquire;
-use crate::rule::prerequisite::Prerequisite;
-use crate::rule::target::Target;
 
 #[derive(Debug)]
 pub enum PreprocError {
@@ -165,7 +165,8 @@ pub fn generate_macro_table<'a>(
         match operator {
             Operator::Equals => {}
             Operator::Colon | Operator::Colon2 => loop {
-                let (result, substitutions) = substitute(&macro_body, &macro_table, target, files, prereqs.clone())?;
+                let (result, substitutions) =
+                    substitute(&macro_body, &macro_table, target, files, prereqs.clone())?;
                 if substitutions == 0 {
                     break;
                 } else {
@@ -173,10 +174,12 @@ pub fn generate_macro_table<'a>(
                 }
             },
             Operator::Colon3 => {
-                macro_body = substitute(&macro_body, &macro_table, target, files, prereqs.clone())?.0;
+                macro_body =
+                    substitute(&macro_body, &macro_table, target, files, prereqs.clone())?.0;
             }
             Operator::Bang => {
-                macro_body = substitute(&macro_body, &macro_table, target, files, prereqs.clone())?.0;
+                macro_body =
+                    substitute(&macro_body, &macro_table, target, files, prereqs.clone())?.0;
                 let Ok(result) = Command::new("sh").args(["-c", &macro_body]).output() else {
                     Err(PreprocError::CommandFailed)?
                 };
@@ -232,16 +235,18 @@ fn parse_function<'a>(
     let mut args = String::new();
     let mut counter = 0;
     while let Some(c) = src.next() {
-        if c == '(' || c == '{' { counter += 1; }
-        
+        if c == '(' || c == '{' {
+            counter += 1;
+        }
+
         if (c == ')' || c == '}') && counter == 0 {
             break;
         }
-        
+
         if c == ')' || c == '}' {
             counter -= 1;
         }
-        
+
         args.push(c);
     }
 
@@ -260,7 +265,7 @@ fn parse_function<'a>(
             let patterns = pattern.split_whitespace();
             let words = text.split_whitespace();
             let pattern_set = HashSet::<&str>::from_iter(patterns.clone());
-            
+
             let result = words
                 .filter(|s| !pattern_set.contains(s))
                 .fold(String::new(), |acc, s| acc + s);
@@ -332,8 +337,13 @@ fn parse_function<'a>(
     }
 }
 
-fn substitute<'a>(source: &str, table: &HashMap<String, String>, target: &Target, files: &(PathBuf, PathBuf),
-              mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,) -> Result<(String, u32)> {
+fn substitute<'a>(
+    source: &str,
+    table: &HashMap<String, String>,
+    target: &Target,
+    files: &(PathBuf, PathBuf),
+    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
+) -> Result<(String, u32)> {
     let env_macros = ENV_MACROS.load(Acquire);
 
     let mut substitutions = 0;
@@ -378,7 +388,7 @@ fn substitute<'a>(source: &str, table: &HashMap<String, String>, target: &Target
                         eprintln!("Unexpected `$`")
                     }
                 }
-                
+
                 continue;
             }
             c if suitable_ident(&c) => {
@@ -400,16 +410,17 @@ fn substitute<'a>(source: &str, table: &HashMap<String, String>, target: &Target
                 let Ok(macro_name) = get_ident(&mut letters) else {
                     Err(PreprocError::BadMacroName)?
                 };
-                
+
                 if let Some(name) = detect_function(&macro_name) {
-                    let macro_body = parse_function(name, &mut letters, table, target, files, prereqs.clone())?;
+                    let macro_body =
+                        parse_function(name, &mut letters, table, target, files, prereqs.clone())?;
                     result.push_str(&macro_body);
                     substitutions += 1;
                     continue;
                 }
 
                 skip_blank(&mut letters);
-                
+
                 let Some(finilizer) = letters.next() else {
                     Err(PreprocError::UnexpectedEOF)?
                 };
@@ -440,8 +451,13 @@ fn substitute<'a>(source: &str, table: &HashMap<String, String>, target: &Target
 
 /// Copy-pastes included makefiles into single one recursively.
 /// Pretty much the same as C preprocessor and `#include` directive
-fn process_include_lines<'a>(source: &str, table: &HashMap<String, String>, target: &Target, files: &(PathBuf, PathBuf),
-                         mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone) -> (String, usize) {
+fn process_include_lines<'a>(
+    source: &str,
+    table: &HashMap<String, String>,
+    target: &Target,
+    files: &(PathBuf, PathBuf),
+    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
+) -> (String, usize) {
     let mut counter = 0;
     let result = source
         .lines()
@@ -449,7 +465,8 @@ fn process_include_lines<'a>(source: &str, table: &HashMap<String, String>, targ
             if let Some(s) = x.strip_prefix("include") {
                 counter += 1;
                 let s = s.trim();
-                let (source, _) = substitute(s, table, target, files, prereqs.clone()).unwrap_or_default();
+                let (source, _) =
+                    substitute(s, table, target, files, prereqs.clone()).unwrap_or_default();
                 let path = Path::new(&source);
 
                 fs::read_to_string(path).unwrap()
@@ -478,8 +495,13 @@ fn remove_variables(source: &str) -> String {
 }
 
 /// Processes `include`s and macros
-pub fn preprocess<'a>(source: &str, table: &HashMap<String, String>, target: &Target, files: &(PathBuf, PathBuf),
-                  mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone) -> Result<String> {
+pub fn preprocess<'a>(
+    source: &str,
+    table: &HashMap<String, String>,
+    target: &Target,
+    files: &(PathBuf, PathBuf),
+    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
+) -> Result<String> {
     let mut source = source.to_string();
 
     source = remove_variables(&source);
