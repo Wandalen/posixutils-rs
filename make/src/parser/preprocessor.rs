@@ -2,10 +2,12 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::fs;
 use std::iter::Peekable;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Acquire;
+use crate::rule::prerequisite::Prerequisite;
+use crate::rule::target::Target;
 
 #[derive(Debug)]
 pub enum PreprocError {
@@ -79,8 +81,11 @@ fn take_till_eol(letters: &mut Peekable<impl Iterator<Item = char>>) -> String {
 
 /// Searches for all the lines in makefile that resemble macro definition
 /// and creates hashtable from macro names and bodies
-pub fn generate_macro_table(
+pub fn generate_macro_table<'a>(
     source: &str,
+    target: &Target,
+    files: &(PathBuf, PathBuf),
+    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
 ) -> std::result::Result<HashMap<String, String>, PreprocError> {
     let macro_defs = source
         .lines()
@@ -160,7 +165,7 @@ pub fn generate_macro_table(
         match operator {
             Operator::Equals => {}
             Operator::Colon | Operator::Colon2 => loop {
-                let (result, substitutions) = substitute(&macro_body, &macro_table)?;
+                let (result, substitutions) = substitute(&macro_body, &macro_table, target, files, prereqs.clone())?;
                 if substitutions == 0 {
                     break;
                 } else {
@@ -168,10 +173,10 @@ pub fn generate_macro_table(
                 }
             },
             Operator::Colon3 => {
-                macro_body = substitute(&macro_body, &macro_table)?.0;
+                macro_body = substitute(&macro_body, &macro_table, target, files, prereqs.clone())?.0;
             }
             Operator::Bang => {
-                macro_body = substitute(&macro_body, &macro_table)?.0;
+                macro_body = substitute(&macro_body, &macro_table, target, files, prereqs.clone())?.0;
                 let Ok(result) = Command::new("sh").args(["-c", &macro_body]).output() else {
                     Err(PreprocError::CommandFailed)?
                 };
@@ -197,6 +202,7 @@ pub fn generate_macro_table(
 
 pub static ENV_MACROS: AtomicBool = AtomicBool::new(false);
 
+#[derive(Debug)]
 enum MacroFunction {
     FilterOut,
     Shell,
@@ -215,18 +221,28 @@ fn detect_function(s: impl AsRef<str>) -> Option<MacroFunction> {
         _ => None,
     }
 }
-fn parse_function(
+fn parse_function<'a>(
     f: MacroFunction,
     src: &mut Peekable<impl Iterator<Item = char>>,
     table: &HashMap<String, String>,
+    target: &Target,
+    files: &(PathBuf, PathBuf),
+    mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
 ) -> Result<String> {
     let mut args = String::new();
-    while let Some(&c) = src.peek() {
-        if c == ')' || c == '}' {
+    let mut counter = 0;
+    while let Some(c) = src.next() {
+        if c == '(' || c == '{' { counter += 1; }
+        
+        if (c == ')' || c == '}') && counter == 0 {
             break;
         }
+        
+        if c == ')' || c == '}' {
+            counter -= 1;
+        }
+        
         args.push(c);
-        src.next();
     }
 
     match f {
@@ -235,11 +251,11 @@ fn parse_function(
             let Some(pattern) = args.next() else {
                 Err(PreprocError::CommandFailed)?
             };
-            let (pattern, _) = substitute(pattern, table)?;
+            let (pattern, _) = substitute(pattern, table, target, files, prereqs.clone())?;
             let Some(text) = args.next() else {
                 Err(PreprocError::CommandFailed)?
             };
-            let (text, _) = substitute(text, table)?;
+            let (text, _) = substitute(text, table, target, files, prereqs.clone())?;
 
             let patterns = pattern.split_whitespace();
             let words = text.split_whitespace();
@@ -268,14 +284,14 @@ fn parse_function(
             };
             let on_false = args.next();
 
-            let (result, _) = substitute(cond, table)?;
+            let (result, _) = substitute(cond, table, target, files, prereqs.clone())?;
             let cond = result.split_whitespace().next().is_none();
             let (output, _) = if cond {
-                substitute(on_true, table)?
+                substitute(on_true, table, target, files, prereqs.clone())?
             } else {
                 on_false
                     .iter()
-                    .flat_map(|x| substitute(x, table))
+                    .flat_map(|x| substitute(x, table, target, files, prereqs.clone()))
                     .next()
                     .unwrap_or_default()
             };
@@ -284,7 +300,7 @@ fn parse_function(
         }
         MacroFunction::And => {
             let args = args.split(',');
-            let expanded = args.map(|x| substitute(x, table));
+            let expanded = args.map(|x| substitute(x, table, target, files, prereqs.clone()));
             let is_true = expanded.clone().all(|x| {
                 if let Ok((s, _)) = x {
                     s.split_whitespace().next().is_some()
@@ -298,7 +314,7 @@ fn parse_function(
         }
         MacroFunction::Or => {
             let args = args.split(',');
-            let expanded = args.map(|x| substitute(x, table));
+            let expanded = args.map(|x| substitute(x, table, target, files, prereqs.clone()));
             let chosen = expanded.clone().find(|x| {
                 if let Ok((s, _)) = x {
                     s.split_whitespace().next().is_some()
@@ -316,7 +332,8 @@ fn parse_function(
     }
 }
 
-fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, u32)> {
+fn substitute<'a>(source: &str, table: &HashMap<String, String>, target: &Target, files: &(PathBuf, PathBuf),
+              mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,) -> Result<(String, u32)> {
     let env_macros = ENV_MACROS.load(Acquire);
 
     let mut substitutions = 0;
@@ -338,8 +355,30 @@ fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, 
             // yet as they will be dealt with in the
             // parsing stage with more context available
             c @ ('$' | '@' | '%' | '?' | '<' | '*') => {
-                result.push('$');
-                result.push(c);
+                match c {
+                    '@' => {
+                        if let Some(s) = target.as_ref().split('(').next() {
+                            result.push_str(s)
+                        }
+                    }
+                    '%' => {
+                        if let Some(body) = target.as_ref().split('(').nth(1) {
+                            result.push_str(body.strip_suffix(')').unwrap_or(body))
+                        }
+                    }
+                    '?' => {
+                        (&mut prereqs)
+                            .map(|x| x.as_ref())
+                            .for_each(|x| result.push_str(x));
+                    }
+                    '$' => result.push('$'),
+                    '<' => result.push_str(files.0.to_str().unwrap()),
+                    '*' => result.push_str(files.1.to_str().unwrap()),
+                    _ => {
+                        eprintln!("Unexpected `$`")
+                    }
+                }
+                
                 continue;
             }
             c if suitable_ident(&c) => {
@@ -361,20 +400,16 @@ fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, 
                 let Ok(macro_name) = get_ident(&mut letters) else {
                     Err(PreprocError::BadMacroName)?
                 };
-
+                
                 if let Some(name) = detect_function(&macro_name) {
-                    let macro_body = parse_function(name, &mut letters, table)?;
+                    let macro_body = parse_function(name, &mut letters, table, target, files, prereqs.clone())?;
                     result.push_str(&macro_body);
                     substitutions += 1;
                     continue;
                 }
 
                 skip_blank(&mut letters);
-                while let Some(c) = letters.peek() {
-                    if *c == '}' || *c == ')' {
-                        break;
-                    }
-                }
+                
                 let Some(finilizer) = letters.next() else {
                     Err(PreprocError::UnexpectedEOF)?
                 };
@@ -405,7 +440,8 @@ fn substitute(source: &str, table: &HashMap<String, String>) -> Result<(String, 
 
 /// Copy-pastes included makefiles into single one recursively.
 /// Pretty much the same as C preprocessor and `#include` directive
-fn process_include_lines(source: &str, table: &HashMap<String, String>) -> (String, usize) {
+fn process_include_lines<'a>(source: &str, table: &HashMap<String, String>, target: &Target, files: &(PathBuf, PathBuf),
+                         mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone) -> (String, usize) {
     let mut counter = 0;
     let result = source
         .lines()
@@ -413,7 +449,7 @@ fn process_include_lines(source: &str, table: &HashMap<String, String>) -> (Stri
             if let Some(s) = x.strip_prefix("include") {
                 counter += 1;
                 let s = s.trim();
-                let (source, _) = substitute(s, table).unwrap_or_default();
+                let (source, _) = substitute(s, table, target, files, prereqs.clone()).unwrap_or_default();
                 let path = Path::new(&source);
 
                 fs::read_to_string(path).unwrap()
@@ -442,13 +478,14 @@ fn remove_variables(source: &str) -> String {
 }
 
 /// Processes `include`s and macros
-pub fn preprocess(source: &str, table: &HashMap<String, String>) -> Result<String> {
+pub fn preprocess<'a>(source: &str, table: &HashMap<String, String>, target: &Target, files: &(PathBuf, PathBuf),
+                  mut prereqs: impl Iterator<Item = &'a Prerequisite> + Clone) -> Result<String> {
     let mut source = source.to_string();
 
     source = remove_variables(&source);
 
     loop {
-        let (result, substitutions) = substitute(&source, table)?;
+        let (result, substitutions) = substitute(&source, table, target, files, prereqs.clone())?;
         if substitutions == 0 {
             break Ok(result);
         } else {

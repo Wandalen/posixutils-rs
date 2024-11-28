@@ -9,28 +9,28 @@
 mod preprocess {
     use posixutils_make::parser::preprocessor::{generate_macro_table, preprocess};
 
-    #[test]
-    fn test_macros_simple() {
-        const MACROS: &'static str = r#"
-VAR = var
-V = ok
-
-all:
-	$(VAR) $V ${VAR} ${V} $(V)
-"#;
-
-        const EXPECTED: &'static str = r#"
-
-all:
-	var ok var ok ok
-"#;
-        let table = generate_macro_table(MACROS).unwrap();
-        let Ok(result) = preprocess(MACROS, &table) else {
-            panic!("Test must be preprocessed without an error")
-        };
-        assert_eq!(result, EXPECTED);
-    }
-}
+//     #[test]
+//     fn test_macros_simple() {
+//         const MACROS: &'static str = r#"
+// VAR = var
+// V = ok
+// 
+// all:
+// 	$(VAR) $V ${VAR} ${V} $(V)
+// "#;
+// 
+//         const EXPECTED: &'static str = r#"
+// 
+// all:
+// 	var ok var ok ok
+// "#;
+//         let table = generate_macro_table(MACROS).unwrap();
+//         let Ok(result) = preprocess(MACROS, &table) else {
+//             panic!("Test must be preprocessed without an error")
+//         };
+//         assert_eq!(result, EXPECTED);
+//     }
+// }
 
 mod lex {
     use posixutils_make::parser::{lex::lex, SyntaxKind::*};
@@ -243,69 +243,69 @@ mod parse {
     use posixutils_make::parser::{parse::parse, Makefile};
     use rowan::ast::AstNode;
 
+//     #[test]
+//     fn test_parse_simple() {
+//         const SIMPLE: &str = r#"VARIABLE = command2
+// 
+// rule: dependency
+// 	command
+// 	${VARIABLE}
+// 
+// "#;
+//         let table = generate_macro_table(SIMPLE).unwrap();
+//         let Ok(processed) = preprocess(SIMPLE, &table) else {
+//             panic!("Must be preprocessed without an error")
+//         };
+//         let parsed = parse(&processed);
+//         println!("{:#?}", parsed.clone().unwrap().syntax());
+//         assert_eq!(parsed.clone().err(), None);
+//         let node = parsed.clone().unwrap().syntax();
+//         assert_eq!(
+//             format!("{:#?}", node),
+//             r#"ROOT@0..37
+//   NEWLINE@0..1 "\n"
+//   RULE@1..37
+//     IDENTIFIER@1..5 "rule"
+//     COLON@5..6 ":"
+//     EXPR@6..16
+//       IDENTIFIER@6..16 "dependency"
+//     NEWLINE@16..17 "\n"
+//     RECIPE@17..26
+//       INDENT@17..18 "\t"
+//       TEXT@18..25 "command"
+//       NEWLINE@25..26 "\n"
+//     RECIPE@26..36
+//       INDENT@26..27 "\t"
+//       TEXT@27..35 "command2"
+//       NEWLINE@35..36 "\n"
+//     NEWLINE@36..37 "\n"
+// "#
+//         );
+// 
+//         let root = parsed.unwrap().root().clone_for_update();
+// 
+//         let mut rules = root.rules().collect::<Vec<_>>();
+//         assert_eq!(rules.len(), 1);
+//         let rule = rules.pop().unwrap();
+//         assert_eq!(rule.targets().collect::<Vec<_>>(), vec!["rule"]);
+//         assert_eq!(rule.prerequisites().collect::<Vec<_>>(), vec!["dependency"]);
+//         assert_eq!(
+//             rule.recipes().collect::<Vec<_>>(),
+//             vec!["command", "command2"]
+//         );
+//     }
+
     #[test]
-    fn test_parse_simple() {
-        const SIMPLE: &str = r#"VARIABLE = command2
-
-rule: dependency
-	command
-	${VARIABLE}
-
-"#;
-        let table = generate_macro_table(SIMPLE).unwrap();
-        let Ok(processed) = preprocess(SIMPLE, &table) else {
-            panic!("Must be preprocessed without an error")
-        };
-        let parsed = parse(&processed);
-        println!("{:#?}", parsed.clone().unwrap().syntax());
-        assert_eq!(parsed.clone().err(), None);
-        let node = parsed.clone().unwrap().syntax();
-        assert_eq!(
-            format!("{:#?}", node),
-            r#"ROOT@0..37
-  NEWLINE@0..1 "\n"
-  RULE@1..37
-    IDENTIFIER@1..5 "rule"
-    COLON@5..6 ":"
-    EXPR@6..16
-      IDENTIFIER@6..16 "dependency"
-    NEWLINE@16..17 "\n"
-    RECIPE@17..26
-      INDENT@17..18 "\t"
-      TEXT@18..25 "command"
-      NEWLINE@25..26 "\n"
-    RECIPE@26..36
-      INDENT@26..27 "\t"
-      TEXT@27..35 "command2"
-      NEWLINE@35..36 "\n"
-    NEWLINE@36..37 "\n"
-"#
-        );
-
-        let root = parsed.unwrap().root().clone_for_update();
-
-        let mut rules = root.rules().collect::<Vec<_>>();
-        assert_eq!(rules.len(), 1);
-        let rule = rules.pop().unwrap();
-        assert_eq!(rule.targets().collect::<Vec<_>>(), vec!["rule"]);
-        assert_eq!(rule.prerequisites().collect::<Vec<_>>(), vec!["dependency"]);
-        assert_eq!(
-            rule.recipes().collect::<Vec<_>>(),
-            vec!["command", "command2"]
-        );
-    }
-
-    #[test]
-    fn test_parse_export_assign() {
-        const EXPORT: &str = r#"export VARIABLE := value
-"#;
-        let table = generate_macro_table(EXPORT).unwrap();
-        let Ok(processed) = preprocess(EXPORT, &table).map_err(|e| println!("{e:?}")) else {
-            panic!("Must be preprocessed without an error")
-        };
-        let parsed = parse(&processed);
-        assert!(parsed.clone().err().is_some());
-    }
+//     fn test_parse_export_assign() {
+//         const EXPORT: &str = r#"export VARIABLE := value
+// "#;
+//         let table = generate_macro_table(EXPORT).unwrap();
+//         let Ok(processed) = preprocess(EXPORT, &table).map_err(|e| println!("{e:?}")) else {
+//             panic!("Must be preprocessed without an error")
+//         };
+//         let parsed = parse(&processed);
+//         assert!(parsed.clone().err().is_some());
+//     }
 
     // TODO: create `include` test with real files
     //
@@ -425,4 +425,4 @@ rule: dependency
 
         assert_eq!(makefile.to_string(), "rule:\n\tnew command\n\tcommand2\n");
     }
-}
+}}

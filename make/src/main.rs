@@ -18,6 +18,7 @@ use posixutils_make::{
     parser::{preprocessor::ENV_MACROS, Makefile},
     Make,
 };
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering::Relaxed;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -129,6 +130,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         keep_going,
         mut targets,
     } = Args::parse();
+    let target_list = targets
+        .iter()
+        .filter_map(|x| x.clone().into_string().ok())
+        .fold(String::new(), |acc, x| acc + &x);
 
     let mut status_code = 0;
 
@@ -149,6 +154,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print,
         precious: false,
         terminate,
+        macros: HashMap::from([(String::from("MAKECMDGOALS"), target_list)]),
         ..Default::default()
     };
 
