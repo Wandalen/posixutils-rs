@@ -156,6 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         terminate,
         macros: HashMap::from([
             (String::from("MAKECMDGOALS"), target_list),
+            (String::from("MAKE"), env::args().next().unwrap()),
         ]),
         ..Default::default()
     };
