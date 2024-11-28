@@ -13,13 +13,13 @@ mod preprocess {
 
     #[test]
     fn test_macros_simple() {
-        const MACROS: &'static str = r#"VAR = var
+        const MACROS: &str = r#"VAR = var
 V = ok
 
 all:
     $(VAR) $V ${VAR} ${V} $(V)"#;
 
-        const EXPECTED: &'static str = r#"
+        const EXPECTED: &str = r#"
 all:
     var ok var ok ok
 "#;

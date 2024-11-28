@@ -170,53 +170,6 @@ pub fn parse(text: &str) -> Result<Parsed, ParseError> {
             self.builder.finish_node();
         }
 
-        fn parse_macro_call(&mut self) -> bool {
-            enum Delims {
-                Paren,
-                Brace,
-            }
-
-            self.builder.start_node(MACRO.into());
-            self.expect(DOLLAR);
-
-            let internal = [AT_SIGN, PERCENT, QUESTION, LESS, STAR, DOLLAR]
-                .iter()
-                .any(|x| self.try_expect(*x));
-
-            if internal {
-                self.builder.finish_node();
-                return true;
-            }
-
-            if self.try_expect(IDENTIFIER) {
-                let (_, ident) = self.find(|(kind, _)| *kind == IDENTIFIER).unwrap();
-                if ident.len() > 1 {
-                    self.error(format!("Macro name `${ident}` is too long, use parenthesis like this: `$({ident})`"));
-                }
-            }
-
-            let delim = if self.try_expect(LPAREN) {
-                Delims::Paren
-            } else if self.try_expect(LBRACE) {
-                Delims::Brace
-            } else {
-                self.error("Found dollar outside of macro invocation".to_string());
-                return false;
-            };
-
-            self.expect(IDENTIFIER);
-            while self.parse_macro_call() {
-                self.expect(COMMA);
-            }
-            match delim {
-                Delims::Paren => self.expect(RPAREN),
-                Delims::Brace => self.expect(RBRACE),
-            }
-
-            self.builder.finish_node();
-            true
-        }
-
         fn parse_rule(&mut self) {
             self.builder.start_node(RULE.into());
             self.skip_ws();

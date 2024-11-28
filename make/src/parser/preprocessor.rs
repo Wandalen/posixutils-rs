@@ -2,9 +2,8 @@ use crate::rule::prerequisite::Prerequisite;
 use crate::rule::target::Target;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
-use std::fs;
 use std::iter::Peekable;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Acquire;
@@ -445,39 +444,6 @@ fn substitute<'a>(
     }
 
     Ok((result, substitutions))
-}
-
-/// Copy-pastes included makefiles into single one recursively.
-/// Pretty much the same as C preprocessor and `#include` directive
-fn process_include_lines<'a>(
-    source: &str,
-    table: &HashMap<String, String>,
-    target: &Target,
-    files: &(PathBuf, PathBuf),
-    prereqs: impl Iterator<Item = &'a Prerequisite> + Clone,
-) -> (String, usize) {
-    let mut counter = 0;
-    let result = source
-        .lines()
-        .map(|x| {
-            if let Some(s) = x.strip_prefix("include") {
-                counter += 1;
-                let s = s.trim();
-                let (source, _) =
-                    substitute(s, table, target, files, prereqs.clone()).unwrap_or_default();
-                let path = Path::new(&source);
-
-                fs::read_to_string(path).unwrap()
-            } else {
-                x.to_string()
-            }
-        })
-        .map(|mut x| {
-            x.push('\n');
-            x
-        })
-        .collect::<String>();
-    (result, counter)
 }
 
 fn remove_variables(source: &str) -> String {
