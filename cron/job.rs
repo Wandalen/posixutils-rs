@@ -139,7 +139,7 @@ fn expect(src: &mut Peekable<impl Iterator<Item = char>>, expected: char) -> boo
 
 fn parse_value<T: TimeUnit>(src: &mut Peekable<impl Iterator<Item = char>>) -> Vec<T> {
     if expect(src, '*') {
-        return if expect(src, ' ') { vec![T::new_all()] } else { Vec::new() }
+        return if expect(src, ' ') { T::new_all() } else { Vec::new() }
     }
     
     let Some(number) = get_number(src) else { return vec![] };
