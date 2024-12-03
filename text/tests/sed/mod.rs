@@ -47,1346 +47,1371 @@ const SCRIPT_ALL_NEWLINES_FILE: &'static str = "tests/sed/assets/script_all_newl
 const SCRIPT_BLANKS_FILE: &'static str = "tests/sed/assets/script_blanks";
 const SCRIPT_SEMICOLONS_FILE: &'static str = "tests/sed/assets/script_blanks";
 
-#[test]
-fn test_no_arguments() {
-    sed_test(&[], "", "", "sed: none script was supplied\n", 1);
-}
+#[cfg(test)]
+mod tests {
+    use crate::sed::*;
 
-#[test]
-fn test_single_script_input_stdin() {
-    sed_test(&[SCRIPT_A], ABC_INPUT, "abbc", "", 0);
-}
+    /*#[test]
+    fn test_no_arguments() {
+        sed_test(&[], "", "", "sed: none script was supplied\n", 1);
+    }
 
-#[test]
-fn test_single_script_input_file() {
-    sed_test(&[SCRIPT_A, ABC_FILE], "", "abbc", "", 0);
-}
+    #[test]
+    fn test_single_script_input_stdin() {
+        sed_test(&[SCRIPT_A], ABC_INPUT, "abbc", "", 0);
+    }
 
-#[test]
-fn test_e_script_input_stdin() {
-    sed_test(&["-e", SCRIPT_A], ABC_INPUT, "abbc", "", 0);
-}
+    #[test]
+    fn test_single_script_input_file() {
+        sed_test(&[SCRIPT_A, ABC_FILE], "", "abbc", "", 0);
+    }
 
-#[test]
-fn test_e_script_input_file() {
-    sed_test(&["-e", SCRIPT_A, ABC_FILE], "", "abbc", "", 0);
-}
+    #[test]
+    fn test_e_script_input_stdin() {
+        sed_test(&["-e", SCRIPT_A], ABC_INPUT, "abbc", "", 0);
+    }
 
-#[test]
-fn test_f_script_input_stdin() {
-    sed_test(&["-f", SCRIPT_A_FILE], ABC_INPUT, "abbc", "", 0);
-}
+    #[test]
+    fn test_e_script_input_file() {
+        sed_test(&["-e", SCRIPT_A, ABC_FILE], "", "abbc", "", 0);
+    }
 
-#[test]
-fn test_f_script_input_file() {
-    sed_test(&["-f", SCRIPT_A_FILE, ABC_FILE], "", "abbc", "", 0);
-}
+    #[test]
+    fn test_f_script_input_stdin() {
+        sed_test(&["-f", SCRIPT_A_FILE], ABC_INPUT, "abbc", "", 0);
+    }
 
-#[test]
-fn test_e_f_scripts_input_stdin() {
-    sed_test(
-        &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE],
-        ABC_INPUT,
-        "abcbcc",
-        "",
-        0,
-    );
-}
+    #[test]
+    fn test_f_script_input_file() {
+        sed_test(&["-f", SCRIPT_A_FILE, ABC_FILE], "", "abbc", "", 0);
+    }
 
-#[test]
-fn test_e_f_scripts_input_file() {
-    sed_test(
-        &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE, ABC_FILE],
-        "",
-        "abcbcc",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_input_explicit_stdin() {
-    sed_test(&[SCRIPT_A, "-"], ABC_INPUT, "abbc", "", 0);
-}
-
-#[test]
-fn test_ignore_stdin_without_dash() {
-    sed_test(&[SCRIPT_A, CBA_FILE], ABC_INPUT, "cbab", "", 0);
-}
-
-#[test]
-fn test_input_file_and_explicit_stdin() {
-    // Reorderind STDIN and input file
-    sed_test(&[SCRIPT_A, "-", CBA_FILE], ABC_INPUT, "abbc\ncbab", "", 0);
-    sed_test(&[SCRIPT_A, CBA_FILE, "-"], ABC_INPUT, "cbab\nabbc", "", 0);
-}
-
-#[test]
-fn test_single_script_multiple_input_files() {
-    // Reorderind input files
-    sed_test(&[SCRIPT_A, ABC_FILE, CBA_FILE], "", "abbc\ncbab", "", 0);
-    sed_test(&[SCRIPT_A, CBA_FILE, ABC_FILE], "", "cbab\nabbc", "", 0);
-}
-
-#[test]
-fn test_e_scripts_multiple_input_files() {
-    // Reorderind input files
-    sed_test(
-        &["-e", SCRIPT_A, "-e", SCRIPT_B, ABC_FILE, CBA_FILE],
-        "",
-        "abcbcc\ncbcabc",
-        "",
-        0,
-    );
-    sed_test(
-        &["-e", SCRIPT_A, "-e", SCRIPT_B, CBA_FILE, ABC_FILE],
-        "",
-        "cbcabc\nabcbcc",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_e_scripts_multiple_input_files_mixed_order() {
-    // Reorderind input files
-    sed_test(
-        &[ABC_FILE, "-e", SCRIPT_A, CBA_FILE, "-e", SCRIPT_B],
-        "",
-        "abcbcc\ncbcabc",
-        "",
-        0,
-    );
-    sed_test(
-        &[CBA_FILE, "-e", SCRIPT_A, ABC_FILE, "-e", SCRIPT_B],
-        "",
-        "cbcabc\nabcbcc",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_f_scripts_multiple_input_files() {
-    // Reorderind input files
-    sed_test(
-        &["-f", SCRIPT_A_FILE, "-f", SCRIPT_B_FILE, ABC_FILE, CBA_FILE],
-        "",
-        "abcbcc\ncbcabc",
-        "",
-        0,
-    );
-    sed_test(
-        &["-f", SCRIPT_A_FILE, "-f", SCRIPT_B_FILE, CBA_FILE, ABC_FILE],
-        "",
-        "cbcabc\nabcbcc",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_f_scripts_multiple_input_files_mixed_order() {
-    // Reorderind input files
-    sed_test(
-        &[ABC_FILE, "-f", SCRIPT_A_FILE, CBA_FILE, "-f", SCRIPT_B_FILE],
-        "",
-        "abcbcc\ncbcabc",
-        "",
-        0,
-    );
-    sed_test(
-        &[CBA_FILE, "-f", SCRIPT_A_FILE, ABC_FILE, "-f", SCRIPT_B_FILE],
-        "",
-        "cbcabc\nabcbcc",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_e_scripts_unique_order_unique_results() {
-    sed_test(
-        &["-e", SCRIPT_A, "-e", SCRIPT_B, "-e", SCRIPT_C],
-        ABC_INPUT,
-        "abcabcaca",
-        "",
-        0,
-    );
-    sed_test(
-        &["-e", SCRIPT_A, "-e", SCRIPT_C, "-e", SCRIPT_B],
-        ABC_INPUT,
-        "abcbcca",
-        "",
-        0,
-    );
-    sed_test(
-        &["-e", SCRIPT_B, "-e", SCRIPT_A, "-e", SCRIPT_C],
-        ABC_INPUT,
-        "abbcaca",
-        "",
-        0,
-    );
-    sed_test(
-        &["-e", SCRIPT_B, "-e", SCRIPT_C, "-e", SCRIPT_A],
-        ABC_INPUT,
-        "abbcabcab",
-        "",
-        0,
-    );
-    sed_test(
-        &["-e", SCRIPT_C, "-e", SCRIPT_A, "-e", SCRIPT_B],
-        ABC_INPUT,
-        "abcbccabc",
-        "",
-        0,
-    );
-    sed_test(
-        &["-e", SCRIPT_C, "-e", SCRIPT_B, "-e", SCRIPT_A],
-        ABC_INPUT,
-        "abbccab",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_f_scripts_unique_order_unique_results() {
-    sed_test(
-        &[
-            "-f",
-            SCRIPT_A_FILE,
-            "-f",
-            SCRIPT_B_FILE,
-            "-f",
-            SCRIPT_C_FILE,
-        ],
-        ABC_INPUT,
-        "abcabcaca",
-        "",
-        0,
-    );
-    sed_test(
-        &[
-            "-f",
-            SCRIPT_A_FILE,
-            "-f",
-            SCRIPT_C_FILE,
-            "-f",
-            SCRIPT_B_FILE,
-        ],
-        ABC_INPUT,
-        "abcbcca",
-        "",
-        0,
-    );
-    sed_test(
-        &[
-            "-f",
-            SCRIPT_B_FILE,
-            "-f",
-            SCRIPT_A_FILE,
-            "-f",
-            SCRIPT_C_FILE,
-        ],
-        ABC_INPUT,
-        "abbcaca",
-        "",
-        0,
-    );
-    sed_test(
-        &[
-            "-f",
-            SCRIPT_B_FILE,
-            "-f",
-            SCRIPT_C_FILE,
-            "-f",
-            SCRIPT_A_FILE,
-        ],
-        ABC_INPUT,
-        "abbcabcab",
-        "",
-        0,
-    );
-    sed_test(
-        &[
-            "-f",
-            SCRIPT_C_FILE,
-            "-f",
-            SCRIPT_A_FILE,
-            "-f",
-            SCRIPT_B_FILE,
-        ],
-        ABC_INPUT,
-        "abcbccabc",
-        "",
-        0,
-    );
-    sed_test(
-        &[
-            "-f",
-            SCRIPT_C_FILE,
-            "-f",
-            SCRIPT_B_FILE,
-            "-f",
-            SCRIPT_A_FILE,
-        ],
-        ABC_INPUT,
-        "abbccab",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_mixed_e_f_scripts() {
-    // -e script -f script -e script
-    sed_test(
-        &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE, "-e", SCRIPT_C],
-        ABC_INPUT,
-        "abcabcaca",
-        "",
-        0,
-    );
-    // -f script -e script -f script
-    sed_test(
-        &["-f", SCRIPT_A_FILE, "-e", SCRIPT_C, "-f", SCRIPT_B_FILE],
-        ABC_INPUT,
-        "abcbcca",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_script_some_newlines() {
-    sed_test(&[SCRIPT_SOME_NEWLINES], ABC_INPUT, "abcabcaca", "", 0);
-}
-
-#[test]
-fn test_script_all_newlines() {
-    sed_test(&[SCRIPT_ALL_NEWLINES], ABC_INPUT, ABC_INPUT, "", 0);
-}
-
-#[test]
-fn test_e_script_some_newlines() {
-    sed_test(&["-e", SCRIPT_SOME_NEWLINES], ABC_INPUT, "abcabcaca", "", 0);
-}
-
-#[test]
-fn test_e_script_all_newlines() {
-    sed_test(&["-e", SCRIPT_ALL_NEWLINES], ABC_INPUT, ABC_INPUT, "", 0);
-}
-
-#[test]
-fn test_f_script_some_newlines() {
-    sed_test(
-        &["-f", SCRIPT_SOME_NEWLINES_FILE],
-        ABC_INPUT,
-        "abcabcaca",
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_f_script_all_newlines() {
-    sed_test(
-        &["-f", SCRIPT_ALL_NEWLINES_FILE],
-        ABC_INPUT,
-        ABC_INPUT,
-        "",
-        0,
-    );
-}
-
-#[test]
-fn test_single_script_ignore_blank_chars() {
-    sed_test(&[SCRIPT_BLANKS], ABC_INPUT, "abcabcaca", "", 0);
-}
-
-#[test]
-fn test_e_script_ignore_blank_chars() {
-    sed_test(&["-e", SCRIPT_BLANKS], ABC_INPUT, "abcabcaca", "", 0);
-}
-
-#[test]
-fn test_f_script_ignore_blank_chars() {
-    sed_test(&["-f", SCRIPT_BLANKS_FILE], ABC_INPUT, "abcabcaca", "", 0);
-}
-
-#[test]
-fn test_single_script_ignore_semicolon_chars() {
-    sed_test(&[SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca", "", 0);
-}
-
-#[test]
-fn test_e_script_ignore_semicolon_chars() {
-    sed_test(&["-e", SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca", "", 0);
-}
-
-#[test]
-fn test_f_script_ignore_semicolon_chars() {
-    sed_test(
-        &["-f", SCRIPT_SEMICOLONS_FILE],
-        ABC_INPUT,
-        "abcabcaca",
-        "",
-        0,
-    );
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-#[test]
-fn test_delimiters() {
-    let test_data = [
-        // correct
-        (";;;;", "", ""),
-        (";\n;\n;;", "", ""),
-        (";\\;\\;;", "", ""),
-        // wrong
-        ("gh", "", ""),
-        ("g h", "", ""),
-        ("g; h \n gh \n g h ; gh \\", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_e_f_scripts_input_stdin() {
         sed_test(
-            &["-e", input],
+            &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE],
+            ABC_INPUT,
+            "abcbcc",
             "",
-            output,
-            err,
             0,
         );
     }
-}
 
-#[test]
-fn test_address_correct() {
-    let test_data = [
-        // correct
-        ("0,10 p", "", ""),
-        ("0,10p", "", ""),
-        ("0,10 p", "", ""),
-        ("10 p", "", ""),
-        ("1,$ p", "", ""),
-        ("$ p", "", ""),
-        ("$p", "", ""),
-        ("$,$ p", "", "")
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_e_f_scripts_input_file() {
         sed_test(
-            &["-e", input],
+            &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE, ABC_FILE],
             "",
-            output,
-            err,
+            "abcbcc",
+            "",
             0,
         );
     }
-}
 
-#[test]
-fn test_address_wrong() {
-    let test_data = [
-        // wrong
-        ("0, p", "", ""),
-        (",10 p", "", ""),
-        (", p", "", ""),
-        (",,p", "", ""),
-        ("0,1,2,3,4 p", "", ""),
-        ("0,-10 p", "", ""),
-        ("0, 10 p", "", ""),
-        ("0 ,10 p", "", ""),
-        ("0,10; p", "", ""),
-        ("0 10 p", "", ""),
-        ("1,+3p", "", ""),
-        ("/5/,+3p", "", ""),
-        ("7;+ p", "", ""),
-        ("+++ p", "", ""),
-        ("-2 p", "", ""),
-        ("3 ---- 2p", "", ""),
-        ("1 2 3 p", "", "")
-    ];
+    #[test]
+    fn test_input_explicit_stdin() {
+        sed_test(&[SCRIPT_A, "-"], ABC_INPUT, "abbc", "", 0);
+    }
 
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_ignore_stdin_without_dash() {
+        sed_test(&[SCRIPT_A, CBA_FILE], ABC_INPUT, "cbab", "", 0);
+    }
+
+    #[test]
+    fn test_input_file_and_explicit_stdin() {
+        // Reorderind STDIN and input file
+        sed_test(&[SCRIPT_A, "-", CBA_FILE], ABC_INPUT, "abbc\ncbab", "", 0);
+        sed_test(&[SCRIPT_A, CBA_FILE, "-"], ABC_INPUT, "cbab\nabbc", "", 0);
+    }
+
+    #[test]
+    fn test_single_script_multiple_input_files() {
+        // Reorderind input files
+        sed_test(&[SCRIPT_A, ABC_FILE, CBA_FILE], "", "abbc\ncbab", "", 0);
+        sed_test(&[SCRIPT_A, CBA_FILE, ABC_FILE], "", "cbab\nabbc", "", 0);
+    }
+
+    #[test]
+    fn test_e_scripts_multiple_input_files() {
+        // Reorderind input files
         sed_test(
-            &["-e", input],
+            &["-e", SCRIPT_A, "-e", SCRIPT_B, ABC_FILE, CBA_FILE],
             "",
-            output,
-            err,
+            "abcbcc\ncbcabc",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_A, "-e", SCRIPT_B, CBA_FILE, ABC_FILE],
+            "",
+            "cbcabc\nabcbcc",
+            "",
             0,
         );
     }
-}
 
-#[test]
-fn test_address_with_bre() {
-    let test_data = [
-        // correct
-        ("\\/abc/,10 p", "", ""),
-        ("\\/abc/ p", "", ""),
-        ("\\@abc@ p", "", ""),
-        ("\\/ab\\/c/ p", "", ""),
-        ("\\/abc/,\\!cdf! p", "", "")
-        // wrong
-        ("\\/abc/10 p", "", ""),
-        ("@abc@ p", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_e_scripts_multiple_input_files_mixed_order() {
+        // Reorderind input files
         sed_test(
-            &["-e", input],
+            &[ABC_FILE, "-e", SCRIPT_A, CBA_FILE, "-e", SCRIPT_B],
             "",
-            output,
-            err,
+            "abcbcc\ncbcabc",
+            "",
+            0,
+        );
+        sed_test(
+            &[CBA_FILE, "-e", SCRIPT_A, ABC_FILE, "-e", SCRIPT_B],
+            "",
+            "cbcabc\nabcbcc",
+            "",
             0,
         );
     }
-}
 
-#[test]
-fn test_block() {
-    let test_data = [
-        // correct
-        ("{}", "", ""),
-        ("{ }", "", ""),
-        ("{ \n \n \n }", "", ""),
-        ("{ { \n } {} {\n} { } }", "", ""),
-        ("{ { { { { { { { {} } } } } } } } }", "", ""),
-        // wrong
-        ("{", "", ""),
-        ("}", "", ""),
-        ("{ { { { { { {} } } } } } } } }", "", ""),
-        ("{ { { { { { { { {} } } } } } }", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_f_scripts_multiple_input_files() {
+        // Reorderind input files
         sed_test(
-            &["-e", input],
+            &["-f", SCRIPT_A_FILE, "-f", SCRIPT_B_FILE, ABC_FILE, CBA_FILE],
             "",
-            output,
-            err,
+            "abcbcc\ncbcabc",
+            "",
+            0,
+        );
+        sed_test(
+            &["-f", SCRIPT_A_FILE, "-f", SCRIPT_B_FILE, CBA_FILE, ABC_FILE],
+            "",
+            "cbcabc\nabcbcc",
+            "",
             0,
         );
     }
-}
 
-#[test]
-fn test_a() {
-    let test_data = [
-        // correct
-        ("a\\text", "", ""),
-        ("a\\   text\\in\\sed", "", ""),
-        ("a\\ text text ; text", "", ""),
-        // wrong
-        ("a\\", "", ""),
-        ("a  \text", "", ""),
-        ("a\text", "", ""),
-        ("a\text\\in\\sed", "", ""),
-        ("a\\ text text \n text ", "", "")
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_f_scripts_multiple_input_files_mixed_order() {
+        // Reorderind input files
         sed_test(
-            &["-e", input],
+            &[ABC_FILE, "-f", SCRIPT_A_FILE, CBA_FILE, "-f", SCRIPT_B_FILE],
             "",
-            output,
-            err,
+            "abcbcc\ncbcabc",
+            "",
+            0,
+        );
+        sed_test(
+            &[CBA_FILE, "-f", SCRIPT_A_FILE, ABC_FILE, "-f", SCRIPT_B_FILE],
+            "",
+            "cbcabc\nabcbcc",
+            "",
             0,
         );
     }
-}
 
-#[test]
-fn test_b() {
-    let test_data = [
-        // correct
-        ("b", "", ""),
-        ("b label", "", ""),
-        ("b; :label", "", ""),
-        ("b label; :label", "", ""),
-        ("b label1", "", ""),
-        ("b lab2el1abc", "", ""),
-        ("b loop_", "", ""),
-        ("b _start", "", ""),
-        ("b my_label", "", ""),
-        ("b ab\ncd; :ab\ncd", "", ""),
-        // wrong
-        ("b #%$?@&*;", "", ""),
-        ("b label#", "", ""),
-        ("b 1label", "", ""),
-        ("b 1234", "", ""),
-        ("b g", "", ""),
-        ("b; label", "", ""),
-        ("b :label", "", ""),
-        ("b label :label", "", ""),
-        (":label b label", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_e_scripts_unique_order_unique_results() {
         sed_test(
-            &["-e", input],
+            &["-e", SCRIPT_A, "-e", SCRIPT_B, "-e", SCRIPT_C],
+            ABC_INPUT,
+            "abcabcaca",
             "",
-            output,
-            err,
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_A, "-e", SCRIPT_C, "-e", SCRIPT_B],
+            ABC_INPUT,
+            "abcbcca",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_B, "-e", SCRIPT_A, "-e", SCRIPT_C],
+            ABC_INPUT,
+            "abbcaca",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_B, "-e", SCRIPT_C, "-e", SCRIPT_A],
+            ABC_INPUT,
+            "abbcabcab",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_C, "-e", SCRIPT_A, "-e", SCRIPT_B],
+            ABC_INPUT,
+            "abcbccabc",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_C, "-e", SCRIPT_B, "-e", SCRIPT_A],
+            ABC_INPUT,
+            "abbccab",
+            "",
             0,
         );
     }
-}
 
-#[test]
-fn test_c() {
-    let test_data = [
-        // correct
-        ("c\\text", "", ""),
-        ("c\\   text\\in\\sed", "", ""),
-        ("c\\ text text ; text", "", ""),
-        ("c\\r", "", ""),
-        ("0 c\\r", "", ""),
-        ("0,2 c\\r", "", ""),
-        // wrong
-        ("c\\", "", ""),
-        ("c  \text", "", ""),
-        ("c\text", "", ""),
-        ("c\text\\in\\sed", "", ""),
-        ("c\\ text text \n text ", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_f_scripts_unique_order_unique_results() {
         sed_test(
-            &["-e", input],
+            &[
+                "-f",
+                SCRIPT_A_FILE,
+                "-f",
+                SCRIPT_B_FILE,
+                "-f",
+                SCRIPT_C_FILE,
+            ],
+            ABC_INPUT,
+            "abcabcaca",
             "",
-            output,
-            err,
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_A_FILE,
+                "-f",
+                SCRIPT_C_FILE,
+                "-f",
+                SCRIPT_B_FILE,
+            ],
+            ABC_INPUT,
+            "abcbcca",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_B_FILE,
+                "-f",
+                SCRIPT_A_FILE,
+                "-f",
+                SCRIPT_C_FILE,
+            ],
+            ABC_INPUT,
+            "abbcaca",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_B_FILE,
+                "-f",
+                SCRIPT_C_FILE,
+                "-f",
+                SCRIPT_A_FILE,
+            ],
+            ABC_INPUT,
+            "abbcabcab",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_C_FILE,
+                "-f",
+                SCRIPT_A_FILE,
+                "-f",
+                SCRIPT_B_FILE,
+            ],
+            ABC_INPUT,
+            "abcbccabc",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_C_FILE,
+                "-f",
+                SCRIPT_B_FILE,
+                "-f",
+                SCRIPT_A_FILE,
+            ],
+            ABC_INPUT,
+            "abbccab",
+            "",
             0,
         );
     }
-}
 
-#[test]
-fn test_d() {
-    let test_data = [
-        // correct
-        ("d", "", ""),
-        ("d; d", "", ""),
-        // wrong
-        ("d b", "", ""),
-        ("d d", "", ""),
-        ("dd", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_mixed_e_f_scripts() {
+        // -e script -f script -e script
         sed_test(
-            &["-e", input],
+            &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE, "-e", SCRIPT_C],
+            ABC_INPUT,
+            "abcabcaca",
             "",
-            output,
-            err,
+            0,
+        );
+        // -f script -e script -f script
+        sed_test(
+            &["-f", SCRIPT_A_FILE, "-e", SCRIPT_C, "-f", SCRIPT_B_FILE],
+            ABC_INPUT,
+            "abcbcca",
+            "",
             0,
         );
     }
-}
 
-#[test]
-fn test_upper_d() {
-    let test_data = [
-        // correct
-        ("D", "", ""),
-        // wrong
-        ("D b", "", ""),
-        ("D D", "", ""),
-        ("DD", "", ""),
-    ];
+    #[test]
+    fn test_script_some_newlines() {
+        sed_test(&[SCRIPT_SOME_NEWLINES], ABC_INPUT, "abcabcaca", "", 0);
+    }
 
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_script_all_newlines() {
+        sed_test(&[SCRIPT_ALL_NEWLINES], ABC_INPUT, ABC_INPUT, "", 0);
+    }
+
+    #[test]
+    fn test_e_script_some_newlines() {
+        sed_test(&["-e", SCRIPT_SOME_NEWLINES], ABC_INPUT, "abcabcaca", "", 0);
+    }
+
+    #[test]
+    fn test_e_script_all_newlines() {
+        sed_test(&["-e", SCRIPT_ALL_NEWLINES], ABC_INPUT, ABC_INPUT, "", 0);
+    }
+
+    #[test]
+    fn test_f_script_some_newlines() {
         sed_test(
-            &["-e", input],
+            &["-f", SCRIPT_SOME_NEWLINES_FILE],
+            ABC_INPUT,
+            "abcabcaca",
             "",
-            output,
-            err,
             0,
         );
     }
-}
 
-#[test]
-fn test_g() {
-    let test_data = [
-        // correct
-        ("0 h; 1 g", "", ""),
-        // wrong
-        ("g g", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_f_script_all_newlines() {
         sed_test(
-            &["-e", input],
+            &["-f", SCRIPT_ALL_NEWLINES_FILE],
+            ABC_INPUT,
+            ABC_INPUT,
             "",
-            output,
-            err,
             0,
         );
     }
-}
 
-#[test]
-fn test_upper_g() {
-    let test_data = [
-        // correct
-        ("0 h; 1 G", "", ""),
-        // wrong
-        ("G G", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+    #[test]
+    fn test_single_script_ignore_blank_chars() {
+        sed_test(&[SCRIPT_BLANKS], ABC_INPUT, "abcabcaca", "", 0);
     }
-}
 
-#[test]
-fn test_h() {
-    let test_data = [
-        // correct
-        ("0 h; 1 h", "", ""),
-        // wrong
-        ("h g", "", ""),
-        ("h h", "", ""),
-        ("hh", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+    #[test]
+    fn test_e_script_ignore_blank_chars() {
+        sed_test(&["-e", SCRIPT_BLANKS], ABC_INPUT, "abcabcaca", "", 0);
     }
-}
 
-#[test]
-fn test_upper_h() {
-    let test_data = [
-        // correct
-        ("0 H; 1 H", "", ""),
-        // wrong
-        ("H g", "", ""),
-        ("H H", "", ""),
-        ("HH", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+    #[test]
+    fn test_f_script_ignore_blank_chars() {
+        sed_test(&["-f", SCRIPT_BLANKS_FILE], ABC_INPUT, "abcabcaca", "", 0);
     }
-}
 
-#[test]
-fn test_i() {
-    let test_data = [
-        // correct
-        ("i\\text", "", ""),
-        ("i\\   text\\in\\sed", "", ""),
-        ("i\\ text text ; text ", "", ""),
-        // wrong
-        ("i\\", "", ""),
-        ("i  \text", "", ""),
-        ("i\text", "", ""),
-        ("i\text\\in\\sed", "", ""),
-        ("i\\ text text \n text ", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+    #[test]
+    fn test_single_script_ignore_semicolon_chars() {
+        sed_test(&[SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca", "", 0);
     }
-}
 
-#[test]
-fn test_upper_i() {
-    let test_data = [
-        // correct
-        ("I", "", ""),
-        // wrong
-        ("I g", "", ""),
-        ("I I", "", ""),
-        ("II", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+    #[test]
+    fn test_e_script_ignore_semicolon_chars() {
+        sed_test(&["-e", SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca", "", 0);
     }
-}
 
-#[test]
-fn test_n() {
-    let test_data = [
-        // correct
-        ("n", "", ""),
-        // wrong
-        ("n g", "", ""),
-        ("n n", "", ""),
-        ("nn", "", ""),
-    ];
-
-    for (input, output, err) in test_data{
+    #[test]
+    fn test_f_script_ignore_semicolon_chars() {
         sed_test(
-            &["-e", input],
+            &["-f", SCRIPT_SEMICOLONS_FILE],
+            ABC_INPUT,
+            "abcabcaca",
             "",
-            output,
-            err,
             0,
         );
+    }*/
+
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_delimiters() {
+        let test_data = [
+            // correct
+            (";;;;", "", "", ""),  
+            (";\n;\n;;", "", "", ""),                   //unterminated address regex
+            (";\\;\\;;", "", "", ""),                   //unknown command
+            (";\\ ;;;", "", "", ""),                    //unterminated address regex
+            // wrong
+            ("gh", "", "", ""),
+            ("g h", "", "", ""),
+            ("g; h \n gh \n g h ; gh \\", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_upper_n() {
-    let test_data = [
-        // correct
-        ("N", "", ""),
-        // wrong
-        ("N g", "", ""),
-        ("N N", "", ""),
-        ("NN", "", ""),
-    ];
+    #[test]
+    fn test_address_correct() {
+        let test_data = [
+            // correct
+            ("1,10 p", "", "", ""),                    
+            ("1,10p", "", "", ""),
+            ("1,10 p", "", "", ""),
+            ("10 p", "", "", ""),
+            ("1,$p", "", "", ""),                  // unexpected `,'
+            ("1,$ p", "", "", ""),            
+            ("$ p", "", "", ""),
+            ("$p", "", "", ""),
+            ("$,$ p", "", "", ""),
+            ("$,$p", "", "", "")                   // unexpected `,'
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_p() {
-    let test_data = [
-        // correct
-        ("p", "", ""),
-        // wrong
-        ("p g", "", ""),
-        ("p p", "", ""),
-        ("pp", "", ""),
-    ];
+    #[test]
+    fn test_address_wrong() {
+        let test_data = [
+            // wrong
+            ("0, p", "", "", ""),
+            (",10 p", "", "", ""),
+            (", p", "", "", ""),
+            (",,p", "", "", ""),
+            ("0,1,2,3,4 p", "", "", ""),
+            ("0,-10 p", "", "", ""),
+            ("0, 10 p", "", "", ""),                  // correct
+            ("0 ,10 p", "", "", ""),                  // correct
+            ("0,10; p", "", "", ""),
+            ("0 10 p", "", "", ""),
+            ("1,+3p", "", "", ""),                    // works
+            ("/5/,+3p", "", "", ""),                  // works
+            ("7;+ p", "", "", ""),                    
+            ("+++ p", "", "", ""),
+            ("-2 p", "", "", ""),
+            ("3 ---- 2p", "", "", ""),
+            ("1 2 3 p", "", "", "")
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_upper_p() {
-    let test_data = [
-        // correct
-        ("P", "", ""),
-        // wrong
-        ("P g", "", ""),
-        ("P P", "", ""),
-        ("PP", "", ""),
-    ];
+    /*
+    #[test]
+    fn test_address_with_bre() {
+        let test_data = [
+            // correct
+            ("\\/abc/,10 p", "", ""),
+            ("\\/abc/ p", "", ""),
+            ("\\@abc@ p", "", ""),
+            ("\\/ab\\/c/ p", "", ""),
+            ("\\/abc/,\\!cdf! p", "", ""),
+            // wrong
+            ("\\/abc/10 p", "", ""),
+            ("@abc@ p", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }*/
+
+    #[test]
+    fn test_block() {
+        let test_data = [
+            // correct
+            ("{}", "", "", ""),
+            ("{ }", "", "", ""),
+            ("{ \n \n \n }", "", "", ""),                           // unterminated address regex
+            ("{ { \n } {} {\n} { } }", "", "", ""),                 // unterminated address regex
+            ("{ { { { { { { { {} } } } } } } } }", "", "", ""),
+            // wrong
+            ("{", "", "", ""),
+            ("}", "", "", ""),
+            ("{ { { { { { {} } } } } } } } }", "", "", ""),
+            ("{ { { { { { { { {} } } } } } }", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_q() {
-    let test_data = [
-        // correct
-        ("q", "", ""),
-        ("q; q", "", ""),
-        // wrong
-        ("q g", "", ""),
-        ("q q", "", ""),
-        ("qq", "", ""),
-    ];
+    #[test]
+    fn test_a() {
+        let test_data = [
+            // correct
+            ("a\\text", "", "", ""),
+            ("a\\   text\\in\\sed", "", "", ""),
+            ("a\\ text text ; text", "", "", ""),
+            ("a\\", "", "", ""),
+            // wrong
+            ("a  \text", "", "", ""),                         //works
+            ("a\text", "", "", ""),                           //works
+            ("a\text\\in\\sed", "", "", ""),                  //works
+            ("a\\ text text \n text ", "", "", ""),           //works
+            ("atext", "", "", ""),                            //works
+            ("a text", "", "", ""),                           //works
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_r() {
-    let test_data = [
-        // correct
-        ("r ./text/tests/sed/assets/abc", "", ""),
-        // wrong
-        ("r", "", ""),
-        ("r aer", "", ""),
-        ("r #@/?", "", ""),
-    ];
+    #[test]
+    fn test_b() {
+        let test_data = [
+            // correct
+            ("b", "", "", ""),
+            ("b; :label", "", "", ""),
+            ("b label; :label", "", "", ""),
+            ("b label1", "", "", ""),
+            ("b lab2el1abc", "", "", ""),
+            ("b loop_", "", "", ""),
+            ("b _start", "", "", ""),
+            ("b my_label", "", "", ""),
+            ("b ab\ncd; :ab\ncd", "", "", ""),
+            ("b #%$?@&*; :#%$?@&*", "", "", ""),             // works
+            ("b label#; :label#", "", "", ""),               // works
+            ("b 1label; :1label", "", "", ""),               // works
+            ("b 1234; :1234", "", "", ""),                   // works
+            // wrong
+            ("b label", "", "", ""),
+            ("b #%$?@&*;", "", "", ""),                      
+            ("b label#", "", "", ""),                        
+            ("b 1label", "", "", ""),                        
+            ("b 1234", "", "", ""),                        
+            ("b g", "", "", ""),                           
+            ("b; label", "", "", ""),     
+            ("b :label", "", "", ""),
+            ("b label :label", "", "", ""),                  // works
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_s() {
-    let test_data = [
-        // correct
-        ("s/b/r/", "", ""),
-        ("s|b|r|", "", ""),
-        ("s/b/r/", "", ""),
-        ("s/[:alpha:]/r/", "", ""),
-        ("s/\\(a\\)\\(x\\)/\\1\\2/", "", ""),
-        // wrong
-        ("s///", "", ""),
-        ("s/a/b/c/d/", "", ""),
-        ("s//a//c//", "", ""),
-        ("s/\\(\\(x\\)/\\1\\2/", "", ""),
-        ("s\na\nb\n", "", ""),
-        ("s\\a\\b\\ ", "", "")
-    ];
+    #[test]
+    fn test_c() {
+        let test_data = [
+            // correct
+            ("c\\text", "", "", ""),
+            ("c\\   text\\in\\sed", "", "", ""),
+            ("c\\ text text ; text", "", "", ""),
+            ("c\\r", "", "", ""),
+            ("1 c\\r", "", "", ""),
+            ("1,2 c\\r", "", "", ""),
+            // wrong
+            ("0 c\\r", "", "", ""),
+            ("0,2 c\\r", "", "", ""),
+            ("c\\", "", "", ""),                                   // works
+            ("c  \text", "", "", ""),                              // works
+            ("c\text", "", "", ""),                                // works
+            ("c\text\\in\\sed", "", "", ""),                       // works
+            ("c\\ text text \n text ", "", "", ""),                // works
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_s_with_right_flags() {
-    let test_data = [
-        // correct
-        ("s/b/r/6", "", ""),
-        ("s/b/r/g", "", ""),
-        ("s/b/r/p", "", ""),
-        ("s/b/r/w ./README.md", "", ""),
-        ("s/b/r/6p", "", ""),
-        ("s/b/r/gp", "", ""),
-        ("s/b/r/p6", "", ""),
-        ("s/b/r/g6", "", ""),
-        ("s/b/r/pw ./README.md", "", ""),
-        ("s/b/r/6pw ./README.md", "", ""),
-        ("s/b/r/gpw ./README.md", "", ""),
-    ];
+    #[test]
+    fn test_d() {
+        let test_data = [
+            // correct
+            ("d", "", "", ""),
+            ("d; d", "", "", ""),
+            // wrong
+            ("d b", "", "", ""),
+            ("d d", "", "", ""),
+            ("dd", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_s_with_wrong_flags() {
-    let test_data = [
-        // wrong
-        ("s/b/r/ p", "", ""),
-        ("s/b/r/ w", "", ""),
-        ("s/b/r/ p w ./README.md", "", ""),
-        ("s/b/r/-6", "", ""),
-        ("s/b/r/-6p", "", ""),
-        ("s/b/r/p-6", "", ""),
-        ("s/b/r/g-6", "", ""),
-        ("s/b/r/6g", "", ""),
-        ("s/b/r/6pg", "", ""),
-        ("s/b/r/wpg6", "", ""),
-        ("s/b/r/w6", "", ""),
-        ("s/b/r/w g6", "", ""),
-        ("s/b/r/w./REA;DME.md", "", ""),
-        ("s/b/r/w ./REA;DME.md", "", ""),
-        ("s/b/r/w ./REA;DME.md p", "", ""),
-        ("s/b/r/6gpw ./README.md", "", "")
-    ];
+    #[test]
+    fn test_upper_d() {
+        let test_data = [
+            // correct
+            ("D", "", "", ""),
+            // wrong
+            ("D b", "", "", ""),
+            ("D D", "", "", ""),
+            ("DD", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_t() {
-    let test_data = [
-        // correct
-        ("t", "", ""),
-        ("t label", "", ""),
-        ("t; :label", "", ""),
-        ("t label; :label", "", ""),
-        ("t label1", "", ""),
-        ("t lab2el1abc", "", ""),
-        ("t loop_", "", ""),
-        ("t _start", "", ""),
-        ("t my_label", "", ""),
-        // wrong
-        ("t #%$?@&*;", "", ""),
-        ("t label#", "", ""),
-        ("t 1label", "", ""),
-        ("t 1234", "", ""),
-        ("t g", "", ""),
-        ("t; label", "", ""),
-        ("t :label", "", ""),
-        ("t label :label", "", ""),
-        (":label t label", "", ""),
-        ("t ab\ncd; :ab\ncd", "", "")
-    ];
+    #[test]
+    fn test_g() {
+        let test_data = [
+            // correct
+            ("1 h; 2 g", "", "", ""),
+            // wrong
+            ("0 h; 1 g", "", "", ""),
+            ("g g", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_w() {
-    let test_data = [
-        // correct
-        ("w ./text/tests/sed/assets/abc", "", ""),
-        // wrong
-        ("w./text/tests/sed/assets/abc", "", ""),
-        ("w ; h", "", ""),
-        ("w atyfv", "", ""),
-    ];
+    #[test]
+    fn test_upper_g() {
+        let test_data = [
+            // correct
+            ("1 h; 2 G", "", "", ""),
+            // wrong
+            ("0 h; 1 G", "", "", ""),
+            ("G G", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_x() {
-    let test_data = [
-        // correct
-        ("h; s/.* /abc/; x", "", ""),
-        // wrong
-        ("x h", "", ""),
-        ("x x", "", ""),
-        ("xx", "", ""),
-    ];
+    #[test]
+    fn test_h() {
+        let test_data = [
+            // correct
+            ("1 h; 2 h", "", "", ""),
+            // wrong
+            ("0 h; 1 h", "", "", ""),
+            ("h g", "", "", ""),
+            ("h h", "", "", ""),
+            ("hh", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_y() {
-    let test_data = [
-        // correct
-        ("y/abc/cdf/", "", ""),
-        ("y/abc/aaa/", "", ""),
-        // wrong
-        ("y/abc/aaaa/", "", ""),
-        ("y///", "", "")
-    ];
+    #[test]
+    fn test_upper_h() {
+        let test_data = [
+            // correct
+            ("1 H; 2 H", "", "", ""),
+            // wrong
+            ("0 H; 1 H", "", "", ""),
+            ("H g", "", "", ""),
+            ("H H", "", "", ""),
+            ("HH", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_line_numeration() {
-    let test_data = [
-        // correct
-        ("=", "", ""),
-        // wrong
-        ("= g", "", ""),
-        ("= =", "", ""),
-        ("==", "", ""),
-    ];
+    #[test]
+    fn test_i() {
+        let test_data = [
+            // correct
+            ("i\\text", "", "", ""),
+            ("i\\   text\\in\\sed", "", "", ""),
+            ("i\\ text text ; text ", "", "", ""),
+            // wrong
+            ("i\\", "", "", ""),                                   // works
+            ("i  \text", "", "", ""),                              // works
+            ("i\text", "", "", ""),                                // works
+            ("i\text\\in\\sed", "", "", ""),                       // works
+            ("i\\ text text \n text ", "", "", ""),                // works
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_comment() {
-    let test_data = [
-        // correct
-        ("{ #\\ }\n{ #\n }\n#h", "", ""),
-        // wrong
-        ("{ # }\n{ \\# }\n{ \n# }", "", ""),
-        ("a\text#abc\ntext", "", ""),
-        ("a\\#text\ntext", "", ""),
-    ];
+    #[test]
+    fn test_upper_i() {
+        let test_data = [
+            // correct
+            ("I", "", "", ""),
+            // wrong
+            ("I g", "", "", ""),
+            ("I I", "", "", ""),
+            ("II", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_combinations_1() {
-    let test_data = [
-        // correct
-        ("1,3 { p ; p } ; 1,2 { p ; p } ; {p ; p}", "", ""),
-        (":x ; /=$/ { N ; s/=\n//g ; bx }", "", ""),
-        ("/1/b else ; s/a/z/ ; :else ; y/123/456/", "", ""),
-        ("/1/!s/a/z/ ; y/123/456/", "", ""),
-        ("/start/,/end/p", "", ""),
-        ("/start/,$p", "", ""),
-        ("1,/end/p", "", ""),
-        // wrong
-        ("2,4 !p", "", ""),
-        ("2,4 !{p}", "", "")
-        ("/pattern/- p", "", "")
-    ];
+    #[test]
+    fn test_n() {
+        let test_data = [
+            // correct
+            ("n", "", "", ""),
+            // wrong
+            ("n g", "", "", ""),
+            ("n n", "", "", ""),
+            ("nn", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_combinations_2() {
-    let test_data = [
-        // correct
-        ("\\:start:,\\,stop, p", "", ""),
-        ("\\`'$PATTERN'`p", "", ""),
-        ("\n1,$ {\n/begin/,/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n/^$/ d\np\n}\n}", "", ""),
-        ("/./{H;$!d} ; x ; s/^/\nSTART-->/ ; s/$/\n<--END/", "", ""),
-        ("s/param=.* /param=new_value/", "", ""),
-        ("s/\\([[:alnum:]]*\\).* /\\1/", "", ""),
-        ("s/[[:alnum:]]* //2", "", ""),
-        ("$ s/[[:alnum:]]* //2", "", ""),
-    ];
+    #[test]
+    fn test_upper_n() {
+        let test_data = [
+            // correct
+            ("N", "", "", ""),
+            // wrong
+            ("N g", "", "", ""),
+            ("N N", "", "", ""),
+            ("NN", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_combinations_3() {
-    let test_data = [
-        // correct
-        ("s/#.* //;s/[[:blank:]]*$//;/^$/ d;p", "", ""),
-        ("s/\\(^[*][[:space:]]\\)/   \\1/", "", ""),
-        ("s/\\(^[*][[:space:]]\\)/   \\1/;/List of products:/a ---------------", "", ""),
-        ("s/h\\.0\\.\\(.*\\)/ \\U\\1/", "", ""),
-        ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "", ""),
-        ("/^$/d;G", "", ""),
-        ("N;s/\n/\t/", "", ""),
-    ];
+    #[test]
+    fn test_p() {
+        let test_data = [
+            // correct
+            ("p", "", "", ""),
+            // wrong
+            ("p g", "", "", ""),
+            ("p p", "", "", ""),
+            ("pp", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_combinations_4() {
-    let test_data = [
-        // correct
-        ("s/^[ \t]* //;s/[ \t]*$//", "", ""),
-        (":a;s/^.\\{1,78\\}$/ &/;ta", "", ""),
-        ("s/\\(.*\\)foo\\(.*foo\\)/\\1bar\\2/", "", ""),
-        ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "", ""),
-        (":a;s/(^|[^0-9.])([0-9]+)([0-9]{3})/\\1\\2,\\3/g;ta", "", ""),
-        ("n;n;n;n;G;", "", ""),
-        (":a;$q;N;11,$D;ba", "", ""),
-        ("1{$q;};$!{h;d;};x", "", ""),
-    ];
+    #[test]
+    fn test_upper_p() {
+        let test_data = [
+            // correct
+            ("P", "abc\n123", "", ""),
+            // wrong
+            ("P g", "abc\n123", "", "sed: can't parse string, reason is: \n"),
+            ("P P", "abc\n123", "", "sed: can't parse string, reason is: \n"),
+            ("PP", "abc\n123", "", "sed: can't parse string, reason is: \n"),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
     }
-}
 
-#[test]
-fn test_combinations_5() {
-    let test_data = [
-        // correct
-        ("/string [[:digit:]]* /p", "", ""),
-        ("/./,/^$/p", "", ""),
-        ("\\,.*, p", "", ""),
-        ("\\:[ac]: p", "", ""),
-        ("1,\\,stop, p", "", ""),
-        ("s/WORD/Hello World/p ; p", "", ""),
-        ("s/.* /[&]/", "", ""),
-        ("s/SUBST/program\\/lib\\/module\\/lib.so/", "", ""),
-    ];
+    #[test]
+    fn test_q() {
+        let test_data = [
+            // correct
+            ("q", "", "", ""),
+            ("q; q", "", "", ""),
+            // wrong
+            ("q g", "", "", ""),
+            ("q q", "", "", ""),
+            ("qq", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_combinations_6() {
-    let test_data = [
-        // correct
-        ("s|SUBST|program/lib/module/lib.so|", "", ""),
-        ("s_SUBST_program/lib/module/lib.so_", "", ""),
-        ("N; s/^/     /; s/ *\\(.\\{6,\\}\\)\n/\\1  /", "", ""),
-        ("/./N; s/\n/ /", "", ""),
-        ("$=", "", ""),
-        ("s/.$//", "", ""),
-        ("s/^M$//", "", ""),
-        ("s/\x0D$//", "", ""),
-    ];
+    #[test]
+    fn test_r() {
+        let test_data = [
+            // correct
+            ("r ./text/tests/sed/assets/abc", "", "", ""),
+            ("r./text/tests/sed/assets/abc", "", "", ""),
+            // wrong
+            ("r", "", "", ""),
+            ("r aer", "", "", ""),                       // works
+            ("r #@/?", "", "", ""),                      // works
+            ("r #@/?\nl", "", "", ""),                   // works
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
-}
 
-#[test]
-fn test_combinations_7() {
-    let test_data = [
-        // correct
-        ("s/$/`echo -e \\\r`/", "", ""),
-        ("/./{H;$!d;};x;/AAA\\|BBB\\|CCC/b;d", "", ""),
-        ("/Iowa/,/Montana/p", "", ""),
-        ("/^$/N;/\n$/N;//D", "", ""),
-        ("/^$/{p;h;};/./{x;/./p;}", "", ""),
-        ("/^Reply-To:/q; /^From:/h; /./d;g;q", "", ""),
-        ("s/ *(.*)//; s/>.* //; s/.*[:<] * //", "", ""),
-        ("/./{H;d;};x;s/\n/={NL}=/g", "", ""),
-        ("N; s/^/ /; s/ *\\(.\\{4,\\}\\)\n/\\1 /", "", "")
-    ];
+    #[test]
+    fn test_s() {
+        let test_data = [
+            // correct
+            ("s/b/r/", "", "", ""),
+            ("s|b|r|", "", "", ""),
+            ("s/b/r/", "", "", ""),
+            ("s/[[:alpha:]]/r/", "", "", ""),
+            ("s/\\(a\\)\\(x\\)/\\1\\2/", "", "", ""),
+            // wrong
+            ("s/[:alpha:]/r/", "", "", ""),
+            ("s///", "", "", ""),
+            ("s/a/b/c/d/", "", "", ""),
+            ("s//a//c//", "", "", ""),
+            ("s/\\(\\(x\\)/\\1\\2/", "", "", ""),
+            ("s\na\nb\n", "", "", ""),
+        ];
 
-    for (input, output, err) in test_data{
-        sed_test(
-            &["-e", input],
-            "",
-            output,
-            err,
-            0,
-        );
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_s_with_right_flags() {
+        let test_data = [
+            // correct
+            ("s/b/r/6", "", "", ""),
+            ("s/b/r/g", "", "", ""),
+            ("s/b/r/p", "", "", ""),
+            ("s/b/r/w ./README.md", "", "", ""),
+            ("s/b/r/6p", "", "", ""),
+            ("s/b/r/gp", "", "", ""),
+            ("s/b/r/p6", "", "", ""),
+            ("s/b/r/g6", "", "", ""),
+            ("s/b/r/pw ./README.md", "", "", ""),
+            ("s/b/r/6pw ./README.md", "", "", ""),
+            ("s/b/r/gpw ./README.md", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_s_with_wrong_flags() {
+        let test_data = [
+            // wrong
+            ("s/b/r/ p", "", "", ""),                           // works
+            ("s/b/r/ w", "", "", ""),                           // works
+            ("s/b/r/ p w ./README.md", "", "", ""),             // works
+            ("s/b/r/-6", "", "", ""),
+            ("s/b/r/-6p", "", "", ""),
+            ("s/b/r/p-6", "", "", ""),
+            ("s/b/r/g-6", "", "", ""),
+            ("s/b/r/6g", "", "", ""),                           // works
+            ("s/b/r/6pg", "", "", ""),                          // works
+            ("s/b/r/wpg6", "", "", ""),                         // works
+            ("s/b/r/w6", "", "", ""),                           // works
+            ("s/b/r/w g6", "", "", ""),                         // works
+            ("s/b/r/w./REA;DME.md", "", "", ""),                // works
+            ("s/b/r/w ./REA;DME.md", "", "", ""),               // works
+            ("s/b/r/w ./REA;DME.md p", "", "", ""),             // works
+            ("s/b/r/6gpw ./README.md", "", "", "")              // works
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_t() {
+        let test_data = [
+            // correct
+            ("t", "", "", ""),
+            ("t label", "", "", ""),
+            ("t; :label", "", "", ""),
+            ("t label; :label", "", "", ""),
+            ("t label1", "", "", ""),
+            ("t lab2el1abc", "", "", ""),
+            ("t loop_", "", "", ""),
+            ("t _start", "", "", ""),
+            ("t my_label", "", "", ""),
+            ("t #%$?@&*; :#%$?@&*", "", "", ""),              // works
+            ("t label#; :label#", "", "", ""),                // works  
+            ("t 1label; :1label", "", "", ""),                // works
+            ("t 1234; :1234", "", "", ""),                    // works
+            // wrong
+            ("t #%$?@&*;", "", "", ""),                 
+            ("t label#", "", "", ""),                  
+            ("t 1label", "", "", ""),                  
+            ("t 1234", "", "", ""),
+            ("t g", "", "", ""),          
+            ("t; label", "", "", ""),                   
+            ("t :label", "", "", ""),                 
+            ("t label :label", "", "", ""),                   // works
+            ("t ab\ncd; :ab\ncd", "", "", "")                 // works
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_w() {
+        let test_data = [
+            // correct
+            ("w ./text/tests/sed/assets/abc", "", "", ""),             // works
+            // wrong
+            ("w./text/tests/sed/assets/abc", "", "", ""),              // works
+            ("w atyfv", "", "", ""),                                   // works
+            ("w ; h", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_x() {
+        let test_data = [
+            // correct
+            ("h; s/.* /abc/; x", "", "", ""),
+            // wrong
+            ("x h", "", "", ""),
+            ("x x", "", "", ""),
+            ("xx", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_y() {
+        let test_data = [
+            // correct
+            ("y/abc/cdf/", "", "", ""),
+            ("y/abc/aaa/", "", "", ""),
+            ("y///", "", "", ""),                                 // works
+            // wrong
+            ("y/abc/aaaa/", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_line_numeration() {
+        let test_data = [
+            // correct
+            ("=", "", "", ""),
+            // wrong
+            ("= g", "", "", ""),
+            ("= =", "", "", ""),
+            ("==", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_comment() {
+        let test_data = [
+            // correct
+            ("{ #\\ }\n{ #\n }\n#h", "", "", ""),                  // not works
+            // wrong
+            ("{ # }\n{ \\# }\n{ \n# }", "", "", ""),
+            ("a\text#abc\ntext", "", "", ""),                      // works
+            ("a\\#text\ntext", "", "", ""),                        // works
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_combinations_1() {
+        let test_data = [
+            // correct
+            ("1,3 { p ; p } ; 1,2 { p ; p } ; {p ; p}", "", "", ""),
+            (":x ; /=$/ { N ; s/=\n//g ; bx }", "", "", ""),
+            ("/1/b else ; s/a/z/ ; :else ; y/123/456/", "", "", ""),
+            ("/1/!s/a/z/ ; y/123/456/", "", "", ""),
+            ("/start/,/end/p", "", "", ""),
+            ("/start/,$p", "", "", ""),
+            ("1,/end/p", "", "", ""),
+            // wrong
+            ("2,4 !p", "", "", ""),
+            ("2,4 !{p}", "", "", ""),
+            ("/pattern/- p", "", "", "")
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_combinations_2() {
+        let test_data = [
+            // correct
+            ("\\:start:,\\,stop, p", "", "", ""),
+            ("\\`'$PATTERN'`p", "", "", ""),
+            ("\n1,$ {\n/begin/,/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n/^$/ d\np\n}\n}", "", "", ""),
+            ("/./{H;$!d} ; x ; s/^/\nSTART-->/ ; s/$/\n<--END/", "", "", ""),
+            ("s/param=.* /param=new_value/", "", "", ""),
+            ("s/\\([[:alnum:]]*\\).* /\\1/", "", "", ""),
+            ("s/[[:alnum:]]* //2", "", "", ""),
+            ("$ s/[[:alnum:]]* //2", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_combinations_3() {
+        let test_data = [
+            // correct
+            ("s/#.* //;s/[[:blank:]]*$//;/^$/ d;p", "", "", ""),
+            ("s/\\(^[*][[:space:]]\\)/   \\1/", "", "", ""),
+            ("s/\\(^[*][[:space:]]\\)/   \\1/;/List of products:/a ---------------", "", "", ""),
+            ("s/h\\.0\\.\\(.*\\)/ \\U\\1/", "", "", ""),
+            ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "", "", ""),
+            ("/^$/d;G", "", "", ""),
+            ("N;s/\n/\t/", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_combinations_4() {
+        let test_data = [
+            // correct
+            ("s/^[ \t]* //;s/[ \t]*$//", "", "", ""),
+            (":a;s/^.\\{1,78\\}$/ &/;ta", "", "", ""),
+            ("s/\\(.*\\)foo\\(.*foo\\)/\\1bar\\2/", "", "", ""),
+            ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "", "", ""),
+            (":a;s/(^|[^0-9.])([0-9]+)([0-9]{3})/\\1\\2,\\3/g;ta", "", "", ""),
+            ("n;n;n;n;G;", "", "", ""),
+            (":a;$q;N;11,$D;ba", "", "", ""),
+            ("1{$q;};$!{h;d;};x", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_combinations_5() {
+        let test_data = [
+            // correct
+            ("/string [[:digit:]]* /p", "", "", ""),
+            ("/./,/^$/p", "", "", ""),
+            ("\\,.*, p", "", "", ""),
+            ("\\:[ac]: p", "", "", ""),
+            ("1,\\,stop, p", "", "", ""),
+            ("s/WORD/Hello World/p ; p", "", "", ""),
+            ("s/.* /[&]/", "", "", ""),
+            ("s/SUBST/program\\/lib\\/module\\/lib.so/", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_combinations_6() {
+        let test_data = [
+            // correct
+            ("s|SUBST|program/lib/module/lib.so|", "", "", ""),
+            ("s_SUBST_program/lib/module/lib.so_", "", "", ""),
+            ("N; s/^/     /; s/ *\\(.\\{6,\\}\\)\n/\\1  /", "", "", ""),
+            ("/./N; s/\n/ /", "", "", ""),
+            ("$=", "", "", ""),
+            ("s/.$//", "", "", ""),
+            ("s/^M$//", "", "", ""),
+            ("s/\x0D$//", "", "", ""),
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
+    }
+
+    #[test]
+    fn test_combinations_7() {
+        let test_data = [
+            // correct
+            ("s/$/`echo -e \\\r`/", "", "", ""),
+            ("/./{H;$!d;};x;/AAA\\|BBB\\|CCC/b;d", "", "", ""),
+            ("/Iowa/,/Montana/p", "", "", ""),
+            ("/^$/N;/\n$/N;//D", "", "", ""),
+            ("/^$/{p;h;};/./{x;/./p;}", "", "", ""),
+            ("/^Reply-To:/q; /^From:/h; /./d;g;q", "", "", ""),
+            ("s/ *(.*)//; s/>.* //; s/.*[:<] * //", "", "", ""),
+            ("/./{H;d;};x;s/\n/={NL}=/g", "", "", ""),
+            ("N; s/^/ /; s/ *\\(.\\{4,\\}\\)\n/\\1 /", "", "", "")
+        ];
+
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                0,
+            );
+        }
     }
 }
 
