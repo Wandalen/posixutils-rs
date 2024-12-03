@@ -463,6 +463,90 @@ fn test_delimiters() {
 }
 
 #[test]
+fn test_address_correct() {
+    let test_data = [
+        // correct
+        ("0,10 p", "", ""),
+        ("0,10p", "", ""),
+        ("0,10 p", "", ""),
+        ("10 p", "", ""),
+        ("1,$ p", "", ""),
+        ("$ p", "", ""),
+        ("$p", "", ""),
+        ("$,$ p", "", "")
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
+
+#[test]
+fn test_address_wrong() {
+    let test_data = [
+        // wrong
+        ("0, p", "", ""),
+        (",10 p", "", ""),
+        (", p", "", ""),
+        (",,p", "", ""),
+        ("0,1,2,3,4 p", "", ""),
+        ("0,-10 p", "", ""),
+        ("0, 10 p", "", ""),
+        ("0 ,10 p", "", ""),
+        ("0,10; p", "", ""),
+        ("0 10 p", "", ""),
+        ("1,+3p", "", ""),
+        ("/5/,+3p", "", ""),
+        ("7;+ p", "", ""),
+        ("+++ p", "", ""),
+        ("-2 p", "", ""),
+        ("3 ---- 2p", "", ""),
+        ("1 2 3 p", "", "")
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
+
+#[test]
+fn test_address_with_bre() {
+    let test_data = [
+        // correct
+        ("\\/abc/,10 p", "", ""),
+        ("\\/abc/ p", "", ""),
+        ("\\@abc@ p", "", ""),
+        ("\\/ab\\/c/ p", "", ""),
+        ("\\/abc/,\\!cdf! p", "", "")
+        // wrong
+        ("\\/abc/10 p", "", ""),
+        ("@abc@ p", "", ""),
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
+
+#[test]
 fn test_block() {
     let test_data = [
         // correct
@@ -528,6 +612,7 @@ fn test_b() {
         ("b loop_", "", ""),
         ("b _start", "", ""),
         ("b my_label", "", ""),
+        ("b ab\ncd; :ab\ncd", "", ""),
         // wrong
         ("b #%$?@&*;", "", ""),
         ("b label#", "", ""),
@@ -923,12 +1008,17 @@ fn test_s() {
 fn test_s_with_right_flags() {
     let test_data = [
         // correct
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("s/b/r/6", "", ""),
+        ("s/b/r/g", "", ""),
+        ("s/b/r/p", "", ""),
+        ("s/b/r/w ./README.md", "", ""),
+        ("s/b/r/6p", "", ""),
+        ("s/b/r/gp", "", ""),
+        ("s/b/r/p6", "", ""),
+        ("s/b/r/g6", "", ""),
+        ("s/b/r/pw ./README.md", "", ""),
+        ("s/b/r/6pw ./README.md", "", ""),
+        ("s/b/r/gpw ./README.md", "", ""),
     ];
 
     for (input, output, err) in test_data{
@@ -946,9 +1036,22 @@ fn test_s_with_right_flags() {
 fn test_s_with_wrong_flags() {
     let test_data = [
         // wrong
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("s/b/r/ p", "", ""),
+        ("s/b/r/ w", "", ""),
+        ("s/b/r/ p w ./README.md", "", ""),
+        ("s/b/r/-6", "", ""),
+        ("s/b/r/-6p", "", ""),
+        ("s/b/r/p-6", "", ""),
+        ("s/b/r/g-6", "", ""),
+        ("s/b/r/6g", "", ""),
+        ("s/b/r/6pg", "", ""),
+        ("s/b/r/wpg6", "", ""),
+        ("s/b/r/w6", "", ""),
+        ("s/b/r/w g6", "", ""),
+        ("s/b/r/w./REA;DME.md", "", ""),
+        ("s/b/r/w ./REA;DME.md", "", ""),
+        ("s/b/r/w ./REA;DME.md p", "", ""),
+        ("s/b/r/6gpw ./README.md", "", "")
     ];
 
     for (input, output, err) in test_data{
@@ -966,13 +1069,26 @@ fn test_s_with_wrong_flags() {
 fn test_t() {
     let test_data = [
         // correct
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("t", "", ""),
+        ("t label", "", ""),
+        ("t; :label", "", ""),
+        ("t label; :label", "", ""),
+        ("t label1", "", ""),
+        ("t lab2el1abc", "", ""),
+        ("t loop_", "", ""),
+        ("t _start", "", ""),
+        ("t my_label", "", ""),
         // wrong
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("t #%$?@&*;", "", ""),
+        ("t label#", "", ""),
+        ("t 1label", "", ""),
+        ("t 1234", "", ""),
+        ("t g", "", ""),
+        ("t; label", "", ""),
+        ("t :label", "", ""),
+        ("t label :label", "", ""),
+        (":label t label", "", ""),
+        ("t ab\ncd; :ab\ncd", "", "")
     ];
 
     for (input, output, err) in test_data{
@@ -990,13 +1106,11 @@ fn test_t() {
 fn test_w() {
     let test_data = [
         // correct
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("w ./text/tests/sed/assets/abc", "", ""),
         // wrong
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("w./text/tests/sed/assets/abc", "", ""),
+        ("w ; h", "", ""),
+        ("w atyfv", "", ""),
     ];
 
     for (input, output, err) in test_data{
@@ -1014,13 +1128,11 @@ fn test_w() {
 fn test_x() {
     let test_data = [
         // correct
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("h; s/.* /abc/; x", "", ""),
         // wrong
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("x h", "", ""),
+        ("x x", "", ""),
+        ("xx", "", ""),
     ];
 
     for (input, output, err) in test_data{
@@ -1036,14 +1148,13 @@ fn test_x() {
 
 #[test]
 fn test_y() {
+    let test_data = [
         // correct
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("y/abc/cdf/", "", ""),
+        ("y/abc/aaa/", "", ""),
         // wrong
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("y/abc/aaaa/", "", ""),
+        ("y///", "", "")
     ];
 
     for (input, output, err) in test_data{
@@ -1061,13 +1172,11 @@ fn test_y() {
 fn test_line_numeration() {
     let test_data = [
         // correct
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("=", "", ""),
         // wrong
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("= g", "", ""),
+        ("= =", "", ""),
+        ("==", "", ""),
     ];
 
     for (input, output, err) in test_data{
@@ -1085,13 +1194,11 @@ fn test_line_numeration() {
 fn test_comment() {
     let test_data = [
         // correct
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("{ #\\ }\n{ #\n }\n#h", "", ""),
         // wrong
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("{ # }\n{ \\# }\n{ \n# }", "", ""),
+        ("a\text#abc\ntext", "", ""),
+        ("a\\#text\ntext", "", ""),
     ];
 
     for (input, output, err) in test_data{
@@ -1106,16 +1213,20 @@ fn test_comment() {
 }
 
 #[test]
-fn test_combinations() {
+fn test_combinations_1() {
     let test_data = [
         // correct
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("1,3 { p ; p } ; 1,2 { p ; p } ; {p ; p}", "", ""),
+        (":x ; /=$/ { N ; s/=\n//g ; bx }", "", ""),
+        ("/1/b else ; s/a/z/ ; :else ; y/123/456/", "", ""),
+        ("/1/!s/a/z/ ; y/123/456/", "", ""),
+        ("/start/,/end/p", "", ""),
+        ("/start/,$p", "", ""),
+        ("1,/end/p", "", ""),
         // wrong
-        ("", "", ""),
-        ("", "", ""),
-        ("", "", ""),
+        ("2,4 !p", "", ""),
+        ("2,4 !{p}", "", "")
+        ("/pattern/- p", "", "")
     ];
 
     for (input, output, err) in test_data{
@@ -1129,6 +1240,155 @@ fn test_combinations() {
     }
 }
 
+#[test]
+fn test_combinations_2() {
+    let test_data = [
+        // correct
+        ("\\:start:,\\,stop, p", "", ""),
+        ("\\`'$PATTERN'`p", "", ""),
+        ("\n1,$ {\n/begin/,/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n/^$/ d\np\n}\n}", "", ""),
+        ("/./{H;$!d} ; x ; s/^/\nSTART-->/ ; s/$/\n<--END/", "", ""),
+        ("s/param=.* /param=new_value/", "", ""),
+        ("s/\\([[:alnum:]]*\\).* /\\1/", "", ""),
+        ("s/[[:alnum:]]* //2", "", ""),
+        ("$ s/[[:alnum:]]* //2", "", ""),
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
+
+#[test]
+fn test_combinations_3() {
+    let test_data = [
+        // correct
+        ("s/#.* //;s/[[:blank:]]*$//;/^$/ d;p", "", ""),
+        ("s/\\(^[*][[:space:]]\\)/   \\1/", "", ""),
+        ("s/\\(^[*][[:space:]]\\)/   \\1/;/List of products:/a ---------------", "", ""),
+        ("s/h\\.0\\.\\(.*\\)/ \\U\\1/", "", ""),
+        ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "", ""),
+        ("/^$/d;G", "", ""),
+        ("N;s/\n/\t/", "", ""),
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
+
+#[test]
+fn test_combinations_4() {
+    let test_data = [
+        // correct
+        ("s/^[ \t]* //;s/[ \t]*$//", "", ""),
+        (":a;s/^.\\{1,78\\}$/ &/;ta", "", ""),
+        ("s/\\(.*\\)foo\\(.*foo\\)/\\1bar\\2/", "", ""),
+        ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "", ""),
+        (":a;s/(^|[^0-9.])([0-9]+)([0-9]{3})/\\1\\2,\\3/g;ta", "", ""),
+        ("n;n;n;n;G;", "", ""),
+        (":a;$q;N;11,$D;ba", "", ""),
+        ("1{$q;};$!{h;d;};x", "", ""),
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
+
+#[test]
+fn test_combinations_5() {
+    let test_data = [
+        // correct
+        ("/string [[:digit:]]* /p", "", ""),
+        ("/./,/^$/p", "", ""),
+        ("\\,.*, p", "", ""),
+        ("\\:[ac]: p", "", ""),
+        ("1,\\,stop, p", "", ""),
+        ("s/WORD/Hello World/p ; p", "", ""),
+        ("s/.* /[&]/", "", ""),
+        ("s/SUBST/program\\/lib\\/module\\/lib.so/", "", ""),
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
+
+#[test]
+fn test_combinations_6() {
+    let test_data = [
+        // correct
+        ("s|SUBST|program/lib/module/lib.so|", "", ""),
+        ("s_SUBST_program/lib/module/lib.so_", "", ""),
+        ("N; s/^/     /; s/ *\\(.\\{6,\\}\\)\n/\\1  /", "", ""),
+        ("/./N; s/\n/ /", "", ""),
+        ("$=", "", ""),
+        ("s/.$//", "", ""),
+        ("s/^M$//", "", ""),
+        ("s/\x0D$//", "", ""),
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
+
+#[test]
+fn test_combinations_7() {
+    let test_data = [
+        // correct
+        ("s/$/`echo -e \\\r`/", "", ""),
+        ("/./{H;$!d;};x;/AAA\\|BBB\\|CCC/b;d", "", ""),
+        ("/Iowa/,/Montana/p", "", ""),
+        ("/^$/N;/\n$/N;//D", "", ""),
+        ("/^$/{p;h;};/./{x;/./p;}", "", ""),
+        ("/^Reply-To:/q; /^From:/h; /./d;g;q", "", ""),
+        ("s/ *(.*)//; s/>.* //; s/.*[:<] * //", "", ""),
+        ("/./{H;d;};x;s/\n/={NL}=/g", "", ""),
+        ("N; s/^/ /; s/ *\\(.\\{4,\\}\\)\n/\\1 /", "", "")
+    ];
+
+    for (input, output, err) in test_data{
+        sed_test(
+            &["-e", input],
+            "",
+            output,
+            err,
+            0,
+        );
+    }
+}
 
 /*
 
@@ -1821,7 +2081,6 @@ a\#text\ntext
 correct:
 0,10 p "" "" "" ""
 0,10p "" "" "" ""
-0,10 p "" "" "" ""
 0,10 p "" "" "" ""
 10 p "" "" "" ""
 1,$ p "" "" "" ""
