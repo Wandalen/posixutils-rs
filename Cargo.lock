@@ -1502,6 +1502,7 @@ dependencies = [
  "proptest",
  "rand",
  "regex",
+ "thiserror",
  "topological-sort",
  "walkdir",
 ]
