@@ -48,6 +48,12 @@ enum ManError {
     Io(#[from] io::Error),
 }
 
+struct FormattingSettings
+{
+    width : u16,
+    indent : u16,
+}
+
 /// Gets system documentation path by passed name.
 ///
 /// # Arguments
@@ -165,26 +171,36 @@ fn get_man_page(name: &str) -> Result<Vec<u8>, ManError> {
 /// # Errors
 ///
 /// Returns [ManError] if working on terminal and failed to get terminal size.
-fn get_page_width() -> Result<Option<u16>, ManError> {
+fn get_pager_settings() -> Result<FormattingSettings, ManError> {
+    let mut ps = FormattingSettings {
+        width: 79,
+        indent: 5,
+    };
+
     if !std::io::stdout().is_terminal() {
-        return Ok(None);
+        return Ok(ps);
     }
+
     let mut winsize = libc::winsize {
         ws_row: 0,
         ws_col: 0,
         ws_xpixel: 0,
         ws_ypixel: 0,
     };
+
     let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) };
     if result != 0 {
         return Err(ManError::GetTerminalSize);
     }
-    let result_width = if winsize.ws_col >= 80 {
-        winsize.ws_col - 2
-    } else {
-        winsize.ws_col
-    };
-    Ok(Some(result_width))
+
+    if winsize.ws_col < 79 {
+        ps.width = winsize.ws_col - 1;
+        if winsize.ws_col < 66 {
+            ps.indent = 3;
+        }
+    }
+    
+    Ok(ps)
 }
 
 /// Parses `mdoc(7)`.
@@ -201,7 +217,7 @@ fn get_page_width() -> Result<Option<u16>, ManError> {
 /// # Errors
 ///
 /// [ManError] if file failed to execute `groff(1)` formatter.
-fn parse_mdoc(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> {
+fn parse_mdoc(man_page: &[u8], formatting_settings: FormattingSettings) -> Result<Vec<u8>, ManError> {
     Ok(man_page.into())
 }
 
@@ -219,9 +235,9 @@ fn parse_mdoc(man_page: &[u8], width: Option<u16>) -> Result<Vec<u8>, ManError> 
 ///
 /// [ManError] if failed to execute formatter.
 fn format_man_page(man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
-    let width = get_page_width()?;
+    let formatting_settings = get_pager_settings()?;
 
-    parse_mdoc(&man_page, width)
+    parse_mdoc(&man_page, formatting_settings)
 }
 
 /// Formats man page content into appropriate format.
