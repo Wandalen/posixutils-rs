@@ -1,32 +1,32 @@
 mod job;
 
+use crate::job::Database;
+use std::env;
 use std::error::Error;
 use std::fs;
-use std::env;
 use std::str::FromStr;
-use crate::job::CronJob;
 
-fn parse_cronfile(username: &str) -> Result<Vec<CronJob>, Box<dyn Error>> {
+fn parse_cronfile(username: &str) -> Result<Database, Box<dyn Error>> {
     let file = format!("/var/spool/cron/{username}");
     let s = fs::read_to_string(&file)?;
-    Ok(s.lines().map(|x| CronJob::from_str(x).unwrap()).collect::<Vec<_>>())
+    Ok(s.lines().map(|x| Database::from_str(x).unwrap()).fold(Database(vec![]), |acc, next| acc.merge(next)))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let Ok(logname) = env::var("LOGNAME") else {
         panic!("Could not obtain the user's logname.")
     };
-    let jobs = parse_cronfile(logname.as_str())?;
-    
+    let mut db = parse_cronfile(&logname)?;
+
     // Daemon setup
     unsafe {
         use libc::*;
-        
+
         let pid = fork();
         if pid > 0 {
             return Ok(());
         }
-        
+
         setsid();
         chdir(b"/\0" as *const _ as *const c_char);
 
@@ -36,13 +36,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Daemon code
-    std::thread::sleep(std::time::Duration::from_secs(10));
-    Ok(())
+
+    loop {
+        let x = db.0.iter().min_by_key(|x| x.next_execution()).unwrap();
+        sleep(x.next_execution() as u32);
+        db = parse_cronfile(&logname)?;
+    }
 }
 
-fn sleep(target: std::time::Duration) {
-    let secs = target.as_secs();
-    while secs > 0 && secs < 65 {
-        std::thread::sleep(target);
-    }
+fn sleep(target: u32) {
+        unsafe {libc::sleep(target) };
 }

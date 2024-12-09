@@ -1,7 +1,10 @@
+use std::alloc::System;
 use std::cmp::Ordering;
-use std::ops::RangeInclusive;
-use std::str::FromStr;
 use std::iter::Peekable;
+use std::process::Command;
+use std::ptr::null_mut;
+use std::str::FromStr;
+use std::time::{Instant, SystemTime};
 
 trait TimeUnit: Sized {
     fn new(amount: i32) -> Option<Self>;
@@ -16,21 +19,31 @@ macro_rules! time_unit {
 
         impl TimeUnit for $name {
             fn new(amount: i32) -> Option<Self> {
-                if !($range).contains(&amount) { return None; }
+                if !($range).contains(&amount) {
+                    return None;
+                }
                 Some(Self(amount as u8))
             }
 
             fn new_range(min: i32, max: i32) -> Vec<Self> {
-                if !($range).contains(&min) { return vec![]; }
-                if !($range).contains(&max) { return vec![]; }
-                if min > max { return vec![]; }
+                if !($range).contains(&min) {
+                    return vec![];
+                }
+                if !($range).contains(&max) {
+                    return vec![];
+                }
+                if min > max {
+                    return vec![];
+                }
 
                 ((min as u8)..=(max as u8)).map(Self).collect::<Vec<Self>>()
             }
 
-            fn new_all() -> Vec<Self> { ($range).map(Self).collect::<Vec<Self>>() }
+            fn new_all() -> Vec<Self> {
+                ($range).map(Self).collect::<Vec<Self>>()
+            }
         }
-        
+
         impl std::ops::Sub<$name> for $name {
             type Output = $name;
 
@@ -41,11 +54,11 @@ macro_rules! time_unit {
     };
 }
 
-time_unit!(Minute  , 0..=59);
-time_unit!(Hour    , 0..=23);
+time_unit!(Minute, 0..=59);
+time_unit!(Hour, 0..=23);
 time_unit!(MonthDay, 1..=31);
-time_unit!(Month   , 1..=12);
-time_unit!(WeekDay , 0..= 6);
+time_unit!(Month, 1..=12);
+time_unit!(WeekDay, 0..=6);
 
 #[derive(Eq, PartialEq, Ord)]
 pub struct CronJob {
@@ -68,30 +81,51 @@ impl PartialOrd for CronJob {
     }
 }
 
-impl FromStr for CronJob {
+pub struct Database(pub Vec<CronJob>);
+
+impl Database {
+    pub fn merge(mut self, other: Database) -> Database {
+        self.0.extend(other.0);
+        self
+    }
+}
+
+impl FromStr for Database {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut src = s.chars().peekable();
-        
-        let minute;
+
         skip_ws(&mut src);
-        minute = Minute::new_all();
-        
-        let hour = Hour::new_all();
-        let monthday = MonthDay::new_all();
-        let month = Month::new_all();
-        let weekday = WeekDay::new_all();
+
+        let minutes = Minute::new_all();
+        let hours = Hour::new_all();
+        let monthdays = MonthDay::new_all();
+        let months = Month::new_all();
+        let weekdays = WeekDay::new_all();
         let command = String::new();
 
-        Ok(Self {
-            minute: todo!(),
-            hour: todo!(),
-            monthday: todo!(),
-            month: todo!(),
-            weekday: todo!(),
-            command: todo!(),
-        })
+        let mut result = vec![];
+        for minute in &minutes {
+            for hour in &hours {
+                for monthday in &monthdays {
+                    for month in &months {
+                        for weekday in &weekdays {
+                            result.push(CronJob {
+                                minute: minute.clone(),
+                                hour: hour.clone(),
+                                monthday: monthday.clone(),
+                                month: month.clone(),
+                                weekday: weekday.clone(),
+                                command: command.clone(),
+                            })
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Self(result))
     }
 }
 
@@ -110,38 +144,99 @@ impl std::ops::Sub<CronJob> for CronJob {
     }
 }
 
+impl CronJob {
+    pub fn next_execution(&self) -> i64 {
+        let Self {
+            minute,
+            hour,
+            month,
+            monthday,
+            weekday,
+            command: _,
+        } = self;
+
+        let month_secs: [i64; 12] = [
+            2_678_400,
+            2_419_200,
+            2_678_400,
+            2_592_000,
+            2_678_400,
+            2_592_000,
+            2_678_400,
+            2_678_400,
+            2_592_000,
+            2_678_400,
+            2_592_000,
+            2_678_400,
+        ];
+        
+        let mut total = 0;
+        total += minute.0 as i64 * 60;
+        total += hour.0 as i64 * 60 * 60;
+        total += month_secs[month.0 as usize];
+        total += (weekday.0 as i64 * 60 * 60 * 24).min(monthday.0 as i64 * 60 * 60 * 24);
+
+        total
+    }
+
+    fn run_job(&self) {
+        Command::new("sh").args(&["-c", &self.command]).output();
+    }
+}
+
 fn skip_ws(src: &mut Peekable<impl Iterator<Item = char>>) {
     while let Some(c) = src.peek() {
-        if c.is_whitespace() { src.next(); } else { break; }
+        if c.is_whitespace() {
+            src.next();
+        } else {
+            break;
+        }
     }
 }
 
 fn skip_till_ws(src: &mut Peekable<impl Iterator<Item = char>>) {
     while let Some(c) = src.peek() {
-        if !c.is_whitespace() { src.next(); } else { break; }
+        if !c.is_whitespace() {
+            src.next();
+        } else {
+            break;
+        }
     }
 }
 
 fn get_number(src: &mut Peekable<impl Iterator<Item = char>>) -> Option<i32> {
     let mut number = String::new();
-    
+
     while let Some(&c) = src.peek() {
-        if c.is_digit(10) { number.push(c); }
+        if c.is_digit(10) {
+            number.push(c);
+        }
     }
-    
+
     number.parse().ok()
 }
 
 fn expect(src: &mut Peekable<impl Iterator<Item = char>>, expected: char) -> bool {
     let Some(&c) = src.peek() else { return false };
-    if c == expected { src.next(); true } else { false }
+    if c == expected {
+        src.next();
+        true
+    } else {
+        false
+    }
 }
 
 fn parse_value<T: TimeUnit>(src: &mut Peekable<impl Iterator<Item = char>>) -> Vec<T> {
     if expect(src, '*') {
-        return if expect(src, ' ') { T::new_all() } else { Vec::new() }
+        return if expect(src, ' ') {
+            T::new_all()
+        } else {
+            Vec::new()
+        };
     }
-    
-    let Some(number) = get_number(src) else { return vec![] };
+
+    let Some(number) = get_number(src) else {
+        return vec![];
+    };
     vec![]
 }
