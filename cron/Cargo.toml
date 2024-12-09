@@ -1,0 +1,16 @@
+[package]
+name = "posixutils-cron"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+libc = { workspace = true }
+
+[[bin]]
+name = "crontab"
+path = "crontab.rs"
+
+[[bin]]
+name = "crond"
+path = "crond.rs"

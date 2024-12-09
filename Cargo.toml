@@ -25,7 +25,8 @@ members = [
 	"tree",
 	"users",
 	"xform",
-	"i18n"
+	"i18n",
+	"cron",
 ]
 
 [workspace.package]
