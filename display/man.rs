@@ -9,12 +9,15 @@
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
+use man_util::mdoc_macro::text_production::{AtAndTUnix, Standard};
 use plib::PROJECT_NAME;
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 use thiserror::Error;
+
+mod man_util;
 
 // `/usr/share/man` - system provided directory with system documentation.
 // `/usr/local/share/man` - user programs provided directory with system documentation.
@@ -48,10 +51,9 @@ enum ManError {
     Io(#[from] io::Error),
 }
 
-struct FormattingSettings
-{
-    width : u16,
-    indent : u16,
+struct FormattingSettings {
+    width: u16,
+    indent: u16,
 }
 
 /// Gets system documentation path by passed name.
@@ -199,7 +201,7 @@ fn get_pager_settings() -> Result<FormattingSettings, ManError> {
             ps.indent = 3;
         }
     }
-    
+
     Ok(ps)
 }
 
@@ -217,7 +219,10 @@ fn get_pager_settings() -> Result<FormattingSettings, ManError> {
 /// # Errors
 ///
 /// [ManError] if file failed to execute `groff(1)` formatter.
-fn parse_mdoc(man_page: &[u8], formatting_settings: FormattingSettings) -> Result<Vec<u8>, ManError> {
+fn parse_mdoc(
+    man_page: &[u8],
+    formatting_settings: FormattingSettings,
+) -> Result<Vec<u8>, ManError> {
     Ok(man_page.into())
 }
 
