@@ -38,7 +38,6 @@ pub enum BlType {
     Dash, // Or "hyphen"
     Diag,
     Enum,
-    Hyphen,
     Inset,
     Item,
     Ohang,
