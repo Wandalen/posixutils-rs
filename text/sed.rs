@@ -8,9 +8,7 @@
 //
 
 use std::{
-    collections::{HashMap, HashSet}, ffi::CString, fmt::{self, Debug}, 
-    fs::File, io::{BufRead, BufReader, Error, ErrorKind, Write}, 
-    mem::MaybeUninit, ops::Range, path::PathBuf
+    collections::{HashMap, HashSet}, env, ffi::CString, fmt::{self, Debug}, fs::File, io::{BufRead, BufReader, Error, ErrorKind, Write}, mem::MaybeUninit, ops::Range, path::PathBuf
 };
 use std::sync::Mutex;
 use libc::{
@@ -112,7 +110,6 @@ impl Args {
             hold_space: String::new(),
             after_space: String::new(),
             current_file: None,
-            current_lines_count: None,
             current_line: 0,
             has_replacements_since_t: false,
             last_regex: None
@@ -136,7 +133,10 @@ enum SedError {
     /// Sed can`t parse raw script string.
     /// Can't parse string, reason is: 
     #[error("{}", .0)] 
-    ScriptParse(String)
+    ScriptParse(String),
+    /// Runtime error when processing file
+    #[error("read {}: {}", .0, .1)] 
+    Runtime(String, String)
 }
 
 /// Define line number or range limits of [`Address`] 
@@ -210,6 +210,19 @@ impl AddressRange{
             0 => return Ok(None),
             _ => None
         };
+        if limits.len() == 2 && limits.iter().all(|t| matches!(t, AddressToken::Number(..))){
+            let AddressToken::Number(a) = limits[0] else {
+                unreachable!()
+            };
+            let AddressToken::Number(b) = limits[1] else {
+                unreachable!()
+            };
+            if a > b{
+                return Err(SedError::ScriptParse(
+                    format!("bottom bound {} bigger than top bound {} in address", a, b)
+                ))
+            }
+        }
         Ok(Some(Self{
             limits,
             passed: state,
@@ -402,7 +415,7 @@ impl Command{
     }
 
     /// Check if [`Command`] apply conditions are met for current line 
-    fn need_execute(&mut self, line_number: usize, line: &str, lines_count: usize) -> Result<bool, SedError>{
+    fn need_execute(&mut self, line_number: usize, line: &str) -> Result<bool, SedError>{
         let Some((address, _)) = self.get_mut_address() else{
             return Ok(true);
         };
@@ -410,11 +423,15 @@ impl Command{
         let mut need_execute = true;
         for range in address.0.iter_mut(){
             let mut reached_now = vec![];
-            for token in &range.limits{
+            for (i, token) in range.limits.iter().enumerate(){
                 reached_now.push(match token{
                     AddressToken::Number(position) => *position == line_number + 1,
                     AddressToken::Pattern(re) => !(match_pattern(*re, line, line_number + 1)?.is_empty()),
-                    AddressToken::Last => line_number + 1 == lines_count,
+                    AddressToken::Last => match i{
+                        0 => true, // how check file len?
+                        1 => range.passed.map(|(a, _)|a).unwrap_or(false),
+                        _ => unreachable!()
+                    },
                     _ => unreachable!()
                 });
             }
@@ -426,13 +443,19 @@ impl Command{
                     if !a && b { 
                         unreachable!()
                     }
-                    range.passed = Some((reached_now[0] && a, reached_now[1] && b));
+                    //println!("{:?}", ((reached_now[0], a), (reached_now[1], b)));
+                    range.passed = Some((reached_now[0] || a, reached_now[1] || b));
+                    let (a, b) = range.passed.unwrap();
                     range.on_limits = Some((reached_now[0], reached_now[1]));
-                    need_execute &= reached_now[0] && a && b;
+                    //println!("{:?}", (reached_now[1], a, b));
+                    need_execute &= reached_now[1] || (a && !b);
                 }, 
                 _ => unreachable!()
             }
         }
+
+        //println!("{:#?}", address);
+        //println!("{}", need_execute);
         Ok(need_execute)
     }
 }
@@ -507,7 +530,7 @@ fn parse_pattern_token(
 
     let splitter = ch;
     let mut next_position = None;
-    let mut j = *i;
+    let mut j = *i+1;
     while j < chars.len(){
         let Some(ch) = chars.get(j) else {
             return Err(SedError::ScriptParse(format!("unterminated address regex{}", problem_command)));
@@ -516,7 +539,7 @@ fn parse_pattern_token(
             let Some(previous) = chars.get(j - 1) else {
                 return Err(SedError::ScriptParse(format!("unterminated address regex{}", problem_command)));
             };
-            if *previous == '\\'{
+            if *previous == '\\' && *splitter == '/'{
                 j += 1;
                 continue;
             }
@@ -534,13 +557,19 @@ fn parse_pattern_token(
         return Err(SedError::ScriptParse(format!("unterminated address regex{}", problem_command)));
     };
 
-    if pattern.contains(&'\n') || pattern.contains(&'\\'){
+    let mut pattern = pattern.iter().collect::<String>();
+    if *splitter == '/'{
+        pattern = pattern.replace(r"\/", "/");
+    }
+
+    if pattern == "\\" || pattern.contains('\n') || pattern.chars().collect::<Vec<_>>().windows(2)
+        .any(|chars| chars[0] == '\\' && !"().*$^".contains(chars[1]) ){
         let problem_command= get_error_command_and_position(chars, *i);
         return Err(SedError::ScriptParse(format!("pattern can't consist more than 1 line{}", problem_command)));    
     }
 
-    let re= compile_regex(pattern.iter().collect::<String>())?;
-
+    let re= compile_regex(pattern)?;
+    *i = next_position;    
     tokens.push(AddressToken::Pattern(re));
     Ok(())
 }
@@ -581,25 +610,27 @@ fn to_address_tokens(chars: &[char], i: &mut usize)
         }
         *i += 1;
     }
+    *i = (*i).saturating_sub(1);
 
     Ok(tokens)
 }
 
 /// Convert [`AddressToken`]s to [`Address`] 
 fn tokens_to_address(tokens: Vec<AddressToken>, chars: &[char], i: usize) -> Result<Option<Address>, SedError>{
-    let mut token_ranges = tokens.split(|token| {
-        matches!(token, AddressToken::Delimiter)
-    });
-
-    if token_ranges.any(|range| range.len() != 1){
+    if tokens.iter().enumerate().filter(|(i, _)| i % 2 == 1)
+        .any(|(_, token)| !matches!(token, AddressToken::Delimiter)) || 
+        tokens.last() == Some(&AddressToken::Delimiter){
         return Err(SedError::ScriptParse(
             "address bound can be only one pattern, number or '$'".to_string()));
     }
 
-    if let Some(range) = AddressRange::new(token_ranges.flatten().cloned().collect())?{
+    let tokens = tokens.into_iter().filter(|token| {
+        !matches!(token, AddressToken::Delimiter)
+    }).collect::<Vec<_>>();
+    if let Some(range) = AddressRange::new(tokens)?{
         if range.limits.iter().any(|token| AddressToken::Number(0) == *token){
             return Err(SedError::ScriptParse(
-                "address lower bound must bigger than 0".to_string()));
+                "address lower bound must be bigger than 0".to_string()));
         }
         return Ok(Some(Address(vec![range])));
     }
@@ -614,9 +645,9 @@ fn get_current_line_and_col(chars: &[char], i: usize) -> Option<(usize, usize)>{
         j += line.len() + 1;
         (line, k)
     }).collect::<Vec<_>>();
-    let Some((mut line, _)) = lines_positions.iter()
+    let Some((line, _)) = lines_positions.iter()
         .enumerate().find(|(_, (_, line_start))|{
-        if i > *line_start{
+        if i >= *line_start{
             return true;
         }
         false 
@@ -749,7 +780,7 @@ fn parse_word_attribute(chars: &[char], i: &mut usize) -> Result<Option<String>,
 fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedError>{
     try_next_blank(chars, i)?;
     *i += 1; 
-    let start = *i; 
+    //let start = *i; 
     let mut path = String::new();
     loop{
         let Some(ch) = chars.get(*i) else{
@@ -775,7 +806,6 @@ fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedErr
         }
     }
 
-    //let path = &chars[start..*i].iter().collect::<String>();
     let path = path.trim();
     if path.is_empty(){
         let problem_command= get_error_command_and_position(chars, *i);
@@ -807,31 +837,37 @@ fn parse_block(chars: &[char], i: &mut usize) -> Result<Vec<Command>, SedError>{
         .filter(|pair| *pair.1 == '{' || *pair.1 == '}')
         .collect::<Vec<_>>();
 
-    let mut j = 1;
+    let mut j = 0;
     let mut k = 0;
     loop{
-        match chars[k]{
+        let Some(ch) = block_limits.get(k) else{
+            break;
+        };
+        match ch.1{
             '{' => j += 1,
             '}' => j -= 1,
-            _ => {}
+            _ => unreachable!()
         }
         if j <= 0{
             break;
         } 
         k += 1;
+        //eprint!("<{:?}>", (k, block_limits.len(), j));
         if k >= block_limits.len(){
             break;
         }
     }
 
-    let commands = if k < block_limits.len(){
+    let commands = if j == 0{
         let block = chars[(*i + 1)..block_limits[k].0].iter().collect::<String>();
+        //eprint!("{:?}", block);
         Script::parse(block)?.0
     }else{
         let problem_command= get_error_command_and_position(chars, *i);
-        return Err(SedError::ScriptParse(format!("one '{{' not have '}}' pair for closing block{}", problem_command)));
+        return Err(SedError::ScriptParse(format!("'{{' not have pair for closing block{}", problem_command)));
     };
-    *i = k + 1;
+    *i = block_limits[k].0 + 1;
+    //eprint!("{:?}", (chars.get(*i..).unwrap().iter().collect::<String>(), commands.clone()));
     Ok(commands)
 }
 
@@ -912,15 +948,19 @@ fn parse_replace_flags(chars: &[char], i: &mut usize) -> Result<Vec<ReplaceFlag>
                 *flag_map.get_mut(&'w').unwrap() += 1;
                 flags.push(ReplaceFlag::AppendToIfReplace(PathBuf::new()))
             },
-            _ => break
+            _ => {
+                *i -= 1;
+                break
+            }
         }
         *i += 1;
     }
 
     let eq_w = |f| matches!(f, ReplaceFlag::AppendToIfReplace(_));
-    let w_start_position = flags.iter().cloned().position(eq_w);
-    let is_w_last = || w_start_position.unwrap() < (flags.len() - 1);
-    if w_start_position.is_some() && !is_w_last() {
+    let w_flag_position = flags.iter().cloned().position(eq_w);
+    let is_w_last = || w_flag_position.unwrap() == (flags.len() - 1);
+    //print!("{:?}", (w_flag_position, flags.clone()));
+    if w_flag_position.is_some() && !is_w_last() {
         let problem_command = get_error_command_and_position(chars, *i);
         return Err(SedError::ScriptParse(format!("w flag must be last flag{}", problem_command)));    
     }else if flag_map.values().any(|k| *k > 1) && is_w_last(){
@@ -932,6 +972,7 @@ fn parse_replace_flags(chars: &[char], i: &mut usize) -> Result<Vec<ReplaceFlag>
         let path = parse_path_attribute(chars, i)?;
         flags.push(ReplaceFlag::AppendToIfReplace(path));
     }
+    //print!("{:?}", flags.clone());
 
     let is_replace_nth = |f| matches!(f, ReplaceFlag::ReplaceNth(_));
     if flags.iter().cloned().any(is_replace_nth) && flags.contains(&ReplaceFlag::ReplaceAll){
@@ -1098,6 +1139,15 @@ fn find_first_repeated_label(vec: Vec<String>) -> Option<String> {
         .next()
 }
 
+// Skip [`Script`] fragment from '#' to '\n' chars (comment)
+fn skip_comment(chars: &[char], i: &mut usize){
+    if let Some(p) = chars.iter().skip(*i).position(|ch| *ch == '\n'){
+        *i = p;
+    }else{
+        *i = chars.len()
+    }
+}
+
 /// Contains [`Command`] sequence of all [`Sed`] session 
 /// that applied all to every line of input files 
 #[derive(Debug)] 
@@ -1137,7 +1187,13 @@ impl Script {
                     address = None;
                     command_added = false
                 },
-                _ if command_added => {
+                '}' => {
+                    let problem_command = get_error_command_and_position(&chars, i);
+                    return Err(SedError::ScriptParse(format!(
+                        "unneccessary '}}'{}", problem_command)
+                    ));
+                }
+                _ if command_added && !matches!(commands.last(), Some(Command::Block(..))) => {
                     let problem_command = get_error_command_and_position(&chars, i);
                     return Err(SedError::ScriptParse(format!(
                         "commands must be delimited with ';'{}", problem_command)
@@ -1192,10 +1248,11 @@ impl Script {
                     commands.push(Command::PrintFile(address.clone(), rfile))
                 },
                 's' => {
-                    let (pattern, replacement)= parse_replace_command(&chars, &mut i)?;
+                    let (pattern, replacement) = parse_replace_command(&chars, &mut i)?;
                     let groups = get_groups_strings(pattern.clone())?;
                     let re = compile_regex(pattern)?;
                     let flags = parse_replace_flags(&chars, &mut i)?;
+                    //print!("{:?}", (ch, chars.get(i..)));
                     commands.push(Command::Replace(address.clone(), groups, Regex(re), replacement.to_owned(), flags));
                 },
                 't' => {
@@ -1227,6 +1284,7 @@ impl Script {
                     commands.push(Command::ReplaceCharSet(address.clone(), string1, string2));
                 },
                 ':' => {
+                    i += 1;
                     let Some(label) = parse_word_attribute(&chars, &mut i)? else {
                         let problem_command= get_error_command_and_position(&chars, i);
                         return Err(SedError::ScriptParse(format!(
@@ -1236,15 +1294,7 @@ impl Script {
                     commands.push(Command::BearBranchLabel(label))
                 },
                 '=' => commands.push(Command::PrintStandard(address.clone())),
-                '#' => {
-                    i += 1;
-                    while let Some(ch) = chars.get(i){
-                        if *ch == '\n'{
-                            break;
-                        } 
-                        i += 1;
-                    }
-                },
+                '#' => skip_comment(&chars, &mut i),
                 _ => {
                     let position= get_current_line_and_col(&chars, i)
                         .map(|(line, col)|{
@@ -1255,6 +1305,7 @@ impl Script {
                     ));
                 }
             } 
+
             if last_commands_count < commands.len(){
                 last_commands_count = commands.len();
                 command_added = true;
@@ -1284,7 +1335,10 @@ impl Script {
         for cmd in commands.iter_mut(){
             cmd.check_address()?;
         }
+
+        //eprint!("{:#?}", commands);
         commands = flatten_commands(commands);
+        //eprint!("{:#?}", commands);
 
         Ok(Script(commands))
     }
@@ -1298,21 +1352,22 @@ fn flatten_commands(mut commands: Vec<Command>) -> Vec<Command>{
     while commands.iter().any(is_block){
         let blocks = commands.iter().enumerate().filter_map(|(i, cmd)|{
             if let Command::Block(block_address, block_commands) = cmd{
-                block_commands.clone().iter_mut().for_each(|cmd|{
+                let mut block_commands = block_commands.clone();
+                block_commands.iter_mut().for_each(|cmd|{
                     if let Some((address, _)) = cmd.get_mut_address(){
                         if let Some(block_address) = block_address{
                             address.0.extend(block_address.0.clone());
                         }
                     }
                 });
-                Some((i, block_commands.clone()))
+                Some((i, block_commands))
             }else {
                 None
             }
         }).collect::<Vec<_>>();
 
         for (i, block_commands) in blocks.iter().rev(){
-            commands.splice(i..i, block_commands.clone());
+            commands.splice(i..&(i+1), block_commands.clone());
         }
     }
 
@@ -1488,31 +1543,34 @@ struct Sed {
     has_replacements_since_t: bool,
     /// Last regex_t in applied [`Command`]  
     last_regex: Option<Regex>,
-    /// LInes count of current file
-    current_lines_count: Option<usize>
 }
 
 impl Sed {
     /// Executes one command for `line` string argument 
     /// and updates [`Sed`] state
-    fn execute(&mut self, mut command: Command) 
+    fn execute(&mut self, command_position: usize) 
         -> Result<Option<ControlFlowInstruction>, SedError> {
+        let Some(command) = self.script.0.get(command_position) else{
+            return Ok(Some(ControlFlowInstruction::Continue));
+        };
+
         let mut instruction = None;
-        match command.clone(){                     
+        let current_command = command.clone();
+        match current_command{                     
             Command::PrintTextAfter(_, text) => { // a
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 self.after_space += &text;
             },                
             Command::BranchToLabel(_, label) => { // b
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 instruction = Some(ControlFlowInstruction::Goto(label.clone()));
             },                
             Command::DeletePatternAndPrintText(address, text) => { // c
-                let mut need_execute = !self.need_execute(&mut command)?;
+                let mut need_execute = !self.need_execute(command_position)?;
                 if let Some(address) = address{
                     let mut i = address.0.len().saturating_sub(1);
                     while i > 0{
@@ -1530,7 +1588,7 @@ impl Sed {
                 }
             },     
             Command::DeletePattern(_, to_first_line) => { // d
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 if to_first_line && self.pattern_space.contains('\n'){
@@ -1543,43 +1601,43 @@ impl Sed {
                 }
             },  
             Command::ReplacePatternWithHold(_) => { // g
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 self.pattern_space = self.hold_space.clone();
             },              
             Command::AppendHoldToPattern(_) => { // G
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 self.pattern_space = self.pattern_space.clone() + "\n" + &self.hold_space;
             },                 
             Command::ReplaceHoldWithPattern(_) => { // h
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 self.hold_space = self.pattern_space.clone(); 
             },              
             Command::AppendPatternToHold(_) => { // H
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 self.hold_space = self.hold_space.clone() + "\n" + &self.pattern_space;
             },                 
             Command::PrintTextBefore(_, text) => { // i
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 print!("{text}");
             },               
             Command::PrintPatternBinary(_) => { // I
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 print_multiline_binary(&self.pattern_space);
             },                  
             Command::PrintPatternAndReplaceWithNext(_) => { // n
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 if !self.quiet{
@@ -1588,13 +1646,13 @@ impl Sed {
                 instruction = Some(ControlFlowInstruction::ReadNext);
             }, 
             Command::AppendNextToPattern(_address) => { // N
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 instruction = Some(ControlFlowInstruction::AppendNext);
             },                                
             Command::PrintPattern(_, to_first_line) => { // pP
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 if to_first_line{
@@ -1603,19 +1661,19 @@ impl Sed {
                         .find(|(_, ch)| *ch == '\n')
                         .map(|pair| pair.0)
                         .unwrap_or(self.pattern_space.len());
-                    print!("{}", &self.pattern_space[0..end]);
+                    println!("{}", &self.pattern_space[0..end]);
                 }else{
-                    print!("{}", self.pattern_space);
+                    println!("{}", self.pattern_space);
                 }
             },                  
             Command::Quit(_) => { // q
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 instruction = Some(ControlFlowInstruction::Break);
             },                                
             Command::PrintFile(_, rfile) => { // r
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 if let Ok(file) = File::open(rfile){
@@ -1624,20 +1682,21 @@ impl Sed {
                         let Ok(line) = line else{
                             break;
                         };
-                        println!("{line}");
+                        self.after_space += "\n";
+                        self.after_space += &line;
                     }
                 }
             },                    
-            Command::Replace(_, _, regex, ..) => { // s
-                if !self.need_execute(&mut command)?{
+            Command::Replace(_, _, ref regex, ..) => { // s
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
-                let _ = execute_replace(&mut self.pattern_space, command, self.current_line);
-                self.last_regex = Some(regex);
+                let _ = execute_replace(&mut self.pattern_space, current_command.clone(), self.current_line);
+                self.last_regex = Some(regex.clone());
                 self.has_replacements_since_t = true;
             },        
             Command::Test(_, label) => { // t
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 if self.has_replacements_since_t{
@@ -1646,7 +1705,7 @@ impl Sed {
                 self.has_replacements_since_t = false;
             },                         
             Command::AppendPatternToFile(_, wfile) => { // w
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 let mut file = std::fs::OpenOptions::new()
@@ -1656,7 +1715,7 @@ impl Sed {
                     .map_err(SedError::Io)?;
             },          
             Command::ExchangeSpaces(_) => { // x
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 let tmp = self.hold_space.clone();
@@ -1664,7 +1723,7 @@ impl Sed {
                 self.pattern_space = tmp;
             },                      
             Command::ReplaceCharSet(_, string1, string2) => { // y
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 for (a, b) in string1.chars().zip(string2.chars()){
@@ -1674,7 +1733,7 @@ impl Sed {
                 self.has_replacements_since_t = true;
             },          
             Command::PrintStandard(_) => { // =
-                if !self.need_execute(&mut command)?{
+                if !self.need_execute(command_position)?{
                     return Ok(None);
                 }
                 if !self.quiet{
@@ -1696,20 +1755,21 @@ impl Sed {
             return Err(SedError::Io(std::io::Error::new(ErrorKind::NotFound, "current file is none"))); 
         };
         let mut line = String::new();
-        match current_file.read_line(&mut line) {
-            Ok(bytes_read) => if bytes_read > 0 {
-                let _ = line.strip_suffix("\n");
-            },
-            Err(err) => return Err(SedError::Io(err)),
+        if let Err(err) = current_file.read_line(&mut line) {
+            return Err(SedError::Io(err));
         }
         Ok(line)
     }
 
-    fn need_execute(&self, command: &mut Command) -> Result<bool, SedError>{
+    fn need_execute(&mut self, command_position: usize) -> Result<bool, SedError>{
+        //print!("{:?}", (self.current_line, self.pattern_space.clone()));
+        let Some(command) = self.script.0.get_mut(command_position) else{
+            return Ok(false);
+        };
+        
         Ok(command.need_execute(
             self.current_line, 
-            &self.pattern_space, 
-            self.current_lines_count.unwrap()
+            &self.pattern_space
         )?)
     }
 
@@ -1717,12 +1777,9 @@ impl Sed {
     fn process_line(&mut self) -> Result<Option<ControlFlowInstruction>, SedError> {
         let mut global_instruction = None;
         let mut i = 0;
-        loop{
-            let Some(command) = self.script.0.get(i) else{
-                break;
-            };
-
-            if let Some(instruction) = self.execute(command.clone())?{
+        let script_len = self.script.0.len();
+        while i < script_len{
+            if let Some(instruction) = self.execute(i)?{
                 global_instruction = None;
                 match instruction{
                     ControlFlowInstruction::Goto(label) => if let Some(label) = label{
@@ -1751,6 +1808,7 @@ impl Sed {
                         if line.is_empty() {
                             break;
                         }
+                        self.pattern_space += "\n";
                         self.pattern_space += &line;
                     },
                     ControlFlowInstruction::ReadNext => {
@@ -1766,9 +1824,14 @@ impl Sed {
             i += 1;
         }
         if !self.quiet{
-            print!("{}", self.pattern_space);
+            print!("{}", self.pattern_space.strip_suffix('\r').unwrap_or(&self.pattern_space));
+            if self.after_space.is_empty(){
+                print!("\n");
+            }
         }
-        println!("{}", self.after_space);
+        if !self.after_space.is_empty(){
+            println!("{}", self.after_space);
+        }
 
         Ok(global_instruction)
     }
@@ -1780,9 +1843,12 @@ impl Sed {
         self.hold_space.clear();
         self.current_line = 0;
         loop {
-            let line = self.read_line()?;
+            let mut line = self.read_line()?;
             if line.is_empty() {
                 break;
+            }
+            if let Some(l) = line.strip_suffix("\n"){
+                line = l.to_string();
             }
             self.has_replacements_since_t = false;
             self.after_space.clear();
@@ -1800,25 +1866,28 @@ impl Sed {
     /// own [`Script`] for all content of all input files 
     fn sed(&mut self) -> Result<(), SedError> {
         *ERE.lock().unwrap() = self.ere;
-        for input in self.input_sources.drain(..).collect::<Vec<_>>() {
+        for mut input in self.input_sources.drain(..).collect::<Vec<_>>() {
             self.current_file = Some(if input == "-" {
                 Box::new(BufReader::new(std::io::stdin()))
             } else {
                 match File::open(&input) {
                     Ok(file) => Box::new(BufReader::new(file)),
                     Err(err) => {
-                        eprintln!("sed: {input}: {err}");
+                        if input == "-"{
+                            input = "stdin".to_owned();
+                        }
+                        eprintln!("sed: read {input}: {err}");
                         continue;
                     }
                 }
             });
-            self.current_lines_count = self.current_file.as_mut().map(|f|{
-                BufReader::new(f.as_mut()).lines().count()
-            });
             match self.process_input() {
                 Ok(_) => {}
                 Err(err) => {
-                    eprintln!("sed: {input}: {err}")
+                    if input == "-"{
+                        input = "stdin".to_owned();
+                    }
+                    return Err(SedError::Runtime(input, format!("{}", err)));
                 }
             };
         }
@@ -2362,7 +2431,7 @@ mod tests {
         ];
 
         for (mut command, line_number, line, _result) in input{
-            assert!(matches!(command.need_execute(line_number, line, 1), _result));
+            assert!(matches!(command.need_execute(line_number, line), _result));
         }
     }
 

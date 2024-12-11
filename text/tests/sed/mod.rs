@@ -446,14 +446,14 @@ mod tests {
     fn test_delimiters() {
         let test_data = [
             // correct
-            (";;;;", "", "", ""),  
-            (";\n;\n;;", "", "", ""),                 
+            (";;;;", "abc\ndef\n@#$", "abc\ndef\n@#$\n", ""),  
+            (";\n;\n;;", "abc\ndef\n@#$", "abc\ndef\n@#$\n", ""),                 
             // wrong
-            (";\\;\\;;", "", "", "sed: pattern can't consist more than 1 line (line: 0, col: 2)\n"),             
-            (";\\ ;;;", "", "", "sed: unterminated address regex (line: 0, col: 1)\n"),                    
-            ("gh", "", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
-            ("g h", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("g; h \n gh \n g h ; gh \\", "", "", "sed: commands must be delimited with ';' (line: 0, col: 8)\n")
+            (";\\;\\;;", "abc\ndef\n@#$", "", "sed: pattern can't consist more than 1 line (line: 0, col: 2)\n"),             
+            (";\\ ;;;", "abc\ndef\n@#$", "", "sed: unterminated address regex (line: 0, col: 1)\n"),                    
+            ("gh", "abc\ndef\n@#$", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
+            ("g h", "abc\ndef\n@#$", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("g; h \n gh \n g h ; gh \\", "abc\ndef\n@#$", "", "sed: commands must be delimited with ';' (line: 0, col: 8)\n")
         ];
 
         for (script, input, output, err) in test_data{
@@ -471,18 +471,18 @@ mod tests {
     fn test_address_correct() {
         let test_data = [
             // correct
-            ("1,10 p", "", "", ""),                    
-            ("1,10p", "", "", ""),
-            ("1,10 p", "", "", ""),
-            ("10 p", "", "", ""),
-            ("1,$p", "", "", ""),                  // unexpected `,'
-            ("1,$ p", "", "", ""),            
-            ("$ p", "", "", ""),
-            ("$p", "", "", ""),
-            ("$,$ p", "", "", ""),
-            ("$,$p", "", "", ""),                   // unexpected `,'
-            ("0, 10 p", "", "", ""),                
-            ("0 ,10 p", "", "", ""),            
+            ("1,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),                    
+            ("1,10p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),
+            ("1,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),
+            ("10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nt\nw\nq\nh\nw\n", ""),
+            ("1,$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),                  // unexpected `,'
+            ("1,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),            
+            //("$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
+            //("$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
+            ("$,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),
+            ("$,$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),                   // unexpected `,'
+            ("1, 10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),                
+            ("1 ,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", "")        
         ];
 
         for (script, input, output, err) in test_data{
@@ -500,21 +500,21 @@ mod tests {
     fn test_address_wrong() {
         let test_data = [
             // wrong
-            ("0, p", "", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 3)\n"),
-            (",10 p", "", "", "sed: unknown character ','\n"),
-            (", p", "", "", "sed: unknown character ','\n"),
-            (",,p", "", "", "sed: unknown character ','\n"),
-            //("0,1,2,3,4 p", "", "", "sed: pattern can't consist more than 1 line (line: 0, col: 2)\n"),
-            ("0,-10 p", "", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n"),
-            //("0,10; p", "", "", ""),
-            ("0 10 p", "", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 5)\n"),
-            ("1,+3p", "", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n"),                    // works
-            ("/5/,+3p", "", "", "sed: unknown character '/'\n"),                  // works
-            ("7;+ p", "", "", "sed: unknown character '+' (line: 0, col: 2)\n"),                    
-            //("+++ p", "", "", "sed: unknown character '+' (line: 0, col: 0)\n"),
-            ("p; -2 p", "", "", "sed: unknown character '-' (line: 0, col: 3)\n"),
-            ("3 ---- 2p", "", "", "sed: unknown character '-' (line: 0, col: 3)\n"),
-            ("1 2 3 p", "", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 6)\n")
+            ("1, p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n"),
+            (",10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: unknown character ',' (line: 0, col: 0)\n"),
+            (", p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: unknown character ',' (line: 0, col: 0)\n"),
+            (",,p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: unknown character ',' (line: 0, col: 0)\n"),
+            ("1,2,3,4,5 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: address isn't empty, position or range (line: 0, col: 9)\n"),
+            ("0,-10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 1)\n"),
+            ("1,10; p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: address hasn't command (line: 0, col: 4)\n"),
+            ("0 10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 4)\n"),
+            ("1,+3p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 1)\n"),                    // works
+            ("/5/,+3p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: unknown character '/' (line: 0, col: 0)\n"),                  // works
+            ("7;+ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: address hasn't command (line: 0, col: 1)\n"),                
+            ("+++ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: unknown character '+' (line: 0, col: 0)\n"),
+            ("p; -2 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: unknown character '-' (line: 0, col: 3)\n"),
+            ("3 ---- 2p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: unknown character '-' (line: 0, col: 2)\n"),
+            ("1 2 3 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 5)\n")
         ];
 
         for (script, input, output, err) in test_data{
@@ -532,14 +532,14 @@ mod tests {
     fn test_address_with_bre() {
         let test_data = [
             // correct
-            //("\\/abc/,10 p", "", "", ""),
-            //("\\/abc/ p", "", "", ""),
-            //("\\@abc@ p", "", "", ""),
-            //("\\/ab\\/c/ p", "", "", ""),
-            //("\\/abc/,\\!cdf! p", "", "", ""),
+            (r"\/abc/,10 p", "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\nb\nc\nd\nabc\nabc\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),
+            (r"\/abc/ p", "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\nb\nc\nd\nabc\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", ""),
+            (r"\@abc@ p", "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw", "a\nb\nc\nd\nabc\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", ""),
+            (r"\/ab\/c/ p", "aaa\nbbb\nab/c\nabc\nbc\n\n", "aaa\nbbb\nab/c\nab/c\nabc\nbc\n\n", ""),
+            (r"\/abc/,\!cdf! p", "abt\nrbc\nabc\n\ncde\nedf\ncdf\ncdf\nwert\nbfb", "abt\nrbc\nabc\nabc\n\n\ncde\ncde\nedf\nedf\ncdf\ncdf\ncdf\nwert\nbfb\n", ""),
             // wrong
-            //("\\/abc/10 p", "", "", ""),
-            ("@abc@ p", "", "", "sed: unknown character '@'\n"),
+            ("\\/abc/10 p", "abc\ndef\n@#$", "", "sed: address bound can be only one pattern, number or '$' (line: 0, col: 8)\n"),
+            ("@abc@ p", "abc\ndef\n@#$", "", "sed: unknown character '@' (line: 0, col: 0)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -557,21 +557,21 @@ mod tests {
     fn test_block() {
         let test_data = [
             // correct
-            /*("{}", "", "", ""),
-            ("{ }", "", "", ""),
-            ("{ \n \n \n }", "", "", ""),                           // unterminated address regex
-            ("{ { \n } {} {\n} { } }", "", "", ""),                 // unterminated address regex
-            ("{ { { { { { { { {} } } } } } } } }", "", "", ""),
-            ("1,10 { 5,10 p }", "", "", ""),
-            ("1,10 { 5,10 { 7,10 p } }", "", "", ""),
-            ("1,10 { 5,7 { 7,15 p } }", "", "", ""),
-            ("1,10 { 10,15 { 15,20 p } }", "", "", ""),*/
+            ("{}", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),
+            ("{ }", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),
+            ("{ \n \n \n }", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),                           // unterminated address regex
+            ("{ { \n } {} {\n} { } }", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),                 // unterminated address regex
+            ("{ { { { { { { { {} } } } } } } } }", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),
+            ("1,10 { 5,10 p }", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),
+            ("1,10 { 5,10 { 7,10 p } }", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),
+            ("1,10 { 5,7 { 7,15 p } }", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),
+            ("1,10 { 10,15 { 15,20 p } }", "abc\ndef\n@@##%%#^", "abc\ndef\n@@##%%#^\n", ""),
             // wrong
-            //("15,10 { 10,5 { 5,1 p } }", "", "", "sed: unknown character '}' (line: 0, col: 21)\n"),
-            ("{", "", "", "sed: one '{' not have '}' pair for closing block\n"),
-            ("}", "", "", "sed: unknown character '}'\n"),
-            ("{ { { { { { {} } } } } } } } }", "", "", "sed: one '{' not have '}' pair for closing block\n"),
-            ("{ { { { { { { { {} } } } } } }", "", "", "sed: one '{' not have '}' pair for closing block\n"),
+            ("15,10 { 10,5 { 5,1 p } }", "abc\ndef\n@@##%%#^", "", "sed: bottom bound 15 bigger than top bound 10 in address (line: 0, col: 5)\n"),
+            ("{", "abc\ndef\n@@##%%#^", "", "sed: '{' not have pair for closing block (line: 0, col: 0)\n"),
+            ("}", "abc\ndef\n@@##%%#^", "", "sed: unneccessary '}' (line: 0, col: 0)\n"),
+            ("{ { { { { { {} } } } } } } } }", "abc\ndef\n@@##%%#^", "", "sed: unneccessary '}' (line: 0, col: 27)\n"),
+            ("{ { { { { { { { {} } } } } } }", "abc\ndef\n@@##%%#^", "", "sed: '{' not have pair for closing block (line: 0, col: 0)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -589,17 +589,17 @@ mod tests {
     fn test_a() {
         let test_data = [
             // correct
-            ("a\\text", "", "", ""),
-            ("a\\   text\\in\\sed", "", "", ""),
-            ("a\\ text text ; text", "", "", ""),
+            ("a\\text", "abc\ndef\n@#$", "abctext\ndeftext\n@#$text\n", ""),
+            ("a\\   text\\in\\sed", "abc\ndef\n@#$", "abctext\\in\\sed\ndeftext\\in\\sed\n@#$text\\in\\sed\n", ""),
+            ("a\\ text text ; text", "abc\ndef\n@#$", "abctext text ; text\ndeftext text ; text\n@#$text text ; text\n", ""),
             // wrong
-            ("a\\", "", "", "sed: missing text argument (line: 0, col: 2)\n"),
-            ("a  \text", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                         //works
-            ("a\text", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                           //works
-            ("a\text\\in\\sed", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                  //works
-            ("a\\ text text \n text ", "", "", "sed: commands must be delimited with ';' (line: 0, col: 15)\n"),           //works
-            ("atext", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                            //works
-            ("a text", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                           //works
+            ("a\\", "abc\ndef\n@#$", "", "sed: missing text argument (line: 0, col: 2)\n"),
+            ("a  \text", "abc\ndef\n@#$", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                         //works
+            ("a\text", "abc\ndef\n@#$", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                           //works
+            ("a\text\\in\\sed", "abc\ndef\n@#$", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                  //works
+            ("a\\ text text \n text ", "abc\ndef\n@#$", "", "sed: commands must be delimited with ';' (line: 0, col: 15)\n"),           //works
+            ("atext", "abc\ndef\n@#$", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                            //works
+            ("a text", "abc\ndef\n@#$", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                           //works
         ];
 
         for (script, input, output, err) in test_data{
@@ -617,29 +617,29 @@ mod tests {
     fn test_b() {
         let test_data = [
             // correct
-            ("b", "", "", ""),
-            ("b; :label", "", "", ""),
-            ("b label; :label", "", "", ""),
-            ("b label1", "", "", ""),
-            ("b lab2el1abc", "", "", ""),
-            ("b loop_", "", "", ""),
-            ("b _start", "", "", ""),
-            ("b my_label", "", "", ""),
-            ("b #%$?@&*; :#%$?@&*", "", "", ""),             // works
-            ("b label#; :label#", "", "", ""),               // works
-            ("b 1label; :1label", "", "", ""),               // works
-            ("b 1234; :1234", "", "", ""),                   // works
+            ("b", "aa\naa", "aa\naa\n", ""),
+            ("b; :label", "aa\naa", "aa\naa\n", ""),
+            ("b label; :label", "aa\naa", "aa\naa\n", ""),
+            ("b label1; :label1", "aa\naa", "aa\naa\n", ""),
+            ("b lab2el1abc; :lab2el1abc", "aa\naa", "aa\naa\n", ""),
+            ("b loop_; :loop_", "aa\naa", "aa\naa\n", ""),
+            ("b _start; :_start", "aa\naa", "aa\naa\n", ""),
+            ("b my_label; :my_label", "aa\naa", "aa\naa\n", ""),
+            ("b #%$?@&*; :#%$?@&*", "aa\naa", "aa\naa\n", ""),             // works
+            ("b label#; :label#", "aa\naa", "aa\naa\n", ""),               // works
+            ("b 1label; :1label", "aa\naa", "aa\naa\n", ""),               // works
+            ("b 1234; :1234", "aa\naa", "aa\naa\n", ""),                   // works
             // wrong
             ("b ab\ncd; :ab\ncd", "", "", "sed: text must be separated with '\\' (line: 0, col: 6)\n"),
-            //("b label", "", "", ""),
-            //("b #%$?@&*;", "", "", ""),                      
-            //("b label#", "", "", ""),                        
-            //("b 1label", "", "", ""),                        
-            //("b 1234", "", "", ""),                        
-            //("b g", "", "", ""),                           
-            ("b; label", "", "", "sed: unknown character 'l' (line: 0, col: 3)\n"),     
-            //("b :label", "", "", ""),
-            //("b label :label", "", "", ""),                  // works*/
+            ("b label", "aa\naa", "", "sed: read stdin: script doesn't contain label 'label'\n"),
+            ("b #%$?@&*;", "aa\naa", "", "sed: read stdin: script doesn't contain label '#%$?@&*'\n"),                      
+            ("b label#", "aa\naa", "", "sed: read stdin: script doesn't contain label 'label#'\n"),                        
+            ("b 1label", "aa\naa", "", "sed: read stdin: script doesn't contain label '1label'\n"),                        
+            ("b 1234", "aa\naa", "", "sed: read stdin: script doesn't contain label '1234'\n"),                        
+            ("b g", "aa\naa", "", "sed: read stdin: script doesn't contain label 'g'\n"),                           
+            ("b; label", "aa\naa", "", "sed: unknown character 'l' (line: 0, col: 3)\n"),    
+            ("b :label", "aa\naa", "", "sed: read stdin: script doesn't contain label ':label'\n"),
+            ("b label :label", "aa\naa", "", "sed: label can't contain ' ' (line: 0, col: 14)\n"),                  // works
         ];
 
         for (script, input, output, err) in test_data{
@@ -657,20 +657,20 @@ mod tests {
     fn test_c() {
         let test_data = [
             // correct
-            ("c\\text", "", "", ""),
-            ("c\\   text\\in\\sed", "", "", ""),
-            ("c\\ text text ; text", "", "", ""),
-            ("c\\r", "", "", ""),
-            //("1 c\\r", "", "", ""),
-            //("1,2 c\\r", "", "", ""),
+            ("c\\text", "abc\ndef\n@#$", "text\ntext\ntext\n", ""),
+            ("c\\   text\\in\\sed", "abc\ndef\n@#$", "", ""),
+            ("c\\ text text ; text", "abc\ndef\n@#$", "", ""),
+            ("c\\r", "abc\ndef\n@#$", "", ""),
+            ("1 c\\r", "abc\ndef\n@#$", "", ""),
+            ("1,2 c\\r", "abc\ndef\n@#$", "", ""),
             // wrong
-            //("0 c\\r", "", "", ""),
-            //("0,2 c\\r", "", "", ""),
-            ("c\\", "", "", "sed: missing text argument (line: 0, col: 2)\n"),                                   // works
-            ("c  \text", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                              // works
-            ("c\text", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                                // works
-            ("c\text\\in\\sed", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                       // works
-            ("c\\ text text \n text ", "", "", "sed: commands must be delimited with ';' (line: 0, col: 15)\n"),                // works
+            ("0 c\\r", "abc\ndef\n@#$", "", "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n"),
+            ("0,2 c\\r", "abc\ndef\n@#$", "", "sed: address lower bound must be bigger than 0 (line: 0, col: 3)\n"),
+            ("c\\", "abc\ndef\n@#$", "", "sed: missing text argument (line: 0, col: 2)\n"),                                   // works
+            ("c  \text", "abc\ndef\n@#$", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                              // works
+            ("c\text", "abc\ndef\n@#$", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                                // works
+            ("c\text\\in\\sed", "abc\ndef\n@#$", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                       // works
+            ("c\\ text text \n text ", "abc\ndef\n@#$", "", "sed: commands must be delimited with ';' (line: 0, col: 15)\n"),                // works
         ];
 
         for (script, input, output, err) in test_data{
@@ -688,12 +688,12 @@ mod tests {
     fn test_d() {
         let test_data = [
             // correct
-            ("d", "", "", ""),
-            ("d; d", "", "", ""),
+            ("d", "abc\ncdf\nret", "\n\n\n", ""),
+            ("d; d", "abc\ncdf\nret", "\n\n\n", ""),
             // wrong
-            ("d b", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("d d", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("dd", "", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
+            ("d b", "abc\ncdf\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("d d", "abc\ncdf\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("dd", "abc\ncdf\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -711,11 +711,11 @@ mod tests {
     fn test_upper_d() {
         let test_data = [
             // correct
-            ("D", "", "", ""),
+            ("1 h; D; 2 G", "abc\ncdf", "\n\n", ""),
             // wrong
-            ("D b", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("D D", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("DD", "", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
+            ("D b", "abc\ncdf", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("D D", "abc\ncdf", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            //("DD", "abc\ncdf", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -733,10 +733,10 @@ mod tests {
     fn test_g() {
         let test_data = [
             // correct
-            ("1 h; 2 g", "", "", ""),
+            ("1 h; 2 g", "abc\ncdf", "abc\nabc\n", ""),
             // wrong
-            ("0 h; 1 g", "", "", ""),
-            ("g g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("0 g; 1 h", "abc\ncdf", "", "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n"),
+            ("g g", "abc\ncdf", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -754,10 +754,10 @@ mod tests {
     fn test_upper_g() {
         let test_data = [
             // correct
-            ("1 h; 2 G", "", "", ""),
+            ("1 H; 2 G", "abc\ncdf", "abc\ncdf\n\nabc\n", ""),
             // wrong
-            ("0 h; 1 G", "", "", ""),
-            ("G G", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("0 G", "abc\ncdf", "", "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n"),
+            ("G G", "abc\ncdf", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -775,12 +775,13 @@ mod tests {
     fn test_h() {
         let test_data = [
             // correct
-            ("1 h; 2 h", "", "", ""),
+            ("1 h; 2 g; 3 h; 4 g", "abc\ncdf\naaa\nbbb", "abc\nabc\naaa\naaa\n", ""),
+            ("1 h; 2 h; 3 g", "abc\ncdf\naaa", "abc\ncdf\ncdf\n", ""),
             // wrong
-            ("0 h; 1 h", "", "", ""),
-            ("h g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("h h", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("hh", "", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
+            ("0 h; 1 h", "abc\ncdf\naaa\nbbb", "", "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n"),
+            ("h g", "abc\ncdf\naaa", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("h h", "abc\ncdf\naaa", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("hh", "abc\ncdf\naaa\nbbb", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -798,12 +799,13 @@ mod tests {
     fn test_upper_h() {
         let test_data = [
             // correct
-            ("1 H; 2 H", "", "", ""),
+            ("1 H; 2 g; 3 H; 4 g", "abc\ncdf\naaa\nbbb", "abc\n\nabc\naaa\n\nabc\naaa\n", ""),
+            ("1 H; 2 H; 3 g", "abc\ncdf\naaa", "abc\ncdf\n\nabc\ncdf\n", ""),
             // wrong
-            ("0 H; 1 H", "", "", ""),
-            ("H g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("H H", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("HH", "", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
+            ("0 H; 1 H", "abc\ncdf\naaa", "", "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n"),
+            ("H g", "abc\ncdf\naaa", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("H H", "abc\ncdf\naaa\nbbb", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("HH", "abc\ncdf\naaa\nbbb", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -821,15 +823,15 @@ mod tests {
     fn test_i() {
         let test_data = [
             // correct
-            ("i\\text", "", "", ""),
-            ("i\\   text\\in\\sed", "", "", ""),
-            ("i\\ text text ; text ", "", "", ""),
+            ("i\\text", "abc\ncdf\n\n", "textabc\ntextcdf\ntext\n", ""),
+            ("i\\   text\\in\\sed", "abc\ncdf\n\n", "text\\in\\sedabc\ntext\\in\\sedcdf\ntext\\in\\sed\n", ""),
+            ("i\\ text text ; text ", "abc\ncdf\n\n", "text text ; text abc\ntext text ; text cdf\ntext text ; text \n", ""),
             // wrong
-            ("i\\", "", "", "sed: missing text argument (line: 0, col: 2)\n"),                                   // works
-            ("i  \text", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                              // works
-            ("i\text", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                                // works
-            ("i\text\\in\\sed", "", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                       // works
-            ("i\\ text text \n text ", "", "", "sed: commands must be delimited with ';' (line: 0, col: 15)\n"),                // works
+            ("i\\", "abc\ncdf\n\n", "", "sed: missing text argument (line: 0, col: 2)\n"),                                   // works
+            ("i  \text", "abc\ncdf\n\n", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                              // works
+            ("i\text", "abc\ncdf\n\n", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                                // works
+            ("i\text\\in\\sed", "abc\ncdf\n\n", "", "sed: text must be separated with '\\' (line: 0, col: 1)\n"),                       // works
+            ("i\\ text text \n text ", "abc\ncdf\n\n", "", "sed: commands must be delimited with ';' (line: 0, col: 15)\n"),                // works
         ];
 
         for (script, input, output, err) in test_data{
@@ -847,7 +849,8 @@ mod tests {
     fn test_upper_i() {
         let test_data = [
             // correct
-            ("I", "", "", ""),
+            ("I", "\x01\x02\x03\x04\x05\x06\x07\x08\x09\n\x0B\x0C\x0D\x0E\x0F", 
+            "\\x01\\x02\\x03\\x04\\x05\\x06\\a\\b\\t$\n\\v\\f\\r\\x0E\\x0F", ""),
             // wrong
             ("I g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
             ("I I", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
@@ -856,7 +859,7 @@ mod tests {
 
         for (script, input, output, err) in test_data{
             sed_test(
-                &["-e", script],
+                &["-n", "-e", script],
                 input,
                 output,
                 err,
@@ -869,7 +872,9 @@ mod tests {
     fn test_n() {
         let test_data = [
             // correct
-            ("n", "", "", ""),
+            ("n", "abc", "abc\nabc\n", ""),
+            ("n; p", "abc\ncdf", "abc\ncdf\ncdf\n", ""),
+            ("g; n; g; n; n", "abc\ncdf\nret", "\n\nret\n", ""),
             // wrong
             ("n g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
             ("n n", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
@@ -891,7 +896,9 @@ mod tests {
     fn test_upper_n() {
         let test_data = [
             // correct
-            ("N", "", "", ""),
+            ("N", "abc", "abc\n", ""),
+            ("N; p", "abc\ncdf", "abc\ncdf\nabc\ncdf\n", ""),
+            ("g; N; g; N; N", "abc\ncdf\nret", "\n\n\n", ""),
             // wrong
             ("N g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
             ("N N", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
@@ -913,7 +920,10 @@ mod tests {
     fn test_p() {
         let test_data = [
             // correct
-            ("p", "", "", ""),
+            ("p", "abc\ncdf\nret", "abc\nabc\ncdf\ncdf\nret\nret\n", ""),
+            ("g; p", "abc\ncdf\nret", "\n\n\n\n\n\n", ""),
+            ("N; p", "abc\ncdf", "abc\ncdf\nabc\ncdf\n", ""),
+            ("1 h; 2 G; p", "abc\n123\n", "abc\nabc\n123\nabc\n123\nabc\n", ""),
             // wrong
             ("p g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
             ("p p", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
@@ -935,7 +945,8 @@ mod tests {
     fn test_upper_p() {
         let test_data = [
             // correct
-            ("P", "abc\n123", "", ""),
+            ("P", "abc\n123", "abc\nabc\n123\n123\n", ""),
+            ("1 h; 2 G; P", "abc\n123\n", "abc\nabc\n123\n123\nabc\n", ""),
             // wrong
             ("P g", "abc\n123", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
             ("P P", "abc\n123", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
@@ -957,12 +968,12 @@ mod tests {
     fn test_q() {
         let test_data = [
             // correct
-            ("q", "", "", ""),
-            ("q; q", "", "", ""),
+            ("q", "abc\n123", "abc\n", ""),
+            ("q; q", "abc\n123", "abc\n", ""),
             // wrong
-            ("q g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("q q", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("qq", "", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
+            ("q g", "abc\n123", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("q q", "abc\n123", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("qq", "abc\n123", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -980,13 +991,15 @@ mod tests {
     fn test_r() {
         let test_data = [
             // correct
-            //("r ./text/tests/sed/assets/abc", "", "", ""),
+            ("r ./tests/sed/assets/script_some_newlines", "abc\ncdf", 
+            "abc\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\ncdf\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\n", ""),
+            //("r./text/tests/sed/assets/abc", "", "abc\nabc\ncdf\n", ""),
+            ("r", "abc\ncdf", "abc\ncdf\n", ""),
+            ("r aer", "abc\ncdf", "abc\ncdf\n", ""),                       // works
+            ("r #@/?", "abc\ncdf", "abc\ncdf\n", ""),                      // works
+            ("r #@/?\nl", "abc\ncdf", "abc\ncdf\n", ""),                   // works
             // wrong
-            ("r./text/tests/sed/assets/abc", "", "", "sed: in current position must be ' ' (line: 0, col: 1)\n"),
-            ("r", "", "", "sed: path is empty (line: 0, col: 2)\n"),
-            ("r aer", "", "", "sed: can't find aer\n"),                       // works
-            ("r #@/?", "", "", "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 2)\n"),                      // works
-            ("r #@/?\nl", "", "", "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 2)\n"),                   // works
+            ("r./text/tests/sed/assets/abc", "", "", "sed: in current position must be ' ' (line: 0, col: 1)\n")
         ];
 
         for (script, input, output, err) in test_data{
@@ -1004,17 +1017,18 @@ mod tests {
     fn test_s() {
         let test_data = [
             // correct
-            ("s/b/r/", "", "", ""),
-            ("s|b|r|", "", "", ""),
-            ("s/[[:alpha:]]/r/", "", "", ""),
-            ("s/\\(a\\)\\(x\\)/\\1\\2/", "", "", ""),
+            ("s/b/r/", "abc\nbbb\nbcb\nrbt", "arc\nbbb\nbcb\nrbt\n", ""),
+            ("s/b/r/g", "abc\nbbb\nbcb\nrbt", "arc\nrrr\nrcr\nrrt\n", ""),
+            ("s|b|r|g", "abc\nbbb\nbcb\nrbt", "arc\nrrr\nrcr\nrrt\n", ""),
+            ("s/[[:alpha:]]/r/", "abc\nbbb\nbcb\nrbt\n@#$", "rrr\nrrr\nrrr\nrrr\n@#$\n", ""),
+            ("s/\\(a\\)\\(x\\)/\\1\\2/", "abc\nbbb\nbcb\nrbt\n@#$", "", ""),
             // wrong
-            ("s/[:alpha:]/r/", "", "", ""),
-            ("s///", "", "", ""),
-            ("s/a/b/c/d/", "", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),
-            ("s//a//c//", "", "", "sed: commands must be delimited with ';' (line: 0, col: 6)\n"),
-            ("s/\\(\\(x\\)/\\1\\2/", "", "", "sed: some bound '(' or ')' doesn't has pair in pattern '\\(\\(x\\)'\n"),
-            ("s\na\nb\n", "", "", "sed: splliter can't be number, '\n' or ';' (line: 0, col: 1)\n"),
+            ("s/[:alpha:]/r/", "abc\nbbb\nbcb\nrbt", "", ""),
+            ("s///", "abc\nbbb\nbcb\nrbt", "", ""),
+            ("s/a/b/c/d/", "abc\nbbb\nbcb\nrbt\n@#$", "", "sed: commands must be delimited with ';' (line: 0, col: 6)\n"),
+            ("s//a//c//", "abc\nbbb\nbcb\nrbt\n@#$", "", "sed: commands must be delimited with ';' (line: 0, col: 5)\n"),
+            ("s/\\(\\(x\\)/\\1\\2/", "abc\nbbb\nbcb\nrbt\n@#$", "", "sed: some bound '(' or ')' doesn't has pair in pattern '\\(\\(x\\)'\n"),
+            ("s\na\nb\n", "abc\nbbb\nbcb\nrbt\n@#$", "", "sed: splliter can't be number, '\n' or ';' (line: 0, col: 1)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1032,16 +1046,16 @@ mod tests {
     fn test_s_with_right_flags() {
         let test_data = [
             // correct
-            ("s/b/r/6", "", "", ""),
-            ("s/b/r/g", "", "", ""),
-            ("s/b/r/p", "", "", ""),
-            //("s/b/r/w ./README.md", "", "", ""),
-            ("s/b/r/6p", "", "", ""),
-            ("s/b/r/gp", "", "", ""),
-            ("s/b/r/p6", "", "", ""),
-            //("s/b/r/pw ./README.md", "", "", ""),
-            //("s/b/r/6pw ./README.md", "", "", ""),
-            //("s/b/r/gpw ./README.md", "", "", ""),
+            ("s/b/r/6", "abcbbdfbdbdfbfb", "abcbbdfbdbdfrfb", ""),
+            ("s/b/r/g","abcbbdfbdbdfbfb", "arcrrdfrdrdfrfr", ""),
+            ("s/b/r/p", "abcbbdfbdbdfbfb", "arcbbdfbdbdfbfb\narcbbdfbdbdfbfb\n", ""),
+            ("s/b/r/w ./tests/sed/assets/abc", "abcbbdfbdbdfbfb", "arcrrdfrdrdfrfr", ""),
+            ("s/b/r/6p", "abcbbdfbdbdfbfb", "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n", ""),
+            ("s/b/r/gp", "abcbbdfbdbdfbfb", "arcrrdfrdrdfrfr\narcrrdfrdrdfrfr\n", ""),
+            ("s/b/r/p6", "abcbbdfbdbdfbfb", "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n", ""),
+            ("s/b/r/pw ./tests/sed/assets/abc", "abcbbdfbdbdfbfb", "arcbbdfbdbdfbfb\narcbbdfbdbdfbfb\n", ""),
+            ("s/b/r/6pw ./tests/sed/assets/abc", "abcbbdfbdbdfbfb", "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n", ""),
+            ("s/b/r/gpw ./tests/sed/assets/abc", "abcbbdfbdbdfbfb", "arcrrdfrdrdfrfr\narcrrdfrdrdfrfr\n", ""),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1059,22 +1073,22 @@ mod tests {
     fn test_s_with_wrong_flags() {
         let test_data = [
             // wrong
-            ("s/b/r/ p", "", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),                           // works
-            ("s/b/r/ w", "", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),                           // works
-            ("s/b/r/ p w ./README.md", "", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),             // works
-            ("s/b/r/-6", "", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),
-            ("s/b/r/-6p", "", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),
-            ("s/b/r/p-6", "", "", "sed: commands must be delimited with ';' (line: 0, col: 8)\n"),
-            ("s/b/r/g-6", "", "", "sed: commands must be delimited with ';' (line: 0, col: 8)\n"),
-            ("s/b/r/6g", "", "", "sed: n and g flags can't be used together (line: 0, col: 8)\n"),                           // works
-            ("s/b/r/6pg", "", "", "sed: n and g flags can't be used together (line: 0, col: 9)\n"),                          // works
-            ("s/b/r/wpg6", "", "", "sed: in current position must be ' ' (line: 0, col: 1)\n"),                         // works
-            ("s/b/r/w6", "", "", "sed: in current position must be ' ' (line: 0, col: 1)\n"),                           // works
-            ("s/b/r/w g6", "", "", "sed: w flag must be last flag (line: 0, col: 7)\n"),                         // works
-            /*("s/b/r/w./REA;DME.md", "", "", ""),                // works
-            ("s/b/r/w ./REA;DME.md", "", "", ""),               // works
-            ("s/b/r/w ./REA;DME.md p", "", "", ""),             // works
-            ("s/b/r/6gpw ./README.md", "", "", "")              // works*/
+            ("s/b/r/ p", "abc\nbbb\nbcb\nrbt", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),                           // works
+            //("s/b/r/ w", "abc\nbbb\nbcb\nrbt", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),                           // works
+            //("s/b/r/ p w ./README.md", "abc\nbbb\nbcb\nrbt", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),             // works
+            ("s/b/r/-6", "abc\nbbb\nbcb\nrbt", "", "sed: commands must be delimited with ';' (line: 0, col: 6)\n"),
+            ("s/b/r/-6p", "abc\nbbb\nbcb\nrbt", "", "sed: commands must be delimited with ';' (line: 0, col: 6)\n"),
+            ("s/b/r/p-6", "abc\nbbb\nbcb\nrbt", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),
+            ("s/b/r/g-6", "abc\nbbb\nbcb\nrbt", "", "sed: commands must be delimited with ';' (line: 0, col: 7)\n"),
+            ("s/b/r/6g", "abc\nbbb\nbcb\nrbt", "", "sed: n and g flags can't be used together (line: 0, col: 8)\n"),                           // works
+            ("s/b/r/6pg", "abc\nbbb\nbcb\nrbt", "", "sed: n and g flags can't be used together (line: 0, col: 9)\n"),                          // works
+            ("s/b/r/wpg6", "abc\nbbb\nbcb\nrbt", "", "sed: w flag must be last flag (line: 0, col: 10)\n"),                         // works
+            ("s/b/r/w6", "abc\nbbb\nbcb\nrbt", "", "sed: w flag must be last flag (line: 0, col: 8)\n"),                           // works
+            ("s/b/r/w g6", "abc\nbbb\nbcb\nrbt", "", "sed: can't find g6\n"),                         // works
+            //("s/b/r/w./REA;DME.md", "abc\nbbb\nbcb\nrbt", "", "sed: in current position must be ' ' (line: 0, col: 7)\n"),                // works
+            //("s/b/r/w ./REA;DME.md", "abc\nbbb\nbcb\nrbt", "", "sed: can't find ./REA\n"),               // works
+            //("s/b/r/w ./REA;DME.md p", "abc\nbbb\nbcb\nrbt", "", "sed: can't find ./REA\n"),             // works
+            ("s/b/r/6gpw ./tests/sed/assets/abc", "abc\nbbb\nbcb\nrbt", "", "sed: n and g flags can't be used together (line: 0, col: 33)\n")              // works
         ];
 
         for (script, input, output, err) in test_data{
@@ -1092,19 +1106,19 @@ mod tests {
     fn test_t() {
         let test_data = [
             // correct
-            ("t", "", "", ""),
+            ("t", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t label", "", "", ""),
-            ("t; :label", "", "", ""),
-            ("t label; :label", "", "", ""),
+            ("t; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t label; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t label1", "", "", ""),
             ("t lab2el1abc", "", "", ""),
             ("t loop_", "", "", ""),
             ("t _start", "", "", ""),
             ("t my_label", "", "", ""),
-            ("t #%$?@&*; :#%$?@&*", "", "", ""),              // works
-            ("t label#; :label#", "", "", ""),                // works  
-            ("t 1label; :1label", "", "", ""),                // works
-            ("t 1234; :1234", "", "", ""),                    // works
+            ("t #%$?@&*; :#%$?@&*", "aa\naaa\n\n", "aa\naaa\n\n", ""),              // works
+            ("t label#; :label#", "aa\naaa\n\n", "aa\naaa\n\n", ""),                // works  
+            ("t 1label; :1label", "aa\naaa\n\n", "aa\naaa\n\n", ""),                // works
+            ("t 1234; :1234", "aa\naaa\n\n", "aa\naaa\n\n", ""),                    // works
             ("t :label", "", "", ""),  
             ("t #%$?@&*;", "", "", ""),                 
             ("t label#", "", "", ""),                  
@@ -1112,9 +1126,9 @@ mod tests {
             ("t 1234", "", "", ""),
             ("t g", "", "", ""),      
             // wrong   
-            ("t; label", "", "", "sed: unknown character 'l' (line: 0, col: 3)\n"),                                  
-            ("t label :label", "", "", "sed: label can't contain ' ' (line: 0, col: 14)\n"),                   // works
-            ("t ab\ncd; :ab\ncd", "", "", "sed: text must be separated with '\\' (line: 0, col: 6)\n")                 // works*/
+            ("t; label", "aa\naaa\n\n", "", "sed: unknown character 'l' (line: 0, col: 3)\n"),                                  
+            ("t label :label", "aa\naaa\n\n", "", "sed: label can't contain ' ' (line: 0, col: 14)\n"),                   // works
+            ("t ab\ncd; :ab\ncd", "aa\naaa\n\n", "", "sed: text must be separated with '\\' (line: 0, col: 6)\n")                 // works*/
         ];
 
         for (script, input, output, err) in test_data{
@@ -1132,11 +1146,11 @@ mod tests {
     fn test_w() {
         let test_data = [
             // correct
-            //("w ./text/tests/sed/assets/abc", "", "", ""),             // works
+            ("w ./tests/sed/assets/newfile", "abc\ncdf", "abc\ncdf\n", ""),             // works
+            ("w atyfv", "abc\ncdf", "abc\ncdf\n", ""),                                   // works
+            ("w ; h", "abc\ncdf", "abc\ncdf\n", ""),
             // wrong
             ("w./text/tests/sed/assets/abc", "", "", "sed: in current position must be ' ' (line: 0, col: 1)\n"),              // works
-            ("w atyfv", "", "", "sed: can't find atyfv\n"),                                   // works
-            ("w ; h", "", "", "sed: path is empty (line: 0, col: 3)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1154,11 +1168,12 @@ mod tests {
     fn test_x() {
         let test_data = [
             // correct
-            //("h; s/.* /abc/; x", "", "", ""),
+            ("h; s/.* /abc/; p; x", "def\nref\nmut\n\n", "abc\ndef\nabc\nref\nabc\nmut\nabc\n\n", ""),
+            ("1 h; 2 x; 3 x", "abc\ncdf\nret", "abc\nabc\ncdf\n", ""),
             // wrong
-            ("x h", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("x x", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("xx", "", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
+            ("x h", "abc\ncdf\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("x x", "abc\ncdf\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("xx", "abc\ncdf\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1176,11 +1191,11 @@ mod tests {
     fn test_y() {
         let test_data = [
             // correct
-            ("y/abc/cdf/", "", "", ""),
-            ("y/abc/aaa/", "", "", ""),
-            ("y///", "", "", ""),                                 // works
+            ("y/abc/cdf/", "abc\naaa\nbbb\ncrt", "fdf\nfff\nddd\nfrt\n", ""),
+            ("y/abc/aaa/", "abc\naaa\nbbb\ncrt", "aaa\naaa\naaa\nart\n", ""),
+            ("y///", "abc\naaa\n\n", "abc\naaa\n\n", ""),                                 // works
             // wrong
-            ("y/abc/aaaa/", "", "", "sed: number of characters in the two arrays does not match (line: 0, col: 11)\n"),
+            ("y/abc/aaaa/", "abc\naaa\n\n", "", "sed: number of characters in the two arrays does not match (line: 0, col: 11)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1198,11 +1213,12 @@ mod tests {
     fn test_line_numeration() {
         let test_data = [
             // correct
-            ("=", "", "", ""),
+            ("=", "abc\ncdf\nefg\nret", "1\nabc\n2\ncdf\n3\nefg\n4\nret\n", ""),
+            ("=", "\n\n\n", "1\n\n2\n\n3\n\n", ""),
             // wrong
-            ("= g", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("= =", "", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
-            ("==", "", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
+            ("= g", "abc\ncdf\nefg\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("= =", "abc\ncdf\nefg\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 2)\n"),
+            ("==", "abc\ncdf\nefg\nret", "", "sed: commands must be delimited with ';' (line: 0, col: 1)\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1220,11 +1236,12 @@ mod tests {
     fn test_comment() {
         let test_data = [
             // correct
-            //("{ #\\ }\n{ #\n }\n#h", "", "", ""),                  // not works
+            ("#n", "abc\ncdf\naaa", "", ""),
+            ("{ #\\ }\n{ #\n }\n#h", "abc\ncdf", "abc\ncdf\n", ""),                  // not works
             // wrong
-            ("{ # }\n{ \\# }\n{ \n# }", "", "", "sed: one '{' not have '}' pair for closing block\n"),
-            ("a\\text#abc\ntext", "", "", "sed: commands must be delimited with ';' (line: 0, col: 12)\n"),                      // works
-            ("a\\#text\ntext", "", "", "sed: commands must be delimited with ';' (line: 0, col: 9)\n"),                        // works
+            ("{ # }\n{ # }\n{ \n# }", "abc\ncdf\naaa", "", ""),
+            ("a\\text#abc\ntext", "abc\ncdf", "", "sed: commands must be delimited with ';' (line: 0, col: 12)\n"),                      // works
+            ("a\\#text\ntext", "abc\ncdf\naaa", "\n\n\n", "sed: commands must be delimited with ';' (line: 0, col: 9)\n"),                        // works
         ];
 
         for (script, input, output, err) in test_data{
@@ -1238,22 +1255,21 @@ mod tests {
         }
     }
 
-    /*
     #[test]
     fn test_combinations_1() {
         let test_data = [
             // correct
-            ("1,3 { p ; p } ; 1,2 { p ; p } ; {p ; p}", "", "", ""),
-            (":x ; /=$/ { N ; s/=\n//g ; bx }", "", "", ""),
-            ("/1/b else ; s/a/z/ ; :else ; y/123/456/", "", "", ""),
-            ("/1/!s/a/z/ ; y/123/456/", "", "", ""),
-            ("/start/,/end/p", "", "", ""),
-            ("/start/,$p", "", "", ""),
-            ("1,/end/p", "", "", ""),
+            ("1,3 { p ; p } ; 1,2 { p ; p } ; {p ; p}", "abc\ncdf\nret\nget", "abc\ncdf\nret\nget\nabc\ncdf\nret\nget\nabc\ncdf\nret\nget\nabc\ncdf\nret\nget\nabc\ncdf\nret\nget\nabc\ncdf\nret\nget\n", ""),
+            (":x ; \\/=$/ { N ; s/=\n//g ; bx }", "abc=$=\ncdf=$=\nret=$=\nget=$=\n", "abc=$=\ncdf=$=\nret=$=\nget=$=\n", ""),
+            ("\\/1/b else ; s/a/z/ ; :else ; y/123/456/", "", "", ""),
+            ("\\/1/s/a/z/ ; y/123/456/", "1aaa\n123aa", "4zaa\n456za\n", ""),
+            ("\\/start/,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
+            ("\\/start/,$p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
+            ("1,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\na\nb\nb\nc\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
             // wrong
-            ("2,4 !p", "", "", ""),
-            ("2,4 !{p}", "", "", ""),
-            ("/pattern/- p", "", "", "")
+            ("2,4 !p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '!' (line: 0, col: 4)\n"),
+            ("2,4 !{p}", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '!' (line: 0, col: 4)\n"),
+            ("\\/pattern/- p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '-' (line: 0, col: 10)\n")
         ];
 
         for (script, input, output, err) in test_data{
@@ -1271,17 +1287,26 @@ mod tests {
     fn test_combinations_2() {
         let test_data = [
             // correct
-            ("\\:start:,\\,stop, p", "", "", ""),
-            ("\\`'$PATTERN'`p", "", "", ""),
-            ("\n1,$ {\n/begin/,/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n/^$/ d\np\n}\n}", "", "", ""),
-            ("/./{H;$!d} ; x ; s/^/\nSTART-->/ ; s/$/\n<--END/", "", "", ""),
-            ("s/param=.* /param=new_value/", "", "", ""),
-            ("s/\\([[:alnum:]]*\\).* /\\1/", "", "", ""),
-            ("s/[[:alnum:]]* //2", "", "", ""),
-            ("$ s/[[:alnum:]]* //2", "", "", ""),
+            ("\\:start:,\\,stop, p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", 
+            "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
+            ("\\`'$PATTERN'`p", "'$PATTERN'\nabc\n\n'$PATTERN'\nret'$PATTERN'abc", 
+            "'$PATTERN'\n'$PATTERN'\nabc\n\n'$PATTERN'\n'$PATTERN'\nret'$PATTERN'abc\nret'$PATTERN'abc\n", ""),
+            ("\n1,$ {\n\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}\n}", 
+            "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n", 
+            "Some text\nLine with trailing spaces\nAnother line\nSome more text\n", ""),
+            ("\\/./{H;$d} ; x ; s/^/\nSTART-->/ ; s/$/\n<--END/", "Line 1\nLine 2\n\nLine 3", 
+            "START-->\nLine 1\nLine 2\nLine 3\n<--END\n", ""),
+            ("s/param=.* /param=new_value/", "param=abc\nparam=\nparam abc", 
+            "param=new_value\nparam=new_value\nparam abc\n", ""),
+            ("s/\\([[:alnum:]]*\\).* /\\1/", "apple pie is sweet\n123abc test123\nhello world", 
+            "apple\n123abc\nhello\n", ""),
+            ("s/[[:alnum:]]* //2", "apple pie is sweet\n123abc test123 hello world\none two three four", 
+            "apple is sweet\n123abc hello world\none three four\n", ""),
+            ("$ s/[[:alnum:]]* //2", "apple pie is sweet\n123abc test123 hello world\none two three four", 
+            "apple pie is sweet\n123abc test123 hello world\none three four\n", ""),
         ];
 
-        for (script, input, output, err, code) in test_data{
+        for (script, input, output, err) in test_data{
             sed_test(
                 &["-e", script],
                 input,
@@ -1296,13 +1321,18 @@ mod tests {
     fn test_combinations_3() {
         let test_data = [
             // correct
-            ("s/#.* //;s/[[:blank:]]*$//;/^$/ d;p", "", "", ""),
-            ("s/\\(^[*][[:space:]]\\)/   \\1/", "", "", ""),
-            ("s/\\(^[*][[:space:]]\\)/   \\1/;/List of products:/a ---------------", "", "", ""),
-            ("s/h\\.0\\.\\(.*\\)/ \\U\\1/", "", "", ""),
-            ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "", "", ""),
-            ("/^$/d;G", "", "", ""),
-            ("N;s/\n/\t/", "", "", ""),
+            ("s/#.* //;s/[[:blank:]]*$//;\\/^$/ d;p", 
+            "# This is a comment\nLine with trailing spaces     \nAnother line", 
+            "Line with trailing spaces\nAnother line\n", ""),
+            ("s/\\(^[*][[:space:]]\\)/   \\1/", "* Item 1\n* Another item\nNormal text", 
+            "   * Item 1\n   * Another item\nNormal text\n", ""),
+            //("s/\\(^[*][[:space:]]\\)/   \\1/;\\/List of products:/a\\ ---------------", "", "", ""),
+            ("s/h\\.0\\.\\(.*\\)/ \\U\\1/", "h.0.someText\nh.0=data\nh.0.anotherExample", 
+            " SOMETEXT\n DATA\n ANOTHEREXAMPLE\n", ""),
+            ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "ABC\n\n1234\nabcdefg", 
+            "abc\n\n1234\nabcdefg\n", ""),
+            ("\\/^$/d;G", "Line 1\n\nLine 2\nLine 3\n\n\nLine 4", "Line 1\n\nLine 2\n\nLine 3\n\nLine 4\n", ""),
+            ("N;s/\n/\t/", "Line 1\nLine 2\nLine 3\nLine 4", "Line 1\tLine 2\nLine 3\tLine 4\n", ""),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1320,14 +1350,17 @@ mod tests {
     fn test_combinations_4() {
         let test_data = [
             // correct
-            ("s/^[ \t]* //;s/[ \t]*$//", "", "", ""),
-            (":a;s/^.\\{1,78\\}$/ &/;ta", "", "", ""),
-            ("s/\\(.*\\)foo\\(.*foo\\)/\\1bar\\2/", "", "", ""),
-            ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "", "", ""),
-            (":a;s/(^|[^0-9.])([0-9]+)([0-9]{3})/\\1\\2,\\3/g;ta", "", "", ""),
-            ("n;n;n;n;G;", "", "", ""),
-            (":a;$q;N;11,$D;ba", "", "", ""),
-            ("1{$q;};$!{h;d;};x", "", "", ""),
+            ("s/^[ \t]* //;s/[ \t]*$//", "    hello world    ", "hello world\n", ""),
+            (":a;s/^.\\{1,78\\}$/ &/;ta", "This is a test line with less than 78 characters.\nThis line is too long to fit within the limit and needs a space at the start.", 
+            "This is a test line with less than 78 characters.\n This line is too long to fit within the limit and needs a space at the start.\n", ""),
+            ("s/\\(.*\\)foo\\(.*foo\\)/\\1bar\\2/", "thisfooisfoo\notherfoosomethingfoo", "thisbarisfoo\notherbarsomethingfoo\n", ""),
+            ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "The scarlet sky turned ruby as the puce evening settled.", 
+            "The red sky turned red as the red evening settled.\n", ""),
+            (":a;s/(^|[^0-9.])([0-9]+)([0-9]{3})/\\1\\2,\\3/g;ta", "1234567890\nhello123456789\n1000", "123,456,7890\nhello123,456789\n1,000\n", ""),
+            ("n;n;n;n;G;", "line1\nline2\nline3\nline4", "line1line2\nline3line4\n", ""),
+            (":a;$q;N;11,$D;ba", "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12", 
+            "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\n", ""),
+            ("1{$q;};${h;d;};x", "line1\nline2\nline3", "line1\nline2\n", ""),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1345,14 +1378,16 @@ mod tests {
     fn test_combinations_5() {
         let test_data = [
             // correct
-            ("/string [[:digit:]]* /p", "", "", ""),
-            ("/./,/^$/p", "", "", ""),
-            ("\\,.*, p", "", "", ""),
-            ("\\:[ac]: p", "", "", ""),
-            ("1,\\,stop, p", "", "", ""),
-            ("s/WORD/Hello World/p ; p", "", "", ""),
-            ("s/.* /[&]/", "", "", ""),
-            ("s/SUBST/program\\/lib\\/module\\/lib.so/", "", "", ""),
+            ("\\/string [[:digit:]]* /p", "string 123\nstring abc\nstring 456", "string 123\nstring 456", ""),
+            ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3", "line1\nline2\n", ""),
+            ("\\,.*, p", "hello, world\nhello world\n\n", "hello, world\n", ""),
+            ("\\:[ac]: p", ":ac:\n:bc:\n:ac:", ":ac:\n:ac:\n", ""),
+            ("1,\\,stop, p", "first line\nsecond stop\nthird line", "first line\nsecond stop\n", ""),
+            ("s/WORD/Hello World/p ; p", "WORD is here\nthis is not WORD", 
+            "Hello World is here\nHello World is here\nthis is not WORD\n", ""),
+            ("s/.* /[&]/", "This is a test\nAnother test line", "[This is a test]\n[Another test line]\n", ""),
+            ("s/SUBST/program\\/lib\\/module\\/lib.so/", "this is a test SUBST\nwe use SUBST here as well", 
+            "this is a test program/lib/module/lib.so\nwe use program/lib/module/lib.so here as well", ""),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1370,14 +1405,12 @@ mod tests {
     fn test_combinations_6() {
         let test_data = [
             // correct
-            ("s|SUBST|program/lib/module/lib.so|", "", "", ""),
-            ("s_SUBST_program/lib/module/lib.so_", "", "", ""),
-            ("N; s/^/     /; s/ *\\(.\\{6,\\}\\)\n/\\1  /", "", "", ""),
-            ("/./N; s/\n/ /", "", "", ""),
-            ("$=", "", "", ""),
-            ("s/.$//", "", "", ""),
-            ("s/^M$//", "", "", ""),
-            ("s/\x0D$//", "", "", ""),
+            ("N; s/^/     /; s/ *\\(.\\{6,\\}\\)\n/\\1  /", "line1\nline2", "     line1line2\n", ""),
+            ("\\/./N; s/\n/ /", "line1\nline2", "line1 line2\n", ""),
+            ("$=", "line1\nline2\nline3", "3\n", ""),
+            ("s/.$//", "line1\nline2", "lin\nline\n", ""),
+            ("s/^M$//", "hello^M", "hello\n", ""),
+            ("s/\x0D$//", "hello\x0D", "hello\n", ""),
         ];
 
         for (script, input, output, err) in test_data{
@@ -1395,15 +1428,17 @@ mod tests {
     fn test_combinations_7() {
         let test_data = [
             // correct
-            ("s/$/`echo -e \\\r`/", "", "", ""),
-            ("/./{H;$!d;};x;/AAA\\|BBB\\|CCC/b;d", "", "", ""),
-            ("/Iowa/,/Montana/p", "", "", ""),
-            ("/^$/N;/\n$/N;//D", "", "", ""),
-            ("/^$/{p;h;};/./{x;/./p;}", "", "", ""),
-            ("/^Reply-To:/q; /^From:/h; /./d;g;q", "", "", ""),
-            ("s/ *(.*)//; s/>.* //; s/.*[:<] * //", "", "", ""),
-            ("/./{H;d;};x;s/\n/={NL}=/g", "", "", ""),
-            ("N; s/^/ /; s/ *\\(.\\{4,\\}\\)\n/\\1 /", "", "", "")
+            ("s/$/`echo -e \\\r`/", "Hello World", "Hello World`echo -e \\\r`\n", ""),
+            ("\\/./{H;$d;};x;\\/AAA|BBB|CCC/b;d", "line1\nAAA\nline2\nBBB\nline3", 
+            "line1\nline2\nline3", ""),
+            ("\\/Iowa/,\\/Montana/p", "Hello\nIowa is here\nMontana is next\nEnd", "Iowa is here\nMontana is next", ""),
+            ("\\/^$/N;\\/$/N;\\//D", "line1\nline2\n//\nline3", "line1\n\nline2\n", ""),
+            ("\\/^$/{p;h;};\\/./{x;\\/./p;}", "line1\n\nline2\nline3", "line1\nline2\nline3\n", ""),
+            ("\\/^Reply-To:/q; \\/^From:/h; \\/./d;g;q", "From: someone\nReply-To: someoneelse", "\n", ""),
+            ("s/ *(.*)//; s/>.* //; s/.*[:<] * //", "Subject: Hello <hello@example.com>\nFrom: someone <someone@example.com>", 
+            "Hello\nsomeone\n", ""),
+            ("\\/./{H;d;};x;s/\n/={NL}=/g", "line1\nline2", "={NL}=line1={NL}=line2={NL}=\n", ""),
+            ("N; s/^/ /; s/ *\\(.\\{4,\\}\\)\n/\\1 /", "line1\nline2", " line1line2 \n", "")
         ];
 
         for (script, input, output, err) in test_data{
@@ -1415,7 +1450,7 @@ mod tests {
                 !err.is_empty() as i32,
             );
         }
-    }*/
+    }
 }
 
 /*
