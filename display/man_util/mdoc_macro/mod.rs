@@ -49,7 +49,7 @@ pub enum ItType {
     OptionalArgs(Vec<String>),
     None,
     Cell {
-        // TODO: https://man.openbsd.org/mdoc#It
+        cells: Vec<String>,
     },
 }
 
@@ -84,7 +84,6 @@ pub enum RsSubmacro {
     O {
         information: String,
     },
-    // Book or journal page number of an Rs block. Conventionally, the argument starts with ‘p.’ for a single page or ‘pp.’ for a range of pages, for example:
     P {
         page_number: String,
     },
@@ -132,7 +131,7 @@ pub enum Macro {
     },
     Ed, // End a display context started by Bd
     Bf(BfType),
-    Ef, // End a display context started by Bd
+    Ef, // End a display context started by Bf
     Bk,
     Ek, // End a keep context started by Bk
     Bl {
@@ -161,7 +160,9 @@ pub enum Macro {
     },
     Db, // Obsolete
     Dd {
-        // TODO: $Mdocdate$ | month day, year
+        month: String,
+        day: u8,
+        year: i32,
     },
     Dl {
         line: String,
@@ -239,7 +240,6 @@ pub enum Macro {
     In {
         file_name: String,
     },
-    // TODO: Finish https://man.openbsd.org/mdoc#It
     It(ItType),
     Lb {
         lib_name: String,
@@ -252,7 +252,6 @@ pub enum Macro {
         display_name: Option<String>,
     },
     Mt {
-        // TODO: Parse??
         // https://man.openbsd.org/mdoc#Mt
         mail_to: String
     },
