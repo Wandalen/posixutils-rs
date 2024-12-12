@@ -1,14 +1,25 @@
+//
+// Copyright (c) 2024 Hemi Labs, Inc.
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
+
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
-use libc::{getlogin, getpwnam, getpwuid, passwd, uid_t};
+use libc::{getlogin, getpwnam, passwd};
 use plib::PROJECT_NAME;
 use timespec::Timespec;
 
 use std::{
+    collections::{BTreeMap, HashSet},
     env,
     ffi::{CStr, CString},
-    fs::File,
+    fmt::Display,
+    fs::{self, File},
     io::{BufRead, Read, Seek, Write},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -16,22 +27,18 @@ use std::{
     str::FromStr,
 };
 
-/*
-    TODO:
+#[cfg(target_os = "linux")]
+const SPOOL_DIRECTORIES: &[&str] = &[
+    "/var/spool/cron/atjobs/",
+    "/var/spool/at/",
+    "/var/spool/atjobs/",
+];
 
-    1. file with at.allow and at.deny
-    first check is allowed, then is denied. If not found in any -> allow
-    MAX chars for name in linux is 32
+#[cfg(target_os = "macos")]
+const MACOS_DIRECTORY: &str = "/var/at/jobs/";
 
-    2.
-
-*/
-
-// TODO: Mac variant?
-const JOB_FILE_NUMBER: &str = "/var/spool/atjobs/.SEQ";
-const SPOOL_DIRECTORY: &str = "/home/ghuba/";
-
-const DAEMON_UID: u32 = 457;
+#[cfg(target_os = "linux")]
+const DEFAULT_DIRECTORY: &str = "/var/spool/atjobs/";
 
 /// at - execute commands at a later time
 #[derive(Parser, Debug)]
@@ -50,12 +57,11 @@ const DAEMON_UID: u32 = 457;
 
 struct Args {
     /// Submit the job to be run at the date and time specified.
-    #[arg(value_name = "TIMESPEC")]
+    #[arg(value_name = "TIMESPEC", required = false)]
     timespec: Option<String>,
-
-    /// Change the environment to what would be expected if the user actually logged in again (letter `l`).
+    /// Displays a list of all scheduled jobs
     #[arg(short = 'l', long)]
-    login: bool,
+    list: bool,
 
     /// Specifies the pathname of a file to be used as the source of the at-job, instead of standard input.
     #[arg(short = 'f', long, value_name = "FILE")]
@@ -66,8 +72,8 @@ struct Args {
     mail: bool,
 
     /// Specify in which queue to schedule a job for submission.
-    #[arg(short = 'q', long, value_name = "QUEUENAME", default_value = "a")]
-    queue: String,
+    #[arg(short = 'q', long, value_name = "QUEUENAME")]
+    queue: Option<char>,
 
     /// Remove the jobs with the specified at_job_id operands that were previously scheduled by the at utility.
     #[arg(short = 'r', long)]
@@ -77,60 +83,120 @@ struct Args {
     #[arg(short = 't', long, value_name = "TIME_ARG")]
     time: Option<String>,
 
-    /// Group ID or group name.
-    #[arg(value_name = "GROUP", required = false)]
-    group: Option<String>,
-
     /// Job IDs for reporting jobs scheduled for the invoking user.
     #[arg(value_name = "AT_JOB_ID", required = false)]
-    at_job_ids: Vec<String>,
+    at_job_ids: Vec<u32>,
+}
+
+impl Args {
+    pub fn validate_args(&mut self) -> Result<(), String> {
+        // Check for incompatibility of the `-l` (list jobs) option with other options
+        if self.list {
+            if let Some(timespec) = self.timespec.take() {
+                let id = timespec
+                    .parse()
+                    .map_err(|e| format!("Failed to parse job ID. Reason: {e}"))?;
+                self.at_job_ids.push(id);
+            }
+            if self.remove || self.time.is_some() || self.file.is_some() || self.mail {
+                return Err("Option '-l' cannot be used with '-r', '-t', '-m' or -f".to_string());
+            }
+
+            if self.queue.is_some() && !self.at_job_ids.is_empty() {
+                return Err("at -l -q queueename cannot be used with AT_JOB_IDs".to_string());
+            }
+        }
+
+        // Check for incompatibility of the `-r` (remove jobs) option with other options
+        if self.remove {
+            if let Some(timespec) = self.timespec.take() {
+                let id = timespec
+                    .parse()
+                    .map_err(|e| format!("Failed to parse job ID. Reason: {e}"))?;
+                self.at_job_ids.push(id);
+            }
+
+            if self.list
+                || self.time.is_some()
+                || self.file.is_some()
+                || self.mail
+                || self.queue.is_some()
+            {
+                return Err(
+                    "Option '-r' cannot be used with '-l', '-t', '-m', '-q' or '-f'".to_string(),
+                );
+            }
+        }
+
+        // Checking if `TIMESPEC` and `-t` are specified at the same time
+        if self.timespec.is_some() && self.time.is_some() {
+            return Err("Options TIMESPEC and '-t' cannot be used together".to_string());
+        }
+
+        // Check if `TIMESPEC` or `-t` is specified with `AT_JOB_ID`
+        if (!self.at_job_ids.is_empty()) && (self.timespec.is_some() || self.time.is_some()) {
+            return Err("AT_JOB_ID cannot be used with TIMESPEC or '-t'".to_string());
+        }
+
+        // Checking the queue for correctness
+        if let Some(queue) = self.queue {
+            if !queue.is_ascii_lowercase() {
+                return Err(
+                    "Invalid queue name. Queue must be a single lowercase ASCII letter."
+                        .to_string(),
+                );
+            }
+        }
+
+        // If all checks are successful
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let Args {
-        timespec,
-        login,
-        file,
-        mail,
-        queue,
-        remove,
-        time,
-        group,
-        at_job_ids,
-    } = Args::try_parse().unwrap_or_else(|err| {
+    let mut args = Args::try_parse().unwrap_or_else(|err| {
         eprintln!("{}", err);
         std::process::exit(1);
     });
+
+    args.validate_args()?;
 
     setlocale(LocaleCategory::LcAll, "");
     textdomain(PROJECT_NAME)?;
     bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
 
-    // if args.mail {
-    //     let real_uid = unsafe { libc::getuid() };
-    //     let mut mailname = get_login_name();
+    if args.remove {
+        remove_jobs(&args.at_job_ids)?;
+        return Ok(());
+    }
 
-    //     if mailname
-    //         .as_ref()
-    //         .and_then(|name| user_info_by_name(name))
-    //         .is_none()
-    //     {
-    //         if let Some(pass_entry) = user_info_by_uid(real_uid) {
-    //             mailname = unsafe {
-    //                 // Safely convert pw_name using CString, avoiding memory leaks.
-    //                 let cstr = CString::from_raw(pass_entry.pw_name as *mut i8);
-    //                 cstr.to_str().ok().map(|s| s.to_string())
-    //             };
-    //         }
-    //     }
+    if args.list {
+        let list = list_jobs(get_job_dir()?);
+        if list.is_empty() {
+            return Ok(());
+        }
+        if let Some(queue) = args.queue {
+            let queue_jobs = jobs_in_queue(queue, &list);
+            for job in queue_jobs {
+                println!("{}", job);
+            }
+        } else if !args.at_job_ids.is_empty() {
+            for id in args.at_job_ids {
+                if let Some(job) = list.get(&id) {
+                    println!("{}", job);
+                } else {
+                    eprintln!("Job with ID {} not found", id);
+                }
+            }
+        } else {
+            for job in list.values() {
+                println!("{}", job);
+            }
+        }
+        return Ok(());
+    }
 
-    //     match mailname {
-    //         Some(name) => println!("Mailname: {}", name),
-    //         None => println!("Failed to retrieve mailname."),
-    //     }
-    // }
-
-    let time = match (time, timespec) {
+    let time = match (args.time, args.timespec) {
         (None, None) => print_err_and_exit(1, "You need `timespec` arg or `-t` flag"),
         (None, Some(timespec)) => Timespec::from_str(&timespec)?
             .to_date_time()
@@ -142,7 +208,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     };
 
-    let cmd = match file {
+    let cmd = match args.file {
         Some(path) => {
             let path = match path.is_absolute() {
                 true => path,
@@ -164,7 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut stdout_lock = stdout.lock();
 
             // TODO: Correct formating
-            writeln!(&mut stdout_lock, "{}", time.to_rfc2822())?;
+            writeln!(&mut stdout_lock, "at {}", time.to_rfc2822())?;
             write!(&mut stdout_lock, "at> ")?;
             stdout_lock.flush()?;
 
@@ -181,16 +247,179 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 result.push(buf.to_owned());
             }
 
-            write!(&mut stdout_lock, "<EOT>\n")?;
+            writeln!(&mut stdout_lock, "<EOT>")?;
             stdout_lock.flush()?;
 
             result.join("\n")
         }
     };
 
-    let _ = at(&queue, &time, cmd).inspect_err(|err| print_err_and_exit(1, err));
+    let _ = at(args.queue, &time, cmd, args.mail).inspect_err(|err| print_err_and_exit(1, err));
 
     Ok(())
+}
+
+/// Returns the path to the jobs directory, adjusted for the operating system.
+/// On Linux: checks the `AT_JOB_DIR` environment variable, then predefined directories.
+/// On macOS: checks or creates the `/var/at/jobs` directory.
+fn get_job_dir() -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        // Check `AT_JOB_DIR` environment variable
+        if let Ok(env_dir) = env::var("AT_JOB_DIR") {
+            if Path::new(&env_dir).exists() {
+                return Ok(env_dir);
+            }
+        }
+
+        // Check the predefined spool directories
+        for dir in SPOOL_DIRECTORIES {
+            if Path::new(dir).exists() {
+                return Ok(dir.to_string());
+            }
+        }
+
+        // Create the default directory if none exist
+        let default_path = Path::new(DEFAULT_DIRECTORY);
+        if !default_path.exists() {
+            if let Err(err) = fs::create_dir_all(default_path) {
+                return Err(format!(
+                    "Failed to create directory {}: {}",
+                    DEFAULT_DIRECTORY, err
+                ));
+            }
+        }
+
+        Ok(DEFAULT_DIRECTORY.to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let macos_path = Path::new(MACOS_DIRECTORY);
+
+        if !macos_path.exists() {
+            if let Err(err) = fs::create_dir_all(macos_path) {
+                return Err(format!(
+                    "Failed to create directory {}: {}",
+                    MACOS_DIRECTORY, err
+                ));
+            }
+        }
+
+        Ok(MACOS_DIRECTORY.to_string())
+    }
+}
+
+/// Checks if the file name matches the job format
+fn is_job_file(file_name: &str) -> bool {
+    file_name.len() == 14
+        && file_name
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic())
+            .unwrap_or(false)
+}
+
+/// Structure representing a job
+#[derive(Debug)]
+struct JobInfo {
+    id: u32,
+    queue: char,
+    file_name: String,
+    formatted_time: String,
+}
+
+impl Display for JobInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}      {}    {}",
+            self.id, self.formatted_time, self.queue
+        )
+    }
+}
+
+/// Parses the file name and returns JobInfo
+fn parse_job_file(file_name: &str) -> Option<(u32, JobInfo)> {
+    let queue = &file_name.chars().next().unwrap();
+    let job_id_str = &file_name[1..6];
+    let time_str = &file_name[6..14];
+
+    let job_id = u32::from_str_radix(job_id_str, 16).ok()?;
+    let duration_seconds = u32::from_str_radix(time_str, 16).ok()? * 60;
+    let formatted_time = format_execution_time(duration_seconds);
+
+    Some((
+        job_id,
+        JobInfo {
+            id: job_id,
+            queue: *queue,
+            file_name: file_name.to_string(),
+            formatted_time,
+        },
+    ))
+}
+
+fn jobs_in_queue(queue_name: char, jobs: &BTreeMap<u32, JobInfo>) -> Vec<&JobInfo> {
+    jobs.values()
+        .filter(|job| job.queue == queue_name)
+        .collect()
+}
+
+/// Removes jobs with the given job IDs
+fn remove_jobs(job_ids: &[u32]) -> Result<(), String> {
+    let job_dir = get_job_dir()?;
+    let path = Path::new(&job_dir);
+    // get a list of all jobs
+    let jobs = list_jobs(path);
+
+    // Go through all the job identifiers
+    for job_id in job_ids {
+        if let Some(job_info) = jobs.get(job_id) {
+            let file_path = path.join(&job_info.file_name);
+            // Delete the file
+            if let Err(e) = fs::remove_file(&file_path) {
+                return Err(format!(
+                    "Could not delete a file {}: {}",
+                    job_info.file_name, e
+                ));
+            }
+        } else {
+            return Err(format!("The job with ID {} was not found.", job_id));
+        }
+    }
+    Ok(())
+}
+
+/// Formats the execution time as `Thu Dec 12 10:44:00 2024`
+fn format_execution_time(duration_seconds: u32) -> String {
+    let datetime = DateTime::from_timestamp(duration_seconds as i64, 0);
+    if let Some(dt) = datetime {
+        dt.format("%a %b %d %H:%M:%S %Y").to_string()
+    } else {
+        "Invalid time".to_string()
+    }
+}
+
+/// Scans the directory, collects the jobs
+fn list_jobs<P>(dir: P) -> BTreeMap<u32, JobInfo>
+where
+    P: AsRef<Path>,
+{
+    let mut queues: BTreeMap<u32, JobInfo> = BTreeMap::new();
+
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_name) = entry.file_name().into_string() {
+                if is_job_file(&file_name) {
+                    if let Some((job_id, job_info)) = parse_job_file(&file_name) {
+                        queues.insert(job_id, job_info);
+                    }
+                }
+            }
+        }
+    }
+
+    queues
 }
 
 fn print_err_and_exit(exit_code: i32, err: impl std::fmt::Display) -> ! {
@@ -199,22 +428,26 @@ fn print_err_and_exit(exit_code: i32, err: impl std::fmt::Display) -> ! {
 }
 
 fn at(
-    queue: &str,
+    queue: Option<char>,
     execution_time: &DateTime<Utc>,
     cmd: impl Into<String>,
+    mail: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let jobno = next_job_id()?;
     let job_filename = job_file_name(jobno, queue, execution_time)
         .ok_or("Failed to generate file name for job")?;
 
     let user = User::new().ok_or("Failed to get current user")?;
+    if !is_user_allowed(&user.name) {
+        return Err(format!("Access denied for user: {}", &user.name).into());
+    }
 
-    let job = Job::new(&user, std::env::current_dir()?, std::env::vars(), cmd).into_script();
+    let job = Job::new(&user, std::env::current_dir()?, std::env::vars(), cmd, mail).into_script();
 
     let mut file_opt = std::fs::OpenOptions::new();
     file_opt.read(true).write(true).create_new(true);
 
-    let file_path = PathBuf::from(format!("{SPOOL_DIRECTORY}/{job_filename}"));
+    let file_path = PathBuf::from(format!("{}/{job_filename}", get_job_dir()?));
 
     let mut file = file_opt
         .open(&file_path)
@@ -222,13 +455,20 @@ fn at(
 
     file.write_all(job.as_bytes())?;
 
-    std::os::unix::fs::chown(file_path, Some(user.uid), Some(user.gid))?;
     file.set_permissions(std::fs::Permissions::from_mode(0o700))?;
+
+    std::os::unix::fs::chown(file_path, Some(user.uid), Some(user.gid))?;
+
+    println!(
+        "job {} at {}",
+        jobno,
+        execution_time.format("%a %b %d %H:%M:%S %Y")
+    );
 
     Ok(())
 }
 
-/// Structure to represent future job or script to be saved in [`SPOOL_DIRECTORY`]
+/// Structure to represent future job or script to be saved
 pub struct Job {
     shell: String,
     user_uid: u32,
@@ -237,6 +477,7 @@ pub struct Job {
     env: std::env::Vars,
     call_place: PathBuf,
     cmd: String,
+    mail: bool,
 }
 
 impl Job {
@@ -250,6 +491,7 @@ impl Job {
         call_place: PathBuf,
         env: std::env::Vars,
         cmd: impl Into<String>,
+        mail: bool,
     ) -> Self {
         Self {
             shell: shell.to_owned(),
@@ -259,6 +501,7 @@ impl Job {
             env,
             call_place,
             cmd: cmd.into(),
+            mail,
         }
     }
 
@@ -271,6 +514,7 @@ impl Job {
             env,
             call_place,
             cmd,
+            mail,
         } = self;
 
         let env = env
@@ -280,7 +524,8 @@ impl Job {
             .join("\n");
 
         format!(
-            "#!{shell}\n# atrun uid={user_uid} gid={user_gid}\n# mail {user_name} 0\numask 22\n{env}\ncd {} || {{\n\techo 'Execution directory inaccessible' >&2\n\texit 1 \n}}\n{cmd}",
+            "#!{shell}\n# atrun uid={user_uid} gid={user_gid}\n# mail {user_name} {}\numask 22\n{env}\ncd {} || {{\n\techo 'Execution directory inaccessible' >&2\n\texit 1 \n}}\n{cmd}",
+            if mail {1} else {0},
             call_place.to_string_lossy()
         )
     }
@@ -289,10 +534,10 @@ impl Job {
 /// Return name for job number
 ///
 /// None if DateTime < [DateTime::UNIX_EPOCH]
-fn job_file_name(next_job: u32, queue: &str, time: &DateTime<Utc>) -> Option<String> {
+fn job_file_name(next_job: u32, queue: Option<char>, time: &DateTime<Utc>) -> Option<String> {
     let duration = time.signed_duration_since(DateTime::UNIX_EPOCH);
     let duration_seconds = u32::try_from(duration.num_seconds()).ok()? / 60;
-
+    let queue = queue.unwrap_or('a');
     let result = format!("{queue}{next_job:05x}{duration_seconds:08x}");
 
     Some(result)
@@ -316,13 +561,14 @@ impl std::fmt::Display for NextJobError {
 
 impl std::error::Error for NextJobError {}
 
-fn next_job_id() -> Result<u32, NextJobError> {
+fn next_job_id() -> Result<u32, Box<dyn std::error::Error>> {
     let mut file_opt = std::fs::OpenOptions::new();
     file_opt.read(true).write(true);
 
     let mut buf = String::new();
+    let job_file_number = format!("{}.SEQ", get_job_dir()?);
 
-    let (next_job_id, mut file) = match file_opt.open(JOB_FILE_NUMBER) {
+    let (next_job_id, mut file) = match file_opt.open(&job_file_number) {
         Ok(mut file) => {
             file.read_to_string(&mut buf)
                 .map_err(|e| NextJobError::Io(e))?;
@@ -337,8 +583,9 @@ fn next_job_id() -> Result<u32, NextJobError> {
         Err(err) => match err.kind() {
             std::io::ErrorKind::NotFound => (
                 0,
-                std::fs::File::create_new(JOB_FILE_NUMBER).map_err(|e| NextJobError::Io(e))?,
+                std::fs::File::create_new(job_file_number).map_err(NextJobError::Io)?,
             ),
+
             _ => Err(NextJobError::Io(err))?,
         },
     };
@@ -347,9 +594,35 @@ fn next_job_id() -> Result<u32, NextJobError> {
     let next_job_id = (1 + next_job_id) % 0xfffff;
 
     file.write_all(format!("{next_job_id:05x}").as_bytes())
-        .map_err(|e| NextJobError::Io(e))?;
+        .map_err(NextJobError::Io)?;
 
     Ok(next_job_id)
+}
+
+fn read_user_file(file_path: &str) -> std::io::Result<HashSet<String>> {
+    let content = std::fs::read_to_string(file_path)?;
+    Ok(content
+        .lines()
+        .map(|line| line.trim().to_string())
+        .collect())
+}
+
+fn is_user_allowed(user: &str) -> bool {
+    let allow_file = "/etc/at.allow";
+    let deny_file = "/etc/at.deny";
+
+    if let Ok(allowed_users) = read_user_file(allow_file) {
+        // If at.allow exists, only users from this file have access
+        return allowed_users.contains(user);
+    }
+
+    if let Ok(denied_users) = read_user_file(deny_file) {
+        // If there is no at.allow, but there is at.deny, check if the user is blacklisted
+        return !denied_users.contains(user);
+    }
+
+    // If there are no files, access is allowed to all
+    true
 }
 
 fn login_name() -> Option<String> {
@@ -507,10 +780,10 @@ mod time {
 }
 
 mod timespec {
-    use std::{num::NonZero, str::FromStr};
+    use std::str::FromStr;
 
     use chrono::{
-        DateTime, Datelike, Days, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, TimeZone, Utc,
+        DateTime, Datelike, Days, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc,
     };
 
     use crate::tokens::{
@@ -707,9 +980,9 @@ mod timespec {
                             Err(TimespecParsingError::DatePatternNotFound(s.to_owned()))?
                         }
 
-                        let (month_name, day_number) = parse_month_and_day(&parts[0])?;
-                        let year_number = YearNumber::from_str(&parts[1])
-                            .map_err(|e| TimespecParsingError::DateTokenParsing(e))?;
+                        let (month_name, day_number) = parse_month_and_day(parts[0])?;
+                        let year_number = YearNumber::from_str(parts[1])
+                            .map_err(TimespecParsingError::DateTokenParsing)?;
 
                         Self::MontDayYear {
                             month_name,
@@ -737,14 +1010,14 @@ mod timespec {
                     .take_while(|this| !this.is_numeric())
                     .collect::<String>()
                     .parse::<Month>()
-                    .map_err(|e| TimespecParsingError::DateTokenParsing(e))?;
+                    .map_err(TimespecParsingError::DateTokenParsing)?;
 
                 let day = s
                     .chars()
                     .skip_while(|this| !this.is_numeric())
                     .collect::<String>()
                     .parse::<DayNumber>()
-                    .map_err(|e| TimespecParsingError::DateTokenParsing(e))?;
+                    .map_err(TimespecParsingError::DateTokenParsing)?;
 
                 Ok((month, day))
             }
@@ -810,8 +1083,14 @@ mod timespec {
                     let Hr24Clock([hour, minute]) = *hr24_clock;
 
                     if let Some(tz) = timezone.to_timezone() {
-                        let utc_time = Utc.ymd(1970, 1, 1).and_hms(hour.into(), minute.into(), 0);
-                        let local_time = utc_time.with_timezone(&tz);
+                        let today = Utc::now().date_naive();
+                        let custom_time =
+                            NaiveTime::from_hms_opt(hour.into(), minute.into(), 0).unwrap();
+                        let utc_time = Utc
+                            .from_local_datetime(&today.and_time(custom_time))
+                            .unwrap();
+                        let tz_time = utc_time.with_timezone(&tz);
+                        let local_time = tz_time.with_timezone(&Local);
                         Some(local_time.time())
                     } else {
                         None
@@ -832,8 +1111,14 @@ mod timespec {
                     let Minute(minute) = *minute;
 
                     if let Some(tz) = timezone.to_timezone() {
-                        let utc_time = Utc.ymd(1970, 1, 1).and_hms(hour.into(), minute.into(), 0);
-                        let local_time = utc_time.with_timezone(&tz);
+                        let today = Utc::now().date_naive();
+                        let custom_time =
+                            NaiveTime::from_hms_opt(hour.into(), minute.into(), 0).unwrap();
+                        let utc_time = Utc
+                            .from_local_datetime(&today.and_time(custom_time))
+                            .unwrap();
+                        let tz_time = utc_time.with_timezone(&tz);
+                        let local_time = tz_time.with_timezone(&Local);
                         Some(local_time.time())
                     } else {
                         None
@@ -863,10 +1148,14 @@ mod timespec {
                             AmPm::Am => hour.get(),
                             AmPm::Pm => hour.get() + 12,
                         };
-                        let utc_time =
-                            Utc.ymd(1970, 1, 1)
-                                .and_hms(hour_24.into(), minutes.into(), 0);
-                        let local_time = utc_time.with_timezone(&tz);
+                        let today = Utc::now().date_naive();
+                        let custom_time =
+                            NaiveTime::from_hms_opt(hour_24.into(), minutes.into(), 0).unwrap();
+                        let utc_time = Utc
+                            .from_local_datetime(&today.and_time(custom_time))
+                            .unwrap();
+                        let tz_time = utc_time.with_timezone(&tz);
+                        let local_time = tz_time.with_timezone(&Local);
                         Some(local_time.time())
                     } else {
                         None
@@ -899,10 +1188,14 @@ mod timespec {
                             AmPm::Am => hour.get(),
                             AmPm::Pm => hour.get() + 12,
                         };
-                        let utc_time =
-                            Utc.ymd(1970, 1, 1)
-                                .and_hms(hour_24.into(), minutes.into(), 0);
-                        let local_time = utc_time.with_timezone(&tz);
+                        let today = Utc::now().date_naive();
+                        let custom_time =
+                            NaiveTime::from_hms_opt(hour_24.into(), minutes.into(), 0).unwrap();
+                        let utc_time = Utc
+                            .from_local_datetime(&today.and_time(custom_time))
+                            .unwrap();
+                        let tz_time = utc_time.with_timezone(&tz);
+                        let local_time = tz_time.with_timezone(&Local);
                         Some(local_time.time())
                     } else {
                         None
@@ -934,7 +1227,7 @@ mod timespec {
                         .collect::<String>();
                     let minutes_len = minute.len();
                     let minute = Minute::from_str(&minute)
-                        .map_err(|e| TimespecParsingError::TimeTokenParsing(e))?;
+                        .map_err(TimespecParsingError::TimeTokenParsing)?;
 
                     let other = other.chars().skip(minutes_len).collect::<String>();
 
@@ -943,9 +1236,9 @@ mod timespec {
                     }
 
                     let am = AmPm::from_str(&other[..2])
-                        .map_err(|e| TimespecParsingError::TimeTokenParsing(e))?;
+                        .map_err(TimespecParsingError::TimeTokenParsing)?;
                     let timezone = TimezoneName::from_str(&other[2..])
-                        .map_err(|e| TimespecParsingError::TimeTokenParsing(e))?;
+                        .map_err(TimespecParsingError::TimeTokenParsing)?;
 
                     return Ok(Self::WallclockHourMinuteTimezone {
                         clock,
@@ -964,14 +1257,14 @@ mod timespec {
                                 .take_while(|this| this.is_numeric())
                                 .collect::<String>()
                                 .parse::<Minute>()
-                                .map_err(|e| TimespecParsingError::TimeTokenParsing(e))?;
+                                .map_err(TimespecParsingError::TimeTokenParsing)?;
 
                             let timezone = other
                                 .chars()
                                 .skip_while(|this| this.is_numeric())
                                 .collect::<String>()
                                 .parse::<TimezoneName>()
-                                .map_err(|e| TimespecParsingError::TimeTokenParsing(e))?;
+                                .map_err(TimespecParsingError::TimeTokenParsing)?;
 
                             Self::Hr24clockHourMinuteTimezone {
                                 hour,
@@ -1084,7 +1377,7 @@ mod timespec {
 
             for slice_index in (0..string_length).rev() {
                 let time = Time::from_str(&s[..slice_index]);
-                if let Ok(_) = time {
+                if time.is_ok() {
                     time_index = slice_index;
                     break;
                 }
@@ -1099,7 +1392,7 @@ mod timespec {
             let mut date_index = 0;
             for slice_index in (time_index..=string_length).rev() {
                 let date = Date::from_str(&s[time_index..slice_index]);
-                if let Ok(_) = date {
+                if date.is_ok() {
                     date_index = slice_index;
                     break;
                 }
@@ -1177,10 +1470,21 @@ mod timespec {
                     date_time
                 }
                 Timespec::Nowspec(nowspec) => match nowspec {
-                    Nowspec::Now => Utc::now(),
-                    Nowspec::NowIncrement(increment) => Utc::now().checked_add_signed(
-                        chrono::TimeDelta::from_std(increment.to_duration()).ok()?,
-                    )?,
+                    Nowspec::Now => {
+                        let datetime_utc = Utc::now();
+                        let datetime_local = datetime_utc.with_timezone(&Local);
+                        Utc.from_local_datetime(&datetime_local.naive_local())
+                            .unwrap()
+                    }
+                    Nowspec::NowIncrement(increment) => {
+                        let datetime_utc = Utc::now();
+                        let datetime_local = datetime_utc.with_timezone(&Local);
+                        Utc.from_local_datetime(&datetime_local.naive_local())
+                            .unwrap()
+                            .checked_add_signed(
+                                chrono::TimeDelta::from_std(increment.to_duration()).ok()?,
+                            )?
+                    }
                 },
             };
 
@@ -1655,6 +1959,130 @@ mod timespec {
 
             assert_eq!(Some(expected), timespec.to_date_time())
         }
+
+        #[test]
+        fn timespec_to_date_time_wallclock_hour_minute_with_timezone() {
+            let timespec = Timespec::TimeDate {
+                time: Time::WallclockHourMinuteTimezone {
+                    clock: WallClockHour(NonZero::new(5).expect("valid")),
+                    minute: Minute(53),
+                    am: AmPm::Am,
+                    timezone: TimezoneName("UTC".to_owned()),
+                },
+                date: Date::MontDayYear {
+                    month_name: Month(10),
+                    day_number: DayNumber(NonZero::new(4).expect("valid")),
+                    year_number: YearNumber(3000),
+                },
+            };
+
+            let expected = DateTime::parse_from_rfc3339("3000-11-04T05:53:00Z")
+                .expect("expected is valid")
+                .to_utc()
+                .with_timezone(&Local);
+
+            assert_eq!(
+                expected.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+                timespec
+                    .to_date_time()
+                    .unwrap()
+                    .format("%Y-%m-%dT%H:%M:%SZ")
+                    .to_string()
+            )
+        }
+
+        #[test]
+        fn timespec_to_date_time_wallclock_hour_with_timezone() {
+            let timespec = Timespec::TimeDate {
+                time: Time::WallclockHourTimezone {
+                    clock: WallClock {
+                        hour: NonZero::new(5).expect("valid"),
+                        minutes: 53,
+                    },
+                    am: AmPm::Am,
+                    timezone: TimezoneName("UTC".to_owned()),
+                },
+                date: Date::MontDayYear {
+                    month_name: Month(10),
+                    day_number: DayNumber(NonZero::new(4).expect("valid")),
+                    year_number: YearNumber(3000),
+                },
+            };
+
+            let expected = DateTime::parse_from_rfc3339("3000-11-04T05:53:00Z")
+                .expect("expected is valid")
+                .to_utc()
+                .with_timezone(&Local);
+
+            assert_eq!(
+                expected.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+                timespec
+                    .to_date_time()
+                    .unwrap()
+                    .format("%Y-%m-%dT%H:%M:%SZ")
+                    .to_string()
+            )
+        }
+
+        #[test]
+        fn timespec_to_date_time_hr24clock_hour_minute_with_timezone() {
+            let timespec = Timespec::TimeDate {
+                time: Time::Hr24clockHourMinuteTimezone {
+                    hour: Hr24ClockHour(5),
+                    minute: Minute(53),
+
+                    timezone: TimezoneName("UTC".to_owned()),
+                },
+                date: Date::MontDayYear {
+                    month_name: Month(10),
+                    day_number: DayNumber(NonZero::new(4).expect("valid")),
+                    year_number: YearNumber(3000),
+                },
+            };
+
+            let expected = DateTime::parse_from_rfc3339("3000-11-04T05:53:00Z")
+                .expect("expected is valid")
+                .to_utc()
+                .with_timezone(&Local);
+
+            assert_eq!(
+                expected.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+                timespec
+                    .to_date_time()
+                    .unwrap()
+                    .format("%Y-%m-%dT%H:%M:%SZ")
+                    .to_string()
+            )
+        }
+
+        #[test]
+        fn timespec_to_date_time_hr24clock_hour_with_timezone() {
+            let timespec = Timespec::TimeDate {
+                time: Time::Hr24clockHourTimezone {
+                    hr24_clock: Hr24Clock([5, 53]),
+                    timezone: TimezoneName("UTC".to_owned()),
+                },
+                date: Date::MontDayYear {
+                    month_name: Month(10),
+                    day_number: DayNumber(NonZero::new(4).expect("valid")),
+                    year_number: YearNumber(3000),
+                },
+            };
+
+            let expected = DateTime::parse_from_rfc3339("3000-11-04T05:53:00Z")
+                .expect("expected is valid")
+                .to_utc()
+                .with_timezone(&Local);
+
+            assert_eq!(
+                expected.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+                timespec
+                    .to_date_time()
+                    .unwrap()
+                    .format("%Y-%m-%dT%H:%M:%SZ")
+                    .to_string()
+            )
+        }
     }
 }
 
@@ -2058,7 +2486,7 @@ mod tokens {
                 err,
                 input: s.to_owned(),
             })?;
-            if year < 1970 || year > 9999 {
+            if !(1970..=9999).contains(&year) {
                 // it should be 4 number, so yeah...
                 Err(TokenParsingError::YearNumberInvalid)?
             }
@@ -2078,7 +2506,7 @@ mod tokens {
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             let tz = std::env::var("TZ").ok().unwrap_or("UTC".to_owned());
 
-            match s == &tz {
+            match s == tz {
                 true => Ok(Self(tz)), // TODO: Seems like implementation only reads UTC, but it should be influenced by TZ variable
                 false => Err(TokenParsingError::TimezonePatternNotFound(tz)),
             }
@@ -2209,14 +2637,14 @@ mod tokens {
 
         #[test]
         fn hour24_two_chars_out_of_range() {
-            let actual = Hr24Clock::from_str(&format!("24")).map(Hr24Clock::into_inner);
+            let actual = Hr24Clock::from_str("24").map(Hr24Clock::into_inner);
 
             assert_eq!(Err(TokenParsingError::H24HourOverflow("hour")), actual)
         }
 
         #[test]
         fn hour24_two_chars_not_a_number() {
-            let actual = Hr24Clock::from_str(&format!("aa")).map(Hr24Clock::into_inner);
+            let actual = Hr24Clock::from_str("aa").map(Hr24Clock::into_inner);
 
             assert!(actual.is_err())
         }
@@ -2242,18 +2670,18 @@ mod tokens {
 
         #[test]
         fn hour24_four_chars_out_of_range() {
-            let actual = Hr24Clock::from_str(&format!("2400")).map(Hr24Clock::into_inner);
+            let actual = Hr24Clock::from_str("2400").map(Hr24Clock::into_inner);
 
             assert_eq!(Err(TokenParsingError::H24HourOverflow("hour")), actual);
 
-            let actual = Hr24Clock::from_str(&format!("2360")).map(Hr24Clock::into_inner);
+            let actual = Hr24Clock::from_str("2360").map(Hr24Clock::into_inner);
 
             assert_eq!(Err(TokenParsingError::H24HourOverflow("minute")), actual);
         }
 
         #[test]
         fn hour24_four_chars_not_a_number() {
-            let actual = Hr24Clock::from_str(&format!("aaaa")).map(Hr24Clock::into_inner);
+            let actual = Hr24Clock::from_str("aaaa").map(Hr24Clock::into_inner);
 
             assert!(actual.is_err())
         }
@@ -2337,11 +2765,11 @@ mod tokens {
 
         #[test]
         fn wallclock_hour_four_chars_out_of_range() {
-            let actual = WallClock::from_str(&format!("2400")).map(WallClock::into_inner);
+            let actual = WallClock::from_str("2400").map(WallClock::into_inner);
 
             assert_eq!(Err(TokenParsingError::WallClockOverflow("hour")), actual);
 
-            let actual = WallClock::from_str(&format!("2360")).map(WallClock::into_inner);
+            let actual = WallClock::from_str("2360").map(WallClock::into_inner);
 
             assert_eq!(Err(TokenParsingError::WallClockOverflow("minute")), actual);
         }
