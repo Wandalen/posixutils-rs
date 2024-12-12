@@ -36,11 +36,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Daemon code
-
+    
     loop {
-        let x = db.0.iter().min_by_key(|x| x.next_execution()).unwrap();
-        sleep(x.next_execution() as u32);
         db = parse_cronfile(&logname)?;
+        let x = db.0.iter().min_by_key(|x| x.next_execution()).unwrap();
+        let sleep_time = x.next_execution() as u32;
+        
+        if sleep_time < 60 {
+            sleep(sleep_time);
+            x.run_job()?;
+        } else {
+            sleep(60);
+        }
     }
 }
 

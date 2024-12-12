@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
+chrono = { workspace = true }
 
 [[bin]]
 name = "crontab"

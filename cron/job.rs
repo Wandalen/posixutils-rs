@@ -1,10 +1,8 @@
-use std::alloc::System;
 use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::process::Command;
-use std::ptr::null_mut;
 use std::str::FromStr;
-use std::time::{Instant, SystemTime};
+use chrono::{DateTime, Local};
 
 trait TimeUnit: Sized {
     fn new(amount: i32) -> Option<Self>;
@@ -15,7 +13,7 @@ trait TimeUnit: Sized {
 macro_rules! time_unit {
     ($name:ident, $range:expr) => {
         #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
-        struct $name(u8);
+        pub struct $name(pub u8);
 
         impl TimeUnit for $name {
             fn new(amount: i32) -> Option<Self> {
@@ -62,12 +60,12 @@ time_unit!(WeekDay, 0..=6);
 
 #[derive(Eq, PartialEq, Ord)]
 pub struct CronJob {
-    minute: Minute,
-    hour: Hour,
-    monthday: MonthDay,
-    month: Month,
-    weekday: WeekDay,
-    command: String,
+    pub minute: Minute,
+    pub hour: Hour,
+    pub monthday: MonthDay,
+    pub month: Month,
+    pub weekday: WeekDay,
+    pub command: String,
 }
 
 impl PartialOrd for CronJob {
@@ -112,11 +110,11 @@ impl FromStr for Database {
                     for month in &months {
                         for weekday in &weekdays {
                             result.push(CronJob {
-                                minute: minute.clone(),
-                                hour: hour.clone(),
-                                monthday: monthday.clone(),
-                                month: month.clone(),
-                                weekday: weekday.clone(),
+                                minute: *minute,
+                                hour: *hour,
+                                monthday: *monthday,
+                                month: *month,
+                                weekday: *weekday,
                                 command: command.clone(),
                             })
                         }
@@ -179,8 +177,8 @@ impl CronJob {
         total
     }
 
-    fn run_job(&self) {
-        Command::new("sh").args(&["-c", &self.command]).output();
+    pub fn run_job(&self) -> std::io::Result<std::process::Output> {
+        Command::new("sh").args(["-c", &self.command]).output()
     }
 }
 
@@ -208,7 +206,7 @@ fn get_number(src: &mut Peekable<impl Iterator<Item = char>>) -> Option<i32> {
     let mut number = String::new();
 
     while let Some(&c) = src.peek() {
-        if c.is_digit(10) {
+        if c.is_ascii_digit() {
             number.push(c);
         }
     }
