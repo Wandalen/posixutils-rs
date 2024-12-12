@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::process::Command;
 use std::str::FromStr;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Datelike, Local, NaiveDate, NaiveDateTime, Timelike};
 
 trait TimeUnit: Sized {
     fn new(amount: i32) -> Option<Self>;
@@ -143,7 +143,7 @@ impl std::ops::Sub<CronJob> for CronJob {
 }
 
 impl CronJob {
-    pub fn next_execution(&self) -> i64 {
+    pub fn next_execution(&self) -> NaiveDateTime {
         let Self {
             minute,
             hour,
@@ -168,13 +168,13 @@ impl CronJob {
             2_678_400,
         ];
         
-        let mut total = 0;
-        total += minute.0 as i64 * 60;
-        total += hour.0 as i64 * 60 * 60;
-        total += month_secs[month.0 as usize];
-        total += (weekday.0 as i64 * 60 * 60 * 24).min(monthday.0 as i64 * 60 * 60 * 24);
-
-        total
+        let date = NaiveDateTime::default();
+        date.with_minute(minute.0 as u32);
+        date.with_hour(hour.0 as u32);
+        date.with_month(month.0 as u32);
+        date.with_day((monthday.0 as u32).min(weekday.0 as u32));
+        
+        date
     }
 
     pub fn run_job(&self) -> std::io::Result<std::process::Output> {

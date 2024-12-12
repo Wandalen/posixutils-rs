@@ -5,6 +5,7 @@ use std::env;
 use std::error::Error;
 use std::fs;
 use std::str::FromStr;
+use chrono::{DateTime, Local};
 
 fn parse_cronfile(username: &str) -> Result<Database, Box<dyn Error>> {
     let file = format!("/var/spool/cron/{username}");
@@ -40,10 +41,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     loop {
         db = parse_cronfile(&logname)?;
         let x = db.0.iter().min_by_key(|x| x.next_execution()).unwrap();
-        let sleep_time = x.next_execution() as u32;
+        let next_exec = x.next_execution();
+        let now = Local::now();
+        let diff = now.naive_local() - next_exec;
+        let sleep_time = diff.num_seconds();
         
         if sleep_time < 60 {
-            sleep(sleep_time);
+            sleep(sleep_time as u32);
             x.run_job()?;
         } else {
             sleep(60);
