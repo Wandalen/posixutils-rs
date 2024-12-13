@@ -4,6 +4,7 @@ resolver = "2"
 members = [
 	"awk",
 	"calc",
+	"cron",
 	"datetime",
 	"dev",
 	"display",

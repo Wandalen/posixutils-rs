@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+plib = { path = "../plib" }
 clap = { workspace = true }
 libc = { workspace = true }
 chrono = { workspace = true }
 
 [[bin]]
 name = "crontab"
-path = "crontab.rs"
+path = "./src/crontab.rs"
 
 [[bin]]
 name = "crond"
-path = "crond.rs"
+path = "./src/crond.rs"
