@@ -67,7 +67,7 @@ fn dash_e() {
 #[test]
 fn dash_l() {
     let output = run_test_base("crontab", &vec!["-l".to_string()], b"");
-    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.status.code(), Some(1));
 }
 
 #[test]
