@@ -22,7 +22,7 @@ fn parse_cronfile(username: &str) -> Result<Database, Box<dyn Error>> {
     let file = format!("/var/at/tabs/{username}");
     let s = fs::read_to_string(&file)?;
     Ok(s.lines()
-        .map(|x| Database::from_str(x).unwrap())
+        .filter_map(|x| Database::from_str(x).ok())
         .fold(Database(vec![]), |acc, next| acc.merge(next)))
 }
 
