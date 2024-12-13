@@ -9,7 +9,7 @@
 
 use chrono::{DateTime, Utc};
 use clap::Parser;
-use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use libc::{getlogin, getpwnam, passwd};
 use timespec::Timespec;
 
@@ -44,46 +44,46 @@ const DEFAULT_DIRECTORY: &str = "/var/spool/atjobs/";
 #[command(
     author,
     version,
-    about = "at - execute commands at a later time",
-    long_about = "The 'at' command schedules commands to be executed later.\n\
+    about = gettext("at - execute commands at a later time"),
+    long_about = gettext("The 'at' command schedules commands to be executed later.\n\
                   Usage:\n\
                   at [-m] [-f file] [-q queuename] -t time_arg\n\
                   at [-m] [-f file] [-q queuename] timespec...\n\
                   at -r at_job_id...\n\
                   at -l -q queuename\n\
                   at -l [at_job_id...]"
-)]
+))]
 
 struct Args {
     /// Submit the job to be run at the date and time specified.
-    #[arg(value_name = "TIMESPEC", required = false)]
+    #[arg(value_name = "TIMESPEC", required = false, help = gettext("Submit the job to be run at the date and time specified."))]
     timespec: Option<String>,
     /// Displays a list of all scheduled jobs
-    #[arg(short = 'l', long)]
+    #[arg(short = 'l', long = "list", help = gettext("Displays a list of all scheduled jobs"))]
     list: bool,
 
     /// Specifies the pathname of a file to be used as the source of the at-job, instead of standard input.
-    #[arg(short = 'f', long, value_name = "FILE")]
+    #[arg(short = 'f', long = "file", value_name = "FILE", help = gettext("Specifies the pathname of a file to be used as the source of the at-job, instead of standard input."))]
     file: Option<PathBuf>,
 
     /// Send mail to the invoking user after the at-job has run.
-    #[arg(short = 'm', long)]
+    #[arg(short = 'm', long = "mail", help = gettext("Send mail to the invoking user after the at-job has run."))]
     mail: bool,
 
     /// Specify in which queue to schedule a job for submission.
-    #[arg(short = 'q', long, value_name = "QUEUENAME")]
+    #[arg(short = 'q', long = "queue", value_name = "QUEUENAME", help = gettext("Specify in which queue to schedule a job for submission."))]
     queue: Option<char>,
 
     /// Remove the jobs with the specified at_job_id operands that were previously scheduled by the at utility.
-    #[arg(short = 'r', long)]
+    #[arg(short = 'r', long = "remove", help = gettext("Remove the jobs with the specified at_job_id operands that were previously scheduled by the at utility."))]
     remove: bool,
 
     /// Submit the job to be run at the time specified by the time option-argument.
-    #[arg(short = 't', long, value_name = "TIME_ARG")]
+    #[arg(short = 't', long = "time", value_name = "TIME_ARG", help = gettext("Submit the job to be run at the time specified by the time option-argument."))]
     time: Option<String>,
 
     /// Job IDs for reporting jobs scheduled for the invoking user.
-    #[arg(value_name = "AT_JOB_ID", required = false)]
+    #[arg(value_name = "AT_JOB_ID", required = false, help = gettext("Job IDs for reporting jobs scheduled"))]
     at_job_ids: Vec<u32>,
 }
 
