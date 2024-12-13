@@ -68,6 +68,11 @@ fn main() {
         print_usage("Too many options specified.");
         exit(1);
     }
+    
+    if opt_count < 1 {
+        print_usage("Not enough options specified.");
+        exit(1);
+    }
 
     if args.edit {
         match edit_crontab(&path) {

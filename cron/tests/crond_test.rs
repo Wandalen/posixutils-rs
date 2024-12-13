@@ -1,5 +1,6 @@
+use std::ops::Sub;
 use std::process::Command;
-use chrono::{Datelike, Local, NaiveDateTime, Timelike};
+use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use posixutils_cron::job::Database;
 
 #[test]
@@ -11,67 +12,102 @@ fn no_args() {
 
 #[test]
 fn test_leap_year() {
-    let database = "0 1 29 2 * echo Ok".parse::<Database>().unwrap();
-    
-    let mut result_date = NaiveDateTime::default();
-    result_date = result_date.with_year(2028).unwrap();
-    result_date = result_date.with_month(2).unwrap();
-    result_date = result_date.with_day(29).unwrap();
-    result_date = result_date.with_hour(1).unwrap();
-    result_date = result_date.with_minute(0).unwrap();
-    
-    assert_eq!(result_date, database.nearest_job().unwrap().next_execution().unwrap());
+    let database = "* * 29 * * echo Ok".parse::<Database>().unwrap();
+
+    let start_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2028, 1, 30).unwrap(),
+        NaiveTime::from_hms_opt(15, 38, 00).unwrap(),
+    );
+
+    let expected_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2028, 2, 29).unwrap(),
+        NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
+    );
+
+    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
 }
 
 #[test]
 fn test_minute() {
-    let database = "5 * * * * echo Ok".parse::<Database>().unwrap();
-    
-    let mut result_date = Local::now().naive_local();
-    result_date = result_date.with_minute(0).unwrap();
-    result_date = result_date.with_hour(1).unwrap();
-    
-    assert_eq!(result_date, database.nearest_job().unwrap().next_execution().unwrap());
+    let database = "10 * * * * echo Ok".parse::<Database>().unwrap();
+
+    let start_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(15, 38, 00).unwrap(),
+    );
+
+    let expected_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(16, 10, 0).unwrap(),
+    );
+
+    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
 }
 
 #[test]
 fn test_hour() {
-    let database = "* 10 * * * echo Ok".parse::<Database>().unwrap();
+    let database = "* 1 * * * echo Ok".parse::<Database>().unwrap();
+    
+    let start_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(15, 38, 00).unwrap(),
+    );
 
-    let mut result_date = Local::now().naive_local();
-    result_date = result_date.with_minute(0).unwrap();
-    result_date = result_date.with_hour(1).unwrap();
-
-    assert_eq!(result_date, database.nearest_job().unwrap().next_execution().unwrap());
+    let expected_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 1, 2).unwrap(),
+        NaiveTime::from_hms_opt(1, 0, 0).unwrap(),
+    );
+    
+    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
 }
 
 #[test]
 fn test_weekday() {
-    let database = "* * * * 3 echo Ok".parse::<Database>().unwrap();
+    let database = "* * * * 0 echo Ok".parse::<Database>().unwrap();
 
-    let mut result_date = Local::now().naive_local();
-    result_date = result_date.with_minute(0).unwrap();
-    result_date = result_date.with_hour(1).unwrap();
+    let start_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 2, 1).unwrap(),
+        NaiveTime::from_hms_opt(15, 38, 00).unwrap(),
+    );
 
-    assert_eq!(result_date, database.nearest_job().unwrap().next_execution().unwrap());
+    let expected_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 2, 6).unwrap(),
+        NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
+    );
+
+    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
 }
 
 #[test]
 fn test_monthday() {
     let database = "* * 20 * * echo Ok".parse::<Database>().unwrap();
 
-    let mut result_date = Local::now().naive_local();
-    result_date = result_date.with_day(20).unwrap();
+    let start_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(15, 38, 00).unwrap(),
+    );
 
-    assert_eq!(result_date, database.nearest_job().unwrap().next_execution().unwrap());
+    let expected_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 1, 20).unwrap(),
+        NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
+    );
+
+    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
 }
 
 #[test]
 fn test_month() {
-    let database = "* * * 5 * echo Ok".parse::<Database>().unwrap();
+    let database = "* * * 12 * echo Ok".parse::<Database>().unwrap();
 
-    let mut result_date = Local::now().naive_local();
-    result_date = result_date.with_month(5).unwrap();
+    let start_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+        NaiveTime::from_hms_opt(15, 38, 00).unwrap(),
+    );
 
-    assert_eq!(result_date, database.nearest_job().unwrap().next_execution().unwrap());
+    let expected_date = NaiveDateTime::new(
+        NaiveDate::from_ymd_opt(2000, 12, 1).unwrap(),
+        NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
+    );
+
+    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
 }

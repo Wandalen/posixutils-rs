@@ -1,4 +1,4 @@
-use crate::job::Database;
+use posixutils_cron::job::Database;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     loop {
         db = parse_cronfile(&logname)?;
         let Some(x) = db.nearest_job() else { sleep(60); continue };
-        let Some(next_exec) = x.next_execution() else { sleep(60); continue };
+        let Some(next_exec) = x.next_execution(&Local::now().naive_local()) else { sleep(60); continue };
         let now = Local::now();
         let diff = now.naive_local() - next_exec;
         let sleep_time = diff.num_seconds();

@@ -11,8 +11,15 @@ chrono = { workspace = true }
 
 [[bin]]
 name = "crontab"
-path = "./src/crontab.rs"
+path = "src/bin/crontab.rs"
 
 [[bin]]
 name = "crond"
-path = "./src/crond.rs"
+path = "src/bin/crond.rs"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[lib]
+path = "./src/lib.rs"
