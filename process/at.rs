@@ -11,7 +11,6 @@ use chrono::{DateTime, Utc};
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::{getlogin, getpwnam, passwd};
-use plib::PROJECT_NAME;
 use timespec::Timespec;
 
 use std::{
@@ -162,8 +161,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     args.validate_args()?;
 
     setlocale(LocaleCategory::LcAll, "");
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+    textdomain("posixutils-rs")?;
+    bind_textdomain_codeset("posixutils-rs", "UTF-8")?;
 
     if args.remove {
         remove_jobs(&args.at_job_ids)?;
