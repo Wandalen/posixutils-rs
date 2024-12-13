@@ -61,6 +61,9 @@ fn main() {
         println!("Could not obtain the user's logname.");
         exit(1);
     };
+    #[cfg(target_os = "linux")]
+    let path = format!("/var/spool/cron/{logname}");
+    #[cfg(target_os = "macos")]
     let path = format!("/var/spool/cron/{logname}");
 
     let opt_count = [args.edit, args.list, args.remove, args.file.is_some()]

@@ -6,7 +6,10 @@ use std::fs;
 use std::str::FromStr;
 
 fn parse_cronfile(username: &str) -> Result<Database, Box<dyn Error>> {
+    #[cfg(target_os = "linux")]
     let file = format!("/var/spool/cron/{username}");
+    #[cfg(target_os = "macos")]
+    let file = format!("/var/at/tabs/{username}");
     let s = fs::read_to_string(&file)?;
     Ok(s.lines()
         .map(|x| Database::from_str(x).unwrap())
@@ -30,12 +33,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         println!("c");
-        
+
         setsid();
         chdir(b"/\0" as *const _ as *const c_char);
 
         println!("d");
-        
+
         close(STDIN_FILENO);
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
