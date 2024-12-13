@@ -59,7 +59,6 @@ fn no_args() {
 
 #[test]
 fn dash_e() {
-
     let output = run_test_base("crontab", &vec!["-e".to_string()], b"");
     assert_eq!(output.status.code(), Some(1));
 }
