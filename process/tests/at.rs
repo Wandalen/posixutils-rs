@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use plib::{run_test, TestPlan};
+use plib::testing::{run_test, TestPlan};
 use tempfile::TempDir;
 
 fn run_test_at(
@@ -59,15 +59,6 @@ fn test2() {
     let expected_output = "job 1 at Thu Nov 04 08:23:00 2100\n";
 
     run_test_at(&args, expected_output, "", 0);
-
-    /*let entries = std::fs::read_dir(temp_dir).unwrap();
-
-     for entry in entries {
-        let entry = entry.unwrap();
-        let path = entry.path();
-
-        println!("{}", path.display());
-    } */
 
     assert!(temp_dir.join("a00001041a0f17").exists());
 }
