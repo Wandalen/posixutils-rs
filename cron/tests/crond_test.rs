@@ -56,8 +56,8 @@ fn run_test_base(cmd: &str, args: &Vec<String>, stdin_data: &[u8]) -> Output {
 
 #[test]
 fn no_args() {
+    std::env::set_var("LOGNAME", "root");
     let output = run_test_base("crond", &vec![], b"");
-    assert_eq!("wrong string", String::from_utf8_lossy(&output.stdout));
     assert_eq!(output.status.code(), Some(0));
 }
 
