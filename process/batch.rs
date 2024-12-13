@@ -10,7 +10,6 @@
 use chrono::{DateTime, Local, TimeZone, Utc};
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use libc::{getlogin, getpwnam, passwd};
-use plib::PROJECT_NAME;
 
 use std::{
     collections::HashSet,
