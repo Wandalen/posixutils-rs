@@ -15,7 +15,7 @@ libc.workspace = true
 chrono.workspace = true
 dirs = "5.0"
 chrono-tz.workspace = true
-tempfile = "3.14.0"
+tempfile = "3.14"
 
 [build-dependencies]
 bindgen = { version = "0.70.0", features = ["runtime"] }

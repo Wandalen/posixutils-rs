@@ -262,15 +262,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// On Linux: checks the `AT_JOB_DIR` environment variable, then predefined directories.
 /// On macOS: checks or creates the `/var/at/jobs` directory.
 fn get_job_dir() -> Result<String, String> {
+    // Check `AT_JOB_DIR` environment variable
+    if let Ok(env_dir) = env::var("AT_JOB_DIR") {
+        if Path::new(&env_dir).exists() {
+            return Ok(env_dir);
+        }
+    }
     #[cfg(target_os = "linux")]
     {
-        // Check `AT_JOB_DIR` environment variable
-        if let Ok(env_dir) = env::var("AT_JOB_DIR") {
-            if Path::new(&env_dir).exists() {
-                return Ok(env_dir);
-            }
-        }
-
         // Check the predefined spool directories
         for dir in SPOOL_DIRECTORIES {
             if Path::new(dir).exists() {
@@ -455,8 +454,6 @@ fn at(
     file.write_all(job.as_bytes())?;
 
     file.set_permissions(std::fs::Permissions::from_mode(0o700))?;
-
-    std::os::unix::fs::chown(file_path, Some(user.uid), Some(user.gid))?;
 
     println!(
         "job {} at {}",

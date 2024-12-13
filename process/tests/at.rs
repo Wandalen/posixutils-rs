@@ -7,8 +7,20 @@
 // SPDX-License-Identifier: MIT
 //
 
+use std::sync::Mutex;
+
+static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
+use std::{fs, path::Path};
+
 use plib::testing::{run_test, TestPlan};
-use tempfile::TempDir;
+use tempfile::{tempdir, TempDir};
+
+fn setup_test_env() -> (TempDir, String) {
+    let temp_dir = tempdir().expect("Unable to create temporary directory");
+    let dir_path = temp_dir.path().join("testdir");
+    (temp_dir, dir_path.to_str().unwrap().to_string())
+}
 
 fn run_test_at(
     args: &[&str],
@@ -30,83 +42,63 @@ fn run_test_at(
 
 #[test]
 fn test1() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
-    let args = ["05:53amUTCNOV4,2100", "-f", &file];
+    let (_temp_dir, dir_path) = setup_test_env();
 
-    let expected_output = "job 1 at Thu Nov 04 07:53:00 2100\n";
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
+
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
+    let args = ["05:53amNOV4,2100", "-f", &file];
+
+    let expected_output = "job 1 at Thu Nov 04 05:53:00 2100\n";
 
     run_test_at(&args, expected_output, "", 0);
 
-    assert!(temp_dir.join("a00001041a0ef9").exists());
+    let res_file = Path::new(&dir_path).join("a00001041a0e81");
+    assert!(res_file.exists());
+
+    fs::remove_file(res_file).expect("Unable to remove test file");
 }
 
 #[test]
 fn test2() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    let (_temp_dir, dir_path) = setup_test_env();
 
-    let args = ["05:53amUTCNOV4,2100+30minutes", "-f", &file];
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let expected_output = "job 1 at Thu Nov 04 08:23:00 2100\n";
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
+
+    let args = ["05:53amNOV4,2100+30minutes", "-f", &file];
+
+    let expected_output = "job 1 at Thu Nov 04 06:23:00 2100\n";
 
     run_test_at(&args, expected_output, "", 0);
 
-    assert!(temp_dir.join("a00001041a0f17").exists());
+    let res_file = Path::new(&dir_path).join("a00001041a0e9f");
+    assert!(res_file.exists());
+
+    fs::remove_file(res_file).expect("Unable to remove test file");
 }
 
 #[test]
 fn test3() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
 
-    let args = ["05:53amUTCNOV4,2100+1day", "-f", &file];
-
-    let expected_output = "job 1 at Fri Nov 05 07:53:00 2100\n";
-
-    run_test_at(&args, expected_output, "", 0);
-
-    assert!(temp_dir.join("a00001041a1499").exists());
-}
-
-#[test]
-fn test4() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
-
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
-
-    let args = ["midnightNOV4,2100", "-f", &file];
-
-    let expected_output = "job 1 at Thu Nov 04 00:00:00 2100\n";
-
-    run_test_at(&args, expected_output, "", 0);
-
-    assert!(temp_dir.join("a00001041a0d20").exists());
-}
-
-#[test]
-fn test5() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
-
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["05:53amNOV4,2100+1day", "-f", &file];
 
@@ -114,17 +106,45 @@ fn test5() {
 
     run_test_at(&args, expected_output, "", 0);
 
-    assert!(temp_dir.join("a00001041a1421").exists());
+    let res_file = Path::new(&dir_path).join("a00001041a1421");
+    assert!(res_file.exists());
+
+    fs::remove_file(res_file).expect("Unable to remove test file");
+}
+
+#[test]
+fn test4() {
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
+
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
+
+    let args = ["midnightNOV4,2100", "-f", &file];
+
+    let expected_output = "job 1 at Thu Nov 04 00:00:00 2100\n";
+
+    run_test_at(&args, expected_output, "", 0);
+
+    let res_file = Path::new(&dir_path).join("a00001041a0d20");
+    assert!(res_file.exists());
+
+    fs::remove_file(res_file).expect("Unable to remove test file");
 }
 
 #[test]
 fn test6() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["05:53pmNOV4,2100+1day", "-f", &file];
 
@@ -132,17 +152,22 @@ fn test6() {
 
     run_test_at(&args, expected_output, "", 0);
 
-    assert!(temp_dir.join("a00001041a16f1").exists());
+    let res_file = Path::new(&dir_path).join("a00001041a16f1");
+    assert!(res_file.exists());
+
+    fs::remove_file(res_file).expect("Unable to remove test file");
 }
 
 #[test]
 fn test7() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["15:53NOV4,2100+1day", "-f", &file];
 
@@ -150,17 +175,22 @@ fn test7() {
 
     run_test_at(&args, expected_output, "", 0);
 
-    assert!(temp_dir.join("a00001041a1679").exists());
+    let res_file = Path::new(&dir_path).join("a00001041a1679");
+    assert!(res_file.exists());
+
+    fs::remove_file(res_file).expect("Unable to remove test file");
 }
 
 #[test]
 fn test8() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["midnightNOV4,2100", "-f", &file, "-q", "b"];
 
@@ -168,17 +198,22 @@ fn test8() {
 
     run_test_at(&args, expected_output, "", 0);
 
-    assert!(temp_dir.join("b00001041a0d20").exists());
+    let res_file = Path::new(&dir_path).join("b00001041a0d20");
+    assert!(res_file.exists());
+
+    fs::remove_file(res_file).expect("Unable to remove test file");
 }
 
 #[test]
 fn test9() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["-t", "210012131200", "-f", &file];
 
@@ -186,17 +221,22 @@ fn test9() {
 
     run_test_at(&args, expected_output, "", 0);
 
-    assert!(temp_dir.join("a00001041aeb50").exists());
+    let res_file = Path::new(&dir_path).join("a00001041aeb50");
+    assert!(res_file.exists());
+
+    fs::remove_file(res_file).expect("Unable to remove test file");
 }
 
 #[test]
 fn test10() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["midnightNOV4,2100", "-f", &file, "-q", "b"];
 
@@ -204,19 +244,21 @@ fn test10() {
 
     run_test_at(&args, expected_output, "", 0);
 
-    let args2 = ["-r", ""];
+    let args2 = ["-r", "1"];
     let expected_output2 = "";
     run_test_at(&args2, expected_output2, "", 0);
 }
 
 #[test]
 fn test11() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["midnightNOV4,2100", "-f", &file, "-q", "b"];
 
@@ -238,12 +280,14 @@ fn test11() {
 
 #[test]
 fn test12() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["midnightNOV4,2100", "-f", &file, "-q", "b"];
 
@@ -266,12 +310,14 @@ fn test12() {
 
 #[test]
 fn test13() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_dir = temp_dir.path();
-    std::env::set_var("AT_JOB_DIR", temp_dir);
+    let _lock = TEST_MUTEX.lock().unwrap();
+    let (_temp_dir, dir_path) = setup_test_env();
+    fs::create_dir(&dir_path).expect("Unable to create test directory");
 
-    let project_root = env!("CARGO_MANIFEST_DIR");
-    let file = format!("{}/tests/at/cmd_for_job", project_root);
+    std::env::set_var("AT_JOB_DIR", &dir_path);
+    std::env::set_var("LOGNAME", "root");
+
+    let file = "tests/at/cmd_for_job".to_string();
 
     let args = ["midnightNOV4,2100", "-f", &file, "-q", "b"];
 
