@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+gettext-rs = { workspace = true }
 plib = { path = "../plib" }
 clap = { workspace = true }
 libc = { workspace = true }

@@ -1,5 +1,15 @@
+//
+// Copyright (c) 2024 Hemi Labs, Inc.
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
+
 use clap::Parser;
 
+use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -8,13 +18,13 @@ use std::process::{exit, ExitStatus};
 
 #[derive(Parser)]
 struct CronArgs {
-    #[arg(short, long)]
+    #[arg(short, long, help = gettext("edit user's crontab"))]
     edit: bool,
-    #[arg(short, long)]
+    #[arg(short, long, help = gettext("list user's crontab"))]
     list: bool,
-    #[arg(short, long)]
+    #[arg(short, long, help = gettext("delete user's crontab"))]
     remove: bool,
-    #[arg(name = "FILE")]
+    #[arg(name = "FILE", help = gettext("file to replace user's current crontab with"))]
     file: Option<String>,
 }
 
@@ -55,7 +65,11 @@ fn replace_crontab(from: &str, to: &str) -> Result<()> {
     Ok(())
 }
 
-fn main() {
+fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    setlocale(LocaleCategory::LcAll, "");
+    textdomain("posixutils-rs")?;
+    bind_textdomain_codeset("posixutils-rs", "UTF-8")?;
+
     let args = CronArgs::parse();
     let Ok(logname) = env::var("LOGNAME") else {
         println!("Could not obtain the user's logname.");
@@ -153,4 +167,6 @@ fn main() {
             }
         }
     }
+
+    Ok(())
 }

@@ -1,4 +1,14 @@
+//
+// Copyright (c) 2024 Hemi Labs, Inc.
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
+
 use chrono::Local;
+use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use posixutils_cron::job::Database;
 use std::env;
 use std::error::Error;
@@ -16,7 +26,11 @@ fn parse_cronfile(username: &str) -> Result<Database, Box<dyn Error>> {
         .fold(Database(vec![]), |acc, next| acc.merge(next)))
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    setlocale(LocaleCategory::LcAll, "");
+    textdomain("posixutils-rs")?;
+    bind_textdomain_codeset("posixutils-rs", "UTF-8")?;
+
     let Ok(logname) = env::var("LOGNAME") else {
         panic!("Could not obtain the user's logname.")
     };
