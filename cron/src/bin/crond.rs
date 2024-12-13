@@ -14,9 +14,11 @@ fn parse_cronfile(username: &str) -> Result<Database, Box<dyn Error>> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    println!("a");
     let Ok(logname) = env::var("LOGNAME") else {
         panic!("Could not obtain the user's logname.")
     };
+    println!("b");
 
     // Daemon setup
     unsafe {
@@ -27,12 +29,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Ok(());
         }
 
+        println!("c");
+        
         setsid();
         chdir(b"/\0" as *const _ as *const c_char);
 
+        println!("d");
+        
         close(STDIN_FILENO);
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
+
+        println!("e");
     }
 
     // Daemon code
