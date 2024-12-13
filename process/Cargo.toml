@@ -31,6 +31,10 @@ name = "at"
 path = "./at.rs"
 
 [[bin]]
+name = "batch"
+path = "./batch.rs"
+
+[[bin]]
 name = "fuser"
 path = "./fuser.rs"
 
