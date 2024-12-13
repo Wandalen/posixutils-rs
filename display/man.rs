@@ -10,6 +10,7 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use man_util::mdoc_macro::text_production::{AtAndTUnix, Standard};
+use man_util::parser::MdocParser;
 use plib::PROJECT_NAME;
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
@@ -223,7 +224,10 @@ fn parse_mdoc(
     man_page: &[u8],
     formatting_settings: FormattingSettings,
 ) -> Result<Vec<u8>, ManError> {
-    Ok(man_page.into())
+    let (_, errors) = MdocParser::parse(man_page);
+    errors.iter().for_each(|e| println!("{e}"));
+
+    Ok(vec![])
 }
 
 /// Formats man page content into appropriate format.

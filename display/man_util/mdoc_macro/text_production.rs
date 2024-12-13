@@ -342,8 +342,12 @@ impl Display for Standard {
             Standard::IsoC => "ISO/IEC 9899:1990 (“ISO C90”)".to_string(),
             Standard::IsoC90 => "ISO/IEC 9899:1990 (“ISO C90”)".to_string(),
             Standard::IsoCAmd1 => "ISO/IEC 9899/AMD1:1995 (“ISO C90, Amendment 1”)".to_string(),
-            Standard::IsoCTcor1 => "ISO/IEC 9899/TCOR1:1994 (“ISO C90, Technical Corrigendum 1”)".to_string(),
-            Standard::IsoCTcor2 => "ISO/IEC 9899/TCOR2:1995 (“ISO C90, Technical Corrigendum 2”)".to_string(),
+            Standard::IsoCTcor1 => {
+                "ISO/IEC 9899/TCOR1:1994 (“ISO C90, Technical Corrigendum 1”)".to_string()
+            }
+            Standard::IsoCTcor2 => {
+                "ISO/IEC 9899/TCOR2:1995 (“ISO C90, Technical Corrigendum 2”)".to_string()
+            }
             Standard::IsoC99 => "ISO/IEC 9899:1999 (“ISO C99”)".to_string(),
             Standard::IsoC2011 => "ISO/IEC 9899:2011 (“ISO C11”)".to_string(),
             // POSIX.1 Standards before XPG4.2
@@ -369,7 +373,9 @@ impl Display for Standard {
             Standard::Xpg42 => "X/Open Portability Guide Issue 4, Version 2 (“XPG4.2”)".to_string(),
             Standard::XCurses42 => "X/Open Curses Issue 4, Version 2 (“XCURSES4.2”)".to_string(),
             Standard::P10031G2000 => "IEEE Std 1003.1g-2000 (“POSIX.1g”)".to_string(),
-            Standard::Svid4 => "System V Interface Definition, Fourth Edition (“SVID4”)".to_string(),
+            Standard::Svid4 => {
+                "System V Interface Definition, Fourth Edition (“SVID4”)".to_string()
+            }
             // X/Open Portability Guide Issue 5 and Related Standards
             Standard::Susv2 => "Version 2 of the Single UNIX Specification (“SUSv2”)".to_string(),
             Standard::Xbd5 => "X/Open Base Definitions Issue 5 (“XBD5”)".to_string(),

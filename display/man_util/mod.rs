@@ -8,3 +8,4 @@
 //
 
 pub mod mdoc_macro;
+pub mod parser;

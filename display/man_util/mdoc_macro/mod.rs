@@ -28,8 +28,8 @@ pub enum OffsetType {
 
 pub enum BfType {
     Emphasis, // Or Em
-    Literal, // Or Li
-    Symboic, // Or Sy
+    Literal,  // Or Li
+    Symboic,  // Or Sy
 }
 
 pub enum BlType {
@@ -48,9 +48,7 @@ pub enum ItType {
     MandatoryArgs(Vec<String>),
     OptionalArgs(Vec<String>),
     None,
-    Cell {
-        cells: Vec<String>,
-    },
+    Cell { cells: Vec<String> },
 }
 
 pub enum SmMode {
@@ -136,8 +134,8 @@ pub enum Macro {
     Ek, // End a keep context started by Bk
     Bl {
         list_type: BlType,
-        offset : Option<OffsetType>,
-        compact : bool,
+        offset: Option<OffsetType>,
+        compact: bool,
     },
     El, // End a list context started by Bl
     Bo,
@@ -253,7 +251,7 @@ pub enum Macro {
     },
     Mt {
         // https://man.openbsd.org/mdoc#Mt
-        mail_to: String
+        mail_to: String,
     },
     Nd {
         line: String,
@@ -272,7 +270,7 @@ pub enum Macro {
         line: String,
     },
     Os {
-        fotter_text: Option<String>
+        fotter_text: Option<String>,
     },
     Ot {
         func_type: String,
@@ -343,5 +341,5 @@ pub enum Macro {
     Xr {
         name: String,
         section: String,
-    }
+    },
 }
