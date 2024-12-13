@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use clap::Parser;
+use clap::{command, Parser};
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use libc::{
     ioctl, regcomp, regex_t, regexec, regmatch_t, winsize, REG_EXTENDED, STDERR_FILENO,
@@ -104,6 +104,7 @@ impl Args {
         }
 
         let script = Script::parse(raw_script)?;
+
 
         Ok(Sed {
             ere: self.ere,
@@ -352,7 +353,7 @@ enum Command {
 }
 
 impl Command {
-    fn get_mut_address(&mut self) -> Option<(&mut Address, usize)> {
+    fn get_mut_address(&mut self) -> Option<(&mut Option<Address>, usize)> {
         let (address, i) = match self {
             Command::Block(address, ..) => (address, 2),
             Command::PrintTextAfter(address, ..) => (address, 1),
@@ -378,7 +379,7 @@ impl Command {
             _ => return None,
         };
 
-        address.as_mut().map(|address| (address, i))
+        Some((address, i))
     }
 
     /// If [`Command`] address has more [`AddressToken`]
@@ -387,7 +388,10 @@ impl Command {
         let Some((address, max_len)) = self.get_mut_address() else {
             return Ok(());
         };
-        for condition in &address.0 {
+        if address.is_none(){
+            return Ok(());
+        }
+        for condition in &address.as_ref().unwrap().0 {
             if condition.limits.len() > max_len {
                 let message = match max_len {
                     0 => unreachable!(),
@@ -410,8 +414,12 @@ impl Command {
             return Ok(true);
         };
 
+        if address.is_none(){
+            return Ok(true);
+        }
+
         let mut need_execute = true;
-        for range in address.0.iter_mut() {
+        for range in address.as_mut().unwrap().0.iter_mut() {
             let mut reached_now = vec![];
             for (i, token) in range.limits.iter().enumerate() {
                 reached_now.push(match token {
@@ -980,9 +988,12 @@ fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, Strin
     };
     *i = splitters[1] + 1;
 
+    let pattern = pattern.iter().collect::<String>();
+    let replacement = replacement.iter().collect::<String>();
+
     Ok((
-        pattern.iter().collect::<String>(),
-        replacement.iter().collect::<String>(),
+        pattern.replace("\\/", "/"),
+        replacement.replace("\\/", "/"),
     ))
 }
 
@@ -1234,7 +1245,7 @@ impl Script {
                 }
                 '{' => commands.push(Command::Block(
                     address.clone(),
-                    parse_block(&chars, &mut i)?,
+                    parse_block(&chars, &mut i)?
                 )),
                 'a' => {
                     if let Some(text) = parse_text_attribute(&chars, &mut i)? {
@@ -1392,29 +1403,28 @@ fn flatten_commands(mut commands: Vec<Command>) -> Vec<Command> {
     let is_block = |cmd: &Command| matches!(cmd, Command::Block(..));
 
     while commands.iter().any(is_block) {
-        let blocks = commands
-            .iter()
-            .enumerate()
-            .filter_map(|(i, cmd)| {
-                if let Command::Block(block_address, block_commands) = cmd {
-                    let mut block_commands = block_commands.clone();
+        commands = commands
+            .into_iter()
+            .map(|cmd| {
+                if let Command::Block(block_address, mut block_commands) = cmd {
+                    let Some(block_address) = block_address else{
+                        return block_commands;
+                    };
                     block_commands.iter_mut().for_each(|cmd| {
                         if let Some((address, _)) = cmd.get_mut_address() {
-                            if let Some(block_address) = block_address {
+                            if let Some(address) = address{
                                 address.0.extend(block_address.0.clone());
+                            } else{
+                                *address = Some(block_address.clone());
                             }
                         }
                     });
-                    Some((i, block_commands))
-                } else {
-                    None
+                    block_commands
+                }else{
+                    vec![cmd]
                 }
-            })
+            }).flatten()
             .collect::<Vec<_>>();
-
-        for (i, block_commands) in blocks.iter().rev() {
-            commands.splice(i..&(i + 1), block_commands.clone());
-        }
     }
 
     commands
@@ -1945,6 +1955,10 @@ impl Sed {
                 break;
             }
             self.current_line += 1;
+        }
+
+        if let Some(Command::PrintFile(..)) = self.script.0.last(){
+            print!("\r");
         }
 
         Ok(())
