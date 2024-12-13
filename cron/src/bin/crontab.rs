@@ -63,12 +63,15 @@ fn main() {
     };
     let path = format!("/var/spool/cron/{logname}");
 
-    let opt_count = [args.edit, args.list, args.remove, args.file.is_some()].into_iter().map(|x| x as i32).sum::<i32>();
+    let opt_count = [args.edit, args.list, args.remove, args.file.is_some()]
+        .into_iter()
+        .map(|x| x as i32)
+        .sum::<i32>();
     if opt_count > 1 {
         print_usage("Too many options specified.");
         exit(1);
     }
-    
+
     if opt_count < 1 {
         print_usage("Not enough options specified.");
         exit(1);
@@ -80,7 +83,9 @@ fn main() {
             Err(err) => {
                 match err.kind() {
                     ErrorKind::NotFound => println!("No crontab file has been found."),
-                    ErrorKind::PermissionDenied => println!("Permission to access user's crontab file denied."),
+                    ErrorKind::PermissionDenied => {
+                        println!("Permission to access user's crontab file denied.")
+                    }
                     ErrorKind::Interrupted => println!("crontab was interrupted."),
                     ErrorKind::OutOfMemory => println!("crontab exceeded available memory."),
                     _ => println!("Unknown error: {}", err),
@@ -96,7 +101,9 @@ fn main() {
             Err(err) => {
                 match err.kind() {
                     ErrorKind::NotFound => println!("No crontab file has been found."),
-                    ErrorKind::PermissionDenied => println!("Permission to access user's crontab file denied."),
+                    ErrorKind::PermissionDenied => {
+                        println!("Permission to access user's crontab file denied.")
+                    }
                     ErrorKind::Interrupted => println!("crontab was interrupted."),
                     ErrorKind::OutOfMemory => println!("crontab exceeded available memory."),
                     _ => println!("Unknown error: {}", err),
@@ -112,7 +119,9 @@ fn main() {
             Err(err) => {
                 match err.kind() {
                     ErrorKind::NotFound => println!("No crontab file has been found."),
-                    ErrorKind::PermissionDenied => println!("Permission to access user's crontab file denied."),
+                    ErrorKind::PermissionDenied => {
+                        println!("Permission to access user's crontab file denied.")
+                    }
                     ErrorKind::Interrupted => println!("crontab was interrupted."),
                     ErrorKind::OutOfMemory => println!("crontab exceeded available memory."),
                     _ => println!("Unknown error: {}", err),
@@ -127,8 +136,12 @@ fn main() {
             Ok(()) => println!("Replaced crontab file with {file}"),
             Err(err) => {
                 match err.kind() {
-                    ErrorKind::NotFound => println!("Crontab file or user-specified file has not been found."),
-                    ErrorKind::PermissionDenied => println!("Permission to access user's crontab file or user-specified file denied."),
+                    ErrorKind::NotFound => {
+                        println!("Crontab file or user-specified file has not been found.")
+                    }
+                    ErrorKind::PermissionDenied => println!(
+                        "Permission to access user's crontab file or user-specified file denied."
+                    ),
                     ErrorKind::Interrupted => println!("crontab was interrupted."),
                     ErrorKind::OutOfMemory => println!("crontab exceeded available memory."),
                     _ => println!("Unknown error: {}", err),

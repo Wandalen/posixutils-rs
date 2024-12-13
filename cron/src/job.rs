@@ -1,5 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, Timelike};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::iter::Peekable;
 use std::process::Command;
 use std::str::FromStr;
@@ -18,29 +18,27 @@ macro_rules! time_unit {
         pub struct $name(Option<Vec<Value>>);
 
         impl $name {
-            const MIN: i32 = $min;
-            const MAX: i32 = $max;
-
             const fn range() -> std::ops::RangeInclusive<i32> {
                 $min..=$max
             }
 
             fn to_vec(&self) -> Vec<i32> {
                 if let Some(x) = &self.0 {
-                let mut v = x
-                    .iter()
-                    .map(|x| match x {
-                        Value::Number(x) => vec![*x],
-                        Value::Range { min, max, step } => {
-                            (*min..=*max).step_by(*step as usize).collect()
-                        }
-                    })
-                    .fold(vec![], |mut acc, x| {
-                        acc.extend(x);
-                        acc
-                    });
-                v.sort();
-                v} else {
+                    let mut v = x
+                        .iter()
+                        .map(|x| match x {
+                            Value::Number(x) => vec![*x],
+                            Value::Range { min, max, step } => {
+                                (*min..=*max).step_by(*step as usize).collect()
+                            }
+                        })
+                        .fold(vec![], |mut acc, x| {
+                            acc.extend(x);
+                            acc
+                        });
+                    v.sort();
+                    v
+                } else {
                     Vec::from_iter(Self::range())
                 }
             }
@@ -141,18 +139,40 @@ impl FromStr for Database {
         for line in s.lines() {
             let mut fields = line.split_ascii_whitespace();
 
-            let Some(minutes_field) = fields.next() else { return Err(()); };
-            let Some(hours_field) = fields.next() else { return Err(()); };
-            let Some(monthdays_field) = fields.next() else { return Err(()); };
-            let Some(months_field) = fields.next() else { return Err(()); };
-            let Some(weekdays_field) = fields.next() else { return Err(()); };
-            let Some(command) = fields.next() else { return Err(()); };
+            let Some(minutes_field) = fields.next() else {
+                return Err(());
+            };
+            let Some(hours_field) = fields.next() else {
+                return Err(());
+            };
+            let Some(monthdays_field) = fields.next() else {
+                return Err(());
+            };
+            let Some(months_field) = fields.next() else {
+                return Err(());
+            };
+            let Some(weekdays_field) = fields.next() else {
+                return Err(());
+            };
+            let Some(command) = fields.next() else {
+                return Err(());
+            };
 
-            let Ok(minute) = Minute::parse(minutes_field) else { return Err(()); };
-            let Ok(hour) = Hour::parse(hours_field) else { return Err(()); };
-            let Ok(monthday) = MonthDay::parse(monthdays_field) else { return Err(()); };
-            let Ok(month) = Month::parse(months_field) else { return Err(()); };
-            let Ok(weekday) = WeekDay::parse(weekdays_field) else { return Err(()); };
+            let Ok(minute) = Minute::parse(minutes_field) else {
+                return Err(());
+            };
+            let Ok(hour) = Hour::parse(hours_field) else {
+                return Err(());
+            };
+            let Ok(monthday) = MonthDay::parse(monthdays_field) else {
+                return Err(());
+            };
+            let Ok(month) = Month::parse(months_field) else {
+                return Err(());
+            };
+            let Ok(weekday) = WeekDay::parse(weekdays_field) else {
+                return Err(());
+            };
 
             result.push(CronJob {
                 minute,
@@ -178,34 +198,46 @@ impl CronJob {
             weekday: weekdays,
             command: _,
         } = self;
-        
+
         let monthdays = monthdays.clone();
         let weekdays = weekdays.clone();
 
         let monthdays = match (monthdays.clone().0, weekdays.clone().0) {
-            (Some(_), Some(_)) => monthdays.merge(convert_weekdays_to_monthdays(now.date(), weekdays)),
+            (Some(_), Some(_)) => {
+                monthdays.merge(convert_weekdays_to_monthdays(now.date(), weekdays))
+            }
             (None, Some(_)) => convert_weekdays_to_monthdays(now.date(), weekdays),
             (Some(_), None) => monthdays,
             (None, None) => MonthDay(None),
         };
-        
+
         println!("{:?}", monthdays.to_vec());
 
         for month in &months.to_vec() {
             for monthday in &monthdays.to_vec() {
                 for hour in &hours.to_vec() {
                     for minute in &minutes.to_vec() {
-                        let mut next_exec = now.clone();
-                        let Some(date) = next_exec.with_minute(*minute as u32) else { continue };
+                        let mut next_exec = *now;
+                        let Some(date) = next_exec.with_minute(*minute as u32) else {
+                            continue;
+                        };
                         next_exec = date;
-                        let Some(date) = next_exec.with_hour(*hour as u32) else { continue };
+                        let Some(date) = next_exec.with_hour(*hour as u32) else {
+                            continue;
+                        };
                         next_exec = date;
-                        let Some(date) = next_exec.with_day(*monthday as u32) else { continue };
+                        let Some(date) = next_exec.with_day(*monthday as u32) else {
+                            continue;
+                        };
                         next_exec = date;
-                        let Some(date) = next_exec.with_month(*month as u32) else { continue };
+                        let Some(date) = next_exec.with_month(*month as u32) else {
+                            continue;
+                        };
                         next_exec = date;
 
-                        if next_exec > *now { return Some(next_exec); }
+                        if next_exec > *now {
+                            return Some(next_exec);
+                        }
                     }
                 }
             }
@@ -216,26 +248,6 @@ impl CronJob {
 
     pub fn run_job(&self) -> std::io::Result<std::process::Output> {
         Command::new("sh").args(["-c", &self.command]).output()
-    }
-}
-
-fn skip_ws(src: &mut Peekable<impl Iterator<Item = char>>) {
-    while let Some(c) = src.peek() {
-        if c.is_whitespace() {
-            src.next();
-        } else {
-            break;
-        }
-    }
-}
-
-fn skip_till_ws(src: &mut Peekable<impl Iterator<Item = char>>) {
-    while let Some(c) = src.peek() {
-        if !c.is_whitespace() {
-            src.next();
-        } else {
-            break;
-        }
     }
 }
 
@@ -264,22 +276,14 @@ fn expect(src: &mut Peekable<impl Iterator<Item = char>>, expected: char) -> boo
     }
 }
 
-fn get_next_leap_year() -> i32 {
-    let mut current = Local::now().year();
-
-    while !((current % 400 == 0) || (current % 100 != 0 && current % 4 == 0)) {
-        current += 1;
-    }
-
-    current
-}
-
 fn convert_weekdays_to_monthdays(date: NaiveDate, days: WeekDay) -> MonthDay {
     let days = BTreeSet::from_iter(days.to_vec());
     let mut result = vec![];
 
     for i in 1..=31 {
-        let Some(date) = date.with_day(i) else { continue };
+        let Some(date) = date.with_day(i) else {
+            continue;
+        };
         let number = date.weekday().num_days_from_sunday() as i32;
         if days.contains(&number) {
             result.push(Value::Number(date.day() as i32));

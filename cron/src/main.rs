@@ -14,5 +14,12 @@ fn main() {
         NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
     );
 
-    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
+    assert_eq!(
+        expected_date,
+        database
+            .nearest_job()
+            .unwrap()
+            .next_execution(&start_date)
+            .unwrap()
+    );
 }

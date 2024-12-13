@@ -1,12 +1,17 @@
-use std::ops::Sub;
-use std::process::Command;
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use posixutils_cron::job::Database;
+use std::ops::Sub;
+use std::process::Command;
 
 #[test]
 fn no_args() {
     let mut command = Command::new("bash");
-    let result = command.args(["-c", "../target/debug/crond"]).spawn().unwrap().wait().unwrap();
+    let result = command
+        .args(["-c", "../target/debug/crond"])
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
     assert_eq!(result.code().unwrap(), 0);
 }
 
@@ -24,7 +29,14 @@ fn test_leap_year() {
         NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
     );
 
-    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
+    assert_eq!(
+        expected_date,
+        database
+            .nearest_job()
+            .unwrap()
+            .next_execution(&start_date)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -41,13 +53,20 @@ fn test_minute() {
         NaiveTime::from_hms_opt(16, 10, 0).unwrap(),
     );
 
-    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
+    assert_eq!(
+        expected_date,
+        database
+            .nearest_job()
+            .unwrap()
+            .next_execution(&start_date)
+            .unwrap()
+    );
 }
 
 #[test]
 fn test_hour() {
     let database = "* 1 * * * echo Ok".parse::<Database>().unwrap();
-    
+
     let start_date = NaiveDateTime::new(
         NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
         NaiveTime::from_hms_opt(15, 38, 00).unwrap(),
@@ -57,8 +76,15 @@ fn test_hour() {
         NaiveDate::from_ymd_opt(2000, 1, 2).unwrap(),
         NaiveTime::from_hms_opt(1, 0, 0).unwrap(),
     );
-    
-    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
+
+    assert_eq!(
+        expected_date,
+        database
+            .nearest_job()
+            .unwrap()
+            .next_execution(&start_date)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -75,7 +101,14 @@ fn test_weekday() {
         NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
     );
 
-    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
+    assert_eq!(
+        expected_date,
+        database
+            .nearest_job()
+            .unwrap()
+            .next_execution(&start_date)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -92,7 +125,14 @@ fn test_monthday() {
         NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
     );
 
-    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
+    assert_eq!(
+        expected_date,
+        database
+            .nearest_job()
+            .unwrap()
+            .next_execution(&start_date)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -109,5 +149,12 @@ fn test_month() {
         NaiveTime::from_hms_opt(00, 00, 0).unwrap(),
     );
 
-    assert_eq!(expected_date, database.nearest_job().unwrap().next_execution(&start_date).unwrap());
+    assert_eq!(
+        expected_date,
+        database
+            .nearest_job()
+            .unwrap()
+            .next_execution(&start_date)
+            .unwrap()
+    );
 }
