@@ -228,7 +228,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let stdout = std::io::stdout();
             let mut stdout_lock = stdout.lock();
 
-            // TODO: Correct formating
             writeln!(&mut stdout_lock, "at {}", time.to_rfc2822())?;
             write!(&mut stdout_lock, "at> ")?;
             stdout_lock.flush()?;
@@ -1434,7 +1433,6 @@ mod timespec {
                     let time = time.to_naive_time()?;
                     let date = date.to_naive_date()?;
 
-                    // TODO: Unsure about this case
                     let date_time = NaiveDateTime::new(date, time).and_utc();
                     let date_time = match date_time < Utc::now() {
                         true => date_time.checked_add_months(chrono::Months::new(12))?,
@@ -1457,7 +1455,6 @@ mod timespec {
                             chrono::TimeDelta::from_std(inrement.to_duration()).ok()?,
                         )?;
 
-                    // TODO: Unsure about this case
                     let date_time = match date_time < Utc::now() {
                         true => date_time.checked_add_months(chrono::Months::new(12))?,
                         false => date_time,
@@ -2271,7 +2268,6 @@ mod tokens {
                     [hour, 0]
                 }
                 4 => {
-                    // TODO: should be fine?
                     let hour = &s[..2];
                     let minutes = &s[2..];
 
