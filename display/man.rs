@@ -9,9 +9,7 @@
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
-use man_util::mdoc_macro::text_production::{AtAndTUnix, Standard};
 use man_util::parser::MdocParser;
-use plib::PROJECT_NAME;
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
@@ -361,8 +359,8 @@ fn man(args: Args) -> Result<bool, ManError> {
 //     >0 - An error occurred.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     setlocale(LocaleCategory::LcAll, "");
-    textdomain(PROJECT_NAME)?;
-    bind_textdomain_codeset(PROJECT_NAME, "UTF-8")?;
+    textdomain("posixutils-rs")?;
+    bind_textdomain_codeset("posixutils-rs", "UTF-8")?;
 
     // parse command line arguments
     let args = Args::parse();
