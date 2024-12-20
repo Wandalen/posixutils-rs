@@ -12,6 +12,8 @@ clap.workspace = true
 clap.features = ["env"]
 gettext-rs.workspace = true
 libc.workspace = true
+pest = "2.7"
+pest_derive = "2.7"
 termion = "4.0"
 thiserror = "1.0"
 

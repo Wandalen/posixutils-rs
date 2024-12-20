@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+#[derive(Debug, PartialEq)]
 pub enum AtAndTUnix {
     General,
     Version(String),
@@ -59,6 +60,7 @@ impl Display for AtAndTUnix {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Bsd {
     version: Option<String>,
     variant: Option<String>,
@@ -96,6 +98,7 @@ impl Display for Bsd {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct BsdOs {
     version: Option<String>,
 }
@@ -119,6 +122,7 @@ impl Display for BsdOs {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct NetBsd {
     version: Option<String>,
 }
@@ -142,6 +146,7 @@ impl Display for NetBsd {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct FreeBsd {
     version: Option<String>,
 }
@@ -165,6 +170,7 @@ impl Display for FreeBsd {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct OpenBsd {
     version: Option<String>,
 }
@@ -188,6 +194,7 @@ impl Display for OpenBsd {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct DragonFly {
     version: Option<String>,
 }
@@ -211,6 +218,7 @@ impl Display for DragonFly {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Standard {
     // C Language Standards
     AnsiC,

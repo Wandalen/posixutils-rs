@@ -1361,6 +1361,8 @@ dependencies = [
  "clap",
  "gettext-rs",
  "libc",
+ "pest",
+ "pest_derive",
  "plib",
  "termion",
  "thiserror",

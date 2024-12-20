@@ -8,100 +8,12 @@
 //
 
 use text_production::{AtAndTUnix, Bsd, BsdOs, DragonFly, FreeBsd, NetBsd, OpenBsd, Standard};
+use types::*;
 
 pub mod text_production;
+pub mod types;
 
-pub enum BdType {
-    Centered,
-    Filled,
-    Literal,
-    Ragged,
-    Unfilled,
-}
-
-pub enum OffsetType {
-    Indent,
-    IndentTwo,
-    Left,
-    Right,
-}
-
-pub enum BfType {
-    Emphasis, // Or Em
-    Literal,  // Or Li
-    Symboic,  // Or Sy
-}
-
-pub enum BlType {
-    Bullet,
-    Column,
-    Dash, // Or "hyphen"
-    Diag,
-    Enum,
-    Inset,
-    Item,
-    Ohang,
-    Tag,
-}
-
-pub enum ItType {
-    MandatoryArgs(Vec<String>),
-    OptionalArgs(Vec<String>),
-    None,
-    Cell { cells: Vec<String> },
-}
-
-pub enum SmMode {
-    On,
-    Off,
-}
-
-pub enum RsSubmacro {
-    A {
-        author_names: Vec<String>,
-    },
-    B {
-        book_title: String,
-    },
-    C {
-        publication_location: String,
-    },
-    D {
-        month_day: Option<(String, String)>,
-        year: i32,
-    },
-    I {
-        issuer_name: String,
-    },
-    J {
-        journal_name: String,
-    },
-    N {
-        issue_number: u16,
-    },
-    O {
-        information: String,
-    },
-    P {
-        page_number: String,
-    },
-    Q {
-        insitution_author: String,
-    },
-    R {
-        report_name: String,
-    },
-    T {
-        article_title: String,
-    },
-    U {
-        uri: String,
-    },
-    V {
-        volume_number: u16,
-    },
-}
-
+#[derive(Debug, PartialEq)]
 pub enum Macro {
     Ad {
         address: String,
@@ -136,6 +48,7 @@ pub enum Macro {
         list_type: BlType,
         offset: Option<OffsetType>,
         compact: bool,
+        columns: Vec<String>,
     },
     El, // End a list context started by Bl
     Bo,
