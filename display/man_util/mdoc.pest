@@ -1,0 +1,90 @@
+WHITESPACE = _{ " " | "\t" }
+NEWLINE    = _{ "\r"? ~ "\n" }
+
+macro_arg  = @{ (!WHITESPACE ~ !NEWLINE ~ ANY)+ }
+macro_name = @{ ASCII_ALPHANUMERIC+ }
+
+text_line = { (!NEWLINE ~ ANY)* ~ NEWLINE }
+
+macro_line = { "." ~ macro_name ~ macro_arg* ~ NEWLINE }
+
+// Closing macros should not be perceived as macro_line because it will break the perception of block_full_explicit
+body_line = { !(ed_close | ef_close | ek_close | el_close) ~ (macro_line | text_line) }
+body      = { body_line* }
+
+// ----- Block full-explicit macros
+
+// ----- Bd
+
+bd_type = {
+    "-centered"
+  | "-filled"
+  | "-literal"
+  | "-ragged"
+  | "-unfilled"
+}
+
+offset = {
+    "indent-two"
+  | "indent"
+  | "left"
+  | "right"
+  | ASCII_ALPHANUMERIC+
+}
+
+compact = { "-compact" }
+
+bd_open  = { "." ~ "Bd" ~ bd_type ~ ("-offset" ~ offset)? ~ compact? ~ NEWLINE }
+ed_close = { "." ~ "Ed" ~ NEWLINE }
+bd_block = { bd_open ~ body ~ ed_close }
+
+// ----- Bf
+
+bf_type = {
+    "-emphasis"
+  | "-literal"
+  | "-symbolic"
+  | "Em"
+  | "Li"
+  | "Sy"
+}
+
+bf_open  = { "." ~ "Bf" ~ bf_type ~ NEWLINE }
+ef_close = { "." ~ "Ef" ~ NEWLINE }
+bf_block = { bf_open ~ body ~ ef_close }
+
+// ----- Bk
+
+bk_words = { "-words" }
+
+bk_open  = { "." ~ "Bk" ~ bk_words ~ macro_arg* ~ NEWLINE }
+ek_close = { "." ~ "Ek" ~ NEWLINE }
+bk_block = { bk_open ~ body ~ ek_close }
+
+// ----- Bl
+
+bl_type = {
+    "-bullet"
+  | "-column"
+  | "-dash"
+  | "-diag"
+  | "-enum"
+  | "-hang"
+  | "-hyphen"
+  | "-inset"
+  | "-item"
+  | "-ohang"
+  | "-tag"
+}
+
+bl_columns = { macro_arg+ }
+
+bl_open  = { "." ~ "Bl" ~ bl_type ~ ("-width" ~ offset)? ~ ("-offset" ~ offset)? ~ compact? ~ bl_columns* ~ NEWLINE }
+el_close = { "." ~ "El" ~ NEWLINE }
+bl_block = { bl_open ~ body ~ el_close }
+
+block_full_explicit = { bd_block | bf_block | bk_block | bl_block }
+
+// ----- Document
+
+document = { (block_full_explicit | macro_line | text_line)* }

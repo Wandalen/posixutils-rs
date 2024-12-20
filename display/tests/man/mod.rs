@@ -9,7 +9,7 @@
 
 use std::process::Output;
 
-use plib::{run_test_with_checker, TestPlan};
+use plib::testing::{run_test_with_checker, TestPlan};
 
 fn test_checker_man(plan: &TestPlan, output: &Output) {
     let stdout = String::from_utf8_lossy(&output.stdout);
