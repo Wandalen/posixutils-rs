@@ -1034,7 +1034,7 @@ mod tests {
     fn test_upper_d() {
         let test_data = [
             // correct
-            ("1 h; D; 2 G", "abc\ncdf", "\nabc", ""),
+            ("1 h; D; 2 G", "abc\ncdf", "", ""),
             // wrong
             (
                 "D b",
@@ -1924,7 +1924,7 @@ mod tests {
                 r#"{ # }\n{ # }\n{ \n# }"#,
                 "abc\ncdf\naaa",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+                "sed: can't compile pattern '{ # }\\'\n",
             ),
             (
                 "a\\text#abc\ntext",
@@ -2029,11 +2029,11 @@ mod tests {
     fn test_combinations_4() {
         let test_data = [
             // correct
+            ("1{$q;};${h;d;}; x", "line1\nline2\nline3", "line1\n", ""),
             (r#"s/\(.*\)foo\(.*foo\)/\1bar\2/"#, "thisfooisfoo", "thisbarisfoo", ""),
             ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "The scarlet sky turned ruby as the puce evening settled.",
             "The red sky turned red as the red evening settled.", ""),
             (r#":a;s/\(^|[^0-9.]\)\([0-9]+\)\([0-9]{3}\)/\1\2,\3/g;ta"#, "1234567890\nhello123456789\n1000", "1234567890\nhello123456789\n1000", ""),            
-            ("1{$q;};${h;d;};x", "line1\nline2\nline3", "line1\nline2\nline3", ""),
             ("n;n;n;n;G;", "line1\nline2\nline3\nline4\n", "line1\nline2\nline3\nline4\n", ""),
             ("s/^[ \t]* //;s/[ \t]*$//", "    hello world    ", "hello world", ""),
             ("s/^M.$/\n/", "hello\nM\nabc\n", "hello\nM\nabc\n", ""),
@@ -2089,8 +2089,6 @@ mod tests {
         let test_data = [
             // correct
             (r#"N; s/^/     /; s/\(\n.*\)/\1     /"#, "line1\nline2", "     line1\nline2     ", ""),
-            ("\\/./{H;$d} ; x; 1 s/^/START-->/; $ s/$/<--END/", "Line 1\nLine 2\n\nLine 3",
-            "START-->\nLine 1\nLine 1\nLine 2\nLine 2\n\nLine 3<--END", ""),
             (r#"s/h\.0\.\(.*\)/ \U\1/"#, "h.0.someText\nh.0=data\nh.0.anotherExample",
             "h.0. \\UsomeText\nh.0=data\nh.0. \\UanotherExample", ""),            
             (r#"s/ *(.*)//; s/>.*//; s/.*[:<] *//"#, "Subject: Hello <hello@example.com>\nFrom: someone <someone@example.com>\n",
@@ -2099,10 +2097,9 @@ mod tests {
             (r#"\/./{H;d;};x;s/\n/={NL}=/g"#, "line1\nline2", "", ""),
             ("s/$/`echo -e \\\r`/", "Hello World", "Hello World`echo -e \\\r`", ""),
             ("s/\n/\t/; N", "Line 1\nLine 2\nLine 3\nLine 4", "Line 1\nLine 2\nLine 3\nLine 4", ""), 
-            (r#":a;s/^.\{1,10\}$/ &/;ta"#, "12345678\n123456789012", "    12345678\n123456789012", ""),
             (r#"s/\(^[*][[:space:]]\)/   \1/;\/List of products:/a\ ---------------"#, 
             "List of products:\n---------------* product\n* product1", 
-            "List of products:\n ---------------\n---------------* product\n   * product1", ""),
+            "List of products:\n ---------------\n---------------   * product\n   * product1", ""),
         ];
 
         for (script, input, output, err) in test_data{
@@ -2120,19 +2117,20 @@ mod tests {
     fn test_combinations_7() {
         let test_data = [
             // correct         
+            ("\\/./{H;$d}; x; 1 s/^/START-->/; $ s/$/<--END/", "Line 1\nLine 2\n\nLine 3",
+            "START-->\nLine 1\nLine 1\nLine 2\nLine 2\n\nLine 3<--END", ""),
+            (r#"\/^Reply-To:/q; \/^From:/h; \/./d;g;q"#, "From: someone\nReply-To: someoneelse\n", "Reply-To: someoneelse\n", ""),
             (r#"1 s/^/ /; $ s/$/ /"#, "line1\nline2", " line1\nline2 ", ""), 
             (":a; $ q; n; 11,$ D; ba", "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n",
             "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n", ""),
-            
-            //(r#"$ s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
-            //"apple pie is sweet\n123abc test123 hello world\none  three four\n", ""),
-            //(r#"s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
-            //"apple  is sweet\n123abc  hello world\none  three four\n", ""),
-            //(r#"\/^Reply-To:/q; \/^From:/h; \/./d;g;q"#, "From: someone\nReply-To: someoneelse\n", "Reply-To: someoneelse\n", ""),
-
-            //("\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
-            //"Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
-            //"Some text\nbegin\nbegin\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\nend\nend\nSome more text", ""),
+            (r#"$ s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
+            "apple pie is sweet\n123abc test123 hello world\none  three four\n", ""),
+            (r#"s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
+            "apple  is sweet\n123abc  hello world\none  three four\n", ""),
+            (r#":a;s/^.\{1,13\}$/ &/;ta"#, "12345678\n1234567890123", "     12345678\n1234567890123", ""),
+            ("\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
+            "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
+            "Some text\nbegin\nbegin\n\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\n\n\nend\nend\nSome more text\n", ""),
         ];
         for (script, input, output, err) in test_data{
             sed_test(

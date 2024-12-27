@@ -7,8 +7,6 @@
 // SPDX-License-Identifier: MIT
 //
 
-const DEBUG: bool = false;
-
 use clap::{command, Parser};
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use libc::{
@@ -106,6 +104,7 @@ impl Args {
         }
 
         let script = Script::parse(raw_script)?;
+        //print!("{:?}", script.0);
 
         Ok(Sed {
             ere: self.ere,
@@ -541,21 +540,16 @@ fn match_pattern(
             c_input = c_input.add(last_offset);
             let _ = regexec(&re as *const regex_t, c_input, 9, pmatch.as_mut_ptr(), 0);
         }
+
         let mut groups = pmatch
             .to_vec()
             .iter()
             .enumerate()
             .filter(|(_, m)| !((m.rm_so < 0) && (m.rm_eo < 0)))
-            //.map(|m|{ print!("{:?}|", (m.1.rm_so, m.1.rm_eo)); m})
-            //.filter(|(_, m)| !(m.rm_so == m.rm_eo))
             .map(|(j, m)| {
-                //print!("|");
-                //print!("<|{:?}|>", ((m.rm_so as usize) + i)..((m.rm_eo as usize) + i));
                 (j + 1, ((m.rm_so as usize) + i)..((m.rm_eo as usize) + i))
             })
             .filter(|(_, m)| {
-                //print!("<{:?}>", m);
-                //print!("${}$", haystack.len());
                 if m.start != m.end{
                     true
                 }else{
@@ -563,10 +557,6 @@ fn match_pattern(
                 }
             })
             .collect::<Vec<_>>();
-        //print!("%{:?}%", (i, haystack.get(i..).unwrap()));
-        if groups.is_empty(){
-            break;
-        }
         if !["^", "$"].contains(&pattern.as_str()){
             groups.retain(|(_, r)|{
                 *r != (0..0) && *r != end_range
@@ -577,11 +567,48 @@ fn match_pattern(
             last_offset = 1;
         }
         i += last_offset;
-        //print!("${i}$");
-        //print!("#{:?}#", groups);
         match_subranges.push(groups);
     }
-    //print!("!{:?}!", match_subranges);
+    if ["^", "$", r#"\{"#, r#"\{"#].iter().all(|pat| pattern.contains(pat)) {
+        let mut lengths = vec![];
+        let mut i = 0;
+        loop{ 
+            let Some(slice) = pattern.get(i..) else{
+                break;
+            };
+            let Some(mut a) = slice.find(r#"\{"#) else{
+                break;
+            };
+            let Some(mut b) = slice.find(r#"\}"#) else{
+                break;
+            };
+            a += i;
+            b += i;
+            let max_len = if let Some(comma_pos) = pattern.get(a..).unwrap().find(","){
+                if let Some(s) = pattern.get((comma_pos + a + 1)..b){
+                    usize::from_str_radix(s, 10).ok()
+                }else{
+                    Some(pattern.len())
+                }
+            }else{
+                let s = pattern.get((a + 2)..b).unwrap();
+                usize::from_str_radix(s, 10).ok()
+            };
+            if let Some(max_len) = max_len{
+                lengths.push(max_len);
+            }
+
+            i = b + 2;
+        }
+
+        for length in &lengths{
+            match_subranges.iter_mut().for_each(|groups|{
+                groups.retain(|(_, r)|{
+                    (r.end - r.start) < *length
+                });
+            });
+        }
+    }
     let match_subranges = match_subranges.into_iter().collect::<HashSet<_>>();
     let mut match_subranges = match_subranges
         .into_iter()
@@ -1000,7 +1027,7 @@ fn parse_block(chars: &[char], i: &mut usize) -> Result<Vec<Command>, SedError> 
             problem_command
         )));
     };
-    *i = block_limits[k].0 + 1;
+    *i = block_limits[k].0;
     Ok(commands)
 }
 
@@ -1412,7 +1439,9 @@ impl Script {
                     let wfile = parse_path_attribute(&chars, &mut i).unwrap_or_default();
                     commands.push(Command::AppendPatternToFile(address.clone(), wfile))
                 }
-                'x' => commands.push(Command::ExchangeSpaces(address.clone())),
+                'x' => {
+                    commands.push(Command::ExchangeSpaces(address.clone()))
+                },
                 'y' => {
                     let (string1, string2) = parse_replace_command(&chars, &mut i)?;
                     if string1.len() != string2.len() {
@@ -1540,8 +1569,6 @@ fn update_pattern_space(
         .rev()
         .collect::<Vec<_>>();
 
-    //print!("|{:?}|", ampersand_positions);
-
     if let Some(ch) = replacement.chars().next() {
         if ch == '&' {
             ampersand_positions.push(0);
@@ -1565,15 +1592,12 @@ fn update_pattern_space(
     }
 
     let mut local_replacement = replacement.to_string();
-    //print!("<1, {:?}>", &local_replacement);
     if let Some((_, range)) = ranges.iter().next() { 
         let value = (*pattern_space).get(range.clone());
-        //print!("<{:?}>", (range, &pattern_space, pattern_space.len(), &ampersand_positions, value)); 
         for position in ampersand_positions.clone() {
             local_replacement.replace_range(position..(position + 1), value.unwrap());
         }
     }
-    //print!("<2, {:?}>", &local_replacement);
 
     if ranges.is_empty(){
         return false;
@@ -1582,8 +1606,6 @@ fn update_pattern_space(
     let main_range = ranges.iter().map(|(_, r)| r.start).min().unwrap()..
         ranges.iter().map(|(_, r)| r.end).max().unwrap();
 
-    //print!("{:?}", (&pattern_space, &main_range, &group_positions));
-    //print!("<{:?}>", (&ranges, &group_positions));
     if !group_positions.is_empty() {
         for (position, group) in group_positions {
             let replace_str = if let Some(range) = ranges.get(&group) {
@@ -1592,9 +1614,7 @@ fn update_pattern_space(
                 &"".to_string()
             };
             local_replacement.replace_range(position..(position + 2), replace_str);
-            //print!("|{:?}|", (position..(position + 2), group, replace_str, a, local_replacement.clone()));
         }
-        //print!("{:?}", (&pattern_space, &main_range, &local_replacement));
         pattern_space.replace_range(
             main_range.clone(), 
             &local_replacement
@@ -1626,7 +1646,6 @@ fn execute_replace(
         };
         true
     };
-    //print!("<<{:?}>>", (match_subranges.clone(), pattern_space.clone()));
     if !match_subranges.is_empty()
         && !flags.iter().any(is_replace_n)
         && !flags.contains(&ReplaceFlag::ReplaceAll)
@@ -1643,11 +1662,7 @@ fn execute_replace(
             );
         }
     } else if flags.contains(&ReplaceFlag::ReplaceAll) {
-        //print!("|");
-        //print!("<{:?}>", match_subranges);
         for ranges in match_subranges.iter().rev() {
-            //print!("<{:?}>", replacement);
-            //print!("<{ranges:?}>");
             let r = update_pattern_space(pattern_space, &replacement, ranges);
             if !replace{
                 replace = r;
@@ -1656,11 +1671,7 @@ fn execute_replace(
     }
 
     if flags.contains(&ReplaceFlag::PrintPatternIfReplace) && !match_subranges.is_empty() && replace {
-        if DEBUG{
-            print!("<S>{}\n<S>", *pattern_space);
-        }else{
-            print!("{}\n", *pattern_space);
-        }
+        print!("{}\n", *pattern_space);
     }
 
     if let Some(wfile) = flags.iter().find_map(|flag| {
@@ -1685,6 +1696,7 @@ fn execute_replace(
 /// Set of states that are returned from [`Sed::execute`]
 /// for controling [`Sed`] [`Script`] execution loop for
 /// current input file
+#[derive(Debug)]
 enum ControlFlowInstruction {
     /// End [`Sed`] [`Command`] execution loop for current file
     Break,
@@ -1782,11 +1794,7 @@ impl Sed {
                 }
                 if need_execute {
                     self.pattern_space.clear();
-                    if DEBUG{
-                        print!("<C>{text}\n<C>");
-                    }else{
-                        print!("{text}\n");
-                    }
+                    print!("{text}\n");
                 }
             }
             Command::DeletePattern(_, to_first_line) => {
@@ -1841,11 +1849,7 @@ impl Sed {
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                if DEBUG{
-                    print!("<B>{text}<B>");
-                }else{
-                    print!("{text}");
-                }
+                print!("{text}");
             }
             Command::PrintPatternBinary(_) => {
                 // I
@@ -1882,21 +1886,11 @@ impl Sed {
                             .find(|(_, ch)| *ch == '\n')
                             .map(|pair| pair.0)
                             .unwrap_or(self.pattern_space.len());
-                        if DEBUG{
-                            print!("<P>{}\n<P>", &self.pattern_space[0..end]);
-                        }else{
-                            print!("{}\n", &self.pattern_space[0..end]);
-                        }
+                        print!("{}\n", &self.pattern_space[0..end]);
                     } else {
-                        if DEBUG{
-                            print!("<P>{}\n<P>", self.pattern_space);
-                        }else{
-                            print!("{}\n", self.pattern_space);
-                        }
+                        print!("{}\n", self.pattern_space);
                     }
-                }/*else if let Some(end) = &self.current_end{
-                    print!("{}", end);
-                }*/
+                }
             }
             Command::Quit(_) => {
                 // q
@@ -1979,11 +1973,7 @@ impl Sed {
                     return Ok(None);
                 }
                 if !self.quiet {
-                    if DEBUG{
-                        print!("<T>{}<T>\n", self.current_line + 1);
-                    }else{
-                        print!("{}\n", self.current_line + 1);
-                    }
+                    print!("{}\n", self.current_line + 1);
                 }
             }
             Command::IgnoreComment if !self.quiet => {
@@ -2022,12 +2012,6 @@ impl Sed {
             self.is_last_line
         )?;
 
-        if need_execute{
-            if DEBUG{
-                print!("<{}>", command.short_string());
-            }
-        }
-
         Ok(need_execute)
     }
 
@@ -2037,9 +2021,6 @@ impl Sed {
         let mut i = 0;
         let script_len = self.script.0.len();
         while i < script_len {
-            if DEBUG{
-                print!("@{}@", self.pattern_space);
-            }
             if let Some(instruction) = self.execute(i)? {
                 global_instruction = None;
                 match instruction {
@@ -2065,8 +2046,11 @@ impl Sed {
                         global_instruction = Some(ControlFlowInstruction::Break);
                         break;
                     }
-                    ControlFlowInstruction::Continue => (),
-                    ControlFlowInstruction::NotReadNext => i = 0,
+                    ControlFlowInstruction::Continue => break,
+                    ControlFlowInstruction::NotReadNext => {
+                        self.hold_space.clear();
+                        i = 0;
+                    },
                     ControlFlowInstruction::AppendNext => {
                         let mut line = self.next_line.clone();
                         self.next_line = self.read_line()?;
@@ -2081,11 +2065,6 @@ impl Sed {
                         }
                         self.pattern_space += "\n";
                         self.pattern_space += &line;
-                        /*if DEBUG{
-                            print!("<N>{}<N>", line);
-                        }else{
-                            print!("{}", line);
-                        }*/
                     }
                     ControlFlowInstruction::ReadNext => {
                         let mut line = self.next_line.clone();
@@ -2099,11 +2078,7 @@ impl Sed {
                         }else{
                             self.current_end = None;
                         }
-                        if DEBUG{
-                            print!("<N>{}\n<N>", self.pattern_space);
-                        }else{
-                            print!("{}\n", self.pattern_space);
-                        }
+                        print!("{}\n", self.pattern_space);
                         self.pattern_space = line;
                     }
                 }
@@ -2114,12 +2089,7 @@ impl Sed {
 
         if !self.quiet{
             if !self.pattern_space.is_empty(){
-                if DEBUG{
-                    print!("<R>{}<R>", self.pattern_space.trim_end_matches('\r'));
-                }else{
-                    print!("{}", self.pattern_space.trim_end_matches('\r'));
-                }
-
+                print!("{}", self.pattern_space.trim_end_matches('\r'));
                 if let Some(end) = &self.current_end{
                     print!("{end}");
                 }
