@@ -200,10 +200,12 @@ struct AddressRange {
     /// Defines what range limits is currently raised
     /// in current processing file for current [`Command`]
     on_limits: Option<(bool, bool)>,
+    /// Inverse fulfillment of [`AddressRange`] conditions
+    is_negative: bool
 }
 
 impl AddressRange {
-    fn new(limits: Vec<AddressToken>) -> Result<Option<Self>, SedError> {
+    fn new(limits: Vec<AddressToken>, is_negative: bool) -> Result<Option<Self>, SedError> {
         let state = match limits.len() {
             i if i > 2 => {
                 return Err(SedError::ScriptParse(
@@ -232,6 +234,7 @@ impl AddressRange {
             limits,
             passed: state,
             on_limits: state,
+            is_negative
         }))
     }
 }
@@ -435,7 +438,7 @@ impl Command {
                         } else { 
                             last_line
                         },
-                        1 => range.passed.map(|(a, b)| !a && b).unwrap_or(false),
+                        1 => last_line,
                         _ => unreachable!(),
                     },
                     _ => unreachable!(),
@@ -453,7 +456,11 @@ impl Command {
                     range.passed = Some((reached_now[0] || old_a, reached_now[1] || old_b));
                     let (a, b) = range.passed.unwrap();
                     range.on_limits = Some((reached_now[0], reached_now[1]));
-                    need_execute &= (old_a && !old_b && reached_now[1]) || (a && !b);
+                    let mut result = (old_a && !old_b && reached_now[1]) || (a && !b);
+                    if range.is_negative{
+                        result = !result;
+                    }
+                    need_execute &= result;
                 }
                 _ => unreachable!(),
             }
@@ -761,7 +768,7 @@ fn to_address_tokens(chars: &[char], i: &mut usize) -> Result<Vec<AddressToken>,
 }
 
 /// Convert [`AddressToken`]s to [`Address`]
-fn tokens_to_address(tokens: Vec<AddressToken>) -> Result<Option<Address>, SedError> {
+fn tokens_to_address(tokens: Vec<AddressToken>, is_negative: bool) -> Result<Option<Address>, SedError> {
     if tokens
         .iter()
         .enumerate()
@@ -778,7 +785,7 @@ fn tokens_to_address(tokens: Vec<AddressToken>) -> Result<Option<Address>, SedEr
         .into_iter()
         .filter(|token| !matches!(token, AddressToken::Delimiter))
         .collect::<Vec<_>>();
-    if let Some(range) = AddressRange::new(tokens)? {
+    if let Some(range) = AddressRange::new(tokens, is_negative)? {
         if range
             .limits
             .iter()
@@ -833,7 +840,22 @@ fn parse_address(
     address: &mut Option<Address>,
 ) -> Result<(), SedError> {
     let tokens = to_address_tokens(chars, i)?;
-    match tokens_to_address(tokens) {
+    let mut is_negative = false;
+    loop{
+        let Some(ch) = chars.get(*i) else {
+            break;
+        };
+        match ch{
+            '!' => {
+                is_negative = true;
+                break;
+            },
+            ' ' => (),
+            _ => break 
+        }
+        *i += 1;
+    }
+    match tokens_to_address(tokens, is_negative) {
         Ok(new_address) => *address = new_address,
         Err(SedError::ScriptParse(message)) => {
             let problem_command = get_error_command_and_position(chars, *i);
@@ -867,10 +889,17 @@ fn parse_text_attribute(chars: &[char], i: &mut usize) -> Result<Option<String>,
         let Some(ch) = chars.get(*i) else {
             break;
         };
-        if *ch == '\n' {
-            *i += 1;
-            break;
-        }
+        match *ch{
+            '\n' => {
+                *i += 1;
+                break;
+            },
+            '\\' => {
+                *i += 1;
+                continue;
+            },
+            _ => ()
+        }    
         text.push(*ch);
         *i += 1;
     }
@@ -1338,7 +1367,7 @@ impl Script {
                 }
                 ch if ch.is_ascii_digit() || "\\$".contains(ch) => {
                     parse_address(&chars, &mut i, &mut address)?
-                }
+                },
                 '{' => commands.push(Command::Block(
                     address.clone(),
                     parse_block(&chars, &mut i)?
@@ -1691,6 +1720,8 @@ enum ControlFlowInstruction {
     ReadNext,
     /// Append next line to current pattern space and continue current cycle  
     AppendNext,
+    /// Skip print after cycle
+    SkipPrint
 }
 
 /// Main program structure. Process input
@@ -1772,7 +1803,9 @@ impl Sed {
                 }
                 if need_execute {
                     self.pattern_space.clear();
-                    print!("{text}");
+                    self.current_end.as_mut().map(|end| end.clear());
+                    print!("{text}\n");
+                    //instruction = Some(ControlFlowInstruction::SkipPrint);
                 }
             }
             Command::DeletePattern(_, to_first_line) => {
@@ -2064,11 +2097,18 @@ impl Sed {
                         }
                         print!("{}\n", self.pattern_space);
                         self.pattern_space = line;
+                    },
+                    ControlFlowInstruction::SkipPrint => {
+                        global_instruction = Some(ControlFlowInstruction::SkipPrint);
                     }
                 }
             }
 
             i += 1;
+        }
+
+        if let Some(ControlFlowInstruction::SkipPrint) = global_instruction{
+            return Ok(None);
         }
 
         if !self.quiet{
@@ -2114,9 +2154,9 @@ impl Sed {
             self.current_line += 1;
         }
 
-        if let Some(Command::PrintFile(..)) = self.script.0.last(){
+        /*if let Some(Command::PrintFile(..)) = self.script.0.last(){
             print!("\n\r");
-        }
+        }*/
 
         Ok(())
     }
@@ -2390,7 +2430,7 @@ mod tests {
                 Ok(Address(vec![AddressRange::new(vec![
                     AddressToken::Number(0),
                     AddressToken::Number(108),
-                ])
+                ], false)
                 .unwrap()
                 .unwrap()])),
             ),
@@ -2403,7 +2443,7 @@ mod tests {
                 Ok(Address(vec![AddressRange::new(vec![
                     AddressToken::Pattern(compile_regex(String::from("[[:alpha:]]")).unwrap(), String::from("[[:alpha:]]")),
                     AddressToken::Number(108),
-                ])
+                ], false)
                 .unwrap()
                 .unwrap()])),
             ),
@@ -2416,7 +2456,7 @@ mod tests {
                 Ok(Address(vec![AddressRange::new(vec![
                     AddressToken::Number(0),
                     AddressToken::Last,
-                ])
+                ], false)
                 .unwrap()
                 .unwrap()])),
             ),
@@ -2424,7 +2464,7 @@ mod tests {
                 vec![AddressToken::Number(0)],
                 Ok(Address(vec![AddressRange::new(vec![
                     AddressToken::Number(0),
-                ])
+                ], false)
                 .unwrap()
                 .unwrap()])),
             ),
@@ -2438,7 +2478,7 @@ mod tests {
                         compile_regex(String::from("[[:alpha:]]")).unwrap(), 
                         String::from("[[:alpha:]]")
                     ),
-                ])
+                ], false)
                 .unwrap()
                 .unwrap()])),
             ),
@@ -2451,7 +2491,7 @@ mod tests {
                 Ok(Address(vec![AddressRange::new(vec![
                     AddressToken::Last,
                     AddressToken::Last,
-                ])
+                ], false)
                 .unwrap()
                 .unwrap()])),
             ),
@@ -2464,7 +2504,7 @@ mod tests {
                 Ok(Address(vec![AddressRange::new(vec![
                     AddressToken::Pattern(compile_regex(String::from("[[:alpha:]]")).unwrap(), String::from("[[:alpha:]]")),
                     AddressToken::Last,
-                ])
+                ], false)
                 .unwrap()
                 .unwrap()])),
             ),
@@ -2477,7 +2517,7 @@ mod tests {
                 Ok(Address(vec![AddressRange::new(vec![
                     AddressToken::Pattern(compile_regex(String::from("[[:alpha:]]")).unwrap(), String::from("[[:alpha:]]")),
                     AddressToken::Pattern(compile_regex(String::from("[[:alpha:]]")).unwrap(), String::from("[[:alpha:]]")),
-                ])
+                ], false)
                 .unwrap()
                 .unwrap()])),
             ),
@@ -2518,9 +2558,9 @@ mod tests {
 
         for (tokens, _result) in input {
             if _result.is_ok() {
-                assert!(matches!(tokens_to_address(tokens), _result));
+                assert!(matches!(tokens_to_address(tokens, false), _result));
             } else {
-                assert!(tokens_to_address(tokens).is_err());
+                assert!(tokens_to_address(tokens, false).is_err());
             }
         }
     }
@@ -2737,7 +2777,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Number(0),
                         AddressToken::Number(10),
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
@@ -2751,7 +2791,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Number(0),
                         AddressToken::Number(10),
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
@@ -2765,7 +2805,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Number(0),
                         AddressToken::Number(10),
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
@@ -2779,7 +2819,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Number(0),
                         AddressToken::Number(10),
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
@@ -2793,7 +2833,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Number(0),
                         AddressToken::Number(10),
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
@@ -2807,7 +2847,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Pattern(compile_regex(String::from("[[:alpha:]]")).unwrap(), String::from("[[:alpha:]]")),
                         AddressToken::Number(10),
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
@@ -2821,7 +2861,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Pattern(compile_regex(String::from("[[:alpha:]]")).unwrap(), String::from("[[:alpha:]]")),
                         AddressToken::Number(10),
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
@@ -2835,7 +2875,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Pattern(compile_regex(String::from("[[:alpha:]]")).unwrap(), String::from("[[:alpha:]]")),
                         AddressToken::Last,
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
@@ -2849,7 +2889,7 @@ mod tests {
                     Some(Address(vec![AddressRange::new(vec![
                         AddressToken::Pattern(compile_regex(String::from("[[:alpha:]]")).unwrap(), String::from("[[:alpha:]]")),
                         AddressToken::Last,
-                    ])
+                    ], false)
                     .unwrap()
                     .unwrap()])),
                     vec![],
