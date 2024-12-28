@@ -172,6 +172,47 @@ pub enum Macro {
     Nm {
         name: Option<Vec<String>>,
     },
+    No {
+        words: Vec<String>,
+    },
+    Ns,
+    Nx(NetBsd),
+    Oo,
+    Oc, // Close multi-line Oo context
+    Op {
+        line: String,
+    },
+    Os {
+        fotter_text: Option<String>,
+    },
+    Ot {
+        func_type: String,
+    },
+    Ox(OpenBsd),
+    Pa {
+        names: Vec<String>,
+    },
+    Pf {
+        prefix: String,
+        macro_name: String,
+        arguments: Vec<String>,
+    },
+    Po,
+    Pc, // Close parenthesised context opened by Po
+    Pp,
+    Pq {
+        line: String,
+    },
+    Ql {
+        line: String,
+    },
+    Qo,
+    Qc, // Close quoted context opened by Qo
+    Rs(Vec<RsSubmacro>),
+    Re, // Close an Rs block
+    Rv {
+        functions: Vec<String>,
+    },
     Sh {
         title: String,
     },
