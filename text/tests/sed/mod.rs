@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use plib::testing::{run_test, TestPlan};
+use plib::testing::{/*run_test,*/ TestPlan};
 
 fn sed_test(
     args: &[&str],
@@ -27,6 +27,66 @@ fn sed_test(
         expected_exit_code,
     });
 }
+
+/*
+use std::process::{ Output, Command, Stdio };
+use std::thread;
+use std::time::Duration;
+use std::io::Write;
+
+pub fn run_test_base(cmd: &str, args: &Vec<String>, stdin_data: &[u8]) -> Output {
+    let mut args = args.clone();
+    args.insert(0, "--posix".to_string());
+    let mut command = Command::new("sed");
+    let mut child = command
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|_| panic!("failed to spawn command {cmd}"));
+
+    // Separate the mutable borrow of stdin from the child process
+    if let Some(mut stdin) = child.stdin.take() {
+        let chunk_size = 1024; // Arbitrary chunk size, adjust if needed
+        for chunk in stdin_data.chunks(chunk_size) {
+            // Write each chunk
+            if let Err(e) = stdin.write_all(chunk) {
+                eprintln!("Error writing to stdin: {}", e);
+                break;
+            }
+            // Flush after writing each chunk
+            if let Err(e) = stdin.flush() {
+                eprintln!("Error flushing stdin: {}", e);
+                break;
+            }
+
+            // Sleep briefly to avoid CPU spinning
+            thread::sleep(Duration::from_millis(10));
+        }
+        // Explicitly drop stdin to close the pipe
+        drop(stdin);
+    }
+
+    // Ensure we wait for the process to complete after writing to stdin
+    let output = child.wait_with_output().expect("failed to wait for child");
+    output
+}
+
+pub fn run_test(plan: TestPlan) {
+    let output = run_test_base(&plan.cmd, &plan.args, plan.stdin_data.as_bytes());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout, plan.expected_out);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(stderr, plan.expected_err);
+
+    assert_eq!(output.status.code(), Some(plan.expected_exit_code));
+    if plan.expected_exit_code == 0 {
+        assert!(output.status.success());
+    }
+}*/
 
 const ABC_INPUT: &'static str = "abc\n";
 const SCRIPT_A: &'static str = "s/a/ab/g";
@@ -657,13 +717,13 @@ mod tests {
             (
                 r"\/ab\/c/ p",
                 "aaa\nbbb\nab/c\nabc\nbc\n\n",
-                "aaa\nbbb\nab/c\nab/c\nabc\nbc\n",
+                "aaa\nbbb\nab/c\nab/c\nabc\nbc\n\n",
                 "",
             ),
             (
                 r"\/abc/,\!cdf! p",
                 "abt\nrbc\nabc\n\ncde\nedf\ncdf\ncdf\nwert\nbfb\n",
-                "abt\nrbc\nabc\nabc\ncde\ncde\nedf\nedf\ncdf\ncdf\ncdf\nwert\nbfb\n",
+                "abt\nrbc\nabc\nabc\n\n\ncde\ncde\nedf\nedf\ncdf\ncdf\ncdf\nwert\nbfb\n",
                 "",
             ),
             // wrong
@@ -932,20 +992,20 @@ mod tests {
     fn test_c() {
         let test_data = [
             // correct
-            ("c\\text", "abc\ndef\n@#$", "text\ntext\ntext\n", ""),
+            ("c\\text", "abc\ndef\n@#$", "text\ntext\ntext", ""),
             (
                 "c\\   text\\in\\sed",
                 "abc\ndef\n@#$",
-                "   text\\in\\sed\n   text\\in\\sed\n   text\\in\\sed\n",
+                "   text\\in\\sed\n   text\\in\\sed\n   text\\in\\sed",
                 "",
             ),
             (
                 "c\\ text text ; text",
                 "abc\ndef\n@#$",
-                " text text ; text\n text text ; text\n text text ; text\n",
+                " text text ; text\n text text ; text\n text text ; text",
                 "",
             ),
-            ("c\\r", "abc\ndef\n@#$", "r\nr\nr\n", ""),
+            ("c\\r", "abc\ndef\n@#$", "r\nr\nr", ""),
             ("1 c\\r", "abc\ndef\n@#$", "r\ndef\n@#$", ""),
             ("1,2 c\\r", "abc\ndef\n@#$", "r\nr\n@#$", ""),
             // wrong
@@ -1206,17 +1266,17 @@ mod tests {
     fn test_i() {
         let test_data = [
             // correct
-            ("i\\text", "abc\ncdf\n\n", "textabc\ntextcdf\ntext", ""),
+            ("i\\text", "abc\ncdf\n\n", "textabc\ntextcdf\ntext\n", ""),
             (
                 "i\\text\\in\\sed",
                 "abc\ncdf\n\n",
-                "text\\in\\sedabc\ntext\\in\\sedcdf\ntext\\in\\sed",
+                "text\\in\\sedabc\ntext\\in\\sedcdf\ntext\\in\\sed\n",
                 "",
             ),
             (
                 "i\\text text ; text ",
                 "abc\ncdf\n\n",
-                "text text ; text abc\ntext text ; text cdf\ntext text ; text ",
+                "text text ; text abc\ntext text ; text cdf\ntext text ; text \n",
                 "",
             ),
             // wrong
@@ -1305,7 +1365,7 @@ mod tests {
             // correct
             ("n", "abc", "abc", ""),
             ("n; p", "abc\ncdf", "abc\ncdf\ncdf", ""),
-            ("g; n; g; n; g; n", "abc\ncdf\nret", "\n\n", ""),
+            ("g; n; g; n; g; n", "abc\ncdf\nret", "\n\n\n", ""),
             // wrong
             (
                 "n g",
@@ -1370,7 +1430,7 @@ mod tests {
         let test_data = [
             // correct
             ("p", "abc\ncdf\nret\n", "abc\nabc\ncdf\ncdf\nret\nret\n", ""),
-            ("g; p", "abc\ncdf\nret\n", "", ""),
+            ("g; p", "abc\ncdf\nret\n", "\n\n\n\n\n\n", ""),
             ("N; p", "abc\ncdf\n", "abc\ncdf\nabc\ncdf\n", ""),
             (
                 "1 h; 2 G; p",
@@ -1569,7 +1629,7 @@ mod tests {
                 "",
             ),
             (
-                "s/b/r/w ./tests/sed/assets/abc",
+                "s/b/r/w ./tests/sed/assets/r",
                 "abcbbdfbdbdfbfb\n",
                 "arcbbdfbdbdfbfb\n",
                 "",
@@ -1599,19 +1659,19 @@ mod tests {
                 "",
             ),
             (
-                "s/b/r/pw ./tests/sed/assets/abc",
+                "s/b/r/pw ./tests/sed/assets/r",
                 "abcbbdfbdbdfbfb\n",
                 "arcbbdfbdbdfbfb\narcbbdfbdbdfbfb\n",
                 "",
             ),
             (
-                "s/b/r/6pw ./tests/sed/assets/abc",
+                "s/b/r/6pw ./tests/sed/assets/r",
                 "abcbbdfbdbdfbfb\n",
                 "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n",
                 "",
             ),
             (
-                "s/b/r/gpw ./tests/sed/assets/abc",
+                "s/b/r/gpw ./tests/sed/assets/r",
                 "abcbbdfbdbdfbfb\n",
                 "arcrrdfrdrdfrfr\narcrrdfrdrdfrfr\n",
                 "",
@@ -1718,10 +1778,10 @@ mod tests {
                 "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
             ),
             (
-                "s/b/r/6gpw ./tests/sed/assets/abc",
+                "s/b/r/6gpw ./tests/sed/assets/r",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: n and g flags can't be used together (line: 0, col: 33)\n",
+                "sed: n and g flags can't be used together (line: 0, col: 31)\n",
             ),
         ];
 
@@ -1734,19 +1794,19 @@ mod tests {
     fn test_t() {
         let test_data = [
             // correct
-            ("t", "aa\naaa\n\n", "aa\naaa\n", ""),
+            ("t", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t label", "", "", ""),
-            ("t; :label", "aa\naaa\n\n", "aa\naaa\n", ""),
-            ("t label; :label", "aa\naaa\n\n", "aa\naaa\n", ""),
+            ("t; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t label; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t label1", "", "", ""),
             ("t lab2el1abc", "", "", ""),
             ("t loop_", "", "", ""),
             ("t _start", "", "", ""),
             ("t my_label", "", "", ""),
-            ("t #%$?@&*; :#%$?@&*", "aa\naaa\n\n", "aa\naaa\n", ""),
-            ("t label#; :label#", "aa\naaa\n\n", "aa\naaa\n", ""),
-            ("t 1label; :1label", "aa\naaa\n\n", "aa\naaa\n", ""),
-            ("t 1234; :1234", "aa\naaa\n\n", "aa\naaa\n", ""),
+            ("t #%$?@&*; :#%$?@&*", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t label#; :label#", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t 1label; :1label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t 1234; :1234", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t :label", "", "", ""),
             ("t #%$?@&*;", "", "", ""),
             ("t label#", "", "", ""),
@@ -1786,7 +1846,7 @@ mod tests {
             ("w ./tests/sed/assets/newfile", "abc\ncdf\n", "abc\ncdf\n", ""),
             ("w atyfv", "abc\ncdf\n", "abc\ncdf\n", ""),
             ("w ; h", "abc\ncdf\n", "abc\ncdf\n", ""),
-            ("w./tests/sed/assets/abc", "", "", ""),
+            ("w./tests/sed/assets/r", "", "", ""),
             ("w./tests/sed/assets/newfile", "a\n", "a\n", ""),
             // wrong
             (
@@ -1855,7 +1915,7 @@ mod tests {
                 "aaa\naaa\naaa\nart\n",
                 "",
             ),
-            ("y///", "abc\naaa\n\n", "abc\naaa\n", ""),
+            ("y///", "abc\naaa\n\n", "abc\naaa\n\n", ""),
             // wrong
             (
                 "y/abc/aaaa/",
@@ -1880,7 +1940,7 @@ mod tests {
                 "1\nabc\n2\ncdf\n3\nefg\n4\nret\n",
                 "",
             ),
-            ("=", "\n\n\n", "1\n2\n3\n", ""),
+            ("=", "\n\n\n", "1\n\n2\n\n3\n\n", ""),
             // wrong
             (
                 "= g",
@@ -1948,9 +2008,9 @@ mod tests {
             "abc\nabc\nabc\nabc\nabc\nabc\nabc\ncdf\ncdf\ncdf\ncdf\ncdf\ncdf\ncdf\nret\nret\nret\nret\nret\nget\nget\nget\n", ""),
             ("\\/1/b else ; s/a/z/ ; :else ; y/123/456/", "", "", ""),
             ("\\/1/s/a/z/ ; y/123/456/", "1aaa\n123aa\n", "4zaa\n456za\n", ""),
-            ("\\/start/,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\nu\nu\nend\nend\nert\nqwerty\n", ""),
-            ("\\/start/,$p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
-            ("1,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nb\nc\nc\nstart\nstart\nt\nt\nu\nu\nend\nend\nert\nqwerty\n", ""),
+            ("\\/start/,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
+            ("\\/start/,$p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
+            ("1,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nb\nc\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
             // wrong
             ("2,4 !p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '!' (line: 0, col: 4)\n"),
             ("2,4 !{p}", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '!' (line: 0, col: 4)\n"),
@@ -1979,9 +2039,9 @@ mod tests {
             (r#"s/\([[:alnum:]]*\)/\1/1"#, "apple pie is sweet\n123abc test123\nhello world\n",
             "apple pie is sweet\n123abc test123\nhello world\n", ""),
             ("\\:start:,\\,stop, p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n",
-            "a\nb\nc\nstart\nstart\nt\nt\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
+            "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
             ("\\`'$PATTERN'`p", "'$PATTERN'\nabc\n\n'$PATTERN'\nret'$PATTERN'abc\n",
-            "'$PATTERN'\n'$PATTERN'\nabc\n'$PATTERN'\n'$PATTERN'\nret'$PATTERN'abc\nret'$PATTERN'abc\n", ""),
+            "'$PATTERN'\n'$PATTERN'\nabc\n\n'$PATTERN'\n'$PATTERN'\nret'$PATTERN'abc\nret'$PATTERN'abc\n", ""),
             ("s/param=.*/param=new_value\n/", "param=abc\nparam=\nparam abc\n",
             "param=new_value\n\nparam=new_value\n\nparam abc\n", ""),
         ];
@@ -2002,9 +2062,9 @@ mod tests {
         let test_data = [
             // correct
             ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "ABC\n\n1234\nabcdefg",
-            "abc\n1234\nabcdefg", ""),
-            ("\\/^$/d;G", "Line 1\n\nLine 2\nLine 3\n\n\nLine 4", "Line 1\n\n\n\nLine 2\n\nLine 3\n\n\n\n\n\nLine 4\n", ""),
-            ("\\/^$/{p;h;};\\/./{x;\\/./p;}", "line1\n\nline2\nline3", "line1\nline1\nline2\nline2", ""),
+            "abc\n\n1234\nabcdefg", ""),
+            ("\\/^$/d;G", "Line 1\n\nLine 2\nLine 3\n\n\nLine 4\n", "Line 1\n\nLine 2\n\nLine 3\n\nLine 4\n\n", ""),
+            (r#"\/^$/{p;h;};\/./{x;\/./p;}"#, "line1\n\nline2\nline3", "\n\n\n\nline2\nline2", ""),
             ("\\/./{H;$d;};x;\\/[AAA|BBB|CCC]/b;d", "line1\nAAA\nline2\nBBB\nline3\n",
              "line1\nAAA\nAAA\nline2\nline2\nBBB\n", ""),
             ("\\/Iowa/,\\/Montana/p", "Hello\nIowa is here\nMontana is next\nEnd\n",
@@ -2029,7 +2089,8 @@ mod tests {
     fn test_combinations_4() {
         let test_data = [
             // correct
-            ("1{$q;};${h;d;}; x", "line1\nline2\nline3", "line1\n", ""),
+            ("1{$q;};${h;d;}; x", "line1\nline2\nline3", "\nline1\n", ""),
+            ("$h; $d; x", "line1\nline2\nline3", "\nline1\n", ""),
             (r#"s/\(.*\)foo\(.*foo\)/\1bar\2/"#, "thisfooisfoo", "thisbarisfoo", ""),
             ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "The scarlet sky turned ruby as the puce evening settled.",
             "The red sky turned red as the red evening settled.", ""),
@@ -2059,8 +2120,8 @@ mod tests {
             // correct
             ("\\/string [[:digit:]]* /p", "string 123 \nstring abc \nstring 456 \n", 
             "string 123 \nstring 123 \nstring abc \nstring 456 \nstring 456 \n", ""),
-            ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3\n", "line1\nline1\nline2\nline2\nline3\nline3\n", ""),
-            ("\\/,.*/ p", "hello, world\nhello world\n\n", "hello, world\nhello, world\nhello world\n", ""),
+            ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3\n", "\n\nline1\nline1\nline2\nline2\n\n\nline3\n", ""),
+            ("\\/,.*/ p", "hello, world\nhello world\n\n", "hello, world\nhello, world\nhello world\n\n", ""),
             ("\\:ac: p", ":ac:\n:bc:\n:ac:\n", ":ac:\n:ac:\n:bc:\n:ac:\n:ac:\n", ""),
             ("1,\\,stop, p", "first line\nsecond stop\nthird line\n", "first line\nfirst line\nsecond stop\nsecond stop\nthird line\n", ""),
             ("s/WORD/Hello World/p ; p", "WORD is here\nthis is not word\n",
@@ -2088,13 +2149,13 @@ mod tests {
     fn test_combinations_6() {
         let test_data = [
             // correct
+            ("\\/./{H;d;};x;s/\n/={NL}=/g", "line1\nline2", "", ""),
             (r#"N; s/^/     /; s/\(\n.*\)/\1     /"#, "line1\nline2", "     line1\nline2     ", ""),
             (r#"s/h\.0\.\(.*\)/ \U\1/"#, "h.0.someText\nh.0=data\nh.0.anotherExample",
             "h.0. \\UsomeText\nh.0=data\nh.0. \\UanotherExample", ""),            
             (r#"s/ *(.*)//; s/>.*//; s/.*[:<] *//"#, "Subject: Hello <hello@example.com>\nFrom: someone <someone@example.com>\n",
             "hello@example.com\nsomeone@example.com\n", ""),
             ("\\/./N; s/\n//", "line1\nline2\n", "line1line2\n", ""),
-            (r#"\/./{H;d;};x;s/\n/={NL}=/g"#, "line1\nline2", "", ""),
             ("s/$/`echo -e \\\r`/", "Hello World", "Hello World`echo -e \\\r`", ""),
             ("s/\n/\t/; N", "Line 1\nLine 2\nLine 3\nLine 4", "Line 1\nLine 2\nLine 3\nLine 4", ""), 
             (r#"s/\(^[*][[:space:]]\)/   \1/;\/List of products:/a\ ---------------"#, 
@@ -2117,9 +2178,9 @@ mod tests {
     fn test_combinations_7() {
         let test_data = [
             // correct         
-            ("\\/./{H;$d}; x; 1 s/^/START-->/; $ s/$/<--END/", "Line 1\nLine 2\n\nLine 3",
-            "START-->\nLine 1\nLine 1\nLine 2\nLine 2\n\nLine 3<--END", ""),
             (r#"\/^Reply-To:/q; \/^From:/h; \/./d;g;q"#, "From: someone\nReply-To: someoneelse\n", "Reply-To: someoneelse\n", ""),
+            ("\\/./{H;$d}; x; 1 s/^/START-->/; $ s/$/<--END/", "Line 1\nLine 2\n\nLine 3",
+            "START-->\nLine 1\nLine 1\nLine 2\nLine 2\n", ""),
             (r#"1 s/^/ /; $ s/$/ /"#, "line1\nline2", " line1\nline2 ", ""), 
             (":a; $ q; n; 11,$ D; ba", "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n",
             "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n", ""),
@@ -2130,7 +2191,7 @@ mod tests {
             (r#":a;s/^.\{1,13\}$/ &/;ta"#, "12345678\n1234567890123", "     12345678\n1234567890123", ""),
             ("\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
             "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
-            "Some text\nbegin\nbegin\n\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\n\n\nend\nend\nSome more text\n", ""),
+            "Some text\nbegin\nbegin\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\nend\nend\nSome more text\n", ""),
         ];
         for (script, input, output, err) in test_data{
             sed_test(

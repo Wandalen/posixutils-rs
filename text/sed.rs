@@ -104,7 +104,6 @@ impl Args {
         }
 
         let script = Script::parse(raw_script)?;
-        //print!("{:?}", script.0);
 
         Ok(Sed {
             ere: self.ere,
@@ -385,36 +384,6 @@ impl Command {
         Some((address, i))
     }
 
-    fn short_string(&self) -> String {
-        let s = match self {
-            Command::Block(..) => "{}",
-            Command::PrintTextAfter(..) => "a",
-            Command::BranchToLabel(..) => "b",
-            Command::DeletePatternAndPrintText(..) => "c",
-            Command::DeletePattern(..) => "d",
-            Command::ReplacePatternWithHold(..) => "g",
-            Command::AppendHoldToPattern(..) => "G",
-            Command::ReplaceHoldWithPattern(..) => "h",
-            Command::AppendPatternToHold(..) => "H",
-            Command::PrintTextBefore(..) => "i",
-            Command::PrintPatternBinary(..) => "I",
-            Command::PrintPatternAndReplaceWithNext(..) => "n",
-            Command::AppendNextToPattern(..) => "n",
-            Command::PrintPattern(..) => "p",
-            Command::Quit(..) => "q",
-            Command::PrintFile(..) => "r",
-            Command::Replace(..) => "s",
-            Command::Test(..) => "t",
-            Command::AppendPatternToFile(..) => "w",
-            Command::ExchangeSpaces(..) => "x",
-            Command::ReplaceCharSet(..) => "y",
-            Command::PrintStandard(..) => "=",
-            _ => "?"
-        };
-
-        String::from(s)
-    }
-
     /// If [`Command`] address has more [`AddressToken`]
     /// then it can have, return error
     fn check_address(&mut self) -> Result<(), SedError> {
@@ -476,14 +445,15 @@ impl Command {
             match range.limits.len() {
                 1 => need_execute &= reached_now[0],
                 2 => {
-                    let (old_a, old_b) = range.passed.unwrap();
+                    let (mut old_a, mut old_b) = range.passed.unwrap();
                     if !old_a && old_b {
-                        unreachable!()
+                        range.passed = Some((false, false));
+                        (old_a, old_b) = range.passed.unwrap();
                     }
                     range.passed = Some((reached_now[0] || old_a, reached_now[1] || old_b));
                     let (a, b) = range.passed.unwrap();
                     range.on_limits = Some((reached_now[0], reached_now[1]));
-                    need_execute &= (!(old_a && old_b) && reached_now[1]) || (a && !b);
+                    need_execute &= (old_a && !old_b && reached_now[1]) || (a && !b);
                 }
                 _ => unreachable!(),
             }
@@ -557,7 +527,17 @@ fn match_pattern(
                 }
             })
             .collect::<Vec<_>>();
-        if !["^", "$"].contains(&pattern.as_str()){
+        if pattern != "^" && pattern != "^$"{
+            groups.retain(|(_, r)|{
+                *r != (0..0)
+            });
+        }
+        if pattern != "$" && pattern != "^$" {
+            groups.retain(|(_, r)|{
+                *r != end_range
+            });
+        }
+        if (pattern == "^$" && !haystack.is_empty()) || !["^$", "^", "$"].contains(&pattern.as_str()){
             groups.retain(|(_, r)|{
                 *r != (0..0) && *r != end_range
             });
@@ -1254,7 +1234,6 @@ fn print_multiline_binary(line: &str) {
                     break;
                 };
                 if chunk.strip_suffix(&['\n']).is_some() {
-                    //print!("<<{}>>", chunk.iter().collect::<String>());
                     if chunks.peek().is_some() {
                         println!("\\\n");
                     } else {
@@ -1761,7 +1740,6 @@ impl Sed {
         let Some(command) = self.script.0.get(command_position) else {
             return Ok(Some(ControlFlowInstruction::Continue));
         };
-
         let mut instruction = None;
         let current_command = command.clone();
         match current_command {
@@ -1794,7 +1772,7 @@ impl Sed {
                 }
                 if need_execute {
                     self.pattern_space.clear();
-                    print!("{text}\n");
+                    print!("{text}");
                 }
             }
             Command::DeletePattern(_, to_first_line) => {
@@ -1890,6 +1868,8 @@ impl Sed {
                     } else {
                         print!("{}\n", self.pattern_space);
                     }
+                }else if let Some(end) = &self.current_end{
+                    print!("{end}");
                 }
             }
             Command::Quit(_) => {
@@ -2046,7 +2026,11 @@ impl Sed {
                         global_instruction = Some(ControlFlowInstruction::Break);
                         break;
                     }
-                    ControlFlowInstruction::Continue => break,
+                    ControlFlowInstruction::Continue => if self.pattern_space.is_empty(){
+                        return Ok(None);
+                    }else{
+                        break
+                    },
                     ControlFlowInstruction::NotReadNext => {
                         self.hold_space.clear();
                         i = 0;
@@ -2090,9 +2074,9 @@ impl Sed {
         if !self.quiet{
             if !self.pattern_space.is_empty(){
                 print!("{}", self.pattern_space.trim_end_matches('\r'));
-                if let Some(end) = &self.current_end{
-                    print!("{end}");
-                }
+            }
+            if let Some(end) = &self.current_end{
+                print!("{end}");
             }
         }
 
