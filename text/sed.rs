@@ -851,7 +851,10 @@ fn parse_address(
                 break;
             },
             ' ' => (),
-            _ => break 
+            _ => {
+                *i -= 1;
+                break
+            } 
         }
         *i += 1;
     }
@@ -1832,7 +1835,12 @@ impl Sed {
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                self.pattern_space = self.hold_space.clone();
+                if let Some(hold_space) = self.hold_space.strip_suffix('\n'){
+                    self.current_end = Some("\n".to_string());
+                    self.pattern_space = hold_space.to_string();
+                }else{
+                    self.pattern_space = self.hold_space.clone();
+                }
             }
             Command::AppendHoldToPattern(_) => {
                 // G
@@ -1846,14 +1854,16 @@ impl Sed {
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                self.hold_space = self.pattern_space.clone();
+                self.hold_space = self.pattern_space.clone() 
+                + self.current_end.clone().unwrap_or_default().as_str();
             }
             Command::AppendPatternToHold(_) => {
                 // H
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                self.hold_space = self.hold_space.clone() + "\n" + &self.pattern_space;
+                self.hold_space = self.hold_space.clone() + "\n" + &self.pattern_space
+                + self.current_end.clone().unwrap_or_default().as_str();
             }
             Command::PrintTextBefore(_, text) => {
                 // i
@@ -1965,17 +1975,38 @@ impl Sed {
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                let tmp = self.hold_space.clone();
-                self.hold_space = self.pattern_space.clone();
-                self.pattern_space = tmp;
+                if let Some(hold_space) = self.hold_space.strip_suffix('\n'){
+                    let tmp = hold_space.to_string();
+                    self.hold_space = self.pattern_space.clone() + self.current_end.clone().unwrap_or_default().as_str();
+                    self.current_end = Some("\n".to_string());
+                    self.pattern_space = tmp;
+                }else{
+                    let tmp = self.hold_space.clone();
+                    self.hold_space = self.pattern_space.clone() + self.current_end.clone().unwrap_or_default().as_str();
+                    self.pattern_space = tmp;
+                    self.current_end = None;
+                }
             }
             Command::ReplaceCharSet(_, string1, string2) => {
                 // y
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
+                let mut replace_positions = vec![];
                 for (a, b) in string1.chars().zip(string2.chars()) {
-                    self.pattern_space = self.pattern_space.replace(a, &b.to_string());
+                    let positions = self.pattern_space.chars().enumerate().filter_map(|(i, ch)|{
+                        if ch == a{
+                            Some(i)
+                        }else{
+                            None
+                        }
+                    }).collect::<Vec<_>>();
+                    replace_positions.push((b.to_string(), positions));
+                }
+                for (ch, positions) in replace_positions {
+                    for position in positions{
+                        self.pattern_space.replace_range(position..(position+1), &ch);
+                    }
                 }
                 self.pattern_space = self.pattern_space.replace("\\n", "\n");
                 self.has_replacements_since_t = true;
@@ -2089,13 +2120,14 @@ impl Sed {
                         if line.is_empty() {
                             break;
                         }
+                        print!("{}", self.pattern_space);
+                        print!("{}", self.current_end.clone().unwrap_or_default());
                         if let Some(l) = line.strip_suffix("\n") {
                             self.current_end = Some("\n".to_string());
                             line = l.to_string();
                         }else{
                             self.current_end = None;
                         }
-                        print!("{}\n", self.pattern_space);
                         self.pattern_space = line;
                     },
                     ControlFlowInstruction::SkipPrint => {
