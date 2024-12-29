@@ -1325,15 +1325,20 @@ impl Script {
     fn parse(raw_script: impl AsRef<str>) -> Result<Script, SedError> {
         let mut commands = vec![];
         let mut address = None;
-        let chars = raw_script.as_ref().chars().collect::<Vec<_>>();
         let mut i = 0;
         let mut last_commands_count = 0;
         let mut command_added = false;
 
-        if let Some(slice) = chars.get(0..2) {
-            if slice[0] == '#' && slice[1] == 'n' {
+        let mut raw_script_without_comments = String::new();
+        for line in raw_script.as_ref().lines(){
+            raw_script_without_comments += line.split('#').next().unwrap_or("");
+            raw_script_without_comments += "\n";
+        }
+
+        let chars = raw_script_without_comments.chars().collect::<Vec<_>>();
+        if let Some(slice) = raw_script.as_ref().get(0..2) {
+            if slice.get(0..1) == Some("#") && slice.get(1..2) == Some("n") {
                 commands.push(Command::IgnoreComment);
-                i += 2;
             }
         }
 
@@ -1723,8 +1728,8 @@ enum ControlFlowInstruction {
     ReadNext,
     /// Append next line to current pattern space and continue current cycle  
     AppendNext,
-    /// Skip print after cycle
-    SkipPrint
+    // /// Skip print after cycle
+    // SkipPrint
 }
 
 /// Main program structure. Process input
@@ -1907,11 +1912,12 @@ impl Sed {
                             .find(|(_, ch)| *ch == '\n')
                             .map(|pair| pair.0)
                             .unwrap_or(self.pattern_space.len());
-                        print!("{}\n", &self.pattern_space[0..end]);
+                        print!("{}", &self.pattern_space[0..end]);
                     } else {
-                        print!("{}\n", self.pattern_space);
+                        print!("{}", self.pattern_space);
                     }
-                }else if let Some(end) = &self.current_end{
+                }
+                if let Some(end) = &self.current_end{
                     print!("{end}");
                 }
             }
@@ -2130,18 +2136,18 @@ impl Sed {
                         }
                         self.pattern_space = line;
                     },
-                    ControlFlowInstruction::SkipPrint => {
+                    /*ControlFlowInstruction::SkipPrint => {
                         global_instruction = Some(ControlFlowInstruction::SkipPrint);
-                    }
+                    }*/
                 }
             }
 
             i += 1;
         }
 
-        if let Some(ControlFlowInstruction::SkipPrint) = global_instruction{
-            return Ok(None);
-        }
+        // if let Some(ControlFlowInstruction::SkipPrint) = global_instruction{
+        //     return Ok(None);
+        // }
 
         if !self.quiet{
             if !self.pattern_space.is_empty(){

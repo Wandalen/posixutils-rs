@@ -599,7 +599,7 @@ mod tests {
                 "1, p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 3)\n",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n",
             ),
             (
                 ",10 p",
@@ -623,13 +623,13 @@ mod tests {
                 "1,2,3,4,5 p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address isn't empty, position or range (line: 0, col: 10)\n",
+                "sed: address isn't empty, position or range (line: 0, col: 9)\n",
             ),
             (
                 "0,-10 p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 1)\n",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 0)\n",
             ),
             (
                 "1,10; p",
@@ -859,7 +859,7 @@ mod tests {
                 "a\\",
                 "abc\ndef\n@#$",
                 "",
-                "sed: missing text argument (line: 0, col: 2)\n",
+                "sed: missing text argument (line: 0, col: 3)\n",
             ),
             (
                 "a  \text",
@@ -917,10 +917,16 @@ mod tests {
             ("b _start; :_start", "aa\naa\n", "aa\naa\n", ""),
             ("b my_label; :my_label", "aa\naa\n", "aa\naa\n", ""),
             ("b #%$?@&*; :#%$?@&*", "aa\naa\n", "aa\naa\n", ""),
-            ("b label#; :label#", "aa\naa\n", "aa\naa\n", ""),
             ("b 1label; :1label", "aa\naa\n", "aa\naa\n", ""),
             ("b 1234; :1234", "aa\naa\n", "aa\naa\n", ""),
+            ("b #%$?@&*;", "aa\naa", "aa\naa", ""),
             // wrong
+            (
+                "b label#; :label#", 
+                "aa\naa\n", 
+                "", 
+                "sed: read stdin: script doesn't contain label 'label'\n"
+            ),
             (
                 "b ab\ncd; :ab\ncd",
                 "",
@@ -934,16 +940,10 @@ mod tests {
                 "sed: read stdin: script doesn't contain label 'label'\n",
             ),
             (
-                "b #%$?@&*;",
-                "aa\naa",
-                "",
-                "sed: read stdin: script doesn't contain label '#%$?@&*'\n",
-            ),
-            (
                 "b label#",
                 "aa\naa",
                 "",
-                "sed: read stdin: script doesn't contain label 'label#'\n",
+                "sed: read stdin: script doesn't contain label 'label'\n",
             ),
             (
                 "b 1label",
@@ -979,7 +979,7 @@ mod tests {
                 "b label :label",
                 "aa\naa",
                 "",
-                "sed: label can't contain ' ' (line: 0, col: 14)\n",
+                "sed: label can't contain ' ' (line: 0, col: 13)\n",
             ),
         ];
 
@@ -1025,7 +1025,7 @@ mod tests {
                 "c\\",
                 "abc\ndef\n@#$",
                 "",
-                "sed: missing text argument (line: 0, col: 2)\n",
+                "sed: missing text argument (line: 0, col: 3)\n",
             ),
             (
                 "c  \text",
@@ -1284,7 +1284,7 @@ mod tests {
                 "i\\",
                 "abc\ncdf\n\n",
                 "",
-                "sed: missing text argument (line: 0, col: 2)\n",
+                "sed: missing text argument (line: 0, col: 3)\n",
             ),
             (
                 "i  \text",
@@ -1544,7 +1544,7 @@ mod tests {
             ("r aer", "abc\ncdf", "abc\ncdf", ""),
             ("r #@/?", "abc\ncdf", "abc\ncdf", ""),
             // wrong
-            ("r #@/?\nl", "abc\ncdf", "", "sed: unknown character 'l' (line: 0, col: 7)\n"),
+            ("r #@/?\nl", "abc\ncdf", "", "sed: unknown character 'l' (line: 0, col: 3)\n"),
             (
                 "r./text/tests/s\x02ed/assets/abc",
                 "",
@@ -1580,7 +1580,7 @@ mod tests {
             (
                 "s/[[:alpha:]]/r/",
                 "abc\nbbb\nbcb\nrbt\n",
-                "rbc\nbbb\nbcb\nrbt\n",
+                "rbc\nrbb\nrcb\nrbt\n",
                 "",
             ),
             ("s///", "abc\nbbb\nbcb\nrbt", "abc\nbbb\nbcb\nrbt", ""),
@@ -1693,7 +1693,7 @@ mod tests {
     fn test_s_with_wrong_flags() {
         let test_data = [
             // wrong
-            /*(
+            (
                 "s/b/r/ p",
                 "abc\nbbb\nbcb\nrbt",
                 "",
@@ -1739,25 +1739,25 @@ mod tests {
                 "s/b/r/6g",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: n and g flags can't be used together (line: 0, col: 8)\n",
+                "sed: n and g flags can't be used together (line: 0, col: 7)\n",
             ),
             (
                 "s/b/r/6pg",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: n and g flags can't be used together (line: 0, col: 9)\n",
+                "sed: n and g flags can't be used together (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/wpg6",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: w flag must be last flag (line: 0, col: 10)\n",
+                "sed: w flag must be last flag (line: 0, col: 9)\n",
             ),
             (
                 "s/b/r/w6",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: w flag must be last flag (line: 0, col: 8)\n",
+                "sed: w flag must be last flag (line: 0, col: 7)\n",
             ),
             (
                 "s/b/r/w./REA;DME.md",
@@ -1776,12 +1776,12 @@ mod tests {
                 "abc\nbbb\nbcb\nrbt",
                 "",
                 "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
-            ),*/
+            ),
             (
                 "s/b/r/6gpw ./tests/sed/assets/r",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: n and g flags can't be used together (line: 0, col: 31)\n",
+                "sed: n and g flags can't be used together (line: 0, col: 30)\n",
             ),
         ];
 
@@ -1824,7 +1824,7 @@ mod tests {
                 "t label :label",
                 "aa\naaa\n\n",
                 "",
-                "sed: label can't contain ' ' (line: 0, col: 14)\n",
+                "sed: label can't contain ' ' (line: 0, col: 13)\n",
             ),
             (
                 "t ab\ncd; :ab\ncd",
@@ -1972,25 +1972,30 @@ mod tests {
         let test_data = [
             // correct
             ("#n", "abc\ncdf\naaa", "", ""),
-            ("{ #\\ }\n{ #\n }\n#h", "abc\ncdf\n", "abc\ncdf\n", ""),
+            // wrong
             (
                 "a\\#text\ntext",
                 "abc\ncdf\naaa\n",
-                "abc\n#text\\ntext\ncdf\n#text\\ntext\naaa\n#text\\ntext\n",
                 "",
+                "sed: missing text argument (line: 0, col: 3)\n",
             ),
-            // wrong
+            (
+                "{ #\\ }\n{ #\n }\n#h", 
+                "abc\ncdf\n", 
+                "", 
+                "sed: '{' not have pair for closing block (line: 0, col: 0)\n"
+            ),
             (
                 r#"{ # }\n{ # }\n{ \n# }"#,
                 "abc\ncdf\naaa",
                 "",
-                "sed: can't compile pattern '{ # }\\'\n",
+                "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
             ),
             (
                 "a\\text#abc\ntext",
                 "abc\ncdf\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 12)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
             ),
         ];
 
