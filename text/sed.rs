@@ -7,6 +7,8 @@
 // SPDX-License-Identifier: MIT
 //
 
+const DEBUG: bool = false;
+
 use clap::{command, Parser};
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use libc::{
@@ -385,6 +387,36 @@ impl Command {
         };
 
         Some((address, i))
+    }
+
+    fn short_string(&self) -> String {
+        let s = match self {
+            Command::Block(..) => "{}",
+            Command::PrintTextAfter(..) => "a",
+            Command::BranchToLabel(..) => "b",
+            Command::DeletePatternAndPrintText(..) => "c",
+            Command::DeletePattern(..) => "d",
+            Command::ReplacePatternWithHold(..) => "g",
+            Command::AppendHoldToPattern(..) => "G",
+            Command::ReplaceHoldWithPattern(..) => "h",
+            Command::AppendPatternToHold(..) => "H",
+            Command::PrintTextBefore(..) => "i",
+            Command::PrintPatternBinary(..) => "I",
+            Command::PrintPatternAndReplaceWithNext(..) => "n",
+            Command::AppendNextToPattern(..) => "n",
+            Command::PrintPattern(..) => "p",
+            Command::Quit(..) => "q",
+            Command::PrintFile(..) => "r",
+            Command::Replace(..) => "s",
+            Command::Test(..) => "t",
+            Command::AppendPatternToFile(..) => "w",
+            Command::ExchangeSpaces(..) => "x",
+            Command::ReplaceCharSet(..) => "y",
+            Command::PrintStandard(..) => "=",
+            _ => "?"
+        };
+
+        String::from(s)
     }
 
     /// If [`Command`] address has more [`AddressToken`]
@@ -1852,7 +1884,14 @@ impl Sed {
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                self.pattern_space = self.pattern_space.clone() + "\n" + &self.hold_space;
+                self.pattern_space = self.pattern_space.clone() + 
+                &self.current_end.clone().unwrap_or_default() + &self.hold_space;
+                if let Some(_) = self.pattern_space.strip_suffix('\n'){
+                    self.pattern_space.pop();
+                    self.current_end = Some("\n".to_string());
+                }else{
+                    self.current_end = None;
+                }
             }
             Command::ReplaceHoldWithPattern(_) => {
                 // h
@@ -1867,8 +1906,11 @@ impl Sed {
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                self.hold_space = self.hold_space.clone() + "\n" + &self.pattern_space
-                + self.current_end.clone().unwrap_or_default().as_str();
+                if self.hold_space.strip_suffix("\n").is_none(){
+                    self.hold_space = self.hold_space.clone() + "\n";
+                }
+                self.hold_space += &(self.pattern_space.clone()
+                + self.current_end.clone().unwrap_or_default().as_str());
             }
             Command::PrintTextBefore(_, text) => {
                 // i
@@ -2062,6 +2104,12 @@ impl Sed {
             self.is_last_line
         )?;
 
+        if need_execute{
+            if DEBUG{
+                print!("<{}>", command.short_string());
+            }
+        }
+
         Ok(need_execute)
     }
 
@@ -2126,8 +2174,10 @@ impl Sed {
                         if line.is_empty() {
                             break;
                         }
-                        print!("{}", self.pattern_space);
-                        print!("{}", self.current_end.clone().unwrap_or_default());
+                        if !self.quiet{
+                            print!("{}", self.pattern_space);
+                            print!("{}", self.current_end.clone().unwrap_or_default());
+                        }
                         if let Some(l) = line.strip_suffix("\n") {
                             self.current_end = Some("\n".to_string());
                             line = l.to_string();
@@ -2151,10 +2201,18 @@ impl Sed {
 
         if !self.quiet{
             if !self.pattern_space.is_empty(){
-                print!("{}", self.pattern_space.trim_end_matches('\r'));
+                if DEBUG{
+                    print!("|{}|", self.pattern_space.trim_end_matches('\r'));
+                }else{
+                    print!("{}", self.pattern_space.trim_end_matches('\r'));
+                }
             }
             if let Some(end) = &self.current_end{
-                print!("{end}");
+                if DEBUG{
+                    print!("|{end}|");
+                }else{
+                    print!("{end}");
+                }
             }
         }
 
