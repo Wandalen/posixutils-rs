@@ -2179,11 +2179,9 @@ impl Sed {
                             print!("{}", self.current_end.clone().unwrap_or_default());
                         }
                         if let Some(l) = line.strip_suffix("\n") {
-                            self.current_end = Some("\n".to_string());
                             line = l.to_string();
-                        }else{
-                            self.current_end = None;
-                        }
+                        }             
+                        self.current_end = Some("\n".to_string());
                         self.pattern_space = line;
                     },
                     /*ControlFlowInstruction::SkipPrint => {
