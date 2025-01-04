@@ -111,462 +111,462 @@ const SCRIPT_SEMICOLONS_FILE: &'static str = "tests/sed/assets/script_blanks";
 mod tests {
     use crate::sed::*;
 
-    // #[test]
-    // fn test_no_arguments() {
-    //     sed_test(&[], "", "", "sed: none script was supplied\n", 1);
-    // }
+    #[test]
+    fn test_no_arguments() {
+        sed_test(&[], "", "", "sed: none script was supplied\n", 1);
+    }
 
-    // #[test]
-    // fn test_single_script_input_stdin() {
-    //     sed_test(&[SCRIPT_A], ABC_INPUT, "abbc\n", "", 0);
-    // }
+    #[test]
+    fn test_single_script_input_stdin() {
+        sed_test(&[SCRIPT_A], ABC_INPUT, "abbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_single_script_input_file() {
-    //     sed_test(&[SCRIPT_A, ABC_FILE], "", "abbc\n", "", 0);
-    // }
+    #[test]
+    fn test_single_script_input_file() {
+        sed_test(&[SCRIPT_A, ABC_FILE], "", "abbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_e_script_input_stdin() {
-    //     sed_test(&["-e", SCRIPT_A], ABC_INPUT, "abbc\n", "", 0);
-    // }
+    #[test]
+    fn test_e_script_input_stdin() {
+        sed_test(&["-e", SCRIPT_A], ABC_INPUT, "abbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_e_script_input_file() {
-    //     sed_test(&["-e", SCRIPT_A, ABC_FILE], "", "abbc\n", "", 0);
-    // }
+    #[test]
+    fn test_e_script_input_file() {
+        sed_test(&["-e", SCRIPT_A, ABC_FILE], "", "abbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_f_script_input_stdin() {
-    //     sed_test(&["-f", SCRIPT_A_FILE], ABC_INPUT, "abbc\n", "", 0);
-    // }
+    #[test]
+    fn test_f_script_input_stdin() {
+        sed_test(&["-f", SCRIPT_A_FILE], ABC_INPUT, "abbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_f_script_input_file() {
-    //     sed_test(&["-f", SCRIPT_A_FILE, ABC_FILE], "", "abbc\n", "", 0);
-    // }
+    #[test]
+    fn test_f_script_input_file() {
+        sed_test(&["-f", SCRIPT_A_FILE, ABC_FILE], "", "abbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_e_f_scripts_input_stdin() {
-    //     sed_test(
-    //         &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE],
-    //         ABC_INPUT,
-    //         "abcbcc\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_e_f_scripts_input_stdin() {
+        sed_test(
+            &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE],
+            ABC_INPUT,
+            "abcbcc\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_e_f_scripts_input_file() {
-    //     sed_test(
-    //         &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE, ABC_FILE],
-    //         "",
-    //         "abcbcc\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_e_f_scripts_input_file() {
+        sed_test(
+            &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE, ABC_FILE],
+            "",
+            "abcbcc\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_input_explicit_stdin() {
-    //     sed_test(&[SCRIPT_A, "-"], ABC_INPUT, "abbc\n", "", 0);
-    // }
+    #[test]
+    fn test_input_explicit_stdin() {
+        sed_test(&[SCRIPT_A, "-"], ABC_INPUT, "abbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_ignore_stdin_without_dash() {
-    //     sed_test(&[SCRIPT_A, CBA_FILE], ABC_INPUT, "cbab\n", "", 0);
-    // }
+    #[test]
+    fn test_ignore_stdin_without_dash() {
+        sed_test(&[SCRIPT_A, CBA_FILE], ABC_INPUT, "cbab\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_input_file_and_explicit_stdin() {
-    //     // Reorderind STDIN and input file
-    //     sed_test(&[SCRIPT_A, "-", CBA_FILE], ABC_INPUT, "abbc\ncbab\n", "", 0);
-    //     sed_test(&[SCRIPT_A, CBA_FILE, "-"], ABC_INPUT, "cbab\nabbc\n", "", 0);
-    // }
+    #[test]
+    fn test_input_file_and_explicit_stdin() {
+        // Reorderind STDIN and input file
+        sed_test(&[SCRIPT_A, "-", CBA_FILE], ABC_INPUT, "abbc\ncbab\n", "", 0);
+        sed_test(&[SCRIPT_A, CBA_FILE, "-"], ABC_INPUT, "cbab\nabbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_single_script_multiple_input_files() {
-    //     // Reorderind input files
-    //     sed_test(&[SCRIPT_A, ABC_FILE, CBA_FILE], "", "abbc\ncbab\n", "", 0);
-    //     sed_test(&[SCRIPT_A, CBA_FILE, ABC_FILE], "", "cbab\nabbc\n", "", 0);
-    // }
+    #[test]
+    fn test_single_script_multiple_input_files() {
+        // Reorderind input files
+        sed_test(&[SCRIPT_A, ABC_FILE, CBA_FILE], "", "abbc\ncbab\n", "", 0);
+        sed_test(&[SCRIPT_A, CBA_FILE, ABC_FILE], "", "cbab\nabbc\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_e_scripts_multiple_input_files() {
-    //     // Reorderind input files
-    //     sed_test(
-    //         &["-e", SCRIPT_A, "-e", SCRIPT_B, ABC_FILE, CBA_FILE],
-    //         "",
-    //         "abcbcc\ncbcabc\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &["-e", SCRIPT_A, "-e", SCRIPT_B, CBA_FILE, ABC_FILE],
-    //         "",
-    //         "cbcabc\nabcbcc\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_e_scripts_multiple_input_files() {
+        // Reorderind input files
+        sed_test(
+            &["-e", SCRIPT_A, "-e", SCRIPT_B, ABC_FILE, CBA_FILE],
+            "",
+            "abcbcc\ncbcabc\n",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_A, "-e", SCRIPT_B, CBA_FILE, ABC_FILE],
+            "",
+            "cbcabc\nabcbcc\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_e_scripts_multiple_input_files_mixed_order() {
-    //     // Reorderind input files
-    //     sed_test(
-    //         &[ABC_FILE, "-e", SCRIPT_A, CBA_FILE, "-e", SCRIPT_B],
-    //         "",
-    //         "abcbcc\ncbcabc\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &[CBA_FILE, "-e", SCRIPT_A, ABC_FILE, "-e", SCRIPT_B],
-    //         "",
-    //         "cbcabc\nabcbcc\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_e_scripts_multiple_input_files_mixed_order() {
+        // Reorderind input files
+        sed_test(
+            &[ABC_FILE, "-e", SCRIPT_A, CBA_FILE, "-e", SCRIPT_B],
+            "",
+            "abcbcc\ncbcabc\n",
+            "",
+            0,
+        );
+        sed_test(
+            &[CBA_FILE, "-e", SCRIPT_A, ABC_FILE, "-e", SCRIPT_B],
+            "",
+            "cbcabc\nabcbcc\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_f_scripts_multiple_input_files() {
-    //     // Reorderind input files
-    //     sed_test(
-    //         &["-f", SCRIPT_A_FILE, "-f", SCRIPT_B_FILE, ABC_FILE, CBA_FILE],
-    //         "",
-    //         "abcbcc\ncbcabc\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &["-f", SCRIPT_A_FILE, "-f", SCRIPT_B_FILE, CBA_FILE, ABC_FILE],
-    //         "",
-    //         "cbcabc\nabcbcc\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_f_scripts_multiple_input_files() {
+        // Reorderind input files
+        sed_test(
+            &["-f", SCRIPT_A_FILE, "-f", SCRIPT_B_FILE, ABC_FILE, CBA_FILE],
+            "",
+            "abcbcc\ncbcabc\n",
+            "",
+            0,
+        );
+        sed_test(
+            &["-f", SCRIPT_A_FILE, "-f", SCRIPT_B_FILE, CBA_FILE, ABC_FILE],
+            "",
+            "cbcabc\nabcbcc\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_f_scripts_multiple_input_files_mixed_order() {
-    //     // Reorderind input files
-    //     sed_test(
-    //         &[ABC_FILE, "-f", SCRIPT_A_FILE, CBA_FILE, "-f", SCRIPT_B_FILE],
-    //         "",
-    //         "abcbcc\ncbcabc\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &[CBA_FILE, "-f", SCRIPT_A_FILE, ABC_FILE, "-f", SCRIPT_B_FILE],
-    //         "",
-    //         "cbcabc\nabcbcc\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_f_scripts_multiple_input_files_mixed_order() {
+        // Reorderind input files
+        sed_test(
+            &[ABC_FILE, "-f", SCRIPT_A_FILE, CBA_FILE, "-f", SCRIPT_B_FILE],
+            "",
+            "abcbcc\ncbcabc\n",
+            "",
+            0,
+        );
+        sed_test(
+            &[CBA_FILE, "-f", SCRIPT_A_FILE, ABC_FILE, "-f", SCRIPT_B_FILE],
+            "",
+            "cbcabc\nabcbcc\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_e_scripts_unique_order_unique_results() {
-    //     sed_test(
-    //         &["-e", SCRIPT_A, "-e", SCRIPT_B, "-e", SCRIPT_C],
-    //         ABC_INPUT,
-    //         "abcabcaca\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &["-e", SCRIPT_A, "-e", SCRIPT_C, "-e", SCRIPT_B],
-    //         ABC_INPUT,
-    //         "abcbcca\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &["-e", SCRIPT_B, "-e", SCRIPT_A, "-e", SCRIPT_C],
-    //         ABC_INPUT,
-    //         "abbcaca\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &["-e", SCRIPT_B, "-e", SCRIPT_C, "-e", SCRIPT_A],
-    //         ABC_INPUT,
-    //         "abbcabcab\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &["-e", SCRIPT_C, "-e", SCRIPT_A, "-e", SCRIPT_B],
-    //         ABC_INPUT,
-    //         "abcbccabc\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &["-e", SCRIPT_C, "-e", SCRIPT_B, "-e", SCRIPT_A],
-    //         ABC_INPUT,
-    //         "abbccab\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_e_scripts_unique_order_unique_results() {
+        sed_test(
+            &["-e", SCRIPT_A, "-e", SCRIPT_B, "-e", SCRIPT_C],
+            ABC_INPUT,
+            "abcabcaca\n",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_A, "-e", SCRIPT_C, "-e", SCRIPT_B],
+            ABC_INPUT,
+            "abcbcca\n",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_B, "-e", SCRIPT_A, "-e", SCRIPT_C],
+            ABC_INPUT,
+            "abbcaca\n",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_B, "-e", SCRIPT_C, "-e", SCRIPT_A],
+            ABC_INPUT,
+            "abbcabcab\n",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_C, "-e", SCRIPT_A, "-e", SCRIPT_B],
+            ABC_INPUT,
+            "abcbccabc\n",
+            "",
+            0,
+        );
+        sed_test(
+            &["-e", SCRIPT_C, "-e", SCRIPT_B, "-e", SCRIPT_A],
+            ABC_INPUT,
+            "abbccab\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_f_scripts_unique_order_unique_results() {
-    //     sed_test(
-    //         &[
-    //             "-f",
-    //             SCRIPT_A_FILE,
-    //             "-f",
-    //             SCRIPT_B_FILE,
-    //             "-f",
-    //             SCRIPT_C_FILE,
-    //         ],
-    //         ABC_INPUT,
-    //         "abcabcaca\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &[
-    //             "-f",
-    //             SCRIPT_A_FILE,
-    //             "-f",
-    //             SCRIPT_C_FILE,
-    //             "-f",
-    //             SCRIPT_B_FILE,
-    //         ],
-    //         ABC_INPUT,
-    //         "abcbcca\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &[
-    //             "-f",
-    //             SCRIPT_B_FILE,
-    //             "-f",
-    //             SCRIPT_A_FILE,
-    //             "-f",
-    //             SCRIPT_C_FILE,
-    //         ],
-    //         ABC_INPUT,
-    //         "abbcaca\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &[
-    //             "-f",
-    //             SCRIPT_B_FILE,
-    //             "-f",
-    //             SCRIPT_C_FILE,
-    //             "-f",
-    //             SCRIPT_A_FILE,
-    //         ],
-    //         ABC_INPUT,
-    //         "abbcabcab\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &[
-    //             "-f",
-    //             SCRIPT_C_FILE,
-    //             "-f",
-    //             SCRIPT_A_FILE,
-    //             "-f",
-    //             SCRIPT_B_FILE,
-    //         ],
-    //         ABC_INPUT,
-    //         "abcbccabc\n",
-    //         "",
-    //         0,
-    //     );
-    //     sed_test(
-    //         &[
-    //             "-f",
-    //             SCRIPT_C_FILE,
-    //             "-f",
-    //             SCRIPT_B_FILE,
-    //             "-f",
-    //             SCRIPT_A_FILE,
-    //         ],
-    //         ABC_INPUT,
-    //         "abbccab\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_f_scripts_unique_order_unique_results() {
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_A_FILE,
+                "-f",
+                SCRIPT_B_FILE,
+                "-f",
+                SCRIPT_C_FILE,
+            ],
+            ABC_INPUT,
+            "abcabcaca\n",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_A_FILE,
+                "-f",
+                SCRIPT_C_FILE,
+                "-f",
+                SCRIPT_B_FILE,
+            ],
+            ABC_INPUT,
+            "abcbcca\n",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_B_FILE,
+                "-f",
+                SCRIPT_A_FILE,
+                "-f",
+                SCRIPT_C_FILE,
+            ],
+            ABC_INPUT,
+            "abbcaca\n",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_B_FILE,
+                "-f",
+                SCRIPT_C_FILE,
+                "-f",
+                SCRIPT_A_FILE,
+            ],
+            ABC_INPUT,
+            "abbcabcab\n",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_C_FILE,
+                "-f",
+                SCRIPT_A_FILE,
+                "-f",
+                SCRIPT_B_FILE,
+            ],
+            ABC_INPUT,
+            "abcbccabc\n",
+            "",
+            0,
+        );
+        sed_test(
+            &[
+                "-f",
+                SCRIPT_C_FILE,
+                "-f",
+                SCRIPT_B_FILE,
+                "-f",
+                SCRIPT_A_FILE,
+            ],
+            ABC_INPUT,
+            "abbccab\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_mixed_e_f_scripts() {
-    //     // -e script -f script -e script
-    //     sed_test(
-    //         &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE, "-e", SCRIPT_C],
-    //         ABC_INPUT,
-    //         "abcabcaca\n",
-    //         "",
-    //         0,
-    //     );
-    //     // -f script -e script -f script
-    //     sed_test(
-    //         &["-f", SCRIPT_A_FILE, "-e", SCRIPT_C, "-f", SCRIPT_B_FILE],
-    //         ABC_INPUT,
-    //         "abcbcca\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_mixed_e_f_scripts() {
+        // -e script -f script -e script
+        sed_test(
+            &["-e", SCRIPT_A, "-f", SCRIPT_B_FILE, "-e", SCRIPT_C],
+            ABC_INPUT,
+            "abcabcaca\n",
+            "",
+            0,
+        );
+        // -f script -e script -f script
+        sed_test(
+            &["-f", SCRIPT_A_FILE, "-e", SCRIPT_C, "-f", SCRIPT_B_FILE],
+            ABC_INPUT,
+            "abcbcca\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_script_some_newlines() {
-    //     sed_test(
-    //         &["-e", SCRIPT_SOME_NEWLINES],
-    //         ABC_INPUT,
-    //         "abcabcaca\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_script_some_newlines() {
+        sed_test(
+            &["-e", SCRIPT_SOME_NEWLINES],
+            ABC_INPUT,
+            "abcabcaca\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_script_all_newlines() {
-    //     sed_test(
-    //         &[SCRIPT_ALL_NEWLINES],
-    //         ABC_INPUT,
-    //         ABC_INPUT,
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_script_all_newlines() {
+        sed_test(
+            &[SCRIPT_ALL_NEWLINES],
+            ABC_INPUT,
+            ABC_INPUT,
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_e_script_some_newlines() {
-    //     sed_test(
-    //         &["-e", SCRIPT_SOME_NEWLINES],
-    //         ABC_INPUT,
-    //         "abcabcaca\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_e_script_some_newlines() {
+        sed_test(
+            &["-e", SCRIPT_SOME_NEWLINES],
+            ABC_INPUT,
+            "abcabcaca\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_e_script_all_newlines() {
-    //     sed_test(
-    //         &["-e", SCRIPT_ALL_NEWLINES],
-    //         ABC_INPUT,
-    //         ABC_INPUT,
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_e_script_all_newlines() {
+        sed_test(
+            &["-e", SCRIPT_ALL_NEWLINES],
+            ABC_INPUT,
+            ABC_INPUT,
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_f_script_some_newlines() {
-    //     sed_test(
-    //         &["-f", SCRIPT_SOME_NEWLINES_FILE],
-    //         ABC_INPUT,
-    //         "abcabcaca\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_f_script_some_newlines() {
+        sed_test(
+            &["-f", SCRIPT_SOME_NEWLINES_FILE],
+            ABC_INPUT,
+            "abcabcaca\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_f_script_all_newlines() {
-    //     sed_test(
-    //         &["-f", SCRIPT_ALL_NEWLINES_FILE],
-    //         ABC_INPUT,
-    //         ABC_INPUT,
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_f_script_all_newlines() {
+        sed_test(
+            &["-f", SCRIPT_ALL_NEWLINES_FILE],
+            ABC_INPUT,
+            ABC_INPUT,
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_single_script_ignore_blank_chars() {
-    //     sed_test(&["-e", SCRIPT_BLANKS], ABC_INPUT, "abcabcaca\n", "", 0);
-    // }
+    #[test]
+    fn test_single_script_ignore_blank_chars() {
+        sed_test(&["-e", SCRIPT_BLANKS], ABC_INPUT, "abcabcaca\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_e_script_ignore_blank_chars() {
-    //     sed_test(&["-e", SCRIPT_BLANKS], ABC_INPUT, "abcabcaca\n", "", 0);
-    // }
+    #[test]
+    fn test_e_script_ignore_blank_chars() {
+        sed_test(&["-e", SCRIPT_BLANKS], ABC_INPUT, "abcabcaca\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_f_script_ignore_blank_chars() {
-    //     sed_test(&["-f", SCRIPT_BLANKS_FILE], ABC_INPUT, "abcabcaca\n", "", 0);
-    // }
+    #[test]
+    fn test_f_script_ignore_blank_chars() {
+        sed_test(&["-f", SCRIPT_BLANKS_FILE], ABC_INPUT, "abcabcaca\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_single_script_ignore_semicolon_chars() {
-    //     sed_test(&[SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca\n", "", 0);
-    // }
+    #[test]
+    fn test_single_script_ignore_semicolon_chars() {
+        sed_test(&[SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_e_script_ignore_semicolon_chars() {
-    //     sed_test(&["-e", SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca\n", "", 0);
-    // }
+    #[test]
+    fn test_e_script_ignore_semicolon_chars() {
+        sed_test(&["-e", SCRIPT_SEMICOLONS], ABC_INPUT, "abcabcaca\n", "", 0);
+    }
 
-    // #[test]
-    // fn test_f_script_ignore_semicolon_chars() {
-    //     sed_test(
-    //         &["-f", SCRIPT_SEMICOLONS_FILE],
-    //         ABC_INPUT,
-    //         "abcabcaca\n",
-    //         "",
-    //         0,
-    //     );
-    // }
+    #[test]
+    fn test_f_script_ignore_semicolon_chars() {
+        sed_test(
+            &["-f", SCRIPT_SEMICOLONS_FILE],
+            ABC_INPUT,
+            "abcabcaca\n",
+            "",
+            0,
+        );
+    }
 
-    // #[test]
-    // fn test_delimiters() {
-    //     let test_data = [
-    //         // correct
-    //         (";;;;", "abc\ndef\n@#$\n", "abc\ndef\n@#$\n", ""),
-    //         (";\n;\n;;", "abc\ndef\n@#$\n", "abc\ndef\n@#$\n", ""),
-    //         // wrong
-    //         (
-    //             ";\\;\\;;",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: pattern can't consist more than 1 line (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             ";\\ ;;;",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: unterminated address regex (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "gh",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "g h",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "g; h \n gh \n g h ; gh \\",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_delimiters() {
+        let test_data = [
+            // correct
+            (";;;;", "abc\ndef\n@#$\n", "abc\ndef\n@#$\n", ""),
+            (";\n;\n;;", "abc\ndef\n@#$\n", "abc\ndef\n@#$\n", ""),
+            // wrong
+            (
+                ";\\;\\;;",
+                "abc\ndef\n@#$",
+                "",
+                "sed: pattern can't consist more than 1 line (line: 0, col: 2)\n",
+            ),
+            (
+                ";\\ ;;;",
+                "abc\ndef\n@#$",
+                "",
+                "sed: unterminated address regex (line: 0, col: 1)\n",
+            ),
+            (
+                "gh",
+                "abc\ndef\n@#$",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+            (
+                "g h",
+                "abc\ndef\n@#$",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "g; h \n gh \n g h ; gh \\",
+                "abc\ndef\n@#$",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
     #[test]
     fn test_address_correct() {
@@ -692,459 +692,459 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_address_with_bre() {
-    //     let test_data = [
-    //         // correct
-    //         (
-    //             r"\/abc/,10 p",
-    //             "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
-    //             "a\nb\nc\nd\nabc\nabc\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n",
-    //             "",
-    //         ),
-    //         (
-    //             r"\/abc/ p",
-    //             "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
-    //             "a\nb\nc\nd\nabc\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
-    //             "",
-    //         ),
-    //         (
-    //             r"\@abc@ p",
-    //             "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
-    //             "a\nb\nc\nd\nabc\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
-    //             "",
-    //         ),
-    //         (
-    //             r"\/ab\/c/ p",
-    //             "aaa\nbbb\nab/c\nabc\nbc\n\n",
-    //             "aaa\nbbb\nab/c\nab/c\nabc\nbc\n\n",
-    //             "",
-    //         ),
-    //         (
-    //             r"\/abc/,\!cdf! p",
-    //             "abt\nrbc\nabc\n\ncde\nedf\ncdf\ncdf\nwert\nbfb\n",
-    //             "abt\nrbc\nabc\nabc\n\n\ncde\ncde\nedf\nedf\ncdf\ncdf\ncdf\nwert\nbfb\n",
-    //             "",
-    //         ),
-    //         // wrong
-    //         (
-    //             "\\/abc/10 p",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: address bound can be only one pattern, number or '$' (line: 0, col: 8)\n",
-    //         ),
-    //         (
-    //             "@abc@ p",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: unknown character '@' (line: 0, col: 0)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_address_with_bre() {
+        let test_data = [
+            // correct
+            (
+                r"\/abc/,10 p",
+                "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
+                "a\nb\nc\nd\nabc\nabc\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n",
+                "",
+            ),
+            (
+                r"\/abc/ p",
+                "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
+                "a\nb\nc\nd\nabc\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
+                "",
+            ),
+            (
+                r"\@abc@ p",
+                "a\nb\nc\nd\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
+                "a\nb\nc\nd\nabc\nabc\nf\ng\nm\nn\nt\nw\nq\nh\nw\n",
+                "",
+            ),
+            (
+                r"\/ab\/c/ p",
+                "aaa\nbbb\nab/c\nabc\nbc\n\n",
+                "aaa\nbbb\nab/c\nab/c\nabc\nbc\n\n",
+                "",
+            ),
+            (
+                r"\/abc/,\!cdf! p",
+                "abt\nrbc\nabc\n\ncde\nedf\ncdf\ncdf\nwert\nbfb\n",
+                "abt\nrbc\nabc\nabc\n\n\ncde\ncde\nedf\nedf\ncdf\ncdf\ncdf\nwert\nbfb\n",
+                "",
+            ),
+            // wrong
+            (
+                "\\/abc/10 p",
+                "abc\ndef\n@#$",
+                "",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 9)\n",
+            ),
+            (
+                "@abc@ p",
+                "abc\ndef\n@#$",
+                "",
+                "sed: unknown character '@' (line: 0, col: 0)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_block() {
-    //     let test_data = [
-    //         // correct
-    //         ("{}", "abc\ndef\n@@##%%#^\n", "abc\ndef\n@@##%%#^\n", ""),
-    //         ("{ }", "abc\ndef\n@@##%%#^\n", "abc\ndef\n@@##%%#^\n", ""),
-    //         (
-    //             "{ \n \n \n }",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "",
-    //         ), // unterminated address regex
-    //         (
-    //             "{ { \n } {} {\n} { } }",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "",
-    //         ), // unterminated address regex
-    //         (
-    //             "{ { { { { { { { {} } } } } } } } }",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "",
-    //         ),
-    //         (
-    //             "1,10 { 5,10 p }",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "",
-    //         ),
-    //         (
-    //             "1,10 { 5,10 { 7,10 p } }",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "",
-    //         ),
-    //         (
-    //             "1,10 { 5,7 { 7,15 p } }",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "",
-    //         ),
-    //         (
-    //             "1,10 { 10,15 { 15,20 p } }",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "",
-    //         ),
-    //         // wrong
-    //         (
-    //             "15,10 { 10,5 { 5,1 p } }",
-    //             "abc\ndef\n@@##%%#^\n",
-    //             "",
-    //             "sed: bottom bound 15 bigger than top bound 10 in address (line: 0, col: 5)\n",
-    //         ),
-    //         (
-    //             "{",
-    //             "abc\ndef\n@@##%%#^",
-    //             "",
-    //             "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             "}",
-    //             "abc\ndef\n@@##%%#^",
-    //             "",
-    //             "sed: unneccessary '}' (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             "{ { { { { { {} } } } } } } } }",
-    //             "abc\ndef\n@@##%%#^",
-    //             "",
-    //             "sed: unneccessary '}' (line: 0, col: 27)\n",
-    //         ),
-    //         (
-    //             "{ { { { { { { { {} } } } } } }",
-    //             "abc\ndef\n@@##%%#^",
-    //             "",
-    //             "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_block() {
+        let test_data = [
+            // correct
+            ("{}", "abc\ndef\n@@##%%#^\n", "abc\ndef\n@@##%%#^\n", ""),
+            ("{ }", "abc\ndef\n@@##%%#^\n", "abc\ndef\n@@##%%#^\n", ""),
+            (
+                "{ \n \n \n }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ), // unterminated address regex
+            (
+                "{ { \n } {} {\n} { } }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ), // unterminated address regex
+            (
+                "{ { { { { { { { {} } } } } } } } }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ),
+            (
+                "1,10 { 5,10 p }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ),
+            (
+                "1,10 { 5,10 { 7,10 p } }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ),
+            (
+                "1,10 { 5,7 { 7,15 p } }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ),
+            (
+                "1,10 { 10,15 { 15,20 p } }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ),
+            // wrong
+            (
+                "15,10 { 10,5 { 5,1 p } }",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+                "sed: bottom bound 15 bigger than top bound 10 in address (line: 0, col: 6)\n",
+            ),
+            (
+                "{",
+                "abc\ndef\n@@##%%#^",
+                "",
+                "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
+            ),
+            (
+                "}",
+                "abc\ndef\n@@##%%#^",
+                "",
+                "sed: unneccessary '}' (line: 0, col: 0)\n",
+            ),
+            (
+                "{ { { { { { {} } } } } } } } }",
+                "abc\ndef\n@@##%%#^",
+                "",
+                "sed: unneccessary '}' (line: 0, col: 27)\n",
+            ),
+            (
+                "{ { { { { { { { {} } } } } } }",
+                "abc\ndef\n@@##%%#^",
+                "",
+                "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_a() {
-    //     let test_data = [
-    //         // correct
-    //         (
-    //             "a\\text",
-    //             "abc\ndef\n@#$\n",
-    //             "abc\ntext\ndef\ntext\n@#$\ntext\n",
-    //             "",
-    //         ),
-    //         (
-    //             "a\\   text\\in\\sed",
-    //             "abc\ndef\n@#$",
-    //             "abc\n   textinsed\ndef\n   textinsed\n@#$\n   textinsed",
-    //             "",
-    //         ),
-    //         (
-    //             "a\\ text text ; text",
-    //             "abc\ndef\n@#$",
-    //             "abc\n text text ; text\ndef\n text text ; text\n@#$\n text text ; text",
-    //             "",
-    //         ),
-    //         // wrong
-    //         (
-    //             "a\\",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: missing text argument (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "a  \text",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "a\text",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "a\text\\in\\sed",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "a\\ text text \n text ",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
-    //         ),
-    //         (
-    //             "atext",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "a text",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_a() {
+        let test_data = [
+            // correct
+            (
+                "a\\text",
+                "abc\ndef\n@#$\n",
+                "abc\ntext\ndef\ntext\n@#$\ntext\n",
+                "",
+            ),
+            (
+                "a\\   text\\in\\sed",
+                "abc\ndef\n@#$",
+                "abc\n   textinsed\ndef\n   textinsed\n@#$\n   textinsed",
+                "",
+            ),
+            (
+                "a\\ text text ; text",
+                "abc\ndef\n@#$",
+                "abc\n text text ; text\ndef\n text text ; text\n@#$\n text text ; text",
+                "",
+            ),
+            // wrong
+            (
+                "a\\",
+                "abc\ndef\n@#$",
+                "",
+                "sed: missing text argument (line: 0, col: 3)\n",
+            ),
+            (
+                "a  \text",
+                "abc\ndef\n@#$",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "a\text",
+                "abc\ndef\n@#$",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "a\text\\in\\sed",
+                "abc\ndef\n@#$",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "a\\ text text \n text ",
+                "abc\ndef\n@#$",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+            ),
+            (
+                "atext",
+                "abc\ndef\n@#$",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "a text",
+                "abc\ndef\n@#$",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_b() {
-    //     let test_data = [
-    //         // correct
-    //         ("b", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b; :label", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b label; :label", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b label1; :label1", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b lab2el1abc; :lab2el1abc", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b loop_; :loop_", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b _start; :_start", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b my_label; :my_label", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b #%$?@&*; :#%$?@&*", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b 1label; :1label", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b 1234; :1234", "aa\naa\n", "aa\naa\n", ""),
-    //         ("b #%$?@&*;", "aa\naa", "aa\naa", ""),
-    //         // wrong
-    //         (
-    //             "b label#; :label#", 
-    //             "aa\naa\n", 
-    //             "", 
-    //             "sed: read stdin: script doesn't contain label 'label'\n"
-    //         ),
-    //         (
-    //             "b ab\ncd; :ab\ncd",
-    //             "",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 6)\n",
-    //         ),
-    //         (
-    //             "b label",
-    //             "aa\naa",
-    //             "",
-    //             "sed: read stdin: script doesn't contain label 'label'\n",
-    //         ),
-    //         (
-    //             "b label#",
-    //             "aa\naa",
-    //             "",
-    //             "sed: read stdin: script doesn't contain label 'label'\n",
-    //         ),
-    //         (
-    //             "b 1label",
-    //             "aa\naa",
-    //             "",
-    //             "sed: read stdin: script doesn't contain label '1label'\n",
-    //         ),
-    //         (
-    //             "b 1234",
-    //             "aa\naa",
-    //             "",
-    //             "sed: read stdin: script doesn't contain label '1234'\n",
-    //         ),
-    //         (
-    //             "b g",
-    //             "aa\naa",
-    //             "",
-    //             "sed: read stdin: script doesn't contain label 'g'\n",
-    //         ),
-    //         (
-    //             "b; label",
-    //             "aa\naa",
-    //             "",
-    //             "sed: unknown character 'l' (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "b :label",
-    //             "aa\naa",
-    //             "",
-    //             "sed: read stdin: script doesn't contain label ':label'\n",
-    //         ),
-    //         (
-    //             "b label :label",
-    //             "aa\naa",
-    //             "",
-    //             "sed: label can't contain ' ' (line: 0, col: 13)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_b() {
+        let test_data = [
+            // correct
+            ("b", "aa\naa\n", "aa\naa\n", ""),
+            ("b; :label", "aa\naa\n", "aa\naa\n", ""),
+            ("b label; :label", "aa\naa\n", "aa\naa\n", ""),
+            ("b label1; :label1", "aa\naa\n", "aa\naa\n", ""),
+            ("b lab2el1abc; :lab2el1abc", "aa\naa\n", "aa\naa\n", ""),
+            ("b loop_; :loop_", "aa\naa\n", "aa\naa\n", ""),
+            ("b _start; :_start", "aa\naa\n", "aa\naa\n", ""),
+            ("b my_label; :my_label", "aa\naa\n", "aa\naa\n", ""),
+            ("b #%$?@&*; :#%$?@&*", "aa\naa\n", "aa\naa\n", ""),
+            ("b 1label; :1label", "aa\naa\n", "aa\naa\n", ""),
+            ("b 1234; :1234", "aa\naa\n", "aa\naa\n", ""),
+            ("b #%$?@&*;", "aa\naa", "aa\naa", ""),
+            // wrong
+            (
+                "b label#; :label#", 
+                "aa\naa\n", 
+                "", 
+                "sed: read stdin: script doesn't contain label 'label'\n"
+            ),
+            (
+                "b ab\ncd; :ab\ncd",
+                "",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 6)\n",
+            ),
+            (
+                "b label",
+                "aa\naa",
+                "",
+                "sed: read stdin: script doesn't contain label 'label'\n",
+            ),
+            (
+                "b label#",
+                "aa\naa",
+                "",
+                "sed: read stdin: script doesn't contain label 'label'\n",
+            ),
+            (
+                "b 1label",
+                "aa\naa",
+                "",
+                "sed: read stdin: script doesn't contain label '1label'\n",
+            ),
+            (
+                "b 1234",
+                "aa\naa",
+                "",
+                "sed: read stdin: script doesn't contain label '1234'\n",
+            ),
+            (
+                "b g",
+                "aa\naa",
+                "",
+                "sed: read stdin: script doesn't contain label 'g'\n",
+            ),
+            (
+                "b; label",
+                "aa\naa",
+                "",
+                "sed: unknown character 'l' (line: 0, col: 3)\n",
+            ),
+            (
+                "b :label",
+                "aa\naa",
+                "",
+                "sed: read stdin: script doesn't contain label ':label'\n",
+            ),
+            (
+                "b label :label",
+                "aa\naa",
+                "",
+                "sed: label can't contain ' ' (line: 0, col: 13)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_c() {
-    //     let test_data = [
-    //         // correct
-    //         ("c\\text", "abc\ndef\n@#$", "text\ntext\ntext\n", ""),
-    //         (
-    //             "c\\   text\\in\\sed",
-    //             "abc\ndef\n@#$",
-    //             "   textinsed\n   textinsed\n   textinsed\n",
-    //             "",
-    //         ),
-    //         (
-    //             "c\\ text text ; text",
-    //             "abc\ndef\n@#$",
-    //             " text text ; text\n text text ; text\n text text ; text\n",
-    //             "",
-    //         ),
-    //         ("c\\r", "abc\ndef\n@#$", "r\nr\nr\n", ""),
-    //         ("1 c\\r", "abc\ndef\n@#$", "r\ndef\n@#$", ""),
-    //         ("1,2 c\\r", "abc\ndef\n@#$", "r\nr\n@#$", ""),
-    //         // wrong
-    //         (
-    //             "0 c\\r",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "0,2 c\\r",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: address lower bound must be bigger than 0 (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "c\\",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: missing text argument (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "c  \text",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "c\text",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "c\text\\in\\sed",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "c\\ text text \n text ",
-    //             "abc\ndef\n@#$",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_c() {
+        let test_data = [
+            // correct
+            ("c\\text", "abc\ndef\n@#$", "text\ntext\ntext\n", ""),
+            (
+                "c\\   text\\in\\sed",
+                "abc\ndef\n@#$",
+                "   textinsed\n   textinsed\n   textinsed\n",
+                "",
+            ),
+            (
+                "c\\ text text ; text",
+                "abc\ndef\n@#$",
+                " text text ; text\n text text ; text\n text text ; text\n",
+                "",
+            ),
+            ("c\\r", "abc\ndef\n@#$", "r\nr\nr\n", ""),
+            ("1 c\\r", "abc\ndef\n@#$", "r\ndef\n@#$", ""),
+            ("1,2 c\\r", "abc\ndef\n@#$", "r\nr\n@#$", ""),
+            // wrong
+            (
+                "0 c\\r",
+                "abc\ndef\n@#$",
+                "",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+            ),
+            (
+                "0,2 c\\r",
+                "abc\ndef\n@#$",
+                "",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 4)\n",
+            ),
+            (
+                "c\\",
+                "abc\ndef\n@#$",
+                "",
+                "sed: missing text argument (line: 0, col: 3)\n",
+            ),
+            (
+                "c  \text",
+                "abc\ndef\n@#$",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "c\text",
+                "abc\ndef\n@#$",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "c\text\\in\\sed",
+                "abc\ndef\n@#$",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "c\\ text text \n text ",
+                "abc\ndef\n@#$",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_d() {
-    //     let test_data = [
-    //         // correct
-    //         ("d", "abc\ncdf\nret", "", ""),
-    //         ("d; d", "abc\ncdf\nret", "", ""),
-    //         // wrong
-    //         (
-    //             "d b",
-    //             "abc\ncdf\nret",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "d d",
-    //             "abc\ncdf\nret",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "dd",
-    //             "abc\ncdf\nret",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_d() {
+        let test_data = [
+            // correct
+            ("d", "abc\ncdf\nret", "", ""),
+            ("d; d", "abc\ncdf\nret", "", ""),
+            // wrong
+            (
+                "d b",
+                "abc\ncdf\nret",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "d d",
+                "abc\ncdf\nret",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "dd",
+                "abc\ncdf\nret",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_upper_d() {
-    //     let test_data = [
-    //         // correct
-    //         ("1 h; D; 2 G", "abc\ncdf", "", ""),
-    //         // wrong
-    //         (
-    //             "D b",
-    //             "abc\ncdf",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "D D",
-    //             "abc\ncdf",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "DD",
-    //             "abc\ncdf",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_upper_d() {
+        let test_data = [
+            // correct
+            ("1 h; D; 2 G", "abc\ncdf", "", ""),
+            // wrong
+            (
+                "D b",
+                "abc\ncdf",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "D D",
+                "abc\ncdf",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "DD",
+                "abc\ncdf",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_g() {
-    //     let test_data = [
-    //         // correct
-    //         ("1 h; 2 g", "abc\ncdf", "abc\nabc\n", ""),
-    //         // wrong
-    //         (
-    //             "0 g; 1 h",
-    //             "abc\ncdf",
-    //             "",
-    //             "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "g g",
-    //             "abc\ncdf",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_g() {
+        let test_data = [
+            // correct
+            ("1 h; 2 g", "abc\ncdf", "abc\nabc\n", ""),
+            // wrong
+            (
+                "0 g; 1 h",
+                "abc\ncdf",
+                "",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+            ),
+            (
+                "g g",
+                "abc\ncdf",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
     #[test]
     fn test_upper_g() {
@@ -1262,102 +1262,102 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_i() {
-    //     let test_data = [
-    //         // correct
-    //         ("i\\text", "abc\ncdf\n\n", "textabc\ntextcdf\ntext\n", ""),
-    //         (
-    //             "i\\text\\in\\sed",
-    //             "abc\ncdf\n\n",
-    //             "textinsedabc\ntextinsedcdf\ntextinsed\n",
-    //             "",
-    //         ),
-    //         (
-    //             "i\\text text ; text ",
-    //             "abc\ncdf\n\n",
-    //             "text text ; text abc\ntext text ; text cdf\ntext text ; text \n",
-    //             "",
-    //         ),
-    //         // wrong
-    //         (
-    //             "i\\",
-    //             "abc\ncdf\n\n",
-    //             "",
-    //             "sed: missing text argument (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "i  \text",
-    //             "abc\ncdf\n\n",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "i\text",
-    //             "abc\ncdf\n\n",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "i\text\\in\\sed",
-    //             "abc\ncdf\n\n",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "i\\ text text \n text ",
-    //             "abc\ncdf\n\n",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_i() {
+        let test_data = [
+            // correct
+            ("i\\text", "abc\ncdf\n\n", "textabc\ntextcdf\ntext\n", ""),
+            (
+                "i\\text\\in\\sed",
+                "abc\ncdf\n\n",
+                "textinsedabc\ntextinsedcdf\ntextinsed\n",
+                "",
+            ),
+            (
+                "i\\text text ; text ",
+                "abc\ncdf\n\n",
+                "text text ; text abc\ntext text ; text cdf\ntext text ; text \n",
+                "",
+            ),
+            // wrong
+            (
+                "i\\",
+                "abc\ncdf\n\n",
+                "",
+                "sed: missing text argument (line: 0, col: 3)\n",
+            ),
+            (
+                "i  \text",
+                "abc\ncdf\n\n",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "i\text",
+                "abc\ncdf\n\n",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "i\text\\in\\sed",
+                "abc\ncdf\n\n",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+            ),
+            (
+                "i\\ text text \n text ",
+                "abc\ncdf\n\n",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_upper_i() {
-    //     let test_data = [
-    //         // correct
-    //         (
-    //             "I",
-    //             "\x01\x02\x03\x04\x05\x06\x07\x08\x09\n\x0B\x0C\x0D\x0E\x0F",
-    //             "\\x01\\x02\\x03\\x04\\x05\\x06\\a\\b\\t$\\v\\f\\r\\x0e\\x0f$",
-    //             "",
-    //         ),
-    //         // wrong
-    //         (
-    //             "I g",
-    //             "",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "I I",
-    //             "",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "II",
-    //             "",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_upper_i() {
+        let test_data = [
+            // correct
+            (
+                "I",
+                "\x01\x02\x03\x04\x05\x06\x07\x08\x09\n\x0B\x0C\x0D\x0E\x0F",
+                "\\x01\\x02\\x03\\x04\\x05\\x06\\a\\b\\t$\\v\\f\\r\\x0e\\x0f$",
+                "",
+            ),
+            // wrong
+            (
+                "I g",
+                "",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "I I",
+                "",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "II",
+                "",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(
-    //             &["-n", "-e", script],
-    //             input,
-    //             output,
-    //             err,
-    //             !err.is_empty() as i32,
-    //         );
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(
+                &["-n", "-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
+    }
  
     #[test]
     fn test_n() {
@@ -1496,513 +1496,513 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_q() {
-    //     let test_data = [
-    //         // correct
-    //         ("q", "abc\n123", "abc\n", ""),
-    //         ("q; q", "abc\n123", "abc\n", ""),
-    //         // wrong
-    //         (
-    //             "q g",
-    //             "abc\n123",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "q q",
-    //             "abc\n123",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "qq",
-    //             "abc\n123",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_q() {
+        let test_data = [
+            // correct
+            ("q", "abc\n123", "abc\n", ""),
+            ("q; q", "abc\n123", "abc\n", ""),
+            // wrong
+            (
+                "q g",
+                "abc\n123",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "q q",
+                "abc\n123",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "qq",
+                "abc\n123",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_r() {
-    //     let test_data = [
-    //         // correct
-    //         (
-    //             "r ./tests/sed/assets/script_some_newlines",
-    //             "abc\ncdf",
-    //             "abc\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\ncdf\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n",
-    //             "",
-    //         ),
-    //         ("r./tests/sed/assets/abc", "", "", ""),
-    //         ("r./tests/sed/assets/abc", "a", "a\nabc", ""),
-    //         ("r", "abc\ncdf", "abc\ncdf", ""),
-    //         ("r aer", "abc\ncdf", "abc\ncdf", ""),
-    //         ("r #@/?", "abc\ncdf", "abc\ncdf", ""),
-    //         // wrong
-    //         ("r #@/?\nl", "abc\ncdf", "", "sed: unknown character 'l' (line: 0, col: 3)\n"),
-    //         (
-    //             "r./text/tests/s\x02ed/assets/abc",
-    //             "",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 16)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_r() {
+        let test_data = [
+            // correct
+            (
+                "r ./tests/sed/assets/script_some_newlines",
+                "abc\ncdf",
+                "abc\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\ncdf\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n",
+                "",
+            ),
+            ("r./tests/sed/assets/abc", "", "", ""),
+            ("r./tests/sed/assets/abc", "a", "a\nabc", ""),
+            ("r", "abc\ncdf", "abc\ncdf", ""),
+            ("r aer", "abc\ncdf", "abc\ncdf", ""),
+            ("r #@/?", "abc\ncdf", "abc\ncdf", ""),
+            // wrong
+            ("r #@/?\nl", "abc\ncdf", "", "sed: unknown character 'l' (line: 0, col: 3)\n"),
+            (
+                "r./text/tests/s\x02ed/assets/abc",
+                "",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 16)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_s() {
-    //     let test_data = [
-    //         // correct
-    //         ("s/b/r/", "abc\nbbb\nbcb\nrbt\n", "arc\nrbb\nrcb\nrrt\n", ""),
-    //         ("s/b/r/g", "abc\nbbb\nbcb\nrbt\n", "arc\nrrr\nrcr\nrrt\n", ""),
-    //         ("s|b|r|g", "abc\nbbb\nbcb\nrbt\n", "arc\nrrr\nrcr\nrrt\n", ""),
-    //         (
-    //             "s/[[:alpha:]]/r/",
-    //             "abc\nbbb\nbcb\nrbt\n@#$\n",
-    //             "rbc\nrbb\nrcb\nrbt\n@#$\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/\\(a\\)\\(x\\)/\\1\\2/",
-    //             "abc\nbbb\nbcb\nrbt\n@#$\n",
-    //             "abc\nbbb\nbcb\nrbt\n@#$\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/[[:alpha:]]/r/",
-    //             "abc\nbbb\nbcb\nrbt\n",
-    //             "rbc\nrbb\nrcb\nrbt\n",
-    //             "",
-    //         ),
-    //         ("s///", "abc\nbbb\nbcb\nrbt", "abc\nbbb\nbcb\nrbt", ""),
-    //         // wrong
-    //         (
-    //             "s/a/b/c/d/",
-    //             "abc\nbbb\nbcb\nrbt\n@#$\n",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
-    //         ),
-    //         (
-    //             "s//a//c//",
-    //             "abc\nbbb\nbcb\nrbt\n@#$\n",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 5)\n",
-    //         ),
-    //         (
-    //             "s/\\(\\(x\\)/\\1\\2/",
-    //             "abc\nbbb\nbcb\nrbt\n@#$",
-    //             "",
-    //             "sed: can't compile pattern '\\(\\(x\\)'\n",
-    //         ),
-    //         (
-    //             "s\na\nb\n",
-    //             "abc\nbbb\nbcb\nrbt\n@#$",
-    //             "",
-    //             "sed: splliter can't be number, '\n' or ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_s() {
+        let test_data = [
+            // correct
+            ("s/b/r/", "abc\nbbb\nbcb\nrbt\n", "arc\nrbb\nrcb\nrrt\n", ""),
+            ("s/b/r/g", "abc\nbbb\nbcb\nrbt\n", "arc\nrrr\nrcr\nrrt\n", ""),
+            ("s|b|r|g", "abc\nbbb\nbcb\nrbt\n", "arc\nrrr\nrcr\nrrt\n", ""),
+            (
+                "s/[[:alpha:]]/r/",
+                "abc\nbbb\nbcb\nrbt\n@#$\n",
+                "rbc\nrbb\nrcb\nrbt\n@#$\n",
+                "",
+            ),
+            (
+                "s/\\(a\\)\\(x\\)/\\1\\2/",
+                "abc\nbbb\nbcb\nrbt\n@#$\n",
+                "abc\nbbb\nbcb\nrbt\n@#$\n",
+                "",
+            ),
+            (
+                "s/[[:alpha:]]/r/",
+                "abc\nbbb\nbcb\nrbt\n",
+                "rbc\nrbb\nrcb\nrbt\n",
+                "",
+            ),
+            ("s///", "abc\nbbb\nbcb\nrbt", "abc\nbbb\nbcb\nrbt", ""),
+            // wrong
+            (
+                "s/a/b/c/d/",
+                "abc\nbbb\nbcb\nrbt\n@#$\n",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
+            ),
+            (
+                "s//a//c//",
+                "abc\nbbb\nbcb\nrbt\n@#$\n",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 5)\n",
+            ),
+            (
+                "s/\\(\\(x\\)/\\1\\2/",
+                "abc\nbbb\nbcb\nrbt\n@#$",
+                "",
+                "sed: can't compile pattern '\\(\\(x\\)'\n",
+            ),
+            (
+                "s\na\nb\n",
+                "abc\nbbb\nbcb\nrbt\n@#$",
+                "",
+                "sed: splliter can't be number, '\n' or ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_s_with_right_flags() {
-    //     let test_data = [
-    //         // correct
-    //         ("s/b/r/6", "abcbbdfbdbdfbfb\n", "abcbbdfbdbdfrfb\n", ""),
-    //         ("s/b/r/g", "abcbbdfbdbdfbfb\n", "arcrrdfrdrdfrfr\n", ""),
-    //         (
-    //             "s/b/r/p",
-    //             "abcbbdfbdbdfbfb\n",
-    //             "arcbbdfbdbdfbfb\narcbbdfbdbdfbfb\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/b/r/w ./tests/sed/assets/r",
-    //             "abcbbdfbdbdfbfb\n",
-    //             "arcbbdfbdbdfbfb\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/b/r/6p",
-    //             "abcbbdfbdbdfbfb\n",
-    //             "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/[[:alpha:]]/r/g",
-    //             "abc\nbbb\nbcb\nrbt\n@#$\n",
-    //             "rrr\nrrr\nrrr\nrrr\n@#$\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/b/r/gp",
-    //             "abcbbdfbdbdfbfb\n",
-    //             "arcrrdfrdrdfrfr\narcrrdfrdrdfrfr\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/b/r/p6",
-    //             "abcbbdfbdbdfbfb\n",
-    //             "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/b/r/pw ./tests/sed/assets/r",
-    //             "abcbbdfbdbdfbfb\n",
-    //             "arcbbdfbdbdfbfb\narcbbdfbdbdfbfb\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/b/r/6pw ./tests/sed/assets/r",
-    //             "abcbbdfbdbdfbfb\n",
-    //             "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/b/r/gpw ./tests/sed/assets/r",
-    //             "abcbbdfbdbdfbfb\n",
-    //             "arcrrdfrdrdfrfr\narcrrdfrdrdfrfr\n",
-    //             "",
-    //         ),
-    //         (
-    //             "s/b/r/w g6",
-    //             "abc\nbbb\nbcb\nrbt\n",
-    //             "arc\nrbb\nrcb\nrrt\n",
-    //             "",
-    //         ),
-    //     ];
+    #[test]
+    fn test_s_with_right_flags() {
+        let test_data = [
+            // correct
+            ("s/b/r/6", "abcbbdfbdbdfbfb\n", "abcbbdfbdbdfrfb\n", ""),
+            ("s/b/r/g", "abcbbdfbdbdfbfb\n", "arcrrdfrdrdfrfr\n", ""),
+            (
+                "s/b/r/p",
+                "abcbbdfbdbdfbfb\n",
+                "arcbbdfbdbdfbfb\narcbbdfbdbdfbfb\n",
+                "",
+            ),
+            (
+                "s/b/r/w ./tests/sed/assets/r",
+                "abcbbdfbdbdfbfb\n",
+                "arcbbdfbdbdfbfb\n",
+                "",
+            ),
+            (
+                "s/b/r/6p",
+                "abcbbdfbdbdfbfb\n",
+                "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n",
+                "",
+            ),
+            (
+                "s/[[:alpha:]]/r/g",
+                "abc\nbbb\nbcb\nrbt\n@#$\n",
+                "rrr\nrrr\nrrr\nrrr\n@#$\n",
+                "",
+            ),
+            (
+                "s/b/r/gp",
+                "abcbbdfbdbdfbfb\n",
+                "arcrrdfrdrdfrfr\narcrrdfrdrdfrfr\n",
+                "",
+            ),
+            (
+                "s/b/r/p6",
+                "abcbbdfbdbdfbfb\n",
+                "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n",
+                "",
+            ),
+            (
+                "s/b/r/pw ./tests/sed/assets/r",
+                "abcbbdfbdbdfbfb\n",
+                "arcbbdfbdbdfbfb\narcbbdfbdbdfbfb\n",
+                "",
+            ),
+            (
+                "s/b/r/6pw ./tests/sed/assets/r",
+                "abcbbdfbdbdfbfb\n",
+                "abcbbdfbdbdfrfb\nabcbbdfbdbdfrfb\n",
+                "",
+            ),
+            (
+                "s/b/r/gpw ./tests/sed/assets/r",
+                "abcbbdfbdbdfbfb\n",
+                "arcrrdfrdrdfrfr\narcrrdfrdrdfrfr\n",
+                "",
+            ),
+            (
+                "s/b/r/w g6",
+                "abc\nbbb\nbcb\nrbt\n",
+                "arc\nrbb\nrcb\nrrt\n",
+                "",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_s_with_wrong_flags() {
-    //     let test_data = [
-    //         // wrong
-    //         (
-    //             "s/b/r/ p",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
-    //         ),
-    //         (
-    //             "s/b/r/ w",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
-    //         ),
-    //         (
-    //             "s/b/r/ p w ./README.md",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
-    //         ),
-    //         (
-    //             "s/b/r/-6",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
-    //         ),
-    //         (
-    //             "s/b/r/-6p",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
-    //         ),
-    //         (
-    //             "s/b/r/p-6",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
-    //         ),
-    //         (
-    //             "s/b/r/g-6",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
-    //         ),
-    //         (
-    //             "s/b/r/6g",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: n and g flags can't be used together (line: 0, col: 7)\n",
-    //         ),
-    //         (
-    //             "s/b/r/6pg",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: n and g flags can't be used together (line: 0, col: 8)\n",
-    //         ),
-    //         (
-    //             "s/b/r/wpg6",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: w flag must be last flag (line: 0, col: 9)\n",
-    //         ),
-    //         (
-    //             "s/b/r/w6",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: w flag must be last flag (line: 0, col: 7)\n",
-    //         ),
-    //         (
-    //             "s/b/r/w./REA;DME.md",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 14)\n",
-    //         ),
-    //         (
-    //             "s/b/r/w ./REA;DME.md",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
-    //         ),
-    //         (
-    //             "s/b/r/w ./REA;DME.md p",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
-    //         ),
-    //         (
-    //             "s/b/r/6gpw ./tests/sed/assets/r",
-    //             "abc\nbbb\nbcb\nrbt",
-    //             "",
-    //             "sed: n and g flags can't be used together (line: 0, col: 30)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_s_with_wrong_flags() {
+        let test_data = [
+            // wrong
+            (
+                "s/b/r/ p",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+            ),
+            (
+                "s/b/r/ w",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+            ),
+            (
+                "s/b/r/ p w ./README.md",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+            ),
+            (
+                "s/b/r/-6",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
+            ),
+            (
+                "s/b/r/-6p",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
+            ),
+            (
+                "s/b/r/p-6",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+            ),
+            (
+                "s/b/r/g-6",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+            ),
+            (
+                "s/b/r/6g",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: n and g flags can't be used together (line: 0, col: 7)\n",
+            ),
+            (
+                "s/b/r/6pg",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: n and g flags can't be used together (line: 0, col: 8)\n",
+            ),
+            (
+                "s/b/r/wpg6",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: w flag must be last flag (line: 0, col: 9)\n",
+            ),
+            (
+                "s/b/r/w6",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: w flag must be last flag (line: 0, col: 7)\n",
+            ),
+            (
+                "s/b/r/w./REA;DME.md",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 14)\n",
+            ),
+            (
+                "s/b/r/w ./REA;DME.md",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+            ),
+            (
+                "s/b/r/w ./REA;DME.md p",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+            ),
+            (
+                "s/b/r/6gpw ./tests/sed/assets/r",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: n and g flags can't be used together (line: 0, col: 30)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_t() {
-    //     let test_data = [
-    //         // correct
-    //         ("t", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-    //         ("t label", "", "", ""),
-    //         ("t; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-    //         ("t label; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-    //         ("t label1", "", "", ""),
-    //         ("t lab2el1abc", "", "", ""),
-    //         ("t loop_", "", "", ""),
-    //         ("t _start", "", "", ""),
-    //         ("t my_label", "", "", ""),
-    //         ("t #%$?@&*; :#%$?@&*", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-    //         ("t label#; :label#", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-    //         ("t 1label; :1label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-    //         ("t 1234; :1234", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-    //         ("t :label", "", "", ""),
-    //         ("t #%$?@&*;", "", "", ""),
-    //         ("t label#", "", "", ""),
-    //         ("t 1label", "", "", ""),
-    //         ("t 1234", "", "", ""),
-    //         ("t g", "", "", ""),
-    //         // wrong
-    //         (
-    //             "t; label",
-    //             "aa\naaa\n\n",
-    //             "",
-    //             "sed: unknown character 'l' (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "t label :label",
-    //             "aa\naaa\n\n",
-    //             "",
-    //             "sed: label can't contain ' ' (line: 0, col: 13)\n",
-    //         ),
-    //         (
-    //             "t ab\ncd; :ab\ncd",
-    //             "aa\naaa\n\n",
-    //             "",
-    //             "sed: text must be separated with '\\' (line: 0, col: 6)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_t() {
+        let test_data = [
+            // correct
+            ("t", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t label", "", "", ""),
+            ("t; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t label; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t label1", "", "", ""),
+            ("t lab2el1abc", "", "", ""),
+            ("t loop_", "", "", ""),
+            ("t _start", "", "", ""),
+            ("t my_label", "", "", ""),
+            ("t #%$?@&*; :#%$?@&*", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t label#; :label#", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t 1label; :1label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t 1234; :1234", "aa\naaa\n\n", "aa\naaa\n\n", ""),
+            ("t :label", "", "", ""),
+            ("t #%$?@&*;", "", "", ""),
+            ("t label#", "", "", ""),
+            ("t 1label", "", "", ""),
+            ("t 1234", "", "", ""),
+            ("t g", "", "", ""),
+            // wrong
+            (
+                "t; label",
+                "aa\naaa\n\n",
+                "",
+                "sed: unknown character 'l' (line: 0, col: 3)\n",
+            ),
+            (
+                "t label :label",
+                "aa\naaa\n\n",
+                "",
+                "sed: label can't contain ' ' (line: 0, col: 13)\n",
+            ),
+            (
+                "t ab\ncd; :ab\ncd",
+                "aa\naaa\n\n",
+                "",
+                "sed: text must be separated with '\\' (line: 0, col: 6)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_w() {
-    //     let test_data = [
-    //         // correct
-    //         ("w ./tests/sed/assets/newfile", "abc\ncdf\n", "abc\ncdf\n", ""),
-    //         ("w atyfv", "abc\ncdf\n", "abc\ncdf\n", ""),
-    //         ("w ; h", "abc\ncdf\n", "abc\ncdf\n", ""),
-    //         ("w./tests/sed/assets/r", "", "", ""),
-    //         ("w./tests/sed/assets/newfile", "a\n", "a\n", ""),
-    //         // wrong
-    //         (
-    //             "w./tests/s\x04ed/assets/abc",
-    //             "",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 11)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_w() {
+        let test_data = [
+            // correct
+            ("w ./tests/sed/assets/newfile", "abc\ncdf\n", "abc\ncdf\n", ""),
+            ("w atyfv", "abc\ncdf\n", "abc\ncdf\n", ""),
+            ("w ; h", "abc\ncdf\n", "abc\ncdf\n", ""),
+            ("w./tests/sed/assets/r", "", "", ""),
+            ("w./tests/sed/assets/newfile", "a\n", "a\n", ""),
+            // wrong
+            (
+                "w./tests/s\x04ed/assets/abc",
+                "",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 11)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_x() {
-    //     let test_data = [
-    //         // correct
-    //         (
-    //             "h; s/.* /abc/; p; x",
-    //             "def \nref \nmut \n \n",
-    //             "abc\ndef \nabc\nref \nabc\nmut \nabc\n \n",
-    //             "",
-    //         ),
-    //         ("1 h; 2 x; 3 x", "abc\ncdf\nret", "abc\nabc\ncdf\n", ""),
-    //         // wrong
-    //         (
-    //             "x h",
-    //             "abc\ncdf\nret",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "x x",
-    //             "abc\ncdf\nret",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "xx",
-    //             "abc\ncdf\nret",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_x() {
+        let test_data = [
+            // correct
+            (
+                "h; s/.* /abc/; p; x",
+                "def \nref \nmut \n \n",
+                "abc\ndef \nabc\nref \nabc\nmut \nabc\n \n",
+                "",
+            ),
+            ("1 h; 2 x; 3 x", "abc\ncdf\nret", "abc\nabc\ncdf\n", ""),
+            // wrong
+            (
+                "x h",
+                "abc\ncdf\nret",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "x x",
+                "abc\ncdf\nret",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "xx",
+                "abc\ncdf\nret",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_y() {
-    //     let test_data = [
-    //         // correct
-    //         (
-    //             "y/abc/cdf/",
-    //             "abc\naaa\nbbb\ncrt\n",
-    //             "cdf\nccc\nddd\nfrt\n",
-    //             "",
-    //         ),
-    //         (
-    //             "y/abc/aaa/",
-    //             "abc\naaa\nbbb\ncrt\n",
-    //             "aaa\naaa\naaa\nart\n",
-    //             "",
-    //         ),
-    //         ("y///", "abc\naaa\n\n", "abc\naaa\n\n", ""),
-    //         // wrong
-    //         (
-    //             "y/abc/aaaa/",
-    //             "abc\naaa\n\n",
-    //             "",
-    //             "sed: number of characters in the two arrays does not match (line: 0, col: 11)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_y() {
+        let test_data = [
+            // correct
+            (
+                "y/abc/cdf/",
+                "abc\naaa\nbbb\ncrt\n",
+                "cdf\nccc\nddd\nfrt\n",
+                "",
+            ),
+            (
+                "y/abc/aaa/",
+                "abc\naaa\nbbb\ncrt\n",
+                "aaa\naaa\naaa\nart\n",
+                "",
+            ),
+            ("y///", "abc\naaa\n\n", "abc\naaa\n\n", ""),
+            // wrong
+            (
+                "y/abc/aaaa/",
+                "abc\naaa\n\n",
+                "",
+                "sed: number of characters in the two arrays does not match (line: 0, col: 11)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_line_numeration() {
-    //     let test_data = [
-    //         // correct
-    //         (
-    //             "=",
-    //             "abc\ncdf\nefg\nret\n",
-    //             "1\nabc\n2\ncdf\n3\nefg\n4\nret\n",
-    //             "",
-    //         ),
-    //         ("=", "\n\n\n", "1\n\n2\n\n3\n\n", ""),
-    //         // wrong
-    //         (
-    //             "= g",
-    //             "abc\ncdf\nefg\nret\n",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "= =",
-    //             "abc\ncdf\nefg\nret\n",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "==",
-    //             "abc\ncdf\nefg\nret\n",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_line_numeration() {
+        let test_data = [
+            // correct
+            (
+                "=",
+                "abc\ncdf\nefg\nret\n",
+                "1\nabc\n2\ncdf\n3\nefg\n4\nret\n",
+                "",
+            ),
+            ("=", "\n\n\n", "1\n\n2\n\n3\n\n", ""),
+            // wrong
+            (
+                "= g",
+                "abc\ncdf\nefg\nret\n",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "= =",
+                "abc\ncdf\nefg\nret\n",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "==",
+                "abc\ncdf\nefg\nret\n",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_comment() {
-    //     let test_data = [
-    //         // correct
-    //         ("#n", "abc\ncdf\naaa", "", ""),
-    //         // wrong
-    //         (
-    //             "a\\#text\ntext",
-    //             "abc\ncdf\naaa\n",
-    //             "",
-    //             "sed: missing text argument (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "{ #\\ }\n{ #\n }\n#h", 
-    //             "abc\ncdf\n", 
-    //             "", 
-    //             "sed: '{' not have pair for closing block (line: 0, col: 0)\n"
-    //         ),
-    //         (
-    //             r#"{ # }\n{ # }\n{ \n# }"#,
-    //             "abc\ncdf\naaa",
-    //             "",
-    //             "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             "a\\text#abc\ntext",
-    //             "abc\ncdf\n",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_comment() {
+        let test_data = [
+            // correct
+            ("#n", "abc\ncdf\naaa", "", ""),
+            // wrong
+            (
+                "a\\#text\ntext",
+                "abc\ncdf\naaa\n",
+                "",
+                "sed: missing text argument (line: 0, col: 3)\n",
+            ),
+            (
+                "{ #\\ }\n{ #\n }\n#h", 
+                "abc\ncdf\n", 
+                "", 
+                "sed: '{' not have pair for closing block (line: 0, col: 0)\n"
+            ),
+            (
+                r#"{ # }\n{ # }\n{ \n# }"#,
+                "abc\ncdf\naaa",
+                "",
+                "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
+            ),
+            (
+                "a\\text#abc\ntext",
+                "abc\ncdf\n",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
     #[test]
     fn test_combinations_1() {
