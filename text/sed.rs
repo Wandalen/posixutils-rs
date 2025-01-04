@@ -106,6 +106,7 @@ impl Args {
         }
 
         let script = Script::parse(raw_script)?;
+        //print!("<{:?}>", &script.0);
 
         Ok(Sed {
             ere: self.ere,
@@ -465,12 +466,7 @@ impl Command {
                         !(match_pattern(*re, pattern.clone(), line, line_number + 1)?.is_empty())
                     }
                     AddressToken::Last => match i {
-                        0 => if range.limits.len() > 1{ 
-                            true
-                        } else { 
-                            last_line
-                        },
-                        1 => last_line,
+                        0 | 1 => last_line,
                         _ => unreachable!(),
                     },
                     _ => unreachable!(),
@@ -793,8 +789,9 @@ fn to_address_tokens(chars: &[char], i: &mut usize) -> Result<Vec<AddressToken>,
             _ => break,
         }
         *i += 1;
+        //print!("<{}>", String::from_iter(chars.get(*i..).unwrap()));
     }
-    *i = (*i).saturating_sub(1);
+    //print!("<{:?}>", (tokens.clone(), String::from_iter(chars.get(*i..).unwrap())));
 
     Ok(tokens)
 }
@@ -884,7 +881,6 @@ fn parse_address(
             },
             ' ' => (),
             _ => {
-                *i -= 1;
                 break
             } 
         }
@@ -1406,7 +1402,8 @@ impl Script {
                     )));
                 }
                 ch if ch.is_ascii_digit() || "\\$".contains(ch) => {
-                    parse_address(&chars, &mut i, &mut address)?
+                    parse_address(&chars, &mut i, &mut address)?;
+                    continue;
                 },
                 '{' => commands.push(Command::Block(
                     address.clone(),
@@ -1886,6 +1883,9 @@ impl Sed {
                 }
                 self.pattern_space = self.pattern_space.clone() + 
                 &self.current_end.clone().unwrap_or_default() + &self.hold_space;
+                if self.hold_space.is_empty(){
+                    self.pattern_space += "\n"; 
+                }
                 if let Some(_) = self.pattern_space.strip_suffix('\n'){
                     self.pattern_space.pop();
                     self.current_end = Some("\n".to_string());
@@ -2031,8 +2031,12 @@ impl Sed {
                 }else{
                     let tmp = self.hold_space.clone();
                     self.hold_space = self.pattern_space.clone() + self.current_end.clone().unwrap_or_default().as_str();
-                    self.pattern_space = tmp;
-                    self.current_end = None;
+                    self.pattern_space = tmp.clone();
+                    self.current_end = if !tmp.is_empty(){
+                        None
+                    }else{
+                        Some("\n".to_string())
+                    };
                 }
             }
             Command::ReplaceCharSet(_, string1, string2) => {

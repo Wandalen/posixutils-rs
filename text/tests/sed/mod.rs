@@ -568,129 +568,129 @@ mod tests {
     //     }
     // }
 
-    // #[test]
-    // fn test_address_correct() {
-    //     let test_data = [
-    //         // correct
-    //         ("1,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),                    
-    //         //("1,10p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),
-    //         ("1,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),
-    //         ("10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nt\nw\nq\nh\nw\n", ""),
-    //         //("1,$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),                 
-    //         ("1,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),            
-    //         ("$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
-    //         ("$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
-    //         //("$,$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", ""),
-    //         //("$,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", ""),                  
-    //         ("1, 10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),                
-    //         ("1 ,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", "")        
-    //     ];
+    #[test]
+    fn test_address_correct() {
+        let test_data = [
+            // correct
+            ("1,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),                    
+            ("1,10p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),
+            ("1,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),
+            ("10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nt\nw\nq\nh\nw\n", ""),
+            ("1,$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),                 
+            ("1,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),            
+            ("$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
+            ("$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
+            ("$,$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", ""),
+            ("$,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", ""),                  
+            ("1, 10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),                
+            ("1 ,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", "")        
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_address_wrong() {
-    //     let test_data = [
-    //         // wrong
-    //         (
-    //             "1, p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             ",10 p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: unknown character ',' (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             ", p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: unknown character ',' (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             ",,p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: unknown character ',' (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             "1,2,3,4,5 p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: address isn't empty, position or range (line: 0, col: 9)\n",
-    //         ),
-    //         (
-    //             "0,-10 p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: address bound can be only one pattern, number or '$' (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             "1,10; p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: address hasn't command (line: 0, col: 4)\n",
-    //         ),
-    //         (
-    //             "0 10 p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: address bound can be only one pattern, number or '$' (line: 0, col: 5)\n",
-    //         ),
-    //         (
-    //             "1,+3p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: address bound can be only one pattern, number or '$' (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "/5/,+3p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: unknown character '/' (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             "7;+ p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: address hasn't command (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "+++ p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: unknown character '+' (line: 0, col: 0)\n",
-    //         ),
-    //         (
-    //             "p; -2 p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: unknown character '-' (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "3 ---- 2p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: unknown character '-' (line: 0, col: 3)\n",
-    //         ),
-    //         (
-    //             "1 2 3 p",
-    //             "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
-    //             "",
-    //             "sed: address bound can be only one pattern, number or '$' (line: 0, col: 6)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_address_wrong() {
+        let test_data = [
+            // wrong
+            (
+                "1, p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 3)\n",
+            ),
+            (
+                ",10 p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: unknown character ',' (line: 0, col: 0)\n",
+            ),
+            (
+                ", p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: unknown character ',' (line: 0, col: 0)\n",
+            ),
+            (
+                ",,p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: unknown character ',' (line: 0, col: 0)\n",
+            ),
+            (
+                "1,2,3,4,5 p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: address isn't empty, position or range (line: 0, col: 10)\n",
+            ),
+            (
+                "0,-10 p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n",
+            ),
+            (
+                "1,10; p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: address hasn't command (line: 0, col: 4)\n",
+            ),
+            (
+                "0 10 p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 5)\n",
+            ),
+            (
+                "1,+3p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n",
+            ),
+            (
+                "/5/,+3p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: unknown character '/' (line: 0, col: 0)\n",
+            ),
+            (
+                "7;+ p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: address hasn't command (line: 0, col: 1)\n",
+            ),
+            (
+                "+++ p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: unknown character '+' (line: 0, col: 0)\n",
+            ),
+            (
+                "p; -2 p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: unknown character '-' (line: 0, col: 3)\n",
+            ),
+            (
+                "3 ---- 2p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: unknown character '-' (line: 0, col: 2)\n",
+            ),
+            (
+                "1 2 3 p",
+                "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
+                "",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 6)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
     // #[test]
     // fn test_address_with_bre() {
@@ -1146,73 +1146,73 @@ mod tests {
     //     }
     // }
 
-    // #[test]
-    // fn test_upper_g() {
-    //     let test_data = [
-    //         // correct
-    //         ("1 H; 2 G", "abc\ncdf", "abc\ncdf\n\nabc\n", ""),
-    //         // wrong
-    //         (
-    //             "0 G",
-    //             "abc\ncdf",
-    //             "",
-    //             "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "G G",
-    //             "abc\ncdf",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_upper_g() {
+        let test_data = [
+            // correct
+            ("1 H; 2 G", "abc\ncdf\n", "abc\ncdf\n\nabc\n", ""),
+            // wrong
+            (
+                "0 G",
+                "abc\ncdf",
+                "",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+            ),
+            (
+                "G G",
+                "abc\ncdf",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
-    // #[test]
-    // fn test_h() {
-    //     let test_data = [
-    //         // correct
-    //         (
-    //             "1 h; 2 g; 3 h; 4 g",
-    //             "abc\ncdf\naaa\nbbb",
-    //             "abc\nabc\naaa\naaa\n",
-    //             "",
-    //         ),
-    //         ("1 h; 2 h; 3 g", "abc\ncdf\naaa", "abc\ncdf\ncdf\n", ""),
-    //         // wrong
-    //         (
-    //             "0 h; 1 h",
-    //             "abc\ncdf\naaa\nbbb",
-    //             "",
-    //             "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n",
-    //         ),
-    //         (
-    //             "h g",
-    //             "abc\ncdf\naaa",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "h h",
-    //             "abc\ncdf\naaa",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "hh",
-    //             "abc\ncdf\naaa\nbbb",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_h() {
+        let test_data = [
+            // correct
+            (
+                "1 h; 2 g; 3 h; 4 g",
+                "abc\ncdf\naaa\nbbb",
+                "abc\nabc\naaa\naaa\n",
+                "",
+            ),
+            ("1 h; 2 h; 3 g", "abc\ncdf\naaa", "abc\ncdf\ncdf\n", ""),
+            // wrong
+            (
+                "0 h; 1 h",
+                "abc\ncdf\naaa\nbbb",
+                "",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+            ),
+            (
+                "h g",
+                "abc\ncdf\naaa",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "h h",
+                "abc\ncdf\naaa",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "hh",
+                "abc\ncdf\naaa\nbbb",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
     #[test]
     fn test_upper_h() {
@@ -1235,7 +1235,7 @@ mod tests {
                 "0 H; 1 H",
                 "abc\ncdf\naaa",
                 "",
-                "sed: address lower bound must be bigger than 0 (line: 0, col: 1)\n",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
             ),
             (
                 "H g",
@@ -1392,46 +1392,46 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_upper_n() {
-    //     let test_data = [
-    //         // correct
-    //         ("N", "abc", "", ""),
-    //         ("N; p", "abc\ncdf\n", "abc\ncdf\nabc\ncdf\n", ""),
-    //         ("g; N; g; N; N", "abc\ncdf\nret", "", ""),
-    //         // wrong
-    //         (
-    //             "N g",
-    //             "",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "N N",
-    //             "",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
-    //         ),
-    //         (
-    //             "NN",
-    //             "",
-    //             "",
-    //             "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
-    //         ),
-    //     ];
+    #[test]
+    fn test_upper_n() {
+        let test_data = [
+            // correct
+            ("N", "abc", "", ""),
+            ("N; p", "abc\ncdf\n", "abc\ncdf\nabc\ncdf\n", ""),
+            ("g; N; g; N; N", "abc\ncdf\nret", "", ""),
+            // wrong
+            (
+                "N g",
+                "",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "N N",
+                "",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+            ),
+            (
+                "NN",
+                "",
+                "",
+                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+            ),
+        ];
 
-    //     for (script, input, output, err) in test_data {
-    //         sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
-    //     }
-    // }
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
+        }
+    }
 
     #[test]
     fn test_p() {
         let test_data = [
             // correct
-            // ("p", "abc\ncdf\nret\n", "abc\nabc\ncdf\ncdf\nret\nret\n", ""),
-            // ("g; p", "abc\ncdf\nret\n", "\n\n\n\n\n\n", ""),
-            // ("N; p", "abc\ncdf\n", "abc\ncdf\nabc\ncdf\n", ""),
+            ("p", "abc\ncdf\nret\n", "abc\nabc\ncdf\ncdf\nret\nret\n", ""),
+            ("g; p", "abc\ncdf\nret\n", "\n\n\n\n\n\n", ""),
+            ("N; p", "abc\ncdf\n", "abc\ncdf\nabc\ncdf\n", ""),
             (
                 "1 h; 2 G; p",
                 "abc\n123\n",
@@ -1468,7 +1468,7 @@ mod tests {
     fn test_upper_p() {
         let test_data = [
             // correct
-            //("P", "abc\n123\n", "abc\nabc\n123\n123\n", ""),
+            ("P", "abc\n123\n", "abc\nabc\n123\n123\n", ""),
             ("1 h; 2 G; P", "abc\n123\n", "abc\nabc\n123\n123\nabc\n", ""),
             // wrong
             (
@@ -2004,208 +2004,208 @@ mod tests {
     //     }
     // }
 
-    // #[test]
-    // fn test_combinations_1() {
-    //     let test_data = [
-    //         // correct
-    //         (":x ; \\/=$/ { N ; s/=$=//g ; bx }", "abc=$=\ncdf=$=\nret=$=\nget=$=\n", "abc\ncdf\nret\nget\n", ""),
-    //         ("1,3 { p ; p } ; 1,2 { p ; p } ; {p ; p}", "abc\ncdf\nret\nget\n",
-    //         "abc\nabc\nabc\nabc\nabc\nabc\nabc\ncdf\ncdf\ncdf\ncdf\ncdf\ncdf\ncdf\nret\nret\nret\nret\nret\nget\nget\nget\n", ""),
-    //         ("\\/1/b else ; s/a/z/ ; :else ; y/123/456/", "", "", ""),
-    //         ("\\/1/s/a/z/ ; y/123/456/", "1aaa\n123aa\n", "4zaa\n456za\n", ""),
-    //         ("\\/start/,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
-    //         ("\\/start/,$p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
-    //         ("1,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nb\nc\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
-    //         ("2,4 !p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty", ""),
-    //         ("2,4 !{p}", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty", ""),
-    //         //wrong
-    //         ("\\/pattern/- p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '-' (line: 0, col: 10)\n")
-    //     ];
+    #[test]
+    fn test_combinations_1() {
+        let test_data = [
+            // correct
+            (":x ; \\/=$/ { N ; s/=$=//g ; bx }", "abc=$=\ncdf=$=\nret=$=\nget=$=\n", "abc\ncdf\nret\nget\n", ""),
+            ("1,3 { p ; p } ; 1,2 { p ; p } ; {p ; p}", "abc\ncdf\nret\nget\n",
+            "abc\nabc\nabc\nabc\nabc\nabc\nabc\ncdf\ncdf\ncdf\ncdf\ncdf\ncdf\ncdf\nret\nret\nret\nret\nret\nget\nget\nget\n", ""),
+            ("\\/1/b else ; s/a/z/ ; :else ; y/123/456/", "", "", ""),
+            ("\\/1/s/a/z/ ; y/123/456/", "1aaa\n123aa\n", "4zaa\n456za\n", ""),
+            ("\\/start/,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
+            ("\\/start/,$p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
+            ("1,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nb\nc\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
+            ("2,4 !p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty", ""),
+            ("2,4 !{p}", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty", ""),
+            //wrong
+            ("\\/pattern/- p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '-' (line: 0, col: 10)\n")
+        ];
 
-    //     for (script, input, output, err) in test_data{
-    //         sed_test(
-    //             &["-e", script],
-    //             input,
-    //             output,
-    //             err,
-    //             !err.is_empty() as i32,
-    //         );
-    //     }
-    // }
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
+    }
 
-    // #[test]
-    // fn test_combinations_2() {
-    //     let test_data = [
-    //         // correct
-    //         (r#"s/^[^[:space:]]*[[:space:]]*//"#, "apple pie is sweet\n123abc test123\nhello world\n",
-    //         "pie is sweet\ntest123\nworld\n", ""),
-    //         (r#"s/^[[:alnum:]]*[[:space:]]*//"#, "apple pie is sweet\n123abc test123\nhello world\n",
-    //         "pie is sweet\ntest123\nworld\n", ""),
-    //         (r#"s/\([[:alnum:]]*\)/\1/1"#, "apple pie is sweet\n123abc test123\nhello world\n",
-    //         "apple pie is sweet\n123abc test123\nhello world\n", ""),
-    //         ("\\:start:,\\,stop, p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n",
-    //         "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
-    //         ("\\`'$PATTERN'`p", "'$PATTERN'\nabc\n\n'$PATTERN'\nret'$PATTERN'abc\n",
-    //         "'$PATTERN'\n'$PATTERN'\nabc\n\n'$PATTERN'\n'$PATTERN'\nret'$PATTERN'abc\nret'$PATTERN'abc\n", ""),
-    //         ("s/param=.*/param=new_value\n/", "param=abc\nparam=\nparam abc\n",
-    //         "param=new_value\n\nparam=new_value\n\nparam abc\n", ""),
-    //     ];
+    #[test]
+    fn test_combinations_2() {
+        let test_data = [
+            // correct
+            (r#"s/^[^[:space:]]*[[:space:]]*//"#, "apple pie is sweet\n123abc test123\nhello world\n",
+            "pie is sweet\ntest123\nworld\n", ""),
+            (r#"s/^[[:alnum:]]*[[:space:]]*//"#, "apple pie is sweet\n123abc test123\nhello world\n",
+            "pie is sweet\ntest123\nworld\n", ""),
+            (r#"s/\([[:alnum:]]*\)/\1/1"#, "apple pie is sweet\n123abc test123\nhello world\n",
+            "apple pie is sweet\n123abc test123\nhello world\n", ""),
+            ("\\:start:,\\,stop, p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n",
+            "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
+            ("\\`'$PATTERN'`p", "'$PATTERN'\nabc\n\n'$PATTERN'\nret'$PATTERN'abc\n",
+            "'$PATTERN'\n'$PATTERN'\nabc\n\n'$PATTERN'\n'$PATTERN'\nret'$PATTERN'abc\nret'$PATTERN'abc\n", ""),
+            ("s/param=.*/param=new_value\n/", "param=abc\nparam=\nparam abc\n",
+            "param=new_value\n\nparam=new_value\n\nparam abc\n", ""),
+        ];
 
-    //     for (script, input, output, err) in test_data{
-    //         sed_test(
-    //             &["-e", script],
-    //             input,
-    //             output,
-    //             err,
-    //             !err.is_empty() as i32,
-    //         );
-    //     }
-    // }
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
+    }
 
-    // #[test]
-    // fn test_combinations_3() {
-    //     let test_data = [
-    //         // correct
-    //         ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "ABC\n\n1234\nabcdefg",
-    //         "abc\n\n1234\nabcdefg", ""),
-    //         ("\\/^$/d;G", "Line 1\n\nLine 2\nLine 3\n\n\nLine 4\n", "Line 1\n\nLine 2\n\nLine 3\n\nLine 4\n\n", ""),
-    //         (r#"\/^$/{p;h;};\/./{x;\/./p;}"#, "line1\n\nline2\nline3", "\n\n\n\nline2\nline2\n", ""),
-    //         ("\\/./{H;$d;};x;\\/[AAA|BBB|CCC]/b;d", "line1\nAAA\nline2\nBBB\nline3\n",
-    //          "line1\nAAA\nAAA\nline2\nline2\nBBB\n", ""),
-    //         ("\\/Iowa/,\\/Montana/p", "Hello\nIowa is here\nMontana is next\nEnd\n",
-    //          "Hello\nIowa is here\nIowa is here\nMontana is next\nMontana is next\nEnd\n", ""),
-    //         (r#"\/\/\//N;\/\/\//d"#, "line1\nline2\n//\nline3", "line1\nline2\n", ""),
-    //         ("$=", "line1\nline2\nline3\n", "line1\nline2\n3\nline3\n", ""),
-    //         ("s/.\n$/\n/", "line1\nline2\n", "line1\nline2\n", ""),
-    //     ];
+    #[test]
+    fn test_combinations_3() {
+        let test_data = [
+            // correct
+            ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "ABC\n\n1234\nabcdefg",
+            "abc\n\n1234\nabcdefg", ""),
+            ("\\/^$/d;G", "Line 1\n\nLine 2\nLine 3\n\n\nLine 4\n", "Line 1\n\nLine 2\n\nLine 3\n\nLine 4\n\n", ""),
+            (r#"\/^$/{p;h;};\/./{x;\/./p;}"#, "line1\n\nline2\nline3", "\n\n\n\nline2\nline2\n", ""),
+            ("\\/./{H;$d;};x;\\/[AAA|BBB|CCC]/b;d", "line1\nAAA\nline2\nBBB\nline3\n",
+             "line1\nAAA\nAAA\nline2\nline2\nBBB\n", ""),
+            ("\\/Iowa/,\\/Montana/p", "Hello\nIowa is here\nMontana is next\nEnd\n",
+             "Hello\nIowa is here\nIowa is here\nMontana is next\nMontana is next\nEnd\n", ""),
+            (r#"\/\/\//N;\/\/\//d"#, "line1\nline2\n//\nline3", "line1\nline2\n", ""),
+            ("$=", "line1\nline2\nline3\n", "line1\nline2\n3\nline3\n", ""),
+            ("s/.\n$/\n/", "line1\nline2\n", "line1\nline2\n", ""),
+        ];
 
-    //     for (script, input, output, err) in test_data{
-    //         sed_test(
-    //             &["-e", script],
-    //             input,
-    //             output,
-    //             err,
-    //             !err.is_empty() as i32,
-    //         );
-    //     }
-    // }
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
+    }
 
-    // #[test]
-    // fn test_combinations_4() {
-    //     let test_data = [
-    //         // correct
-    //         ("1{$q;};${h;d;}; x", "line1\nline2\nline3", "\nline1\n", ""),
-    //         ("$h; $d; x", "line1\nline2\nline3", "\nline1\n", ""),
-    //         (r#"s/\(.*\)foo\(.*foo\)/\1bar\2/"#, "thisfooisfoo", "thisbarisfoo", ""),
-    //         ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "The scarlet sky turned ruby as the puce evening settled.",
-    //         "The red sky turned red as the red evening settled.", ""),
-    //         (r#":a;s/\(^|[^0-9.]\)\([0-9]+\)\([0-9]{3}\)/\1\2,\3/g;ta"#, "1234567890\nhello123456789\n1000", "1234567890\nhello123456789\n1000", ""),            
-    //         ("n;n;n;n;G;", "line1\nline2\nline3\nline4\n", "line1\nline2\nline3\nline4\n", ""),
-    //         ("s/^[ \t]* //;s/[ \t]*$//", "    hello world    ", "hello world", ""),
-    //         ("s/^M.$/\n/", "hello\nM\nabc\n", "hello\nM\nabc\n", ""),
-    //         ("s/\x0D.$/\n/", "hello\x0D\n", "hello\n", ""),
-    //         (r#"s/\(^[*][[:space:]]\)/   \1/"#, "* Item 1\n* Another item\nNormal text",
-    //         "   * Item 1\n   * Another item\nNormal text", ""),
-    //     ];
+    #[test]
+    fn test_combinations_4() {
+        let test_data = [
+            // correct
+            ("1{$q;};${h;d;}; x", "line1\nline2\nline3", "\nline1\n", ""),
+            ("$h; $d; x", "line1\nline2\nline3", "\nline1\n", ""),
+            (r#"s/\(.*\)foo\(.*foo\)/\1bar\2/"#, "thisfooisfoo", "thisbarisfoo", ""),
+            ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "The scarlet sky turned ruby as the puce evening settled.",
+            "The red sky turned red as the red evening settled.", ""),
+            (r#":a;s/\(^|[^0-9.]\)\([0-9]+\)\([0-9]{3}\)/\1\2,\3/g;ta"#, "1234567890\nhello123456789\n1000", "1234567890\nhello123456789\n1000", ""),            
+            ("n;n;n;n;G;", "line1\nline2\nline3\nline4\n", "line1\nline2\nline3\nline4\n", ""),
+            ("s/^[ \t]* //;s/[ \t]*$//", "    hello world    ", "hello world", ""),
+            ("s/^M.$/\n/", "hello\nM\nabc\n", "hello\nM\nabc\n", ""),
+            ("s/\x0D.$/\n/", "hello\x0D\n", "hello\n", ""),
+            (r#"s/\(^[*][[:space:]]\)/   \1/"#, "* Item 1\n* Another item\nNormal text",
+            "   * Item 1\n   * Another item\nNormal text", ""),
+        ];
 
-    //     for (script, input, output, err) in test_data{
-    //         sed_test(
-    //             &["-e", script],
-    //             input,
-    //             output,
-    //             err,
-    //             !err.is_empty() as i32,
-    //         );
-    //     }
-    // }
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
+    }
 
-    // #[test]
-    // fn test_combinations_5() {
-    //     let test_data = [
-    //         // correct
-    //         ("\\/string [[:digit:]]* /p", "string 123 \nstring abc \nstring 456 \n", 
-    //         "string 123 \nstring 123 \nstring abc \nstring 456 \nstring 456 \n", ""),
-    //         ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3\n", "\n\nline1\nline1\nline2\nline2\n\n\nline3\n", ""),
-    //         ("\\/,.*/ p", "hello, world\nhello world\n\n", "hello, world\nhello, world\nhello world\n\n", ""),
-    //         ("\\:ac: p", ":ac:\n:bc:\n:ac:\n", ":ac:\n:ac:\n:bc:\n:ac:\n:ac:\n", ""),
-    //         ("1,\\,stop, p", "first line\nsecond stop\nthird line\n", "first line\nfirst line\nsecond stop\nsecond stop\nthird line\n", ""),
-    //         ("s/WORD/Hello World/p ; p", "WORD is here\nthis is not word\n",
-    //         "Hello World is here\nHello World is here\nHello World is here\nthis is not word\nthis is not word\n", ""),
-    //         ("s/SUBST/program\\/lib\\/module\\/lib.so/", "this is a test SUBST\nwe use SUBST here as well",
-    //         "this is a test program/lib/module/lib.so\nwe use program/lib/module/lib.so here as well", ""),
-    //         ("s/.*/[&]/", "This is a test\nAnother test line\n", "[This is a test]\n[Another test line]\n", ""),
-    //         (r#"s/#.*//;s/[[:blank:]]*$//;\/^$/ d;p"#,
-    //         "# This is a comment\nLine with trailing spaces     \nAnother line",
-    //         "Line with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line", "")
-    //     ];
+    #[test]
+    fn test_combinations_5() {
+        let test_data = [
+            // correct
+            ("\\/string [[:digit:]]* /p", "string 123 \nstring abc \nstring 456 \n", 
+            "string 123 \nstring 123 \nstring abc \nstring 456 \nstring 456 \n", ""),
+            ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3\n", "\n\nline1\nline1\nline2\nline2\n\n\nline3\n", ""),
+            ("\\/,.*/ p", "hello, world\nhello world\n\n", "hello, world\nhello, world\nhello world\n\n", ""),
+            ("\\:ac: p", ":ac:\n:bc:\n:ac:\n", ":ac:\n:ac:\n:bc:\n:ac:\n:ac:\n", ""),
+            ("1,\\,stop, p", "first line\nsecond stop\nthird line\n", "first line\nfirst line\nsecond stop\nsecond stop\nthird line\n", ""),
+            ("s/WORD/Hello World/p ; p", "WORD is here\nthis is not word\n",
+            "Hello World is here\nHello World is here\nHello World is here\nthis is not word\nthis is not word\n", ""),
+            ("s/SUBST/program\\/lib\\/module\\/lib.so/", "this is a test SUBST\nwe use SUBST here as well",
+            "this is a test program/lib/module/lib.so\nwe use program/lib/module/lib.so here as well", ""),
+            ("s/.*/[&]/", "This is a test\nAnother test line\n", "[This is a test]\n[Another test line]\n", ""),
+            (r#"s/#.*//;s/[[:blank:]]*$//;\/^$/ d;p"#,
+            "# This is a comment\nLine with trailing spaces     \nAnother line",
+            "Line with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line", "")
+        ];
 
-    //     for (script, input, output, err) in test_data{
-    //         sed_test(
-    //             &["-e", script],
-    //             input,
-    //             output,
-    //             err,
-    //             !err.is_empty() as i32,
-    //         );
-    //     }
-    // }
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
+    }
 
-    // #[test]
-    // fn test_combinations_6() {
-    //     let test_data = [
-    //         // correct
-    //         ("\\/./{H;d;};x;s/\n/={NL}=/g", "line1\nline2", "", ""),
-    //         (r#"N; s/^/     /; s/\(\n.*\)/\1     /"#, "line1\nline2", "     line1\nline2     ", ""),
-    //         (r#"s/h\.0\.\(.*\)/ \U\1/"#, "h.0.someText\nh.0=data\nh.0.anotherExample",
-    //         "h.0. \\UsomeText\nh.0=data\nh.0. \\UanotherExample", ""),            
-    //         (r#"s/ *(.*)//; s/>.*//; s/.*[:<] *//"#, "Subject: Hello <hello@example.com>\nFrom: someone <someone@example.com>\n",
-    //         "hello@example.com\nsomeone@example.com\n", ""),
-    //         ("\\/./N; s/\n//", "line1\nline2\n", "line1line2\n", ""),
-    //         ("s/$/`echo -e \\\r`/", "Hello World", "Hello World`echo -e \\\r`", ""),
-    //         ("s/\n/\t/; N", "Line 1\nLine 2\nLine 3\nLine 4", "Line 1\nLine 2\nLine 3\nLine 4", ""), 
-    //         (r#"s/\(^[*][[:space:]]\)/   \1/;\/List of products:/a\ ---------------"#, 
-    //         "List of products:\n---------------* product\n* product1", 
-    //         "List of products:\n ---------------\n---------------   * product\n   * product1", ""),
-    //     ];
+    #[test]
+    fn test_combinations_6() {
+        let test_data = [
+            // correct
+            ("\\/./{H;d;};x;s/\n/={NL}=/g", "line1\nline2", "", ""),
+            (r#"N; s/^/     /; s/\(\n.*\)/\1     /"#, "line1\nline2", "     line1\nline2     ", ""),
+            (r#"s/h\.0\.\(.*\)/ \U\1/"#, "h.0.someText\nh.0=data\nh.0.anotherExample",
+            "h.0. \\UsomeText\nh.0=data\nh.0. \\UanotherExample", ""),            
+            (r#"s/ *(.*)//; s/>.*//; s/.*[:<] *//"#, "Subject: Hello <hello@example.com>\nFrom: someone <someone@example.com>\n",
+            "hello@example.com\nsomeone@example.com\n", ""),
+            ("\\/./N; s/\n//", "line1\nline2\n", "line1line2\n", ""),
+            ("s/$/`echo -e \\\r`/", "Hello World", "Hello World`echo -e \\\r`", ""),
+            ("s/\n/\t/; N", "Line 1\nLine 2\nLine 3\nLine 4", "Line 1\nLine 2\nLine 3\nLine 4", ""), 
+            (r#"s/\(^[*][[:space:]]\)/   \1/;\/List of products:/a\ ---------------"#, 
+            "List of products:\n---------------* product\n* product1", 
+            "List of products:\n ---------------\n---------------   * product\n   * product1", ""),
+        ];
 
-    //     for (script, input, output, err) in test_data{
-    //         sed_test(
-    //             &["-e", script],
-    //             input,
-    //             output,
-    //             err,
-    //             !err.is_empty() as i32,
-    //         );
-    //     }
-    // }
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
+    }
 
-    // #[test]
-    // fn test_combinations_7() {
-    //     let test_data = [
-    //         // correct         
-    //         (r#"\/^Reply-To:/q; \/^From:/h; \/./d;g;q"#, "From: someone\nReply-To: someoneelse\n", "Reply-To: someoneelse\n", ""),
-    //         ("\\/./{H;$d}; x; 1 s/^/START-->/; $ s/$/<--END/", "Line 1\nLine 2\n\nLine 3",
-    //         "START-->\nLine 1\nLine 1\nLine 2\nLine 2\n", ""),
-    //         (r#"1 s/^/ /; $ s/$/ /"#, "line1\nline2", " line1\nline2 ", ""), 
-    //         (":a; $ q; n; 11,$ D; ba", "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n",
-    //         "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n", ""),
-    //         (r#"$ s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
-    //         "apple pie is sweet\n123abc test123 hello world\none  three four\n", ""),
-    //         (r#"s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
-    //         "apple  is sweet\n123abc  hello world\none  three four\n", ""),
-    //         (r#":a;s/^.\{1,13\}$/ &/;ta"#, "12345678\n1234567890123", "     12345678\n1234567890123", ""),
-    //         ("\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
-    //         "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
-    //         "Some text\nbegin\nbegin\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\nend\nend\nSome more text\n", ""),
-    //     ];
-    //     for (script, input, output, err) in test_data{
-    //         sed_test(
-    //             &["-e", script],
-    //             input,
-    //             output,
-    //             err,
-    //             !err.is_empty() as i32,
-    //         );
-    //     }
-    // }
+    #[test]
+    fn test_combinations_7() {
+        let test_data = [
+            // correct         
+            (r#"\/^Reply-To:/q; \/^From:/h; \/./d;g;q"#, "From: someone\nReply-To: someoneelse\n", "Reply-To: someoneelse\n", ""),
+            ("\\/./{H;$d}; x; 1 s/^/START-->/; $ s/$/<--END/", "Line 1\nLine 2\n\nLine 3",
+            "START-->\nLine 1\nLine 1\nLine 2\nLine 2\n", ""),
+            (r#"1 s/^/ /; $ s/$/ /"#, "line1\nline2", " line1\nline2 ", ""), 
+            (":a; $ q; n; 11,$ D; ba", "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n",
+            "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n", ""),
+            (r#"$ s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
+            "apple pie is sweet\n123abc test123 hello world\none  three four\n", ""),
+            (r#"s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
+            "apple  is sweet\n123abc  hello world\none  three four\n", ""),
+            (r#":a;s/^.\{1,13\}$/ &/;ta"#, "12345678\n1234567890123", "     12345678\n1234567890123", ""),
+            ("\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
+            "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
+            "Some text\nbegin\nbegin\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\nend\nend\nSome more text\n", ""),
+        ];
+        for (script, input, output, err) in test_data{
+            sed_test(
+                &["-e", script],
+                input,
+                output,
+                err,
+                !err.is_empty() as i32,
+            );
+        }
+    }
 }
