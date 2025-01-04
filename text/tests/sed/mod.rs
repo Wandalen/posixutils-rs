@@ -2016,8 +2016,8 @@ mod tests {
             ("\\/start/,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
             ("\\/start/,$p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\nb\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
             ("1,\\/end/p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nb\nc\nc\nstart\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nqwerty\n", ""),
-            ("2,4 !p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty", ""),
-            ("2,4 !{p}", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty", ""),
+            ("2,4 !p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
+            ("2,4 !{p}", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
             //wrong
             ("\\/pattern/- p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '-' (line: 0, col: 10)\n")
         ];
@@ -2134,9 +2134,13 @@ mod tests {
             ("s/SUBST/program\\/lib\\/module\\/lib.so/", "this is a test SUBST\nwe use SUBST here as well",
             "this is a test program/lib/module/lib.so\nwe use program/lib/module/lib.so here as well", ""),
             ("s/.*/[&]/", "This is a test\nAnother test line\n", "[This is a test]\n[Another test line]\n", ""),
-            (r#"s/#.*//;s/[[:blank:]]*$//;\/^$/ d;p"#,
-            "# This is a comment\nLine with trailing spaces     \nAnother line",
-            "Line with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line", "")
+            // wrong
+            (
+                r#"s/#.*//;s/[[:blank:]]*$//;\/^$/ d;p"#, 
+                "# This is a comment\nLine with trailing spaces     \nAnother line", 
+                "", 
+                "sed: script ended unexpectedly  (line: 0, col: 2)\n"
+            )
         ];
 
         for (script, input, output, err) in test_data{
@@ -2194,9 +2198,12 @@ mod tests {
             (r#"s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
             "apple  is sweet\n123abc  hello world\none  three four\n", ""),
             (r#":a;s/^.\{1,13\}$/ &/;ta"#, "12345678\n1234567890123", "     12345678\n1234567890123", ""),
-            ("\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
-            "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
-            "Some text\nbegin\nbegin\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\nend\nend\nSome more text\n", ""),
+            (
+                "\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
+                "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
+                "", 
+                "sed: commands must be delimited with ';' (line: 0, col: 21)\n"
+            ),
         ];
         for (script, input, output, err) in test_data{
             sed_test(

@@ -877,6 +877,7 @@ fn parse_address(
         match ch{
             '!' => {
                 is_negative = true;
+                *i += 1;
                 break;
             },
             ' ' => (),
