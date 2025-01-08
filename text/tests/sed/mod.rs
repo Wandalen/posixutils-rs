@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use plib::testing::{ run_test, TestPlan};
+use plib::testing::{ /*run_test,*/ TestPlan};
 
 fn sed_test(
     args: &[&str],
@@ -28,7 +28,7 @@ fn sed_test(
     });
 }
 
-/*
+// /*
 use std::process::{ Output, Command, Stdio };
 use std::thread;
 use std::time::Duration;
@@ -86,7 +86,7 @@ pub fn run_test(plan: TestPlan) {
     if plan.expected_exit_code == 0 {
         assert!(output.status.success());
     }
-}*/
+}// */
 
 const ABC_INPUT: &'static str = "abc\n";
 const SCRIPT_A: &'static str = "s/a/ab/g";
@@ -580,8 +580,8 @@ mod tests {
             ("1,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nw\nq\nq\nh\nh\nw\nw\n", ""),            
             ("$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
             ("$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
-            ("$,$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", ""),
-            ("$,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", ""),                  
+            ("$,$p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),
+            ("$,$ p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\nw\n", ""),                  
             ("1, 10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", ""),                
             ("1 ,10 p", "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw\n", "a\na\nb\nb\nc\nc\nd\nd\ne\ne\nf\nf\ng\ng\nm\nm\nn\nn\nt\nt\nw\nq\nh\nw\n", "")        
         ];
@@ -845,13 +845,13 @@ mod tests {
             (
                 "a\\   text\\in\\sed",
                 "abc\ndef\n@#$",
-                "abc\n   textinsed\ndef\n   textinsed\n@#$\n   textinsed",
+                "abc\n   textinsed\ndef\n   textinsed\n@#$\n   textinsed\n",
                 "",
             ),
             (
                 "a\\ text text ; text",
                 "abc\ndef\n@#$",
-                "abc\n text text ; text\ndef\n text text ; text\n@#$\n text text ; text",
+                "abc\n text text ; text\ndef\n text text ; text\n@#$\n text text ; text\n",
                 "",
             ),
             // wrong
@@ -909,7 +909,6 @@ mod tests {
         let test_data = [
             // correct
             ("b", "aa\naa\n", "aa\naa\n", ""),
-            ("b; :label", "aa\naa\n", "aa\naa\n", ""),
             ("b label; :label", "aa\naa\n", "aa\naa\n", ""),
             ("b label1; :label1", "aa\naa\n", "aa\naa\n", ""),
             ("b lab2el1abc; :lab2el1abc", "aa\naa\n", "aa\naa\n", ""),
@@ -921,11 +920,12 @@ mod tests {
             ("b 1234; :1234", "aa\naa\n", "aa\naa\n", ""),
             ("b #%$?@&*;", "aa\naa", "aa\naa", ""),
             // wrong
+            ("b; :label", "aa\naa\n", "", "sed: can't find label for jump to `label'\n"),
             (
                 "b label#; :label#", 
                 "aa\naa\n", 
                 "", 
-                "sed: read stdin: script doesn't contain label 'label'\n"
+                "sed: can't find label for jump to `label'\n"
             ),
             (
                 "b ab\ncd; :ab\ncd",
@@ -937,31 +937,31 @@ mod tests {
                 "b label",
                 "aa\naa",
                 "",
-                "sed: read stdin: script doesn't contain label 'label'\n",
+                "sed: can't find label for jump to `label'\n",
             ),
             (
                 "b label#",
                 "aa\naa",
                 "",
-                "sed: read stdin: script doesn't contain label 'label'\n",
+                "sed: can't find label for jump to `label'\n",
             ),
             (
                 "b 1label",
                 "aa\naa",
                 "",
-                "sed: read stdin: script doesn't contain label '1label'\n",
+                "sed: can't find label for jump to `1label'\n",
             ),
             (
                 "b 1234",
                 "aa\naa",
                 "",
-                "sed: read stdin: script doesn't contain label '1234'\n",
+                "sed: can't find label for jump to `1234'\n",
             ),
             (
                 "b g",
                 "aa\naa",
                 "",
-                "sed: read stdin: script doesn't contain label 'g'\n",
+                "sed: can't find label for jump to `g'\n",
             ),
             (
                 "b; label",
@@ -973,7 +973,7 @@ mod tests {
                 "b :label",
                 "aa\naa",
                 "",
-                "sed: read stdin: script doesn't contain label ':label'\n",
+                "sed: can't find label for jump to `:label'\n",
             ),
             (
                 "b label :label",
@@ -1007,7 +1007,7 @@ mod tests {
             ),
             ("c\\r", "abc\ndef\n@#$", "r\nr\nr\n", ""),
             ("1 c\\r", "abc\ndef\n@#$", "r\ndef\n@#$", ""),
-            ("1,2 c\\r", "abc\ndef\n@#$", "r\nr\n@#$", ""),
+            ("1,2 c\\r", "abc\ndef\n@#$", "r\n@#$", ""),
             // wrong
             (
                 "0 c\\r",
@@ -1266,17 +1266,17 @@ mod tests {
     fn test_i() {
         let test_data = [
             // correct
-            ("i\\text", "abc\ncdf\n\n", "textabc\ntextcdf\ntext\n", ""),
+            ("i\\text", "abc\ncdf\n\n", "text\nabc\ntext\ncdf\ntext\n\n", ""),
             (
                 "i\\text\\in\\sed",
                 "abc\ncdf\n\n",
-                "textinsedabc\ntextinsedcdf\ntextinsed\n",
+                "textinsed\nabc\ntextinsed\ncdf\ntextinsed\n\n",
                 "",
             ),
             (
                 "i\\text text ; text ",
                 "abc\ncdf\n\n",
-                "text text ; text abc\ntext text ; text cdf\ntext text ; text \n",
+                "text text ; text \nabc\ntext text ; text \ncdf\ntext text ; text \n\n",
                 "",
             ),
             // wrong
@@ -1535,21 +1535,22 @@ mod tests {
             (
                 "r ./tests/sed/assets/script_some_newlines",
                 "abc\ncdf",
-                "abc\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\ncdf\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n",
+                "abc\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\ncdf\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\n",
                 "",
             ),
             ("r./tests/sed/assets/abc", "", "", ""),
-            ("r./tests/sed/assets/abc", "a", "a\nabc", ""),
-            ("r", "abc\ncdf", "abc\ncdf", ""),
+            ("r./tests/sed/assets/abc", "a", "a\nabc\n", ""),
             ("r aer", "abc\ncdf", "abc\ncdf", ""),
-            ("r #@/?", "abc\ncdf", "abc\ncdf", ""),
+            ("r./text/ard/assets/abc", "abc\ncdf", "abc\ncdf", ""),
             // wrong
-            ("r #@/?\nl", "abc\ncdf", "", "sed: unknown character 'l' (line: 0, col: 3)\n"),
+            ("r", "abc\ncdf", "", "sed: path is empty (line: 0, col: 0)\n"),
+            ("r #@/?", "abc\ncdf", "", "sed: path is empty (line: 0, col: 1)\n"),
+            ("r #@/?\nl", "abc\ncdf", "", "sed: path is empty (line: 0, col: 1)\n"),
             (
                 "r./text/tests/s\x02ed/assets/abc",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 16)\n",
+                "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 15)\n",
             ),
         ];
 
@@ -1795,25 +1796,25 @@ mod tests {
         let test_data = [
             // correct
             ("t", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-            ("t label", "", "", ""),
-            ("t; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t label; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-            ("t label1", "", "", ""),
-            ("t lab2el1abc", "", "", ""),
-            ("t loop_", "", "", ""),
-            ("t _start", "", "", ""),
-            ("t my_label", "", "", ""),
+            ("t label1; :label1", "", "", ""),
+            ("t lab2el1abc; :lab2el1abc", "", "", ""),
+            ("t loop_; :loop_", "", "", ""),
+            ("t _start; :_start", "", "", ""),
+            ("t my_label; :my_label", "", "", ""),
             ("t #%$?@&*; :#%$?@&*", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-            ("t label#; :label#", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t 1label; :1label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t 1234; :1234", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-            ("t :label", "", "", ""),
             ("t #%$?@&*;", "", "", ""),
-            ("t label#", "", "", ""),
-            ("t 1label", "", "", ""),
-            ("t 1234", "", "", ""),
-            ("t g", "", "", ""),
             // wrong
+            ("t; :label", "aa\naaa\n\n", "", "sed: can't find label for jump to `label'\n"),
+            ("t label#; :label#", "aa\naaa\n\n", "", "sed: can't find label for jump to `label'\n"),
+            ("t label;", "", "", "sed: can't find label for jump to `label'\n"),
+            ("t :label", "", "", "sed: can't find label for jump to `:label'\n"),
+            ("t label#", "", "", "sed: can't find label for jump to `label'\n"),
+            ("t 1label", "", "", "sed: can't find label for jump to `1label'\n"),
+            ("t 1234", "", "", "sed: can't find label for jump to `1234'\n"),
+            ("t g", "", "", "sed: can't find label for jump to `g'\n"),
             (
                 "t; label",
                 "aa\naaa\n\n",
@@ -1845,15 +1846,21 @@ mod tests {
             // correct
             ("w ./tests/sed/assets/newfile", "abc\ncdf\n", "abc\ncdf\n", ""),
             ("w atyfv", "abc\ncdf\n", "abc\ncdf\n", ""),
-            ("w ; h", "abc\ncdf\n", "abc\ncdf\n", ""),
+            ("w ; h", "abc\ncdf\n", "", "sed: path is empty (line: 0, col: 1)\n"),
             ("w./tests/sed/assets/r", "", "", ""),
             ("w./tests/sed/assets/newfile", "a\n", "a\n", ""),
             // wrong
             (
                 "w./tests/s\x04ed/assets/abc",
+                "a\n",
                 "",
+                "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 10)\n",
+            ),
+            (
+                "w./tests/ard/assets/abc",
+                "a\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 11)\n",
+                "sed: read stdin: can't find './tests/ard/assets/abc': no such file or directory (os error 2)\n",
             ),
         ];
 

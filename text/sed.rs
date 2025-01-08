@@ -106,6 +106,7 @@ impl Args {
         }
 
         let script = Script::parse(raw_script)?;
+        script.check_labels()?;
         //print!("<{:?}>", &script.0);
 
         Ok(Sed {
@@ -466,7 +467,12 @@ impl Command {
                         !(match_pattern(*re, pattern.clone(), line, line_number + 1)?.is_empty())
                     }
                     AddressToken::Last => match i {
-                        0 | 1 => last_line,
+                        0 => if last_line {
+                            true
+                        }else{
+                            false
+                        },
+                        1 => false,
                         _ => unreachable!(),
                     },
                     _ => unreachable!(),
@@ -1002,13 +1008,13 @@ fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedErr
         }
     }
     let path = path.trim();
-    if path.is_empty() {
+    /*if path.is_empty() {
         let problem_command = get_error_command_and_position(chars, *i);
         return Err(SedError::ScriptParse(format!(
             "path is empty{}",
             problem_command
         )));
-    }
+    }*/
     let file = PathBuf::from(path);
     if file.exists() {
         if file.is_file() {
@@ -1016,14 +1022,15 @@ fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedErr
         } else {
             Err(SedError::Io(Error::new(
                 ErrorKind::InvalidInput,
-                format!("{} isn't file", file.to_str().unwrap_or("<path>")),
+                format!("{} isn't file", file.display()),
             )))
         }
     } else {
-        Err(SedError::Io(Error::new(
-            ErrorKind::NotFound,
-            format!("can't find {}", file.to_str().unwrap_or("<path>")),
-        )))
+        Ok(file)
+        // Err(SedError::Io(Error::new(
+        //     ErrorKind::NotFound,
+        //     format!("can't find {}", file.display()),
+        // )))
     }
 }
 
@@ -1193,7 +1200,7 @@ fn parse_replace_flags(chars: &[char], i: &mut usize) -> Result<Vec<ReplaceFlag>
     }
     if let Some(w_start_position) = w_start_position {
         *i = w_start_position;
-        let path = parse_path_attribute(chars, i).unwrap_or_default();
+        let path = parse_path_attribute(chars, i)?;
         flags.push(ReplaceFlag::AppendToIfReplace(path));
     }
 
@@ -1461,7 +1468,7 @@ impl Script {
                 'P' => commands.push(Command::PrintPattern(address.clone(), true)),
                 'q' => commands.push(Command::Quit(address.clone())),
                 'r' => {
-                    let rfile = parse_path_attribute(&chars, &mut i).unwrap_or_default();
+                    let rfile = parse_path_attribute(&chars, &mut i)?;
                     commands.push(Command::PrintFile(address.clone(), rfile))
                 }
                 's' => {
@@ -1482,7 +1489,7 @@ impl Script {
                     commands.push(Command::Test(address.clone(), label));
                 }
                 'w' => {
-                    let wfile = parse_path_attribute(&chars, &mut i).unwrap_or_default();
+                    let wfile = parse_path_attribute(&chars, &mut i)?;
                     commands.push(Command::AppendPatternToFile(address.clone(), wfile))
                 }
                 'x' => {
@@ -1530,31 +1537,6 @@ impl Script {
             i += 1;
         }
 
-        let labels = commands
-            .iter()
-            .cloned()
-            .filter_map(|cmd| {
-                if let Command::BearBranchLabel(label) = cmd {
-                    Some(label)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let labels_set = labels.iter().collect::<HashSet<_>>();
-        if labels.len() > labels_set.len() {
-            let label = match find_first_repeated_label(labels) {
-                Some(label) => format!("label {}", label),
-                None => "some label".to_string(),
-            };
-            let problem_command = get_error_command_and_position(&chars, i);
-            return Err(SedError::ScriptParse(format!(
-                "{} is repeated{}",
-                label, problem_command
-            )));
-        }
-
         for cmd in commands.iter_mut() {
             cmd.check_address()?;
         }
@@ -1562,6 +1544,44 @@ impl Script {
         commands = flatten_commands(commands);
 
         Ok(Script(commands))
+    }
+
+    fn check_labels(&self) -> Result<(), SedError>{
+        let labels = self.0
+            .iter()
+            .cloned()
+            .filter_map(|cmd| {
+                match cmd{
+                    Command::BearBranchLabel(label) => Some(label),
+                    _ => None
+                }
+            })
+            .collect::<Vec<_>>();
+    
+        let cmd_labels_set = self.0
+            .iter()
+            .cloned()
+            .filter_map(|cmd| {
+                match cmd{
+                    Command::BranchToLabel(_, label) | 
+                    Command::Test(_, label) => label,
+                    _ => None
+                }
+            })
+            .collect::<HashSet<_>>();
+    
+        let labels_set = labels.iter().cloned().collect::<HashSet<_>>();       
+        if let Some(label) = cmd_labels_set.difference(&labels_set)
+            .chain(labels_set.difference(&cmd_labels_set)).next(){
+            return Err(SedError::ScriptParse(format!("can't find label for jump to `{}'", label)));
+        } else if labels.len() > labels_set.len() {
+            let label = match find_first_repeated_label(labels) {
+                Some(label) => format!("label {}", label),
+                None => "some label".to_string(),
+            };
+            return Err(SedError::ScriptParse(format!("{} is repeated", label)));
+        }
+        Ok(())
     }
 }
 
@@ -1726,9 +1746,10 @@ fn execute_replace(
         };
         Some(wfile)
     }) {
-        if replace{
+        if replace && wfile.components().next().is_some(){
             if let Ok(mut file) = std::fs::OpenOptions::new()
                 .append(true)
+                .create(true)
                 .open(wfile)
                 .map_err(SedError::Io){
                 let _ = file.write(pattern_space.as_bytes());
@@ -1818,14 +1839,15 @@ impl Sed {
                     return Ok(None);
                 }
                 self.pattern_space += &("\n".to_string() + &text);
-            }
+                self.current_end = Some("\n".to_string());
+            },
             Command::BranchToLabel(_, label) => {
                 // b
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
                 instruction = Some(ControlFlowInstruction::Goto(label.clone()));
-            }
+            },
             Command::DeletePatternAndPrintText(address, text) => {
                 // c
                 let mut need_execute = self.need_execute(command_position)?;
@@ -1845,7 +1867,7 @@ impl Sed {
                     print!("{text}\n");
                     //instruction = Some(ControlFlowInstruction::SkipPrint);
                 }
-            }
+            },
             Command::DeletePattern(_, to_first_line) => {
                 // dD
                 if !self.need_execute(command_position)? {
@@ -1864,7 +1886,7 @@ impl Sed {
                     self.pattern_space.clear();
                     instruction = Some(ControlFlowInstruction::Continue);
                 }
-            }
+            },
             Command::ReplacePatternWithHold(_) => {
                 // g
                 if !self.need_execute(command_position)? {
@@ -1876,7 +1898,7 @@ impl Sed {
                 }else{
                     self.pattern_space = self.hold_space.clone();
                 }
-            }
+            },
             Command::AppendHoldToPattern(_) => {
                 // G
                 if !self.need_execute(command_position)? {
@@ -1893,7 +1915,7 @@ impl Sed {
                 }else{
                     self.current_end = None;
                 }
-            }
+            },
             Command::ReplaceHoldWithPattern(_) => {
                 // h
                 if !self.need_execute(command_position)? {
@@ -1901,7 +1923,7 @@ impl Sed {
                 }
                 self.hold_space = self.pattern_space.clone() 
                 + self.current_end.clone().unwrap_or_default().as_str();
-            }
+            },
             Command::AppendPatternToHold(_) => {
                 // H
                 if !self.need_execute(command_position)? {
@@ -1912,35 +1934,35 @@ impl Sed {
                 }
                 self.hold_space += &(self.pattern_space.clone()
                 + self.current_end.clone().unwrap_or_default().as_str());
-            }
+            },
             Command::PrintTextBefore(_, text) => {
                 // i
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                print!("{text}");
-            }
+                print!("{text}\n");
+            },
             Command::PrintPatternBinary(_) => {
                 // I
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
                 print_multiline_binary(&self.pattern_space);
-            }
+            },
             Command::PrintPatternAndReplaceWithNext(_) => {
                 // n
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
                 instruction = Some(ControlFlowInstruction::ReadNext);
-            }
+            },
             Command::AppendNextToPattern(_address) => {
                 // N
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
                 instruction = Some(ControlFlowInstruction::AppendNext);
-            }
+            },
             Command::PrintPattern(_, to_first_line) => {
                 // pP
                 if !self.need_execute(command_position)? {
@@ -1963,14 +1985,14 @@ impl Sed {
                 if let Some(end) = &self.current_end{
                     print!("{end}");
                 }
-            }
+            },
             Command::Quit(_) => {
                 // q
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
                 instruction = Some(ControlFlowInstruction::Break);
-            }
+            },
             Command::PrintFile(_, rfile) => {
                 // r
                 if !self.need_execute(command_position)? {
@@ -1985,8 +2007,11 @@ impl Sed {
                         self.pattern_space += "\n";
                         self.pattern_space += &line;
                     }
+                    if self.current_end.is_none(){
+                        self.current_end = Some("\n".to_string());
+                    }
                 }
-            }
+            },
             Command::Replace(_, ref regex, ..) => {
                 // s
                 if !self.need_execute(command_position)? {
@@ -1998,7 +2023,7 @@ impl Sed {
                     self.current_line,
                 )?;
                 self.last_regex = Some(regex.clone());
-            }
+            },
             Command::Test(_, label) => {
                 // t
                 if !self.need_execute(command_position)? {
@@ -2008,17 +2033,26 @@ impl Sed {
                     instruction = Some(ControlFlowInstruction::Goto(label.clone()));
                 }
                 self.has_replacements_since_t = false;
-            }
+            },
             Command::AppendPatternToFile(_, wfile) => {
                 // w
-                if !self.need_execute(command_position)? {
+                if !self.need_execute(command_position)? || wfile.components().next().is_none() {
                     return Ok(None);
                 }
-                let Ok(mut file) = std::fs::OpenOptions::new().append(true).open(wfile) else {
-                    return Ok(None);
+                let _ = match std::fs::OpenOptions::new().append(true).create(true).open(wfile.clone()){
+                    Ok(mut file) => file.write(self.pattern_space.as_bytes()),
+                    Err(err) => { 
+                        return Err(SedError::Io(Error::new(
+                            ErrorKind::NotFound,
+                            format!(
+                                "can't find '{}': {}", 
+                                wfile.display(),
+                                err.to_string().to_lowercase()
+                            ),
+                        ))); 
+                    }
                 };
-                let _ = file.write(self.pattern_space.as_bytes());
-            }
+            },
             Command::ExchangeSpaces(_) => {
                 // x
                 if !self.need_execute(command_position)? {
@@ -2039,7 +2073,7 @@ impl Sed {
                         Some("\n".to_string())
                     };
                 }
-            }
+            },
             Command::ReplaceCharSet(_, string1, string2) => {
                 // y
                 if !self.need_execute(command_position)? {
@@ -2063,7 +2097,7 @@ impl Sed {
                 }
                 self.pattern_space = self.pattern_space.replace("\\n", "\n");
                 self.has_replacements_since_t = true;
-            }
+            },
             Command::PrintStandard(_) => {
                 // =
                 if !self.need_execute(command_position)? {
@@ -2072,12 +2106,12 @@ impl Sed {
                 if !self.quiet {
                     print!("{}\n", self.current_line + 1);
                 }
-            }
+            },
             Command::IgnoreComment if !self.quiet => {
                 // #
                 self.quiet = true;
             }
-            Command::_Unknown => {}
+            Command::_Unknown => {},
             Command::Block(..) => unreachable!(),
             _ => {}
         }
