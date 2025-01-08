@@ -449,11 +449,182 @@ impl MdocParser {
         }
     }
 
+    // Parses (`Aq`)[https://man.openbsd.org/mdoc#Aq]:
+    // `Aq line`
+    fn parse_aq_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Aq,
+            nodes,
+        })
+    }
+
+    // Parses (`Bq`)[https://man.openbsd.org/mdoc#Bq]:
+    // `Bq line`
+    fn parse_bq_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Bq,
+            nodes,
+        })
+    }
+
+    // Parses (`Brq`)[https://man.openbsd.org/mdoc#Brq]:
+    // `Brq line`
+    fn parse_brq_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Brq,
+            nodes,
+        })
+    }
+
+    // Parses (`D1`)[https://man.openbsd.org/mdoc#D1]:
+    // `D1 line`
+    fn parse_d1_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::D1,
+            nodes,
+        })
+    }
+
+    // Parses (`Dl`)[https://man.openbsd.org/mdoc#Dl]:
+    // `Dl line`
+    fn parse_dl_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Dl,
+            nodes,
+        })
+    }
+
+    // Parses (`Dq`)[https://man.openbsd.org/mdoc#Dq]:
+    // `Dq line`
+    fn parse_dq_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Dq,
+            nodes,
+        })
+    }
+
+    // Parses (`En`)[https://man.openbsd.org/mdoc#En]:
+    // `En word ...`
+    fn parse_en_block(pair: Pair<Rule>) -> Element {
+        let words = pair.into_inner().map(|p| p.as_str().to_string()).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::En { words },
+            nodes: vec![],
+        })
+    }
+
+    // Parses (`Op`)[https://man.openbsd.org/mdoc#Op]:
+    // `Op line`
+    fn parse_op_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Op,
+            nodes,
+        })
+    }
+
+    // Parses (`Pq`)[https://man.openbsd.org/mdoc#Pq]:
+    // `Pq line`
+    fn parse_pq_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Pq,
+            nodes,
+        })
+    }
+
+    // Parses (`Ql`)[https://man.openbsd.org/mdoc#Ql]:
+    // `Ql line`
+    fn parse_ql_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ql,
+            nodes,
+        })
+    }
+
+    // Parses (`Qq`)[https://man.openbsd.org/mdoc#Qq]:
+    // `Qq line`
+    fn parse_qq_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Qq,
+            nodes,
+        })
+    }
+
+    // Parses (`Sq`)[https://man.openbsd.org/mdoc#Sq]:
+    // `Sq line`
+    fn parse_sq_block(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(|p| Self::parse_element(p)).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Sq,
+            nodes,
+        })
+    }
+
+    // Parses (`Vt`)[https://man.openbsd.org/mdoc#Vt]:
+    // `Vt type [identifier] ...`
+    fn parse_vt_block(pair: Pair<Rule>) -> Element {
+        let mut inner = pair.into_inner();
+
+        let variable_type = inner.next().unwrap().as_str().to_string();
+
+        let identifier = inner.map(|p| p.as_str().to_string()).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Vt {
+                variable_type,
+                identifier,
+            },
+            nodes: vec![],
+        })
+    }
+
+    fn parse_block_partial_implicit(pair: Pair<Rule>) -> Element {
+        let pair = pair.into_inner().next().unwrap();
+        match pair.as_rule() {
+            Rule::aq_block => Self::parse_aq_block(pair),
+            Rule::bq_block => Self::parse_bq_block(pair),
+            Rule::brq_block => Self::parse_brq_block(pair),
+            Rule::d1_block => Self::parse_d1_block(pair),
+            Rule::dl_block => Self::parse_dl_block(pair),
+            Rule::dq_block => Self::parse_dq_block(pair),
+            Rule::en_block => Self::parse_en_block(pair),
+            Rule::op_block => Self::parse_op_block(pair),
+            Rule::pq_block => Self::parse_pq_block(pair),
+            Rule::ql_block => Self::parse_ql_block(pair),
+            Rule::qq_block => Self::parse_qq_block(pair),
+            Rule::sq_block => Self::parse_sq_block(pair),
+            Rule::vt_block => Self::parse_vt_block(pair),
+            _ => Element::Text("Unsupported block".to_string()),
+        }
+    }
+
     fn parse_element(pair: Pair<Rule>) -> Element {
         match pair.as_rule() {
             Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
             Rule::block_full_implicit => Self::parse_block_full_implicit(pair),
+            Rule::block_partial_implicit => Self::parse_block_partial_implicit(pair),
             _ => Element::Text(pair.as_str().to_string()),
         }
     }
@@ -1397,5 +1568,322 @@ mod test {
                 "Duplicate .Ss title found: Subchapter 1".to_string()
             ))
         );
+    }
+
+    #[test]
+    fn aq_empty() {
+        assert!(MdocParser::parse_mdoc(".Aq\n").is_err());
+    }
+
+    #[test]
+    fn aq_text_line() {
+        let content = ".Aq Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Aq,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn aq_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn bq_empty() {
+        assert!(MdocParser::parse_mdoc(".Bq\n").is_err());
+    }
+
+    #[test]
+    fn bq_text_line() {
+        let content = ".Bq Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Bq,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn bq_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn brq_empty() {
+        assert!(MdocParser::parse_mdoc(".Brq\n").is_err());
+    }
+
+    #[test]
+    fn brq_text_line() {
+        let content = ".Brq Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Brq,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn brq_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn d1_empty() {
+        assert!(MdocParser::parse_mdoc(".D1\n").is_err());
+    }
+
+    #[test]
+    fn d1_text_line() {
+        let content = ".D1 Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::D1,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn d1_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn dl_empty() {
+        assert!(MdocParser::parse_mdoc(".Dl\n").is_err());
+    }
+
+    #[test]
+    fn dl_text_line() {
+        let content = ".Dl Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Dl,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn dl_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn dq_empty() {
+        assert!(MdocParser::parse_mdoc(".Dq\n").is_err());
+    }
+
+    #[test]
+    fn dq_text_line() {
+        let content = ".Dq Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Dq,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn dq_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn en_no_words() {
+        let content = ".En\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::En { words: vec![] },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn en() {
+        let content = ".En word1 word2 word3\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::En {
+                words: vec![
+                    "word1".to_string(),
+                    "word2".to_string(),
+                    "word3".to_string(),
+                ],
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn en_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn op_empty() {
+        assert!(MdocParser::parse_mdoc(".Op\n").is_err());
+    }
+
+    #[test]
+    fn op_text_line() {
+        let content = ".Op Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Op,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn op_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn pq_empty() {
+        assert!(MdocParser::parse_mdoc(".Pq\n").is_err());
+    }
+
+    #[test]
+    fn pq_text_line() {
+        let content = ".Pq Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Pq,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn pq_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn ql_empty() {
+        assert!(MdocParser::parse_mdoc(".Ql\n").is_err());
+    }
+
+    #[test]
+    fn ql_text_line() {
+        let content = ".Ql Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ql,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn ql_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn qq_empty() {
+        assert!(MdocParser::parse_mdoc(".Qq\n").is_err());
+    }
+
+    #[test]
+    fn qq_text_line() {
+        let content = ".Qq Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Qq,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn qq_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn sq_empty() {
+        assert!(MdocParser::parse_mdoc(".Sq\n").is_err());
+    }
+
+    #[test]
+    fn sq_text_line() {
+        let content = ".Sq Line 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Sq,
+            nodes: vec![Element::Text("Line 1\n".to_string())],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn sq_macro_inside() {
+        todo!()
+    }
+
+    #[test]
+    fn vt_empty() {
+        assert!(MdocParser::parse_mdoc(".Vt\n").is_err());
+    }
+
+    #[test]
+    fn vt_only_type() {
+        let content = ".Vt type\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Vt {
+                variable_type: "type".to_string(),
+                identifier: vec![],
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn vt() {
+        let content = ".Vt type some identifier\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Vt {
+                variable_type: "type".to_string(),
+                identifier: vec!["some".to_string(), "identifier".to_string()],
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn vt_macro_inside() {
+        todo!()
     }
 }

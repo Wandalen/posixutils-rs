@@ -25,9 +25,7 @@ pub enum Macro {
     Ao, // Begin a block enclosed by angle brackets
     Ac, // Close an Ao block
     Ap,
-    Aq {
-        line: String,
-    },
+    Aq,
     Ar {
         // Command arguments. If an argument is not provided, the string “file ...” is used as a default.
         // https://man.openbsd.org/mdoc#Ar
@@ -66,18 +64,14 @@ pub enum Macro {
     Cm {
         keywords: Vec<String>,
     },
-    D1 {
-        line: String,
-    },
+    D1,
     Db, // Obsolete
     Dd {
         month: String,
         day: u8,
         year: i32,
     },
-    Dl {
-        line: String,
-    },
+    Dl,
     Do,
     Dc, // Close a Do block
     Dq,
@@ -179,9 +173,7 @@ pub enum Macro {
     Nx(NetBsd),
     Oo,
     Oc, // Close multi-line Oo context
-    Op {
-        line: String,
-    },
+    Op,
     Os {
         fotter_text: Option<String>,
     },
@@ -200,14 +192,11 @@ pub enum Macro {
     Po,
     Pc, // Close parenthesised context opened by Po
     Pp,
-    Pq {
-        line: String,
-    },
-    Ql {
-        line: String,
-    },
+    Pq,
+    Ql,
     Qo,
     Qc, // Close quoted context opened by Qo
+    Qq,
     Rs(Vec<RsSubmacro>),
     Re, // Close an Rs block
     Rv {
@@ -219,9 +208,7 @@ pub enum Macro {
     Sm(SmMode),
     So,
     Sc, // Close single-quoted context opened by So
-    Sq {
-        line: String,
-    },
+    Sq,
     Ss {
         title: String,
     },
@@ -246,8 +233,8 @@ pub enum Macro {
         identifier: Vec<String>,
     },
     Vt {
-        var_type: String,
-        identifier: Option<String>,
+        variable_type: String,
+        identifier: Vec<String>,
     },
     Xo,
     Xc, // Close a scope opened by Xo

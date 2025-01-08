@@ -67,8 +67,8 @@ nd_block = { nd_open ~ (!sh_block ~ element)* }
 
 // ----- Nm
 
-nm_name = { macro_arg+ }
-nm_open = { "." ~ "Nm" ~ nm_name* ~ NEWLINE }
+nm_name  = { macro_arg+ }
+nm_open  = { "." ~ "Nm" ~ nm_name* ~ NEWLINE }
 nm_block = { nm_open ~ (!nm_open ~ !sh_block ~ !ss_block ~ element)* }
 
 // ----- Sh
@@ -85,8 +85,68 @@ ss_block      = { ss_open ~ (!sh_block ~ !ss_block ~ element)* }
 
 block_full_implicit = { nd_block | nm_block | sh_block | ss_block }
 
+// ----- Block partial-implicit
+
+block_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
+
+// ----- Aq
+
+aq_block = { "." ~ "Aq" ~ block_line }
+
+// ----- Bq
+
+bq_block = { "." ~ "Bq" ~ block_line }
+
+// ----- Brq
+
+brq_block = { "." ~ "Brq" ~ block_line }
+
+// ----- D1
+
+d1_block = { "." ~ "D1" ~ block_line }
+
+// ----- Dl
+
+dl_block = { "." ~ "Dl" ~ block_line }
+
+// ----- Dq
+
+dq_block = { "." ~ "Dq" ~ block_line }
+
+// ----- En
+
+en_block = { "." ~ "En" ~ macro_arg* ~ NEWLINE }
+
+// ----- Op
+
+op_block = { "." ~ "Op" ~ block_line }
+
+// ----- Pq
+
+pq_block = { "." ~ "Pq" ~ block_line }
+
+// ----- Ql
+
+ql_block = { "." ~ "Ql" ~ block_line }
+
+// ----- Qq
+
+qq_block = { "." ~ "Qq" ~ block_line }
+
+// ----- Sq
+
+sq_block = { "." ~ "Sq" ~ block_line }
+
+// ----- Vt
+
+vt_type       = { macro_arg }
+vt_identifier = { macro_arg }
+vt_block      = { "." ~ "Vt" ~ vt_type ~ vt_identifier* ~ NEWLINE }
+
+block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block | dq_block | en_block | op_block | pq_block | ql_block | qq_block | sq_block | vt_block }
+
 // ----- Document
 
-element = { block_full_explicit | block_full_implicit | text_line }
+element = { block_full_explicit | block_full_implicit | block_partial_implicit | text_line }
 
 document = { SOI ~ element* ~ EOI }
