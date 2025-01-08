@@ -757,15 +757,27 @@ mod tests {
                 "abc\ndef\n@@##%%#^\n",
                 "abc\ndef\n@@##%%#^\n",
                 "",
-            ), // unterminated address regex
+            ), 
             (
-                "{ { \n } {} {\n} { } }",
+                "{ { \n }; {}; {\n}; { }; }",
                 "abc\ndef\n@@##%%#^\n",
                 "abc\ndef\n@@##%%#^\n",
                 "",
-            ), // unterminated address regex
+            ), 
+            (
+                "{ { \n }; {}; {\n}; { } }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ), 
             (
                 "{ { { { { { { { {} } } } } } } } }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "",
+            ),
+            (
+                "{ { { { { { { { {}; }; }; }; }; }; }; }; }",
                 "abc\ndef\n@@##%%#^\n",
                 "abc\ndef\n@@##%%#^\n",
                 "",
@@ -796,10 +808,16 @@ mod tests {
             ),
             // wrong
             (
-                "15,10 { 10,5 { 5,1 p } }",
+                "{ { \n } {} {\n} { } }",
                 "abc\ndef\n@@##%%#^\n",
                 "",
-                "sed: bottom bound 15 bigger than top bound 10 in address (line: 0, col: 6)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+            ), 
+            (
+                "15,10 { 10,5 { 5,1 p } }",
+                "abc\ndef\n@@##%%#^\n",
+                "abc\ndef\n@@##%%#^\n",
+                "", //sed: bottom bound 15 bigger than top bound 10 in address (line: 0, col: 6)\n
             ),
             (
                 "{",
