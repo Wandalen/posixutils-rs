@@ -64,6 +64,9 @@ impl Args {
                     for raw_script_line in e_script.split('\n') {
                         raw_scripts.push(raw_script_line.to_string());
                     }
+                    if let Some(script) = raw_scripts.last_mut(){
+                        *script += "\n;";
+                    }
                 }
                 "-f" => {
                     // Can unwrap because `-f` is already validated by `clap`.
@@ -73,6 +76,9 @@ impl Args {
                     for line in reader.lines() {
                         let raw_script = line.map_err(SedError::Io)?;
                         raw_scripts.push(raw_script);
+                    }
+                    if let Some(script) = raw_scripts.last_mut(){
+                        *script += "\n;";
                     }
                 }
                 _ => continue,
@@ -1433,7 +1439,7 @@ impl Script {
                 '}' => {
                     let position = get_current_line_and_col(&chars, i);
                     return Err(SedError::ScriptParse(
-                        "unneccessary '}}'".to_string(),
+                        "unneccessary '}'".to_string(),
                         position
                     ));
                 }
@@ -1885,22 +1891,35 @@ impl Sed {
             },
             Command::DeletePatternAndPrintText(address, text) => {
                 // c
-                let mut need_execute = self.need_execute(command_position)?;
-                if let Some(address) = address {
-                    let mut i = address.0.len().saturating_sub(1);
-                    while i > 0 {
-                        if address.0[i].passed.map(|r| r.1).unwrap_or(need_execute) {
-                            need_execute &= true;
+                if address.is_none(){
+                    self.pattern_space.clear();
+                    self.current_end = None;
+                    print!("{text}\n");
+                }else{
+                    let mut need_execute = self.need_execute(command_position)?;
+                    if need_execute{
+                        print!("{text}\n");
+                    }
+                    loop{
+                        need_execute = self.need_execute(command_position)?;
+                        if need_execute{
+                            let mut line = self.next_line.clone();
+                            self.next_line = self.read_line()?;
+                            self.current_line += 1;
+                            if line.is_empty() {
+                                break;
+                            }
+                            if let Some(l) = line.strip_suffix("\n") {
+                                line = l.to_string();
+                                self.current_end = Some("\n".to_string());
+                            }else{
+                                self.current_end = None;
+                            }       
+                            self.pattern_space = line;
+                        }else{
                             break;
                         }
-                        i -= 1;
                     }
-                }
-                if need_execute {
-                    self.pattern_space.clear();
-                    self.current_end.as_mut().map(|end| end.clear());
-                    print!("{text}\n");
-                    //instruction = Some(ControlFlowInstruction::SkipPrint);
                 }
             },
             Command::DeletePattern(_, to_first_line) => {
@@ -2230,6 +2249,7 @@ impl Sed {
                     ControlFlowInstruction::AppendNext => {
                         let mut line = self.next_line.clone();
                         self.next_line = self.read_line()?;
+                        self.current_line += 1;
                         if line.is_empty() {
                             return Ok(None);
                         }
@@ -2245,6 +2265,7 @@ impl Sed {
                     ControlFlowInstruction::ReadNext => {
                         let mut line = self.next_line.clone();
                         self.next_line = self.read_line()?;
+                        self.current_line += 1;
                         if line.is_empty() {
                             break;
                         }

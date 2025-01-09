@@ -1,5 +1,5 @@
-s/a/ab/g
-s/b/bc/g
+s/a/ab/g;
+s/b/bc/g;
 s/c/ca/g
 
 

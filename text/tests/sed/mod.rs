@@ -7,7 +7,12 @@
 // SPDX-License-Identifier: MIT
 //
 
-use plib::testing::{ /*run_test,*/ TestPlan};
+use plib::testing::{ 
+    // /*
+    run_test,
+    // */ 
+    TestPlan
+};
 
 fn sed_test(
     args: &[&str],
@@ -28,7 +33,7 @@ fn sed_test(
     });
 }
 
-// /*
+/*
 use std::process::{ Output, Command, Stdio };
 use std::thread;
 use std::time::Duration;
@@ -86,15 +91,15 @@ pub fn run_test(plan: TestPlan) {
     if plan.expected_exit_code == 0 {
         assert!(output.status.success());
     }
-}// */
+}*/
 
 const ABC_INPUT: &'static str = "abc\n";
 const SCRIPT_A: &'static str = "s/a/ab/g";
 const SCRIPT_B: &'static str = "s/b/bc/g";
 const SCRIPT_C: &'static str = "s/c/ca/g";
-const SCRIPT_SOME_NEWLINES: &'static str = "s/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\n";
+const SCRIPT_SOME_NEWLINES: &'static str = "s/a/ab/g;\ns/b/bc/g;\ns/c/ca/g\n\n\n";
 const SCRIPT_ALL_NEWLINES: &'static str = "\n\n\n";
-const SCRIPT_BLANKS: &'static str = "   s/a/ab/g\n   s/b/bc/g\n   s/c/ca/g";
+const SCRIPT_BLANKS: &'static str = "   s/a/ab/g;\n   s/b/bc/g;\n   s/c/ca/g";
 const SCRIPT_SEMICOLONS: &'static str = ";;;s/a/ab/g\n;;;s/b/bc/g\n;;;s/c/ca/g";
 
 const ABC_FILE: &'static str = "tests/sed/assets/abc";
@@ -535,31 +540,31 @@ mod tests {
                 ";\\;\\;;",
                 "abc\ndef\n@#$",
                 "",
-                "sed: pattern can't consist more than 1 line (line: 0, col: 2)\n",
+                "sed: pattern can't consist more than 1 line (line: 0, col: 3)\n",
             ),
             (
                 ";\\ ;;;",
                 "abc\ndef\n@#$",
                 "",
-                "sed: unterminated address regex (line: 0, col: 1)\n",
+                "sed: unterminated address regex (line: 0, col: 2)\n",
             ),
             (
                 "gh",
                 "abc\ndef\n@#$",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
             (
                 "g h",
                 "abc\ndef\n@#$",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "g; h \n gh \n g h ; gh \\",
                 "abc\ndef\n@#$",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
+                "sed: commands must be delimited with ';' (line: 1, col: 2)\n",
             ),
         ];
 
@@ -599,91 +604,91 @@ mod tests {
                 "1, p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 3)\n",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 4)\n",
             ),
             (
                 ",10 p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: unknown character ',' (line: 0, col: 0)\n",
+                "sed: unknown character ',' (line: 0, col: 1)\n",
             ),
             (
                 ", p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: unknown character ',' (line: 0, col: 0)\n",
+                "sed: unknown character ',' (line: 0, col: 1)\n",
             ),
             (
                 ",,p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: unknown character ',' (line: 0, col: 0)\n",
+                "sed: unknown character ',' (line: 0, col: 1)\n",
             ),
             (
                 "1,2,3,4,5 p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address isn't empty, position or range (line: 0, col: 10)\n",
+                "sed: address isn't empty, position or range (line: 0, col: 11)\n",
             ),
             (
                 "0,-10 p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 3)\n",
             ),
             (
                 "1,10; p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address hasn't command (line: 0, col: 4)\n",
+                "sed: address hasn't command (line: 0, col: 5)\n",
             ),
             (
                 "0 10 p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 5)\n",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 6)\n",
             ),
             (
                 "1,+3p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 2)\n",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 3)\n",
             ),
             (
                 "/5/,+3p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: unknown character '/' (line: 0, col: 0)\n",
+                "sed: unknown character '/' (line: 0, col: 1)\n",
             ),
             (
                 "7;+ p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address hasn't command (line: 0, col: 1)\n",
+                "sed: address hasn't command (line: 0, col: 2)\n",
             ),
             (
                 "+++ p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: unknown character '+' (line: 0, col: 0)\n",
+                "sed: unknown character '+' (line: 0, col: 1)\n",
             ),
             (
                 "p; -2 p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: unknown character '-' (line: 0, col: 3)\n",
+                "sed: unknown character '-' (line: 0, col: 4)\n",
             ),
             (
                 "3 ---- 2p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: unknown character '-' (line: 0, col: 2)\n",
+                "sed: unknown character '-' (line: 0, col: 3)\n",
             ),
             (
                 "1 2 3 p",
                 "a\nb\nc\nd\ne\nf\ng\nm\nn\nt\nw\nq\nh\nw",
                 "",
-                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 6)\n",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 7)\n",
             ),
         ];
 
@@ -731,13 +736,13 @@ mod tests {
                 "\\/abc/10 p",
                 "abc\ndef\n@#$",
                 "",
-                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 9)\n",
+                "sed: address bound can be only one pattern, number or '$' (line: 0, col: 10)\n",
             ),
             (
                 "@abc@ p",
                 "abc\ndef\n@#$",
                 "",
-                "sed: unknown character '@' (line: 0, col: 0)\n",
+                "sed: unknown character '@' (line: 0, col: 1)\n",
             ),
         ];
 
@@ -811,37 +816,37 @@ mod tests {
                 "{ { \n } {} {\n} { } }",
                 "abc\ndef\n@@##%%#^\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+                "sed: commands must be delimited with ';' (line: 1, col: 4)\n",
             ), 
             (
                 "15,10 { 10,5 { 5,1 p } }",
                 "abc\ndef\n@@##%%#^\n",
                 "abc\ndef\n@@##%%#^\n",
-                "", //sed: bottom bound 15 bigger than top bound 10 in address (line: 0, col: 6)\n
+                "",
             ),
             (
                 "{",
                 "abc\ndef\n@@##%%#^",
                 "",
-                "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
+                "sed: '{' not have pair for closing block (line: 0, col: 1)\n",
             ),
             (
                 "}",
                 "abc\ndef\n@@##%%#^",
                 "",
-                "sed: unneccessary '}' (line: 0, col: 0)\n",
+                "sed: unneccessary '}' (line: 0, col: 1)\n",
             ),
             (
                 "{ { { { { { {} } } } } } } } }",
                 "abc\ndef\n@@##%%#^",
                 "",
-                "sed: unneccessary '}' (line: 0, col: 27)\n",
+                "sed: unneccessary '}' (line: 0, col: 28)\n",
             ),
             (
                 "{ { { { { { { { {} } } } } } }",
                 "abc\ndef\n@@##%%#^",
                 "",
-                "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
+                "sed: '{' not have pair for closing block (line: 0, col: 1)\n",
             ),
         ];
 
@@ -877,43 +882,43 @@ mod tests {
                 "a\\",
                 "abc\ndef\n@#$",
                 "",
-                "sed: missing text argument (line: 0, col: 3)\n",
+                "sed: missing text argument (line: 1, col: 1)\n",
             ),
             (
                 "a  \text",
                 "abc\ndef\n@#$",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "a\text",
                 "abc\ndef\n@#$",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "a\text\\in\\sed",
                 "abc\ndef\n@#$",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "a\\ text text \n text ",
                 "abc\ndef\n@#$",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+                "sed: commands must be delimited with ';' (line: 1, col: 2)\n",
             ),
             (
                 "atext",
                 "abc\ndef\n@#$",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "a text",
                 "abc\ndef\n@#$",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -949,7 +954,7 @@ mod tests {
                 "b ab\ncd; :ab\ncd",
                 "",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 6)\n",
+                "sed: commands must be delimited with ';' (line: 1, col: 1)\n",
             ),
             (
                 "b label",
@@ -985,7 +990,7 @@ mod tests {
                 "b; label",
                 "aa\naa",
                 "",
-                "sed: unknown character 'l' (line: 0, col: 3)\n",
+                "sed: unknown character 'l' (line: 0, col: 4)\n",
             ),
             (
                 "b :label",
@@ -997,7 +1002,7 @@ mod tests {
                 "b label :label",
                 "aa\naa",
                 "",
-                "sed: label can't contain ' ' (line: 0, col: 13)\n",
+                "sed: label can't contain ' ' (line: 0, col: 14)\n",
             ),
         ];
 
@@ -1031,43 +1036,43 @@ mod tests {
                 "0 c\\r",
                 "abc\ndef\n@#$",
                 "",
-                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 3)\n",
             ),
             (
                 "0,2 c\\r",
                 "abc\ndef\n@#$",
                 "",
-                "sed: address lower bound must be bigger than 0 (line: 0, col: 4)\n",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 5)\n",
             ),
             (
                 "c\\",
                 "abc\ndef\n@#$",
                 "",
-                "sed: missing text argument (line: 0, col: 3)\n",
+                "sed: missing text argument (line: 1, col: 1)\n",
             ),
             (
                 "c  \text",
                 "abc\ndef\n@#$",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "c\text",
                 "abc\ndef\n@#$",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "c\text\\in\\sed",
                 "abc\ndef\n@#$",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "c\\ text text \n text ",
                 "abc\ndef\n@#$",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+                "sed: commands must be delimited with ';' (line: 1, col: 2)\n",
             ),
         ];
 
@@ -1087,19 +1092,19 @@ mod tests {
                 "d b",
                 "abc\ncdf\nret",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "d d",
                 "abc\ncdf\nret",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "dd",
                 "abc\ncdf\nret",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1118,19 +1123,19 @@ mod tests {
                 "D b",
                 "abc\ncdf",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "D D",
                 "abc\ncdf",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "DD",
                 "abc\ncdf",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1149,13 +1154,13 @@ mod tests {
                 "0 g; 1 h",
                 "abc\ncdf",
                 "",
-                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 3)\n",
             ),
             (
                 "g g",
                 "abc\ncdf",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
         ];
 
@@ -1174,13 +1179,13 @@ mod tests {
                 "0 G",
                 "abc\ncdf",
                 "",
-                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 3)\n",
             ),
             (
                 "G G",
                 "abc\ncdf",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
         ];
 
@@ -1205,25 +1210,25 @@ mod tests {
                 "0 h; 1 h",
                 "abc\ncdf\naaa\nbbb",
                 "",
-                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 3)\n",
             ),
             (
                 "h g",
                 "abc\ncdf\naaa",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "h h",
                 "abc\ncdf\naaa",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "hh",
                 "abc\ncdf\naaa\nbbb",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1253,25 +1258,25 @@ mod tests {
                 "0 H; 1 H",
                 "abc\ncdf\naaa",
                 "",
-                "sed: address lower bound must be bigger than 0 (line: 0, col: 2)\n",
+                "sed: address lower bound must be bigger than 0 (line: 0, col: 3)\n",
             ),
             (
                 "H g",
                 "abc\ncdf\naaa",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "H H",
                 "abc\ncdf\naaa\nbbb",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "HH",
                 "abc\ncdf\naaa\nbbb",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1302,31 +1307,31 @@ mod tests {
                 "i\\",
                 "abc\ncdf\n\n",
                 "",
-                "sed: missing text argument (line: 0, col: 3)\n",
+                "sed: missing text argument (line: 1, col: 1)\n",
             ),
             (
                 "i  \text",
                 "abc\ncdf\n\n",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "i\text",
                 "abc\ncdf\n\n",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "i\text\\in\\sed",
                 "abc\ncdf\n\n",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 1)\n",
+                "sed: text must be separated with '\\' (line: 0, col: 2)\n",
             ),
             (
                 "i\\ text text \n text ",
                 "abc\ncdf\n\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+                "sed: commands must be delimited with ';' (line: 1, col: 2)\n",
             ),
         ];
 
@@ -1350,19 +1355,19 @@ mod tests {
                 "I g",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "I I",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "II",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1389,19 +1394,19 @@ mod tests {
                 "n g",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "n n",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "nn",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1422,19 +1427,19 @@ mod tests {
                 "N g",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "N N",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "NN",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1461,19 +1466,19 @@ mod tests {
                 "p g",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "p p",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "pp",
                 "",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1493,19 +1498,19 @@ mod tests {
                 "P g",
                 "abc\n123",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "P P",
                 "abc\n123",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "PP",
                 "abc\n123",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1525,19 +1530,19 @@ mod tests {
                 "q g",
                 "abc\n123",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "q q",
                 "abc\n123",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "qq",
                 "abc\n123",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1553,22 +1558,22 @@ mod tests {
             (
                 "r ./tests/sed/assets/script_some_newlines",
                 "abc\ncdf",
-                "abc\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\ncdf\ns/a/ab/g\ns/b/bc/g\ns/c/ca/g\n\n\n",
+                "abc\ns/a/ab/g;\ns/b/bc/g;\ns/c/ca/g\n\n\ncdf\ns/a/ab/g;\ns/b/bc/g;\ns/c/ca/g\n\n\n",
                 "",
             ),
             ("r./tests/sed/assets/abc", "", "", ""),
             ("r./tests/sed/assets/abc", "a", "a\nabc\n", ""),
             ("r aer", "abc\ncdf", "abc\ncdf", ""),
             ("r./text/ard/assets/abc", "abc\ncdf", "abc\ncdf", ""),
+            ("r", "abc\ncdf", "abc\ncdf", ""),
+            ("r #@/?", "abc\ncdf", "abc\ncdf", ""),
             // wrong
-            ("r", "abc\ncdf", "", "sed: path is empty (line: 0, col: 0)\n"),
-            ("r #@/?", "abc\ncdf", "", "sed: path is empty (line: 0, col: 1)\n"),
-            ("r #@/?\nl", "abc\ncdf", "", "sed: path is empty (line: 0, col: 1)\n"),
+            ("r #@/?\nl", "abc\ncdf", "", "sed: commands must be delimited with ';' (line: 1, col: 1)\n"),
             (
                 "r./text/tests/s\x02ed/assets/abc",
                 "",
                 "",
-                "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 15)\n",
+                "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 16)\n",
             ),
         ];
 
@@ -1608,13 +1613,13 @@ mod tests {
                 "s/a/b/c/d/",
                 "abc\nbbb\nbcb\nrbt\n@#$\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
             ),
             (
                 "s//a//c//",
                 "abc\nbbb\nbcb\nrbt\n@#$\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 5)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
             ),
             (
                 "s/\\(\\(x\\)/\\1\\2/",
@@ -1626,7 +1631,7 @@ mod tests {
                 "s\na\nb\n",
                 "abc\nbbb\nbcb\nrbt\n@#$",
                 "",
-                "sed: splliter can't be number, '\n' or ';' (line: 0, col: 1)\n",
+                "sed: splliter can't be number, '\n' or ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1716,91 +1721,91 @@ mod tests {
                 "s/b/r/ p",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/ w",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/ p w ./README.md",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/-6",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
             ),
             (
                 "s/b/r/-6p",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 6)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
             ),
             (
                 "s/b/r/p-6",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/g-6",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 7)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/6g",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: n and g flags can't be used together (line: 0, col: 7)\n",
+                "sed: n and g flags can't be used together (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/6pg",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: n and g flags can't be used together (line: 0, col: 8)\n",
+                "sed: n and g flags can't be used together (line: 0, col: 9)\n",
             ),
             (
                 "s/b/r/wpg6",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: w flag must be last flag (line: 0, col: 9)\n",
+                "sed: w flag must be last flag (line: 0, col: 10)\n",
             ),
             (
                 "s/b/r/w6",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: w flag must be last flag (line: 0, col: 7)\n",
+                "sed: w flag must be last flag (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/w./REA;DME.md",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 14)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
             ),
             (
                 "s/b/r/w ./REA;DME.md",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 16)\n",
             ),
             (
                 "s/b/r/w ./REA;DME.md p",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 15)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 16)\n",
             ),
             (
                 "s/b/r/6gpw ./tests/sed/assets/r",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: n and g flags can't be used together (line: 0, col: 30)\n",
+                "sed: n and g flags can't be used together (line: 0, col: 31)\n",
             ),
         ];
 
@@ -1837,19 +1842,19 @@ mod tests {
                 "t; label",
                 "aa\naaa\n\n",
                 "",
-                "sed: unknown character 'l' (line: 0, col: 3)\n",
+                "sed: unknown character 'l' (line: 0, col: 4)\n",
             ),
             (
                 "t label :label",
                 "aa\naaa\n\n",
                 "",
-                "sed: label can't contain ' ' (line: 0, col: 13)\n",
+                "sed: label can't contain ' ' (line: 0, col: 14)\n",
             ),
             (
                 "t ab\ncd; :ab\ncd",
                 "aa\naaa\n\n",
                 "",
-                "sed: text must be separated with '\\' (line: 0, col: 6)\n",
+                "sed: commands must be delimited with ';' (line: 1, col: 1)\n",
             ),
         ];
 
@@ -1864,7 +1869,7 @@ mod tests {
             // correct
             ("w ./tests/sed/assets/newfile", "abc\ncdf\n", "abc\ncdf\n", ""),
             ("w atyfv", "abc\ncdf\n", "abc\ncdf\n", ""),
-            ("w ; h", "abc\ncdf\n", "", "sed: path is empty (line: 0, col: 1)\n"),
+            ("w ; h", "abc\ncdf\n", "abc\ncdf\n", ""),
             ("w./tests/sed/assets/r", "", "", ""),
             ("w./tests/sed/assets/newfile", "a\n", "a\n", ""),
             // wrong
@@ -1872,7 +1877,7 @@ mod tests {
                 "w./tests/s\x04ed/assets/abc",
                 "a\n",
                 "",
-                "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 10)\n",
+                "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 11)\n",
             ),
             (
                 "w./tests/ard/assets/abc",
@@ -1903,19 +1908,19 @@ mod tests {
                 "x h",
                 "abc\ncdf\nret",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "x x",
                 "abc\ncdf\nret",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "xx",
                 "abc\ncdf\nret",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -1946,7 +1951,7 @@ mod tests {
                 "y/abc/aaaa/",
                 "abc\naaa\n\n",
                 "",
-                "sed: number of characters in the two arrays does not match (line: 0, col: 11)\n",
+                "sed: number of characters in the two arrays does not match (line: 0, col: 12)\n",
             ),
         ];
 
@@ -1971,19 +1976,19 @@ mod tests {
                 "= g",
                 "abc\ncdf\nefg\nret\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "= =",
                 "abc\ncdf\nefg\nret\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 3)\n",
             ),
             (
                 "==",
                 "abc\ncdf\nefg\nret\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 1)\n",
+                "sed: commands must be delimited with ';' (line: 0, col: 2)\n",
             ),
         ];
 
@@ -2002,25 +2007,25 @@ mod tests {
                 "a\\#text\ntext",
                 "abc\ncdf\naaa\n",
                 "",
-                "sed: missing text argument (line: 0, col: 3)\n",
+                "sed: missing text argument (line: 1, col: 1)\n",
             ),
             (
                 "{ #\\ }\n{ #\n }\n#h", 
                 "abc\ncdf\n", 
                 "", 
-                "sed: '{' not have pair for closing block (line: 0, col: 0)\n"
+                "sed: '{' not have pair for closing block (line: 0, col: 1)\n"
             ),
             (
                 r#"{ # }\n{ # }\n{ \n# }"#,
                 "abc\ncdf\naaa",
                 "",
-                "sed: '{' not have pair for closing block (line: 0, col: 0)\n",
+                "sed: '{' not have pair for closing block (line: 0, col: 1)\n",
             ),
             (
                 "a\\text#abc\ntext",
                 "abc\ncdf\n",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
+                "sed: commands must be delimited with ';' (line: 1, col: 2)\n",
             ),
         ];
 
@@ -2044,7 +2049,7 @@ mod tests {
             ("2,4 !p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
             ("2,4 !{p}", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty\n", "a\na\nb\nc\nstart\nt\nt\n\n\nu\nu\nend\nend\nert\nert\nqwerty\nqwerty\n", ""),
             //wrong
-            ("\\/pattern/- p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '-' (line: 0, col: 10)\n")
+            ("\\/pattern/- p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '-' (line: 0, col: 11)\n")
         ];
 
         for (script, input, output, err) in test_data{
@@ -2164,7 +2169,7 @@ mod tests {
                 r#"s/#.*//;s/[[:blank:]]*$//;\/^$/ d;p"#, 
                 "# This is a comment\nLine with trailing spaces     \nAnother line", 
                 "", 
-                "sed: script ended unexpectedly  (line: 0, col: 2)\n"
+                "sed: script ended unexpectedly (line: 0, col: 3)\n"
             )
         ];
 
@@ -2217,7 +2222,7 @@ mod tests {
             "START-->\nLine 1\nLine 1\nLine 2\nLine 2\n", ""),
             (r#"1 s/^/ /; $ s/$/ /"#, "line1\nline2", " line1\nline2 ", ""), 
             (":a; $ q; n; 11,$ D; ba", "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n",
-            "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n", ""),
+            "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline12\n", ""),
             (r#"$ s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
             "apple pie is sweet\n123abc test123 hello world\none  three four\n", ""),
             (r#"s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
@@ -2227,7 +2232,7 @@ mod tests {
                 "\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
                 "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
                 "", 
-                "sed: commands must be delimited with ';' (line: 0, col: 21)\n"
+                "sed: commands must be delimited with ';' (line: 3, col: 17)\n"
             ),
         ];
         for (script, input, output, err) in test_data{
