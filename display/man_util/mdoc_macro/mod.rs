@@ -15,6 +15,49 @@ pub mod types;
 
 #[derive(Debug, PartialEq)]
 pub enum Macro {
+    A {
+        author_name: String,
+    },
+    B {
+        book_title: String,
+    },
+    C {
+        publication_location: String,
+    },
+    D {
+        month_day: Option<(String, u8)>,
+        year: i32,
+    },
+    I {
+        issuer_name: String,
+    },
+    J {
+        journal_name: String,
+    },
+    N {
+        issue_number: String,
+    },
+    O {
+        information: String,
+    },
+    P {
+        page_number: String,
+    },
+    Q {
+        insitution_author: String,
+    },
+    R {
+        report_name: String,
+    },
+    T {
+        article_title: String,
+    },
+    U {
+        uri: String,
+    },
+    V {
+        volume_number: String,
+    },
     Ad {
         address: String,
     },
@@ -197,7 +240,7 @@ pub enum Macro {
     Qo,
     Qc, // Close quoted context opened by Qo
     Qq,
-    Rs(Vec<RsSubmacro>),
+    Rs,
     Re, // Close an Rs block
     Rv {
         functions: Vec<String>,

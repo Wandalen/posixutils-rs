@@ -619,12 +619,253 @@ impl MdocParser {
         }
     }
 
+    fn parse_rs_submacro(pair: Pair<Rule>) -> Element {
+        // Parses (`%A`)[https://man.openbsd.org/mdoc#_A]:
+        // `%A first_name ... last_name`
+        fn parse_a(pair: Pair<Rule>) -> Element {
+            let author_names = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::A {
+                    author_name: author_names,
+                },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%B`)[https://man.openbsd.org/mdoc#_B]:
+        // `%B title`
+        fn parse_b(pair: Pair<Rule>) -> Element {
+            let book_title = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::B { book_title },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%C`)[https://man.openbsd.org/mdoc#_C]:
+        // `%C location`
+        fn parse_c(pair: Pair<'_, Rule>) -> Element {
+            let publication_location = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::C {
+                    publication_location,
+                },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%D`)[https://man.openbsd.org/mdoc#_D]:
+        // `%D [month day,] year`
+        fn parse_d(pair: Pair<'_, Rule>) -> Element {
+            let mut inner = pair.into_inner();
+
+            let mut month_day = None;
+
+            let inner_pair = inner.next().unwrap();
+            let year = match inner_pair.as_rule() {
+                Rule::month_day => {
+                    let mut md = inner_pair.into_inner();
+
+                    let month = md.next().unwrap().as_str().to_string();
+                    let day = md.next().unwrap().as_str().parse().unwrap();
+
+                    month_day = Some((month, day));
+
+                    inner.next().unwrap().as_str().parse::<i32>().unwrap()
+                }
+                Rule::year => inner_pair.as_str().parse::<i32>().unwrap(),
+                _ => unreachable!(),
+            };
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::D { month_day, year },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%I`)[https://man.openbsd.org/mdoc#_I]:
+        // `%I name`
+        fn parse_i(pair: Pair<'_, Rule>) -> Element {
+            let issuer_name = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::I { issuer_name },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%J`)[https://man.openbsd.org/mdoc#_J]:
+        // `%J name`
+        fn parse_j(pair: Pair<'_, Rule>) -> Element {
+            let journal_name = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::J { journal_name },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%N`)[https://man.openbsd.org/mdoc#_N]:
+        // `%N number`
+        fn parse_n(pair: Pair<'_, Rule>) -> Element {
+            let issue_number = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::N { issue_number },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%O`)[https://man.openbsd.org/mdoc#_O]:
+        // `%O line`
+        fn parse_o(pair: Pair<'_, Rule>) -> Element {
+            let information = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::O { information },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%P`)[https://man.openbsd.org/mdoc#_P]:
+        // `%P number`
+        fn parse_p(pair: Pair<'_, Rule>) -> Element {
+            let page_number = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::P { page_number },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%Q`)[https://man.openbsd.org/mdoc#_Q]:
+        // `%Q name`
+        fn parse_q(pair: Pair<'_, Rule>) -> Element {
+            let insitution_author = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::Q { insitution_author },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%R`)[https://man.openbsd.org/mdoc#_R]:
+        // `%R name`
+        fn parse_r(pair: Pair<'_, Rule>) -> Element {
+            let report_name = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::R { report_name },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%T`)[https://man.openbsd.org/mdoc#_T]:
+        // `%T title`
+        fn parse_t(pair: Pair<'_, Rule>) -> Element {
+            let article_title = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::T { article_title },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%U`)[https://man.openbsd.org/mdoc#_U]:
+        // `%U protocol://path`
+        fn parse_u(pair: Pair<'_, Rule>) -> Element {
+            let uri = pair.into_inner().next().unwrap().as_str().to_string();
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::U { uri },
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`%V`)[https://man.openbsd.org/mdoc#_V]:
+        // `%V number`
+        fn parse_v(pair: Pair<'_, Rule>) -> Element {
+            let volume_number = pair
+                .into_inner()
+                .map(|p| p.as_str().to_string())
+                .collect::<Vec<String>>()
+                .join(" ");
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::V { volume_number },
+                nodes: vec![],
+            })
+        }
+
+        let pair = pair.into_inner().next().unwrap();
+        match pair.as_rule() {
+            Rule::a => parse_a(pair),
+            Rule::b => parse_b(pair),
+            Rule::c => parse_c(pair),
+            Rule::d => parse_d(pair),
+            Rule::i => parse_i(pair),
+            Rule::j => parse_j(pair),
+            Rule::n => parse_n(pair),
+            Rule::o => parse_o(pair),
+            Rule::p => parse_p(pair),
+            Rule::q => parse_q(pair),
+            Rule::r => parse_r(pair),
+            Rule::t => parse_t(pair),
+            Rule::u => parse_u(pair),
+            Rule::v => parse_v(pair),
+            _ => Element::Text("Unsupported submacro".to_string()),
+        }
+    }
+
+    fn parse_inline(pair: Pair<Rule>) -> Element {
+        let pair = pair.into_inner().next().unwrap();
+        match pair.as_rule() {
+            Rule::rs_submacro => Self::parse_rs_submacro(pair),
+            _ => Element::Text("Unsupported inline".to_string()),
+        }
+    }
+
     fn parse_element(pair: Pair<Rule>) -> Element {
         match pair.as_rule() {
             Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
             Rule::block_full_implicit => Self::parse_block_full_implicit(pair),
             Rule::block_partial_implicit => Self::parse_block_partial_implicit(pair),
+            Rule::inline => Self::parse_inline(pair),
             _ => Element::Text(pair.as_str().to_string()),
         }
     }
@@ -1885,5 +2126,480 @@ mod test {
     #[test]
     fn vt_macro_inside() {
         todo!()
+    }
+
+    #[test]
+    fn a() {
+        let content = ".%A John Doe\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::A {
+                author_name: "John Doe".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn a_with_whitespaces() {
+        let content = ".%A John  \t  Doe\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::A {
+                author_name: "John Doe".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn a_no_args() {
+        assert!(MdocParser::parse_mdoc(".%A\n").is_err());
+    }
+
+    #[test]
+    fn b() {
+        let content = ".%B Title Line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::B {
+                book_title: "Title Line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn b_with_whitespaces() {
+        let content = ".%B Title  \t  Line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::B {
+                book_title: "Title Line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn b_no_args() {
+        assert!(MdocParser::parse_mdoc(".%B\n").is_err());
+    }
+
+    #[test]
+    fn c() {
+        let content = ".%C Location line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::C {
+                publication_location: "Location line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn c_with_whitespaces() {
+        let content = ".%C Location  \t  Line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::C {
+                publication_location: "Location Line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn c_no_args() {
+        assert!(MdocParser::parse_mdoc(".%C\n").is_err());
+    }
+
+    #[test]
+    fn d() {
+        let content = ".%D January 1, 1970\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::D {
+                month_day: Some(("January".to_string(), 1)),
+                year: 1970,
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn d_with_whitespaces() {
+        let content = ".%D January  \t  1,  \t  1970\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::D {
+                month_day: Some(("January".to_string(), 1)),
+                year: 1970,
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn d_no_month_day() {
+        let content = ".%D 1970\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::D {
+                month_day: None,
+                year: 1970,
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn d_no_args() {
+        assert!(MdocParser::parse_mdoc(".%D\n").is_err());
+    }
+
+    #[test]
+    fn i() {
+        let content = ".%I John Doe\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::I {
+                issuer_name: "John Doe".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn i_with_whitespaces() {
+        let content = ".%I John  \t  Doe\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::I {
+                issuer_name: "John Doe".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn i_no_args() {
+        assert!(MdocParser::parse_mdoc(".%I\n").is_err());
+    }
+
+    #[test]
+    fn j() {
+        let content = ".%J Journal Name Line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::J {
+                journal_name: "Journal Name Line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn j_with_whitespaces() {
+        let content = ".%J Journal  \t  Name  \t  Line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::J {
+                journal_name: "Journal Name Line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn j_no_args() {
+        assert!(MdocParser::parse_mdoc(".%J\n").is_err());
+    }
+
+    #[test]
+    fn n() {
+        let content = ".%N Issue No. 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::N {
+                issue_number: "Issue No. 1".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn n_with_whitespaces() {
+        let content = ".%N Issue  \t  No.  \t  1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::N {
+                issue_number: "Issue No. 1".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn n_no_args() {
+        assert!(MdocParser::parse_mdoc(".%N\n").is_err());
+    }
+
+    #[test]
+    fn o() {
+        let content = ".%O Optional information line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::O {
+                information: "Optional information line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn o_with_whitespaces() {
+        let content = ".%O Optional  \t  information  \t  line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::O {
+                information: "Optional information line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn o_no_args() {
+        assert!(MdocParser::parse_mdoc(".%O\n").is_err());
+    }
+
+    #[test]
+    fn p() {
+        let content = ".%P pp. 1-100\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::P {
+                page_number: "pp. 1-100".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn p_with_whitespaces() {
+        let content = ".%P pp.  \t  1-100\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::P {
+                page_number: "pp. 1-100".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn p_no_args() {
+        assert!(MdocParser::parse_mdoc(".%P\n").is_err());
+    }
+
+    #[test]
+    fn q() {
+        let content = ".%Q John Doe\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Q {
+                insitution_author: "John Doe".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn q_with_whitespaces() {
+        let content = ".%Q John  \t  Doe\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::Q {
+                insitution_author: "John Doe".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn q_no_args() {
+        assert!(MdocParser::parse_mdoc(".%Q\n").is_err());
+    }
+
+    #[test]
+    fn r() {
+        let content = ".%R Technical report No. 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::R {
+                report_name: "Technical report No. 1".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn r_with_whitespaces() {
+        let content = ".%R Technical  \t  report  \t  No.  \t  1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::R {
+                report_name: "Technical report No. 1".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn r_no_args() {
+        assert!(MdocParser::parse_mdoc(".%R\n").is_err());
+    }
+
+    #[test]
+    fn t() {
+        let content = ".%T Article title line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::T {
+                article_title: "Article title line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn t_with_whitespaces() {
+        let content = ".%T Article  \t  title  \t  line\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::T {
+                article_title: "Article title line".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn t_no_args() {
+        assert!(MdocParser::parse_mdoc(".%T\n").is_err());
+    }
+
+    #[test]
+    fn u() {
+        let content = ".%U protocol://path\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::U {
+                uri: "protocol://path".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn u_with_whitespaces() {
+        assert!(MdocParser::parse_mdoc(".%U protocol :// path\n").is_err());
+    }
+
+    #[test]
+    fn u_invalid_uri() {
+        assert!(MdocParser::parse_mdoc(".%U some_non_uri_text\n").is_err());
+    }
+
+    #[test]
+    fn u_no_args() {
+        assert!(MdocParser::parse_mdoc(".%U\n").is_err());
+    }
+
+    #[test]
+    fn v() {
+        let content = ".%V Volume No. 1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::V {
+                volume_number: "Volume No. 1".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn v_with_whitespaces() {
+        let content = ".%V Volume  \t  No.  \t  1\n";
+        let element = Element::Macro(MacroNode {
+            mdoc_macro: Macro::V {
+                volume_number: "Volume No. 1".to_string(),
+            },
+            nodes: vec![],
+        });
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+    }
+
+    #[test]
+    fn v_no_args() {
+        assert!(MdocParser::parse_mdoc(".%V\n").is_err());
     }
 }

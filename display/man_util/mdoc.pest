@@ -145,8 +145,75 @@ vt_block      = { "." ~ "Vt" ~ vt_type ~ vt_identifier* ~ NEWLINE }
 
 block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block | dq_block | en_block | op_block | pq_block | ql_block | qq_block | sq_block | vt_block }
 
+// ----- In-line
+
+// ----- %A
+
+a = { ".%A" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %B
+
+b = { ".%B" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %C
+
+c = { ".%C" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %D
+
+month     =  { macro_arg }
+day       = @{ (!WHITESPACE ~ !NEWLINE ~ ASCII_DIGIT)+ }
+month_day =  { month ~ day ~ "," }
+year      =  { macro_arg }
+d         =  { ".%D" ~ month_day? ~ year ~ NEWLINE? }
+
+// ----- %I
+
+i = { ".%I" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %J
+
+j = { ".%J" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %N
+
+n = { ".%N" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %O
+
+o = { ".%O" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %P
+
+p = { ".%P" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %Q
+
+q = { ".%Q" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %R
+
+r = { ".%R" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %T
+
+t = { ".%T" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- %U
+
+uri = @{ (!"://" ~ ANY)+ ~ "://" ~ macro_arg }
+u   =  { ".%U" ~ uri ~ NEWLINE? }
+
+// ----- %V
+
+v = { ".%V" ~ macro_arg+ ~ NEWLINE? }
+
+rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
+
+inline = { rs_submacro }
+
 // ----- Document
 
-element = { block_full_explicit | block_full_implicit | block_partial_implicit | text_line }
+element = { block_full_explicit | block_full_implicit | block_partial_implicit | inline | text_line }
 
 document = { SOI ~ element* ~ EOI }
