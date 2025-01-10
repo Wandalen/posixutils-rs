@@ -1018,14 +1018,14 @@ fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedErr
                 *i -= 1;
                 break;
             }
-            '_' | '/' | '\\' | ':' | '.' | ' ' => path.push(*ch),
+            /*'_' | '/' | '\\' | ':' | '.' | ' ' => path.push(*ch),
             _ if ch.is_whitespace() || ch.is_control() => {
                 let position = get_current_line_and_col(chars, *i);
                 return Err(SedError::ScriptParse(
                     "path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/'".to_string(),
                     position
                 ));
-            }
+            }*/
             _ => path.push(*ch),
         }
         *i += 1;
@@ -1034,6 +1034,13 @@ fn parse_path_attribute(chars: &[char], i: &mut usize) -> Result<PathBuf, SedErr
         }
     }
     let path = path.trim();
+    if path.is_empty(){
+        let position = get_current_line_and_col(chars, *i);
+        return Err(
+            SedError::ScriptParse(
+                "missing filename in r/R/w/W commands".to_string(), position
+            ));
+    }
     let file = PathBuf::from(path);
     if file.exists() {
         if file.is_file() {
@@ -1210,8 +1217,11 @@ fn parse_replace_flags(chars: &[char], i: &mut usize) -> Result<Vec<ReplaceFlag>
                     w_start_position = Some(*i);
                 }
                 *flag_map.get_mut(&'w').unwrap() += 1;
-                flags.push(ReplaceFlag::AppendToIfReplace(PathBuf::new()))
-            }
+                flags.push(ReplaceFlag::AppendToIfReplace(PathBuf::new()));
+                *i += 1;
+                break;
+            },
+            ' ' => {},
             _ => {
                 *i -= 1;
                 break;
@@ -2064,6 +2074,8 @@ impl Sed {
                     if self.current_end.is_none(){
                         self.current_end = Some("\n".to_string());
                     }
+                }else{
+                    self.current_end = Some("\n".to_string());
                 }
             },
             Command::Replace(_, ref regex, ..) => {

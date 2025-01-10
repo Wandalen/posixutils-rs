@@ -1563,18 +1563,13 @@ mod tests {
             ),
             ("r./tests/sed/assets/abc", "", "", ""),
             ("r./tests/sed/assets/abc", "a", "a\nabc\n", ""),
-            ("r aer", "abc\ncdf", "abc\ncdf", ""),
-            ("r./text/ard/assets/abc", "abc\ncdf", "abc\ncdf", ""),
-            ("r", "abc\ncdf", "abc\ncdf", ""),
-            ("r #@/?", "abc\ncdf", "abc\ncdf", ""),
+            ("r./text/tests/s\x03ed/assets/abc", "abc", "abc\n", ""),
+            ("r aer", "abc\ncdf", "abc\ncdf\n", ""),
+            ("r./text/ard/assets/abc", "abc\ncdf", "abc\ncdf\n", ""),
             // wrong
-            ("r #@/?\nl", "abc\ncdf", "", "sed: commands must be delimited with ';' (line: 1, col: 1)\n"),
-            (
-                "r./text/tests/s\x02ed/assets/abc",
-                "",
-                "",
-                "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 16)\n",
-            ),
+            ("r", "abc\ncdf", "", "sed: missing filename in r/R/w/W commands (line: 0, col: 1)\n"),
+            ("r #@/?", "abc\ncdf", "", "sed: missing filename in r/R/w/W commands (line: 0, col: 2)\n"),
+            ("r #@/?\nl", "abc\ncdf", "", "sed: missing filename in r/R/w/W commands (line: 0, col: 2)\n")
         ];
 
         for (script, input, output, err) in test_data {
@@ -1701,9 +1696,33 @@ mod tests {
                 "",
             ),
             (
+                "s/b/r/ p",
+                "abc\nbbb\nbcb\nrbt",
+                "arc\narc\nrbb\nrbb\nrcb\nrcb\nrrt\nrrt",
+                "",
+            ),
+            (
+                "s/b/r/ p w ./r",
+                "abc\nbbb\nbcb\nrbt",
+                "arc\narc\nrbb\nrbb\nrcb\nrcb\nrrt\nrrt",
+                "",
+            ),
+            (
                 "s/b/r/w g6",
                 "abc\nbbb\nbcb\nrbt\n",
                 "arc\nrbb\nrcb\nrrt\n",
+                "",
+            ),
+            (
+                "s/b/r/wpg6",
+                "abc\nbbb\nbcb\nrbt",
+                "arc\nrbb\nrcb\nrrt",
+                "",
+            ),
+            (
+                "s/b/r/w6",
+                "abc\nbbb\nbcb\nrbt",
+                "arc\nrbb\nrcb\nrrt",
                 "",
             ),
         ];
@@ -1718,22 +1737,10 @@ mod tests {
         let test_data = [
             // wrong
             (
-                "s/b/r/ p",
-                "abc\nbbb\nbcb\nrbt",
-                "",
-                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
-            ),
-            (
                 "s/b/r/ w",
                 "abc\nbbb\nbcb\nrbt",
                 "",
-                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
-            ),
-            (
-                "s/b/r/ p w ./README.md",
-                "abc\nbbb\nbcb\nrbt",
-                "",
-                "sed: commands must be delimited with ';' (line: 0, col: 8)\n",
+                "sed: missing filename in r/R/w/W commands (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/-6",
@@ -1770,18 +1777,6 @@ mod tests {
                 "abc\nbbb\nbcb\nrbt",
                 "",
                 "sed: n and g flags can't be used together (line: 0, col: 9)\n",
-            ),
-            (
-                "s/b/r/wpg6",
-                "abc\nbbb\nbcb\nrbt",
-                "",
-                "sed: w flag must be last flag (line: 0, col: 10)\n",
-            ),
-            (
-                "s/b/r/w6",
-                "abc\nbbb\nbcb\nrbt",
-                "",
-                "sed: w flag must be last flag (line: 0, col: 8)\n",
             ),
             (
                 "s/b/r/w./REA;DME.md",
