@@ -8,9 +8,9 @@
 //
 
 use plib::testing::{ 
-    // /*
+    /*
     run_test,
-    // */ 
+    */ 
     TestPlan
 };
 
@@ -33,7 +33,7 @@ fn sed_test(
     });
 }
 
-/*
+// /*
 use std::process::{ Output, Command, Stdio };
 use std::thread;
 use std::time::Duration;
@@ -91,7 +91,7 @@ pub fn run_test(plan: TestPlan) {
     if plan.expected_exit_code == 0 {
         assert!(output.status.success());
     }
-}*/
+}// */
 
 const ABC_INPUT: &'static str = "abc\n";
 const SCRIPT_A: &'static str = "s/a/ab/g";
@@ -2222,12 +2222,12 @@ mod tests {
             "apple pie is sweet\n123abc test123 hello world\none  three four\n", ""),
             (r#"s/[[:alnum:]]*//2"#, "apple pie is sweet\n123abc test123 hello world\none two three four\n",
             "apple  is sweet\n123abc  hello world\none  three four\n", ""),
-            (r#":a;s/^.\{1,13\}$/ &/;ta"#, "12345678\n1234567890123", "     12345678\n1234567890123", ""),
+            (r#":a;s/^.\{1,13\}$/ &/;ta"#, "12345678\n1234567890123", "      12345678\n 1234567890123", ""),
             (
                 "\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
                 "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
-                "", 
-                "sed: commands must be delimited with ';' (line: 3, col: 17)\n"
+                "Some text\nbegin\nbegin\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\nend\nend\nSome more text\n", 
+                ""
             ),
         ];
         for (script, input, output, err) in test_data{
