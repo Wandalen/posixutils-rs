@@ -143,6 +143,9 @@ enum SedError {
     /// [`Command::BranchToLabel`] or [`Command::Test`]
     #[error("script doesn't contain label '{}'", .0)]
     NoLabel(String),
+    /// [`Command::Replace`] pattern is empty and script doesn't has last regex
+    #[error("no previous regular expression")]
+    NoRegex,
     /// Files, stdin read/write errors
     #[error("{0}")]
     Io(#[from] std::io::Error),
@@ -1123,7 +1126,7 @@ fn parse_block(chars: &[char], i: &mut usize) -> Result<Vec<Command>, SedError> 
 
 /// Parse s, y [`Command`]s that formated as:
 /// x/string1/string2/
-fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, String), SedError> {
+fn parse_replace_command(chars: &[char], i: &mut usize, command: String) -> Result<(String, String), SedError> {
     *i += 1;
     let first_position = *i + 1;
     let Some(splitter) = chars.get(*i) else {
@@ -1135,7 +1138,7 @@ fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, Strin
     if splitter.is_alphanumeric() || " \n;{".contains(*splitter) {
         let position = get_current_line_and_col(chars, *i);
         return Err(SedError::ScriptParse(
-            "splliter can't be number, '\n' or ';'".to_string(),
+            format!("unterminated `{}' command", command),
             position
         ));
     }
@@ -1161,24 +1164,32 @@ fn parse_replace_command(chars: &[char], i: &mut usize) -> Result<(String, Strin
     if splitters.len() < 2 {
         let position = get_current_line_and_col(chars, *i);
         return Err(SedError::ScriptParse(
-            "script ended unexpectedly".to_string(),
+            format!("unterminated `{}' command", command),
             position
         ));
     };
 
     let Some(pattern) = chars.get(first_position..splitters[0]) else {
         return Err(SedError::ScriptParse(
-            "script ended unexpectedly".to_string(),
+            format!("unterminated `{}' command", command),
             None
         ));
     };
 
     let Some(replacement) = chars.get((splitters[0] + 1)..splitters[1]) else {
         return Err(SedError::ScriptParse(
-            "script ended unexpectedly".to_string(),
+            format!("unterminated `{}' command", command),
             None
         ));
     };
+
+    if pattern.contains(&'\n') || replacement.contains(&'\n'){
+        return Err(SedError::ScriptParse(
+            format!("unterminated `{}' command", command),
+            None
+        ));
+    }
+
     *i = splitters[1] + 1;
 
     let pattern = pattern.iter().collect::<String>();
@@ -1525,7 +1536,7 @@ impl Script {
                     commands.push(Command::PrintFile(address.clone(), rfile))
                 }
                 's' => {
-                    let (pattern, replacement) = parse_replace_command(&chars, &mut i)?;
+                    let (pattern, replacement) = parse_replace_command(&chars, &mut i, "s".to_string())?;
                     let re = compile_regex(pattern.clone())?;
                     let flags = parse_replace_flags(&chars, &mut i)?;
                     commands.push(Command::Replace(
@@ -1554,7 +1565,7 @@ impl Script {
                     commands.push(Command::ExchangeSpaces(address.clone()))
                 },
                 'y' => {
-                    let (string1, string2) = parse_replace_command(&chars, &mut i)?;
+                    let (string1, string2) = parse_replace_command(&chars, &mut i, "y".to_string())?;
                     if string1.len() != string2.len() {
                         let position = get_current_line_and_col(&chars, i);
                         return Err(SedError::ScriptParse(
@@ -2083,14 +2094,22 @@ impl Sed {
                     self.current_end = Some("\n".to_string());
                 }
             },
-            Command::Replace(_, ref regex, ..) => {
+            Command::Replace(address, ref regex, pattern, replacement, flags) => {
                 // s
+                let mut regex= regex.clone();
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
+                if pattern.is_empty(){
+                    if let Some(last_regex) = &self.last_regex{
+                        regex = last_regex.clone();
+                    }else{
+                        return Err(SedError::NoRegex);
+                    }
+                }
                 self.has_replacements_since_t = execute_replace(
                     &mut self.pattern_space,
-                    current_command.clone(),
+                    Command::Replace(address, regex.clone(), pattern, replacement, flags),
                     self.current_line,
                 )?;
                 self.last_regex = Some(regex.clone());
@@ -2856,12 +2875,12 @@ mod tests {
         for (raw_script, _result) in input {
             if _result.is_ok() {
                 assert!(matches!(
-                    parse_replace_command(&raw_script.chars().collect::<Vec<_>>(), &mut 0),
+                    parse_replace_command(&raw_script.chars().collect::<Vec<_>>(), &mut 0, "s".to_string()),
                     _result
                 ));
             } else {
                 assert!(
-                    parse_replace_command(&raw_script.chars().collect::<Vec<_>>(), &mut 0).is_err()
+                    parse_replace_command(&raw_script.chars().collect::<Vec<_>>(), &mut 0, "s".to_string()).is_err()
                 );
             }
         }

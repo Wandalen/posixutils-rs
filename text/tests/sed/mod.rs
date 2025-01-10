@@ -1602,7 +1602,7 @@ mod tests {
                 "rbc\nrbb\nrcb\nrbt\n",
                 "",
             ),
-            ("s///", "abc\nbbb\nbcb\nrbt", "abc\nbbb\nbcb\nrbt", ""),
+            ("s///", "abc\nbbb\nbcb\nrbt", "", "sed: read stdin: no previous regular expression\n"),
             // wrong
             (
                 "s/a/b/c/d/",
@@ -1626,7 +1626,7 @@ mod tests {
                 "s\na\nb\n",
                 "abc\nbbb\nbcb\nrbt\n@#$",
                 "",
-                "sed: splliter can't be number, '\n' or ';' (line: 0, col: 2)\n",
+                "sed: unterminated `s' command (line: 0, col: 2)\n",
             ),
         ];
 
