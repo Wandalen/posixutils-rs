@@ -31,13 +31,13 @@ pub struct MdocDocument {
 #[derive(Error, Debug, PartialEq)]
 pub enum MdocError {
     #[error("mdoc: {0}")]
-    PestError(#[from] Box<pest::error::Error<Rule>>),
+    Pest(#[from] Box<pest::error::Error<Rule>>),
     #[error("mdoc: {0}")]
-    ParsingError(String),
+    Parsing(String),
     #[error("mdoc: {0}")]
-    ValidationError(String),
+    Validation(String),
     #[error("mdoc: {0}")]
-    FormattingError(String),
+    Formatting(String),
 }
 
 #[derive(Default)]
@@ -71,10 +71,10 @@ impl MdocValidator {
             match element {
                 Element::Macro(MacroNode { mdoc_macro, nodes }) => {
                     if let Some(last_node) = nodes.last() {
-                        // Рекурсивно перевіряємо останній дочірній вузол
+                        // Recursively check the last child node
                         is_last_element_nd(last_node)
                     } else {
-                        // Якщо вузол пустий, перевіряємо сам макрос
+                        // If the node is empty, check the macro itself
                         matches!(mdoc_macro, Macro::Nd { .. })
                     }
                 }
@@ -84,14 +84,14 @@ impl MdocValidator {
 
         if let Macro::Sh { title } = &sh_node.mdoc_macro {
             if !self.sh_titles.insert(title.clone()) {
-                return Err(MdocError::ValidationError(format!(
+                return Err(MdocError::Validation(format!(
                     "Duplicate .Sh title found: {title}"
                 )));
             }
             if title == "NAME" && !sh_node.nodes.is_empty() {
                 let last_element = sh_node.nodes.last().unwrap();
                 if !is_last_element_nd(last_element) {
-                    return Err(MdocError::ValidationError(
+                    return Err(MdocError::Validation(
                         ".Sh NAME must end with .Nd".to_string(),
                     ));
                 }
@@ -103,7 +103,7 @@ impl MdocValidator {
     fn validate_ss(&mut self, ss_node: &MacroNode) -> Result<(), MdocError> {
         if let Macro::Ss { title } = &ss_node.mdoc_macro {
             if !self.ss_titles.insert(title.clone()) {
-                return Err(MdocError::ValidationError(format!(
+                return Err(MdocError::Validation(format!(
                     "Duplicate .Ss title found: {title}",
                 )));
             }
@@ -139,6 +139,41 @@ impl MdocValidator {
     }
 }
 
+impl MdocParser {
+    fn parse_element(pair: Pair<Rule>) -> Element {
+        match pair.as_rule() {
+            Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
+            Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
+            Rule::block_full_implicit => Self::parse_block_full_implicit(pair),
+            Rule::block_partial_implicit => Self::parse_block_partial_implicit(pair),
+            Rule::inline => Self::parse_inline(pair),
+            _ => Element::Text(pair.as_str().to_string()),
+        }
+    }
+
+    pub fn parse_mdoc(input: impl AsRef<str>) -> Result<MdocDocument, MdocError> {
+        let pairs = MdocParser::parse(Rule::document, input.as_ref())
+            .map_err(|err| MdocError::Pest(Box::new(err)))?;
+        println!("Pairs:\n{pairs:#?}\n\n");
+
+        // Iterate each pair (macro or text element)
+        let elements = pairs
+            .flat_map(|p| {
+                let inner_rules = p.into_inner();
+                inner_rules.map(|p| Self::parse_element(p))
+            })
+            .collect();
+
+        let mut mdoc = MdocDocument { elements };
+
+        let validator = &mut MdocValidator::default();
+        validator.validate(&mut mdoc)?;
+
+        Ok(mdoc)
+    }
+}
+
+// Block full-explicit macros parsing
 impl MdocParser {
     /// Parses (`Bd`)[https://man.openbsd.org/mdoc#Bd]:
     /// `Bd -type [-offset width] [-compact]`
@@ -346,7 +381,10 @@ impl MdocParser {
             _ => Element::Text("Unsupported block".to_string()),
         }
     }
+}
 
+// Block full-implicit macros parsing
+impl MdocParser {
     // Parses (`Nd`)[https://man.openbsd.org/mdoc#Nd]
     // `Nd line`
     fn parse_nd(pair: Pair<Rule>) -> Element {
@@ -448,7 +486,10 @@ impl MdocParser {
             _ => Element::Text("Unsupported block".to_string()),
         }
     }
+}
 
+// Block partial-implicit macros parsing
+impl MdocParser {
     // Parses (`Aq`)[https://man.openbsd.org/mdoc#Aq]:
     // `Aq line`
     fn parse_aq_block(pair: Pair<Rule>) -> Element {
@@ -618,7 +659,10 @@ impl MdocParser {
             _ => Element::Text("Unsupported block".to_string()),
         }
     }
+}
 
+// In-line macros parsing
+impl MdocParser {
     fn parse_rs_submacro(pair: Pair<Rule>) -> Element {
         // Parses (`%A`)[https://man.openbsd.org/mdoc#_A]:
         // `%A first_name ... last_name`
@@ -857,38 +901,6 @@ impl MdocParser {
             Rule::rs_submacro => Self::parse_rs_submacro(pair),
             _ => Element::Text("Unsupported inline".to_string()),
         }
-    }
-
-    fn parse_element(pair: Pair<Rule>) -> Element {
-        match pair.as_rule() {
-            Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
-            Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
-            Rule::block_full_implicit => Self::parse_block_full_implicit(pair),
-            Rule::block_partial_implicit => Self::parse_block_partial_implicit(pair),
-            Rule::inline => Self::parse_inline(pair),
-            _ => Element::Text(pair.as_str().to_string()),
-        }
-    }
-
-    pub fn parse_mdoc(input: impl AsRef<str>) -> Result<MdocDocument, MdocError> {
-        let pairs = MdocParser::parse(Rule::document, input.as_ref())
-            .map_err(|err| MdocError::PestError(Box::new(err)))?;
-        println!("Pairs:\n{pairs:#?}\n\n");
-
-        // Iterate each pair (macro or text element)
-        let elements = pairs
-            .flat_map(|p| {
-                let inner_rules = p.into_inner();
-                inner_rules.map(|p| Self::parse_element(p))
-            })
-            .collect();
-
-        let mut mdoc = MdocDocument { elements };
-
-        let validator = &mut MdocValidator::default();
-        validator.validate(&mut mdoc)?;
-
-        Ok(mdoc)
     }
 }
 
@@ -1636,7 +1648,7 @@ mod test {
             let mdoc = MdocParser::parse_mdoc(content);
             assert_eq!(
                 mdoc,
-                Err(MdocError::ValidationError(
+                Err(MdocError::Validation(
                     "Duplicate .Sh title found: SECTION".to_string()
                 ))
             );
@@ -1649,7 +1661,7 @@ mod test {
             let mdoc = MdocParser::parse_mdoc(content);
             assert_eq!(
                 mdoc,
-                Err(MdocError::ValidationError(
+                Err(MdocError::Validation(
                     ".Sh NAME must end with .Nd".to_string()
                 ))
             );
@@ -1810,7 +1822,7 @@ mod test {
             let mdoc = MdocParser::parse_mdoc(content);
             assert_eq!(
                 mdoc,
-                Err(MdocError::ValidationError(
+                Err(MdocError::Validation(
                     "Duplicate .Ss title found: Subchapter 1".to_string()
                 ))
             );
