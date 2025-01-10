@@ -463,7 +463,7 @@ mod tests {
                 ";\\;\\;;",
                 "abc\ndef\n@#$",
                 "",
-                "sed: pattern can't consist more than 1 line (line: 0, col: 3)\n",
+                "sed: pattern can't consist more than 1 line (line: 0, col: 2)\n",
             ),
             (
                 ";\\ ;;;",
@@ -2030,7 +2030,7 @@ mod tests {
             ("\\`'$PATTERN'`p", "'$PATTERN'\nabc\n\n'$PATTERN'\nret'$PATTERN'abc\n",
             "'$PATTERN'\n'$PATTERN'\nabc\n\n'$PATTERN'\n'$PATTERN'\nret'$PATTERN'abc\nret'$PATTERN'abc\n", ""),
             ("s/param=.*/param=new_value\n/", "param=abc\nparam=\nparam abc\n",
-            "", "sed: unterminated `s' command\n"),
+            "", "sed: unterminated `s' command (line: 0, col: 3)\n"),
         ];
 
         for (script, input, output, err) in test_data {
@@ -2088,7 +2088,7 @@ mod tests {
                 "s/.\n$/\n/",
                 "line1\nline2\n",
                 "",
-                "sed: unterminated `s' command\n",
+                "sed: unterminated `s' command (line: 0, col: 3)\n",
             ),
         ];
 
@@ -2137,13 +2137,13 @@ mod tests {
                 "s/^M.$/\n/",
                 "hello\nM\nabc\n",
                 "",
-                "sed: unterminated `s' command\n",
+                "sed: unterminated `s' command (line: 0, col: 3)\n",
             ),
             (
                 "s/\x0D.$/\n/",
                 "hello\x0D\n",
                 "",
-                "sed: unterminated `s' command\n",
+                "sed: unterminated `s' command (line: 0, col: 3)\n",
             ),
             (
                 r#"s/\(^[*][[:space:]]\)/   \1/"#,
@@ -2195,7 +2195,7 @@ mod tests {
                 "\\/./{H;d;};x;s/\n/={NL}=/g",
                 "line1\nline2",
                 "",
-                "sed: unterminated `s' command\n",
+                "sed: unterminated `s' command (line: 0, col: 16)\n",
             ),
             (
                 r#"N; s/^/     /; s/\(\n.*\)/\1     /"#,
@@ -2219,7 +2219,7 @@ mod tests {
                 "\\/./N; s/\n//",
                 "line1\nline2\n",
                 "",
-                "sed: unterminated `s' command\n",
+                "sed: unterminated `s' command (line: 0, col: 10)\n",
             ),
             (
                 "s/$/`echo -e \\\r`/",
@@ -2231,7 +2231,7 @@ mod tests {
                 "s/\n/\t/; N",
                 "Line 1\nLine 2\nLine 3\nLine 4",
                 "",
-                "sed: unterminated `s' command\n",
+                "sed: unterminated `s' command (line: 0, col: 3)\n",
             ),
             (
                 r#"s/\(^[*][[:space:]]\)/   \1/;\/List of products:/a\ ---------------"#,
