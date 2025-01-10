@@ -2101,7 +2101,7 @@ mod tests {
              "Hello\nIowa is here\nIowa is here\nMontana is next\nMontana is next\nEnd\n", ""),
             (r#"\/\/\//N;\/\/\//d"#, "line1\nline2\n//\nline3", "line1\nline2\n", ""),
             ("$=", "line1\nline2\nline3\n", "line1\nline2\n3\nline3\n", ""),
-            ("s/.\n$/\n/", "line1\nline2\n", "line1\nline2\n", ""),
+            ("s/.\n$/\n/", "line1\nline2\n", "", "sed: unterminated `s' command\n"),
         ];
 
         for (script, input, output, err) in test_data{
