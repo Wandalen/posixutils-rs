@@ -1542,8 +1542,13 @@ impl Script {
                     commands.push(Command::Test(address.clone(), label));
                 }
                 'w' => {
-                    let wfile = parse_path_attribute(&chars, &mut i)?;
-                    commands.push(Command::AppendPatternToFile(address.clone(), wfile))
+                    match parse_path_attribute(&chars, &mut i){
+                        Ok(wfile) => {
+                            commands.push(Command::AppendPatternToFile(address.clone(), wfile));
+                        },
+                        Err(SedError::ScriptParse(msg, _)) if msg.starts_with("missing") => {},
+                        Err(err) => return Err(err)  
+                    };
                 }
                 'x' => {
                     commands.push(Command::ExchangeSpaces(address.clone()))

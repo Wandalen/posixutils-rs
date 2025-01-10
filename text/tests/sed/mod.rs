@@ -1866,6 +1866,7 @@ mod tests {
             ("w atyfv", "abc\ncdf\n", "abc\ncdf\n", ""),
             ("w./tests/sed/assets/r", "", "", ""),
             ("w./tests/sed/assets/newfile", "a\n", "a\n", ""),
+            ("w ; h", "abc\ncdf\n", "abc\ncdf\n", ""),
             // wrong
             (
                 "w./tests/s\x04ed/assets/abc",
@@ -1879,7 +1880,6 @@ mod tests {
                 "",
                 "sed: read stdin: can't find './tests/ard/assets/abc': no such file or directory (os error 2)\n",
             ),
-            ("w ; h", "abc\ncdf\n", "", "sed: missing filename in r/R/w/W commands (line: 0, col: 2)\n"),
         ];
 
         for (script, input, output, err) in test_data {
