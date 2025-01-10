@@ -1864,7 +1864,6 @@ mod tests {
             // correct
             ("w ./tests/sed/assets/newfile", "abc\ncdf\n", "abc\ncdf\n", ""),
             ("w atyfv", "abc\ncdf\n", "abc\ncdf\n", ""),
-            ("w ; h", "abc\ncdf\n", "abc\ncdf\n", ""),
             ("w./tests/sed/assets/r", "", "", ""),
             ("w./tests/sed/assets/newfile", "a\n", "a\n", ""),
             // wrong
@@ -1872,7 +1871,7 @@ mod tests {
                 "w./tests/s\x04ed/assets/abc",
                 "a\n",
                 "",
-                "sed: path can contain only letters, numbers, '_', ':', '.', '\\', ' ' and '/' (line: 0, col: 11)\n",
+                "sed: read stdin: can't find './tests/s\u{4}ed/assets/abc': no such file or directory (os error 2)\n",
             ),
             (
                 "w./tests/ard/assets/abc",
@@ -1880,6 +1879,7 @@ mod tests {
                 "",
                 "sed: read stdin: can't find './tests/ard/assets/abc': no such file or directory (os error 2)\n",
             ),
+            ("w ; h", "abc\ncdf\n", "", "sed: missing filename in r/R/w/W commands (line: 0, col: 2)\n"),
         ];
 
         for (script, input, output, err) in test_data {
