@@ -7,11 +7,11 @@
 // SPDX-License-Identifier: MIT
 //
 
-use plib::testing::{ 
+use plib::testing::{
     // /*
     run_test,
-    // */ 
-    TestPlan
+    // */
+    TestPlan,
 };
 
 fn sed_test(
@@ -440,13 +440,7 @@ mod tests {
 
     #[test]
     fn test_script_all_newlines() {
-        sed_test(
-            &[SCRIPT_ALL_NEWLINES],
-            ABC_INPUT,
-            ABC_INPUT,
-            "",
-            0,
-        );
+        sed_test(&[SCRIPT_ALL_NEWLINES], ABC_INPUT, ABC_INPUT, "", 0);
     }
 
     #[test]
@@ -462,13 +456,7 @@ mod tests {
 
     #[test]
     fn test_e_script_all_newlines() {
-        sed_test(
-            &["-e", SCRIPT_ALL_NEWLINES],
-            ABC_INPUT,
-            ABC_INPUT,
-            "",
-            0,
-        );
+        sed_test(&["-e", SCRIPT_ALL_NEWLINES], ABC_INPUT, ABC_INPUT, "", 0);
     }
 
     #[test]
@@ -762,19 +750,19 @@ mod tests {
                 "abc\ndef\n@@##%%#^\n",
                 "abc\ndef\n@@##%%#^\n",
                 "",
-            ), 
+            ),
             (
                 "{ { \n }; {}; {\n}; { }; }",
                 "abc\ndef\n@@##%%#^\n",
                 "abc\ndef\n@@##%%#^\n",
                 "",
-            ), 
+            ),
             (
                 "{ { \n }; {}; {\n}; { } }",
                 "abc\ndef\n@@##%%#^\n",
                 "abc\ndef\n@@##%%#^\n",
                 "",
-            ), 
+            ),
             (
                 "{ { { { { { { { {} } } } } } } } }",
                 "abc\ndef\n@@##%%#^\n",
@@ -817,7 +805,7 @@ mod tests {
                 "abc\ndef\n@@##%%#^\n",
                 "",
                 "sed: commands must be delimited with ';' (line: 1, col: 4)\n",
-            ), 
+            ),
             (
                 "15,10 { 10,5 { 5,1 p } }",
                 "abc\ndef\n@@##%%#^\n",
@@ -945,10 +933,10 @@ mod tests {
             // wrong
             ("b; :label", "aa\naa\n", "aa\naa\n", ""),
             (
-                "b label#; :label#", 
-                "aa\naa\n", 
-                "", 
-                "sed: can't find label for jump to `label'\n"
+                "b label#; :label#",
+                "aa\naa\n",
+                "",
+                "sed: can't find label for jump to `label'\n",
             ),
             (
                 "b ab\ncd; :ab\ncd",
@@ -1289,7 +1277,12 @@ mod tests {
     fn test_i() {
         let test_data = [
             // correct
-            ("i\\text", "abc\ncdf\n\n", "text\nabc\ntext\ncdf\ntext\n\n", ""),
+            (
+                "i\\text",
+                "abc\ncdf\n\n",
+                "text\nabc\ntext\ncdf\ntext\n\n",
+                "",
+            ),
             (
                 "i\\text\\in\\sed",
                 "abc\ncdf\n\n",
@@ -1381,12 +1374,12 @@ mod tests {
             );
         }
     }
- 
+
     #[test]
     fn test_n() {
         let test_data = [
             // correct
-            //("n", "abc", "abc", ""),
+            ("n", "abc", "abc", ""),
             ("n; p", "abc\ncdf\n", "abc\ncdf\ncdf\n", ""),
             ("g; n; g; n; g; n", "abc\ncdf\nret", "\n\n\n", ""),
             // wrong
@@ -1582,8 +1575,18 @@ mod tests {
         let test_data = [
             // correct
             ("s/b/r/", "abc\nbbb\nbcb\nrbt\n", "arc\nrbb\nrcb\nrrt\n", ""),
-            ("s/b/r/g", "abc\nbbb\nbcb\nrbt\n", "arc\nrrr\nrcr\nrrt\n", ""),
-            ("s|b|r|g", "abc\nbbb\nbcb\nrbt\n", "arc\nrrr\nrcr\nrrt\n", ""),
+            (
+                "s/b/r/g",
+                "abc\nbbb\nbcb\nrbt\n",
+                "arc\nrrr\nrcr\nrrt\n",
+                "",
+            ),
+            (
+                "s|b|r|g",
+                "abc\nbbb\nbcb\nrbt\n",
+                "arc\nrrr\nrcr\nrrt\n",
+                "",
+            ),
             (
                 "s/[[:alpha:]]/r/",
                 "abc\nbbb\nbcb\nrbt\n@#$\n",
@@ -1602,7 +1605,12 @@ mod tests {
                 "rbc\nrbb\nrcb\nrbt\n",
                 "",
             ),
-            ("s///", "abc\nbbb\nbcb\nrbt", "", "sed: read stdin: no previous regular expression\n"),
+            (
+                "s///",
+                "abc\nbbb\nbcb\nrbt",
+                "",
+                "sed: read stdin: no previous regular expression\n",
+            ),
             // wrong
             (
                 "s/a/b/c/d/",
@@ -1713,18 +1721,8 @@ mod tests {
                 "arc\nrbb\nrcb\nrrt\n",
                 "",
             ),
-            (
-                "s/b/r/wpg6",
-                "abc\nbbb\nbcb\nrbt",
-                "arc\nrbb\nrcb\nrrt",
-                "",
-            ),
-            (
-                "s/b/r/w6",
-                "abc\nbbb\nbcb\nrbt",
-                "arc\nrbb\nrcb\nrrt",
-                "",
-            ),
+            ("s/b/r/wpg6", "abc\nbbb\nbcb\nrbt", "arc\nrbb\nrcb\nrrt", ""),
+            ("s/b/r/w6", "abc\nbbb\nbcb\nrbt", "arc\nrbb\nrcb\nrrt", ""),
         ];
 
         for (script, input, output, err) in test_data {
@@ -1826,12 +1824,42 @@ mod tests {
             ("t #%$?@&*;", "", "", ""),
             // wrong
             ("t; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
-            ("t label#; :label#", "aa\naaa\n\n", "", "sed: can't find label for jump to `label'\n"),
-            ("t label;", "", "", "sed: can't find label for jump to `label'\n"),
-            ("t :label", "", "", "sed: can't find label for jump to `:label'\n"),
-            ("t label#", "", "", "sed: can't find label for jump to `label'\n"),
-            ("t 1label", "", "", "sed: can't find label for jump to `1label'\n"),
-            ("t 1234", "", "", "sed: can't find label for jump to `1234'\n"),
+            (
+                "t label#; :label#",
+                "aa\naaa\n\n",
+                "",
+                "sed: can't find label for jump to `label'\n",
+            ),
+            (
+                "t label;",
+                "",
+                "",
+                "sed: can't find label for jump to `label'\n",
+            ),
+            (
+                "t :label",
+                "",
+                "",
+                "sed: can't find label for jump to `:label'\n",
+            ),
+            (
+                "t label#",
+                "",
+                "",
+                "sed: can't find label for jump to `label'\n",
+            ),
+            (
+                "t 1label",
+                "",
+                "",
+                "sed: can't find label for jump to `1label'\n",
+            ),
+            (
+                "t 1234",
+                "",
+                "",
+                "sed: can't find label for jump to `1234'\n",
+            ),
             ("t g", "", "", "sed: can't find label for jump to `g'\n"),
             (
                 "t; label",
@@ -2005,10 +2033,10 @@ mod tests {
                 "sed: missing text argument (line: 1, col: 1)\n",
             ),
             (
-                "{ #\\ }\n{ #\n }\n#h", 
-                "abc\ncdf\n", 
-                "", 
-                "sed: '{' not have pair for closing block (line: 0, col: 1)\n"
+                "{ #\\ }\n{ #\n }\n#h",
+                "abc\ncdf\n",
+                "",
+                "sed: '{' not have pair for closing block (line: 0, col: 1)\n",
             ),
             (
                 r#"{ # }\n{ # }\n{ \n# }"#,
@@ -2047,14 +2075,8 @@ mod tests {
             ("\\/pattern/- p", "a\nb\nc\nstart\nt\n\nu\nend\nert\nqwerty", "", "sed: unknown character '-' (line: 0, col: 11)\n")
         ];
 
-        for (script, input, output, err) in test_data{
-            sed_test(
-                &["-e", script],
-                input,
-                output,
-                err,
-                !err.is_empty() as i32,
-            );
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
         }
     }
 
@@ -2076,14 +2098,8 @@ mod tests {
             "", "sed: unterminated `s' command\n"),
         ];
 
-        for (script, input, output, err) in test_data{
-            sed_test(
-                &["-e", script],
-                input,
-                output,
-                err,
-                !err.is_empty() as i32,
-            );
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
         }
     }
 
@@ -2091,27 +2107,58 @@ mod tests {
     fn test_combinations_3() {
         let test_data = [
             // correct
-            ("y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:", "ABC\n\n1234\nabcdefg",
-            "abc\n\n1234\nabcdefg", ""),
-            ("\\/^$/d;G", "Line 1\n\nLine 2\nLine 3\n\n\nLine 4\n", "Line 1\n\nLine 2\n\nLine 3\n\nLine 4\n\n", ""),
-            (r#"\/^$/{p;h;};\/./{x;\/./p;}"#, "line1\n\nline2\nline3", "\n\n\n\nline2\nline2\n", ""),
-            ("\\/./{H;$d;};x;\\/[AAA|BBB|CCC]/b;d", "line1\nAAA\nline2\nBBB\nline3\n",
-             "line1\nAAA\nAAA\nline2\nline2\nBBB\n", ""),
-            ("\\/Iowa/,\\/Montana/p", "Hello\nIowa is here\nMontana is next\nEnd\n",
-             "Hello\nIowa is here\nIowa is here\nMontana is next\nMontana is next\nEnd\n", ""),
-            (r#"\/\/\//N;\/\/\//d"#, "line1\nline2\n//\nline3", "line1\nline2\n", ""),
-            ("$=", "line1\nline2\nline3\n", "line1\nline2\n3\nline3\n", ""),
-            ("s/.\n$/\n/", "line1\nline2\n", "", "sed: unterminated `s' command\n"),
+            (
+                "y:ABCDEFGHIJKLMNOPQRSTUVWXYZ:abcdefghijklmnopqrstuvwxyz:",
+                "ABC\n\n1234\nabcdefg",
+                "abc\n\n1234\nabcdefg",
+                "",
+            ),
+            (
+                "\\/^$/d;G",
+                "Line 1\n\nLine 2\nLine 3\n\n\nLine 4\n",
+                "Line 1\n\nLine 2\n\nLine 3\n\nLine 4\n\n",
+                "",
+            ),
+            (
+                r#"\/^$/{p;h;};\/./{x;\/./p;}"#,
+                "line1\n\nline2\nline3",
+                "\n\n\n\nline2\nline2\n",
+                "",
+            ),
+            (
+                "\\/./{H;$d;};x;\\/[AAA|BBB|CCC]/b;d",
+                "line1\nAAA\nline2\nBBB\nline3\n",
+                "line1\nAAA\nAAA\nline2\nline2\nBBB\n",
+                "",
+            ),
+            (
+                "\\/Iowa/,\\/Montana/p",
+                "Hello\nIowa is here\nMontana is next\nEnd\n",
+                "Hello\nIowa is here\nIowa is here\nMontana is next\nMontana is next\nEnd\n",
+                "",
+            ),
+            (
+                r#"\/\/\//N;\/\/\//d"#,
+                "line1\nline2\n//\nline3",
+                "line1\nline2\n",
+                "",
+            ),
+            (
+                "$=",
+                "line1\nline2\nline3\n",
+                "line1\nline2\n3\nline3\n",
+                "",
+            ),
+            (
+                "s/.\n$/\n/",
+                "line1\nline2\n",
+                "",
+                "sed: unterminated `s' command\n",
+            ),
         ];
 
-        for (script, input, output, err) in test_data{
-            sed_test(
-                &["-e", script],
-                input,
-                output,
-                err,
-                !err.is_empty() as i32,
-            );
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
         }
     }
 
@@ -2121,26 +2168,58 @@ mod tests {
             // correct
             ("1{$q;};${h;d;}; x", "line1\nline2\nline3", "\nline1\n", ""),
             ("$h; $d; x", "line1\nline2\nline3", "\nline1\n", ""),
-            (r#"s/\(.*\)foo\(.*foo\)/\1bar\2/"#, "thisfooisfoo", "thisbarisfoo", ""),
-            ("s/scarlet/red/g;s/ruby/red/g;s/puce/red/g", "The scarlet sky turned ruby as the puce evening settled.",
-            "The red sky turned red as the red evening settled.", ""),
-            (r#":a;s/\(^|[^0-9.]\)\([0-9]+\)\([0-9]{3}\)/\1\2,\3/g;ta"#, "1234567890\nhello123456789\n1000", "1234567890\nhello123456789\n1000", ""),            
-            ("n;n;n;n;G;", "line1\nline2\nline3\nline4\n", "line1\nline2\nline3\nline4\n", ""),
-            ("s/^[ \t]* //;s/[ \t]*$//", "    hello world    ", "hello world", ""),
-            ("s/^M.$/\n/", "hello\nM\nabc\n", "", "sed: unterminated `s' command\n"),
-            ("s/\x0D.$/\n/", "hello\x0D\n", "", "sed: unterminated `s' command\n"),
-            (r#"s/\(^[*][[:space:]]\)/   \1/"#, "* Item 1\n* Another item\nNormal text",
-            "   * Item 1\n   * Another item\nNormal text", ""),
+            (
+                r#"s/\(.*\)foo\(.*foo\)/\1bar\2/"#,
+                "thisfooisfoo",
+                "thisbarisfoo",
+                "",
+            ),
+            (
+                "s/scarlet/red/g;s/ruby/red/g;s/puce/red/g",
+                "The scarlet sky turned ruby as the puce evening settled.",
+                "The red sky turned red as the red evening settled.",
+                "",
+            ),
+            (
+                r#":a;s/\(^|[^0-9.]\)\([0-9]+\)\([0-9]{3}\)/\1\2,\3/g;ta"#,
+                "1234567890\nhello123456789\n1000",
+                "1234567890\nhello123456789\n1000",
+                "",
+            ),
+            (
+                "n;n;n;n;G;",
+                "line1\nline2\nline3\nline4\n",
+                "line1\nline2\nline3\nline4\n",
+                "",
+            ),
+            (
+                "s/^[ \t]* //;s/[ \t]*$//",
+                "    hello world    ",
+                "hello world",
+                "",
+            ),
+            (
+                "s/^M.$/\n/",
+                "hello\nM\nabc\n",
+                "",
+                "sed: unterminated `s' command\n",
+            ),
+            (
+                "s/\x0D.$/\n/",
+                "hello\x0D\n",
+                "",
+                "sed: unterminated `s' command\n",
+            ),
+            (
+                r#"s/\(^[*][[:space:]]\)/   \1/"#,
+                "* Item 1\n* Another item\nNormal text",
+                "   * Item 1\n   * Another item\nNormal text",
+                "",
+            ),
         ];
 
-        for (script, input, output, err) in test_data{
-            sed_test(
-                &["-e", script],
-                input,
-                output,
-                err,
-                !err.is_empty() as i32,
-            );
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
         }
     }
 
@@ -2168,14 +2247,8 @@ mod tests {
             )
         ];
 
-        for (script, input, output, err) in test_data{
-            sed_test(
-                &["-e", script],
-                input,
-                output,
-                err,
-                !err.is_empty() as i32,
-            );
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
         }
     }
 
@@ -2183,28 +2256,58 @@ mod tests {
     fn test_combinations_6() {
         let test_data = [
             // correct
-            ("\\/./{H;d;};x;s/\n/={NL}=/g", "line1\nline2", "", "sed: unterminated `s' command\n"),
-            (r#"N; s/^/     /; s/\(\n.*\)/\1     /"#, "line1\nline2", "     line1\nline2     ", ""),
-            (r#"s/h\.0\.\(.*\)/ \U\1/"#, "h.0.someText\nh.0=data\nh.0.anotherExample",
-            "h.0. UsomeText\nh.0=data\nh.0. UanotherExample", ""),            
-            (r#"s/ *(.*)//; s/>.*//; s/.*[:<] *//"#, "Subject: Hello <hello@example.com>\nFrom: someone <someone@example.com>\n",
-            "hello@example.com\nsomeone@example.com\n", ""),
-            ("\\/./N; s/\n//", "line1\nline2\n", "", "sed: unterminated `s' command\n"),
-            ("s/$/`echo -e \\\r`/", "Hello World", "Hello World`echo -e \r`", ""),
-            ("s/\n/\t/; N", "Line 1\nLine 2\nLine 3\nLine 4", "", "sed: unterminated `s' command\n"), 
-            (r#"s/\(^[*][[:space:]]\)/   \1/;\/List of products:/a\ ---------------"#, 
-            "List of products:\n---------------* product\n* product1", 
-            "List of products:\n ---------------\n---------------   * product\n   * product1", ""),
+            (
+                "\\/./{H;d;};x;s/\n/={NL}=/g",
+                "line1\nline2",
+                "",
+                "sed: unterminated `s' command\n",
+            ),
+            (
+                r#"N; s/^/     /; s/\(\n.*\)/\1     /"#,
+                "line1\nline2",
+                "     line1\nline2     ",
+                "",
+            ),
+            (
+                r#"s/h\.0\.\(.*\)/ \U\1/"#,
+                "h.0.someText\nh.0=data\nh.0.anotherExample",
+                "h.0. UsomeText\nh.0=data\nh.0. UanotherExample",
+                "",
+            ),
+            (
+                r#"s/ *(.*)//; s/>.*//; s/.*[:<] *//"#,
+                "Subject: Hello <hello@example.com>\nFrom: someone <someone@example.com>\n",
+                "hello@example.com\nsomeone@example.com\n",
+                "",
+            ),
+            (
+                "\\/./N; s/\n//",
+                "line1\nline2\n",
+                "",
+                "sed: unterminated `s' command\n",
+            ),
+            (
+                "s/$/`echo -e \\\r`/",
+                "Hello World",
+                "Hello World`echo -e \r`",
+                "",
+            ),
+            (
+                "s/\n/\t/; N",
+                "Line 1\nLine 2\nLine 3\nLine 4",
+                "",
+                "sed: unterminated `s' command\n",
+            ),
+            (
+                r#"s/\(^[*][[:space:]]\)/   \1/;\/List of products:/a\ ---------------"#,
+                "List of products:\n---------------* product\n* product1",
+                "List of products:\n ---------------\n---------------   * product\n   * product1",
+                "",
+            ),
         ];
 
-        for (script, input, output, err) in test_data{
-            sed_test(
-                &["-e", script],
-                input,
-                output,
-                err,
-                !err.is_empty() as i32,
-            );
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
         }
     }
 
@@ -2230,14 +2333,8 @@ mod tests {
                 ""
             ),
         ];
-        for (script, input, output, err) in test_data{
-            sed_test(
-                &["-e", script],
-                input,
-                output,
-                err,
-                !err.is_empty() as i32,
-            );
+        for (script, input, output, err) in test_data {
+            sed_test(&["-e", script], input, output, err, !err.is_empty() as i32);
         }
     }
 }
