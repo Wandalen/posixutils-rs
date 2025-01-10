@@ -2380,8 +2380,10 @@ impl Sed {
 ///     >0 - An error occurred.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     setlocale(LocaleCategory::LcAll, "");
-    textdomain(env!("PROJECT_NAME"))?;
-    bind_textdomain_codeset(env!("PROJECT_NAME"), "UTF-8")?;
+    let project_name = std::env::var("PROJECT_NAME").ok()
+        .unwrap_or("posixutil-text".to_string());
+    textdomain(&*project_name)?;
+    bind_textdomain_codeset(&*project_name, "UTF-8")?;
 
     let args = Args::parse();
 

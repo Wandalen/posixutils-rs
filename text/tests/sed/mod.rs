@@ -8,9 +8,7 @@
 //
 
 use plib::testing::{
-    // /*
     run_test,
-    // */
     TestPlan,
 };
 
@@ -32,66 +30,6 @@ fn sed_test(
         expected_exit_code,
     });
 }
-
-/*
-use std::process::{ Output, Command, Stdio };
-use std::thread;
-use std::time::Duration;
-use std::io::Write;
-
-pub fn run_test_base(cmd: &str, args: &Vec<String>, stdin_data: &[u8]) -> Output {
-    let mut args = args.clone();
-    args.insert(0, "--posix".to_string());
-    let mut command = Command::new("sed");
-    let mut child = command
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|_| panic!("failed to spawn command {cmd}"));
-
-    // Separate the mutable borrow of stdin from the child process
-    if let Some(mut stdin) = child.stdin.take() {
-        let chunk_size = 1024; // Arbitrary chunk size, adjust if needed
-        for chunk in stdin_data.chunks(chunk_size) {
-            // Write each chunk
-            if let Err(e) = stdin.write_all(chunk) {
-                eprintln!("Error writing to stdin: {}", e);
-                break;
-            }
-            // Flush after writing each chunk
-            if let Err(e) = stdin.flush() {
-                eprintln!("Error flushing stdin: {}", e);
-                break;
-            }
-
-            // Sleep briefly to avoid CPU spinning
-            thread::sleep(Duration::from_millis(10));
-        }
-        // Explicitly drop stdin to close the pipe
-        drop(stdin);
-    }
-
-    // Ensure we wait for the process to complete after writing to stdin
-    let output = child.wait_with_output().expect("failed to wait for child");
-    output
-}
-
-pub fn run_test(plan: TestPlan) {
-    let output = run_test_base(&plan.cmd, &plan.args, plan.stdin_data.as_bytes());
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(stdout, plan.expected_out);
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(stderr, plan.expected_err);
-
-    // assert_eq!(output.status.code(), Some(plan.expected_exit_code));
-    // if plan.expected_exit_code == 0 {
-    //     assert!(output.status.success());
-    // }
-}*/
 
 const ABC_INPUT: &str = "abc\n";
 const SCRIPT_A: &str = "s/a/ab/g";
