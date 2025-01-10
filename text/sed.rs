@@ -7,8 +7,6 @@
 // SPDX-License-Identifier: MIT
 //
 
-const DEBUG: bool = false;
-
 use clap::{command, Parser};
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use libc::{
@@ -113,7 +111,6 @@ impl Args {
 
         let script = Script::parse(raw_script)?;
         script.check_labels()?;
-        //print!("<{:?}>", &script.0);
 
         Ok(Sed {
             ere: self.ere,
@@ -230,23 +227,7 @@ impl AddressRange {
             0 => return Ok(None),
             _ => None,
         };
-        if limits.len() == 2 && limits.iter().all(|t| matches!(t, AddressToken::Number(..))) {
-            /*let AddressToken::Number(a) = limits[0] else {
-                unreachable!()
-            };
-            let AddressToken::Number(b) = limits[1] else {
-                unreachable!()
-            };
-            if a > b {
-                return Err(SedError::ScriptParse(
-                    format!(
-                        "bottom bound {} bigger than top bound {} in address",
-                        a, b
-                    ),
-                    None
-                ));
-            }*/
-        }
+
         Ok(Some(Self {
             limits,
             passed: state,
@@ -404,36 +385,6 @@ impl Command {
         Some((address, i))
     }
 
-    fn short_string(&self) -> String {
-        let s = match self {
-            Command::Block(..) => "{}",
-            Command::PrintTextAfter(..) => "a",
-            Command::BranchToLabel(..) => "b",
-            Command::DeletePatternAndPrintText(..) => "c",
-            Command::DeletePattern(..) => "d",
-            Command::ReplacePatternWithHold(..) => "g",
-            Command::AppendHoldToPattern(..) => "G",
-            Command::ReplaceHoldWithPattern(..) => "h",
-            Command::AppendPatternToHold(..) => "H",
-            Command::PrintTextBefore(..) => "i",
-            Command::PrintPatternBinary(..) => "I",
-            Command::PrintPatternAndReplaceWithNext(..) => "n",
-            Command::AppendNextToPattern(..) => "n",
-            Command::PrintPattern(..) => "p",
-            Command::Quit(..) => "q",
-            Command::PrintFile(..) => "r",
-            Command::Replace(..) => "s",
-            Command::Test(..) => "t",
-            Command::AppendPatternToFile(..) => "w",
-            Command::ExchangeSpaces(..) => "x",
-            Command::ReplaceCharSet(..) => "y",
-            Command::PrintStandard(..) => "=",
-            _ => "?"
-        };
-
-        String::from(s)
-    }
-
     /// If [`Command`] address has more [`AddressToken`]
     /// then it can have, return error
     fn check_address(&mut self) -> Result<(), SedError> {
@@ -475,6 +426,14 @@ impl Command {
 
         let mut need_execute = true;
         for range in address.as_mut().unwrap().0.iter_mut() {
+            if let Some(AddressToken::Pattern(..)) = range.limits.first(){
+                if let Some(AddressToken::Pattern(..)) = range.limits.get(1){
+                    if range.passed == Some((true, true)){
+                        range.passed = Some((false, false));
+                    }
+                }
+            }
+
             let mut reached_now = vec![];
             for (i, token) in range.limits.iter().enumerate() {
                 reached_now.push(match token {
@@ -483,11 +442,7 @@ impl Command {
                         !(match_pattern(*re, pattern.clone(), line, line_number + 1)?.is_empty())
                     }
                     AddressToken::Last => match i {
-                        0 => if last_line {
-                            true
-                        }else{
-                            false
-                        },
+                        0 => last_line,
                         1 => false,
                         _ => unreachable!(),
                     },
@@ -520,6 +475,8 @@ impl Command {
     }
 }
 
+/// Function [`regexec`] can return from 1 to 9 range that can be nested. 
+/// [`delete_nested_ranges`] function deletes ranges that contain another ranges.
 fn delete_nested_ranges(mut ranges: Vec<(usize, Range<usize>)>) -> Vec<(usize, Range<usize>)> {
     let mut result: Vec<(usize, Range<usize>)> = Vec::new();
 
@@ -626,13 +583,13 @@ fn match_pattern(
             b += i;
             let max_len = if let Some(comma_pos) = pattern.get(a..).unwrap().find(","){
                 if let Some(s) = pattern.get((comma_pos + a + 1)..b){
-                    usize::from_str_radix(s, 10).ok()
+                    s.parse::<usize>().ok()
                 }else{
                     Some(pattern.len())
                 }
             }else{
                 let s = pattern.get((a + 2)..b).unwrap();
-                usize::from_str_radix(s, 10).ok()
+                s.parse::<usize>().ok()
             };
             if let Some(max_len) = max_len{
                 lengths.push(max_len);
@@ -645,7 +602,6 @@ fn match_pattern(
             match_subranges.iter_mut().for_each(|groups|{
                 groups.retain(|(_, r)|{
                     r.end <= *length
-                    //(r.end - r.start) < *length + h
                 });
             });
         }
@@ -653,7 +609,7 @@ fn match_pattern(
     let match_subranges = match_subranges.into_iter().collect::<HashSet<_>>();
     let mut match_subranges = match_subranges
         .into_iter()
-        .map(|m| delete_nested_ranges(m))
+        .map(delete_nested_ranges)
         .map(|m| {
             m.into_iter().enumerate().map(|(i, (_, r))|{
                 (i + 1, r)
@@ -817,9 +773,7 @@ fn to_address_tokens(chars: &[char], i: &mut usize) -> Result<Vec<AddressToken>,
             _ => break,
         }
         *i += 1;
-        //print!("<{}>", String::from_iter(chars.get(*i..).unwrap()));
     }
-    //print!("<{:?}>", (tokens.clone(), String::from_iter(chars.get(*i..).unwrap())));
 
     Ok(tokens)
 }
@@ -1002,7 +956,7 @@ fn parse_word_attribute(chars: &[char], i: &mut usize) -> Result<Option<String>,
     if label.contains(' ') {
         let position = get_current_line_and_col(chars, *i);
         return Err(SedError::ScriptParse(
-            format!("label can't contain ' '"),
+            "label can't contain ' '".to_string(),
             position
         ));
     }
@@ -1362,22 +1316,17 @@ fn print_multiline_binary(line: &str) {
                     } else {
                         println!("$\n");
                     }
-                }else{
-                    if chunks.peek().is_some() {
-                        println!("\\");
-                    } else {
-                        println!("$");
-                    }
+                }else if chunks.peek().is_some() {
+                    println!("\\");
+                } else {
+                    println!("$");
                 }
-
             }
         }
-    } else {
-        if let Some(line) = line.strip_suffix(&['\n']) {
-            print!("{}$\n", line);
-        }else{
-            print!("{}$", line);
-        }
+    } else if let Some(line) = line.strip_suffix(&['\n']) {
+        println!("{}$", line);
+    }else{
+        print!("{}$", line);
     }
 }
 
@@ -1420,7 +1369,7 @@ fn filter_comments(raw_script: impl AsRef<str>) -> String{
                 break;
             };
             let mut b = a;
-            if let Err(err) = parse_replace_command(&remain, &mut b, String::new()){
+            if parse_replace_command(remain, &mut b, String::new()).is_err(){
                 break;
             }
             split_positions.push(j + a);
@@ -1490,7 +1439,7 @@ impl Script {
                         position
                     ));
                 }
-                _ if command_added => { //&& !matches!(commands.last(), Some(Command::Block(..)))
+                _ if command_added => { 
                     let position = get_current_line_and_col(&chars, i);
                     return Err(SedError::ScriptParse(
                         "commands must be delimited with ';'".to_string(),
@@ -1639,6 +1588,7 @@ impl Script {
         Ok(Script(commands))
     }
 
+    /// Raise error if "b" or "t" commands without ":<label>" pair 
     fn check_labels(&self) -> Result<(), SedError>{
         let labels = self.0
             .iter()
@@ -1665,7 +1615,7 @@ impl Script {
     
         let labels_set = labels.iter().cloned().collect::<HashSet<_>>();       
         if let Some(label) = cmd_labels_set.difference(&labels_set)
-            .chain(labels_set.difference(&cmd_labels_set)).next(){
+            .next(){
             return Err(SedError::ScriptParse(format!("can't find label for jump to `{}'", label), None));
         } else if labels.len() > labels_set.len() {
             let label = match find_first_repeated_label(labels) {
@@ -1678,13 +1628,15 @@ impl Script {
     }
 }
 
+/// Replace every [`Command::Block`] with inner [`Command`] 
+/// set and adding [`AddressRange`] for every inner [`Command`]
 fn flatten_commands(mut commands: Vec<Command>) -> Vec<Command> {
     let is_block = |cmd: &Command| matches!(cmd, Command::Block(..));
 
     while commands.iter().any(is_block) {
         commands = commands
             .into_iter()
-            .map(|cmd| {
+            .flat_map(|cmd| {
                 if let Command::Block(block_address, mut block_commands) = cmd {
                     let Some(block_address) = block_address else{
                         return block_commands;
@@ -1702,13 +1654,15 @@ fn flatten_commands(mut commands: Vec<Command>) -> Vec<Command> {
                 }else{
                     vec![cmd]
                 }
-            }).flatten()
+            })
             .collect::<Vec<_>>();
     }
 
     commands
 }
 
+/// Construct replace string and replace 
+/// ranges with new content in pattern space
 fn update_pattern_space(
     pattern_space: &mut String,
     replacement: &str,
@@ -1832,7 +1786,7 @@ fn execute_replace(
     }
 
     if flags.contains(&ReplaceFlag::PrintPatternIfReplace) && !match_subranges.is_empty() && replace {
-        print!("{}\n", *pattern_space);
+        println!("{}", *pattern_space);
     }
 
     if let Some(wfile) = flags.iter().find_map(|flag| {
@@ -1948,11 +1902,11 @@ impl Sed {
                 if address.is_none(){
                     self.pattern_space.clear();
                     self.current_end = None;
-                    print!("{text}\n");
+                    println!("{text}");
                 }else{
                     let mut need_execute = self.need_execute(command_position)?;
                     if need_execute{
-                        print!("{text}\n");
+                        println!("{text}");
                     }
                     loop{
                         need_execute = self.need_execute(command_position)?;
@@ -2048,7 +2002,7 @@ impl Sed {
                 if !self.need_execute(command_position)? {
                     return Ok(None);
                 }
-                print!("{text}\n");
+                println!("{text}");
             },
             Command::PrintPatternBinary(_) => {
                 // I
@@ -2222,7 +2176,7 @@ impl Sed {
                     return Ok(None);
                 }
                 if !self.quiet {
-                    print!("{}\n", self.current_line + 1);
+                    println!("{}", self.current_line + 1);
                 }
             },
             Command::IgnoreComment if !self.quiet => {
@@ -2260,12 +2214,6 @@ impl Sed {
             &self.pattern_space, 
             self.is_last_line
         )?;
-
-        if need_execute{
-            if DEBUG{
-                print!("<{}>", command.short_string());
-            }
-        }
 
         Ok(need_execute)
     }
@@ -2343,33 +2291,18 @@ impl Sed {
                         self.current_end = Some("\n".to_string());
                         self.pattern_space = line;
                     },
-                    /*ControlFlowInstruction::SkipPrint => {
-                        global_instruction = Some(ControlFlowInstruction::SkipPrint);
-                    }*/
                 }
             }
 
             i += 1;
         }
 
-        // if let Some(ControlFlowInstruction::SkipPrint) = global_instruction{
-        //     return Ok(None);
-        // }
-
         if !self.quiet{
             if !self.pattern_space.is_empty(){
-                if DEBUG{
-                    print!("|{}|", self.pattern_space.trim_end_matches('\r'));
-                }else{
-                    print!("{}", self.pattern_space.trim_end_matches('\r'));
-                }
+                print!("{}", self.pattern_space.trim_end_matches('\r'));
             }
             if let Some(end) = &self.current_end{
-                if DEBUG{
-                    print!("|{end}|");
-                }else{
-                    print!("{end}");
-                }
+                print!("{end}");
             }
         }
 
@@ -2406,10 +2339,6 @@ impl Sed {
             }
             self.current_line += 1;
         }
-
-        /*if let Some(Command::PrintFile(..)) = self.script.0.last(){
-            print!("\n\r");
-        }*/
 
         Ok(())
     }

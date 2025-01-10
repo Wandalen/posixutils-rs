@@ -87,10 +87,10 @@ pub fn run_test(plan: TestPlan) {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(stderr, plan.expected_err);
 
-    assert_eq!(output.status.code(), Some(plan.expected_exit_code));
-    if plan.expected_exit_code == 0 {
-        assert!(output.status.success());
-    }
+    // assert_eq!(output.status.code(), Some(plan.expected_exit_code));
+    // if plan.expected_exit_code == 0 {
+    //     assert!(output.status.success());
+    // }
 }*/
 
 const ABC_INPUT: &'static str = "abc\n";
@@ -943,7 +943,7 @@ mod tests {
             ("b 1234; :1234", "aa\naa\n", "aa\naa\n", ""),
             ("b #%$?@&*;", "aa\naa", "aa\naa", ""),
             // wrong
-            ("b; :label", "aa\naa\n", "", "sed: can't find label for jump to `label'\n"),
+            ("b; :label", "aa\naa\n", "aa\naa\n", ""),
             (
                 "b label#; :label#", 
                 "aa\naa\n", 
@@ -1825,7 +1825,7 @@ mod tests {
             ("t 1234; :1234", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t #%$?@&*;", "", "", ""),
             // wrong
-            ("t; :label", "aa\naaa\n\n", "", "sed: can't find label for jump to `label'\n"),
+            ("t; :label", "aa\naaa\n\n", "aa\naaa\n\n", ""),
             ("t label#; :label#", "aa\naaa\n\n", "", "sed: can't find label for jump to `label'\n"),
             ("t label;", "", "", "sed: can't find label for jump to `label'\n"),
             ("t :label", "", "", "sed: can't find label for jump to `:label'\n"),
@@ -2148,9 +2148,9 @@ mod tests {
     fn test_combinations_5() {
         let test_data = [
             // correct
+            ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3\n", "\n\nline1\nline1\nline2\nline2\n\n\nline3\nline3\n", ""),
             ("\\/string [[:digit:]]* /p", "string 123 \nstring abc \nstring 456 \n", 
             "string 123 \nstring 123 \nstring abc \nstring 456 \nstring 456 \n", ""),
-            ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3\n", "\n\nline1\nline1\nline2\nline2\n\n\nline3\nline3\n", ""),
             ("\\/,.*/ p", "hello, world\nhello world\n\n", "hello, world\nhello, world\nhello world\n\n", ""),
             ("\\:ac: p", ":ac:\n:bc:\n:ac:\n", ":ac:\n:ac:\n:bc:\n:ac:\n:ac:\n", ""),
             ("1,\\,stop, p", "first line\nsecond stop\nthird line\n", "first line\nfirst line\nsecond stop\nsecond stop\nthird line\n", ""),
@@ -2162,9 +2162,9 @@ mod tests {
             // wrong
             (
                 r#"s/#.*//;s/[[:blank:]]*$//;\/^$/ d;p"#, 
-                "# This is a comment\nLine with trailing spaces     \nAnother line", 
-                "", 
-                "sed: script ended unexpectedly (line: 0, col: 3)\n"
+                "# This is a comment\nLine with trailing spaces     \nAnother line\n", 
+                "Line with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\n", 
+                ""
             )
         ];
 
