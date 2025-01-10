@@ -93,24 +93,24 @@ pub fn run_test(plan: TestPlan) {
     // }
 }*/
 
-const ABC_INPUT: &'static str = "abc\n";
-const SCRIPT_A: &'static str = "s/a/ab/g";
-const SCRIPT_B: &'static str = "s/b/bc/g";
-const SCRIPT_C: &'static str = "s/c/ca/g";
-const SCRIPT_SOME_NEWLINES: &'static str = "s/a/ab/g;\ns/b/bc/g;\ns/c/ca/g\n\n\n";
-const SCRIPT_ALL_NEWLINES: &'static str = "\n\n\n";
-const SCRIPT_BLANKS: &'static str = "   s/a/ab/g;\n   s/b/bc/g;\n   s/c/ca/g";
-const SCRIPT_SEMICOLONS: &'static str = ";;;s/a/ab/g\n;;;s/b/bc/g\n;;;s/c/ca/g";
+const ABC_INPUT: &str = "abc\n";
+const SCRIPT_A: &str = "s/a/ab/g";
+const SCRIPT_B: &str = "s/b/bc/g";
+const SCRIPT_C: &str = "s/c/ca/g";
+const SCRIPT_SOME_NEWLINES: &str = "s/a/ab/g;\ns/b/bc/g;\ns/c/ca/g\n\n\n";
+const SCRIPT_ALL_NEWLINES: &str = "\n\n\n";
+const SCRIPT_BLANKS: &str = "   s/a/ab/g;\n   s/b/bc/g;\n   s/c/ca/g";
+const SCRIPT_SEMICOLONS: &str = ";;;s/a/ab/g\n;;;s/b/bc/g\n;;;s/c/ca/g";
 
-const ABC_FILE: &'static str = "tests/sed/assets/abc";
-const CBA_FILE: &'static str = "tests/sed/assets/cba";
-const SCRIPT_A_FILE: &'static str = "tests/sed/assets/script_a";
-const SCRIPT_B_FILE: &'static str = "tests/sed/assets/script_b";
-const SCRIPT_C_FILE: &'static str = "tests/sed/assets/script_c";
-const SCRIPT_SOME_NEWLINES_FILE: &'static str = "tests/sed/assets/script_some_newlines";
-const SCRIPT_ALL_NEWLINES_FILE: &'static str = "tests/sed/assets/script_all_newlines";
-const SCRIPT_BLANKS_FILE: &'static str = "tests/sed/assets/script_blanks";
-const SCRIPT_SEMICOLONS_FILE: &'static str = "tests/sed/assets/script_blanks";
+const ABC_FILE: &str = "tests/sed/assets/abc";
+const CBA_FILE: &str = "tests/sed/assets/cba";
+const SCRIPT_A_FILE: &str = "tests/sed/assets/script_a";
+const SCRIPT_B_FILE: &str = "tests/sed/assets/script_b";
+const SCRIPT_C_FILE: &str = "tests/sed/assets/script_c";
+const SCRIPT_SOME_NEWLINES_FILE: &str = "tests/sed/assets/script_some_newlines";
+const SCRIPT_ALL_NEWLINES_FILE: &str = "tests/sed/assets/script_all_newlines";
+const SCRIPT_BLANKS_FILE: &str = "tests/sed/assets/script_blanks";
+const SCRIPT_SEMICOLONS_FILE: &str = "tests/sed/assets/script_blanks";
 
 #[cfg(test)]
 mod tests {

@@ -1971,7 +1971,7 @@ impl Sed {
                 if self.hold_space.is_empty(){
                     self.pattern_space += "\n"; 
                 }
-                if let Some(_) = self.pattern_space.strip_suffix('\n'){
+                if self.pattern_space.strip_suffix('\n').is_some(){
                     self.pattern_space.pop();
                     self.current_end = Some("\n".to_string());
                 }else{
