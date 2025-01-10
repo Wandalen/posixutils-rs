@@ -1740,11 +1740,13 @@ fn update_pattern_space(
             };
             local_replacement.replace_range(position..(position + 2), replace_str);
         }
+        local_replacement = local_replacement.replace("\\", "");
         pattern_space.replace_range(
             main_range.clone(), 
             &local_replacement
         );
     } else if !ranges.is_empty(){
+        local_replacement = local_replacement.replace("\\", "");
         pattern_space.replace_range(
             main_range.clone(),
             &local_replacement

@@ -2183,15 +2183,15 @@ mod tests {
     fn test_combinations_6() {
         let test_data = [
             // correct
-            ("\\/./{H;d;};x;s/\n/={NL}=/g", "line1\nline2", "", ""),
+            ("\\/./{H;d;};x;s/\n/={NL}=/g", "line1\nline2", "", "sed: unterminated `s' command\n"),
             (r#"N; s/^/     /; s/\(\n.*\)/\1     /"#, "line1\nline2", "     line1\nline2     ", ""),
             (r#"s/h\.0\.\(.*\)/ \U\1/"#, "h.0.someText\nh.0=data\nh.0.anotherExample",
-            "h.0. \\UsomeText\nh.0=data\nh.0. \\UanotherExample", ""),            
+            "h.0. UsomeText\nh.0=data\nh.0. UanotherExample", ""),            
             (r#"s/ *(.*)//; s/>.*//; s/.*[:<] *//"#, "Subject: Hello <hello@example.com>\nFrom: someone <someone@example.com>\n",
             "hello@example.com\nsomeone@example.com\n", ""),
-            ("\\/./N; s/\n//", "line1\nline2\n", "line1line2\n", ""),
-            ("s/$/`echo -e \\\r`/", "Hello World", "Hello World`echo -e \\\r`", ""),
-            ("s/\n/\t/; N", "Line 1\nLine 2\nLine 3\nLine 4", "Line 1\nLine 2\nLine 3\nLine 4", ""), 
+            ("\\/./N; s/\n//", "line1\nline2\n", "", "sed: unterminated `s' command\n"),
+            ("s/$/`echo -e \\\r`/", "Hello World", "Hello World`echo -e \r`", ""),
+            ("s/\n/\t/; N", "Line 1\nLine 2\nLine 3\nLine 4", "", "sed: unterminated `s' command\n"), 
             (r#"s/\(^[*][[:space:]]\)/   \1/;\/List of products:/a\ ---------------"#, 
             "List of products:\n---------------* product\n* product1", 
             "List of products:\n ---------------\n---------------   * product\n   * product1", ""),
