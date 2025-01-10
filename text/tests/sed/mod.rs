@@ -8,9 +8,9 @@
 //
 
 use plib::testing::{ 
-    /*
+    // /*
     run_test,
-    */ 
+    // */ 
     TestPlan
 };
 
@@ -33,7 +33,7 @@ fn sed_test(
     });
 }
 
-// /*
+/*
 use std::process::{ Output, Command, Stdio };
 use std::thread;
 use std::time::Duration;
@@ -91,7 +91,7 @@ pub fn run_test(plan: TestPlan) {
     if plan.expected_exit_code == 0 {
         assert!(output.status.success());
     }
-}// */
+}*/
 
 const ABC_INPUT: &'static str = "abc\n";
 const SCRIPT_A: &'static str = "s/a/ab/g";
@@ -2073,7 +2073,7 @@ mod tests {
             ("\\`'$PATTERN'`p", "'$PATTERN'\nabc\n\n'$PATTERN'\nret'$PATTERN'abc\n",
             "'$PATTERN'\n'$PATTERN'\nabc\n\n'$PATTERN'\n'$PATTERN'\nret'$PATTERN'abc\nret'$PATTERN'abc\n", ""),
             ("s/param=.*/param=new_value\n/", "param=abc\nparam=\nparam abc\n",
-            "param=new_value\n\nparam=new_value\n\nparam abc\n", ""),
+            "", "sed: unterminated `s' command\n"),
         ];
 
         for (script, input, output, err) in test_data{
@@ -2127,8 +2127,8 @@ mod tests {
             (r#":a;s/\(^|[^0-9.]\)\([0-9]+\)\([0-9]{3}\)/\1\2,\3/g;ta"#, "1234567890\nhello123456789\n1000", "1234567890\nhello123456789\n1000", ""),            
             ("n;n;n;n;G;", "line1\nline2\nline3\nline4\n", "line1\nline2\nline3\nline4\n", ""),
             ("s/^[ \t]* //;s/[ \t]*$//", "    hello world    ", "hello world", ""),
-            ("s/^M.$/\n/", "hello\nM\nabc\n", "hello\nM\nabc\n", ""),
-            ("s/\x0D.$/\n/", "hello\x0D\n", "hello\n", ""),
+            ("s/^M.$/\n/", "hello\nM\nabc\n", "", "sed: unterminated `s' command\n"),
+            ("s/\x0D.$/\n/", "hello\x0D\n", "", "sed: unterminated `s' command\n"),
             (r#"s/\(^[*][[:space:]]\)/   \1/"#, "* Item 1\n* Another item\nNormal text",
             "   * Item 1\n   * Another item\nNormal text", ""),
         ];
@@ -2150,7 +2150,7 @@ mod tests {
             // correct
             ("\\/string [[:digit:]]* /p", "string 123 \nstring abc \nstring 456 \n", 
             "string 123 \nstring 123 \nstring abc \nstring 456 \nstring 456 \n", ""),
-            ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3\n", "\n\nline1\nline1\nline2\nline2\n\n\nline3\n", ""),
+            ("\\/./,\\/^$/p", "\n\nline1\nline2\n\nline3\n", "\n\nline1\nline1\nline2\nline2\n\n\nline3\nline3\n", ""),
             ("\\/,.*/ p", "hello, world\nhello world\n\n", "hello, world\nhello, world\nhello world\n\n", ""),
             ("\\:ac: p", ":ac:\n:bc:\n:ac:\n", ":ac:\n:ac:\n:bc:\n:ac:\n:ac:\n", ""),
             ("1,\\,stop, p", "first line\nsecond stop\nthird line\n", "first line\nfirst line\nsecond stop\nsecond stop\nthird line\n", ""),
@@ -2224,7 +2224,7 @@ mod tests {
             "apple  is sweet\n123abc  hello world\none  three four\n", ""),
             (r#":a;s/^.\{1,13\}$/ &/;ta"#, "12345678\n1234567890123", "      12345678\n 1234567890123", ""),
             (
-                "\\/begin/,\\/end/ {\ns/#.* //\n\ns/[[:blank:]]*$//\n\\/^$/ d\np\n}",
+                "\\/begin/,\\/end/ {\ns/#.* //;\n\ns/[[:blank:]]*$//;\n\\/^$/ d;\np;\n}",
                 "Some text\nbegin\n# A comment   \nLine with trailing spaces     \nAnother line\n\n     \nend\nSome more text\n",
                 "Some text\nbegin\nbegin\nLine with trailing spaces\nLine with trailing spaces\nAnother line\nAnother line\nend\nend\nSome more text\n", 
                 ""

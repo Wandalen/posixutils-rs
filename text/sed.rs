@@ -644,7 +644,8 @@ fn match_pattern(
         for length in &lengths{
             match_subranges.iter_mut().for_each(|groups|{
                 groups.retain(|(_, r)|{
-                    (r.end - r.start) < *length
+                    r.end <= *length
+                    //(r.end - r.start) < *length + h
                 });
             });
         }
@@ -1404,6 +1405,45 @@ fn skip_comment(chars: &[char], i: &mut usize) {
     }
 }
 
+/// Filter comments (line ends after '#') in raw script
+fn filter_comments(raw_script: impl AsRef<str>) -> String{
+    let mut raw_script_without_comments = String::new();
+    for line in raw_script.as_ref().lines(){
+        let mut j = 0;
+        let chars = line.chars().collect::<Vec<_>>();
+        let mut split_positions = vec![0];
+        loop{
+            let Some(remain) = chars.get(j..) else{
+                break;
+            };
+            let Some(a) = remain.iter().position(|ch| ['s', 'y'].contains(ch)) else{
+                break;
+            };
+            let mut b = a;
+            if let Err(err) = parse_replace_command(&remain, &mut b, String::new()){
+                break;
+            }
+            split_positions.push(j + a);
+            j += b;
+            split_positions.push(j);
+        }
+        split_positions.push(line.len());
+        let mut is_s = false;
+        for pair in split_positions.windows(2){
+            let part = line.get(pair[0]..pair[1]).unwrap_or("");
+            if !is_s && part.contains('#'){
+                raw_script_without_comments += part.split('#').next().unwrap_or("");
+                break;
+            }else{
+                raw_script_without_comments += part;
+            }
+            is_s = !is_s;
+        }
+        raw_script_without_comments += "\n";
+    }
+    raw_script_without_comments
+}
+
 /// Contains [`Command`] sequence of all [`Sed`] session
 /// that applied all to every line of input files
 #[derive(Debug)]
@@ -1418,14 +1458,8 @@ impl Script {
         let mut i = 0;
         let mut last_commands_count = 0;
         let mut command_added = false;
+        let chars = filter_comments(&raw_script).chars().collect::<Vec<_>>();
 
-        let mut raw_script_without_comments = String::new();
-        for line in raw_script.as_ref().lines(){
-            raw_script_without_comments += line.split('#').next().unwrap_or("");
-            raw_script_without_comments += "\n";
-        }
-
-        let chars = raw_script_without_comments.chars().collect::<Vec<_>>();
         if let Some(slice) = raw_script.as_ref().get(0..2) {
             if slice.get(0..1) == Some("#") && slice.get(1..2) == Some("n") {
                 commands.push(Command::IgnoreComment);
