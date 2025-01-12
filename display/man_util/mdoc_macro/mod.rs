@@ -101,7 +101,7 @@ pub enum Macro {
     Bt,
     Bx(Bsd),
     Cd {
-        line: String,
+        line: Vec<String>,
     },
     Cm {
         keywords: Vec<String>,

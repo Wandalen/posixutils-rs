@@ -1017,6 +1017,41 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Bt`)[https://man.openbsd.org/mdoc#Bt]:
+    // `Bt`
+    fn parse_bt(_pair: Pair<Rule>) -> Element {
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Bt,
+            nodes: vec![],
+        })
+    }
+
+    // Parses (`Cd`)[https://man.openbsd.org/mdoc#Cd]:
+    // `Cd line`
+    fn parse_cd(pair: Pair<Rule>) -> Element {
+        let args = pair
+            .into_inner()
+            .map(|p| p.as_str().to_string())
+            .collect::<Vec<String>>();
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Cd { line: args },
+            nodes: vec![],
+        })
+    }
+
+    // Parses (`Cd`)[https://man.openbsd.org/mdoc#Cm]:
+    // `Cm keyword ...`
+    fn parse_cm(pair: Pair<Rule>) -> Element {
+        let args = pair
+            .into_inner()
+            .map(|p| p.as_str().to_string())
+            .collect::<Vec<String>>();
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Cm { keywords: args },
+            nodes: vec![],
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1026,6 +1061,9 @@ impl MdocParser {
             Rule::an => Self::parse_an(pair),
             Rule::ap => Self::parse_ap(pair),
             Rule::ar => Self::parse_ar(pair),
+            Rule::bt => Self::parse_bt(pair),
+            Rule::cd => Self::parse_cd(pair),
+            Rule::cm => Self::parse_cm(pair),
             _ => Element::Text("Unsupported inline".to_string()),
         }
     }
@@ -2911,6 +2949,90 @@ mod test {
 
         #[test]
         fn ar_close_by_macro() {
+            todo!()
+        }
+
+        #[test]
+        fn bt() {
+            // "Text Line" will be ignored
+            let content = ".Bt Text Line\n";
+
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bt,
+                    nodes: vec![],
+                }),
+                Element::Text("".to_string()),
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn bt_no_args() {
+            let content = ".Bt";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::Bt,
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn cd() {
+            let content = ".Cd kernel configuration declaration";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::Cd {
+                    line: vec![
+                        "kernel".to_string(),
+                        "configuration".to_string(),
+                        "declaration".to_string(),
+                    ],
+                },
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn cd_no_args() {
+            assert!(MdocParser::parse_mdoc(".Cd").is_err());
+        }
+
+        #[test]
+        fn cd_close_by_macro() {
+            todo!()
+        }
+
+        #[test]
+        fn cm() {
+            let content = ".Cm mod1 mod2 mod3";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::Cm {
+                    keywords: vec!["mod1".to_string(), "mod2".to_string(), "mod3".to_string()],
+                },
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn cm_no_args() {
+            assert!(MdocParser::parse_mdoc(".Cm").is_err());
+        }
+
+        #[test]
+        fn cm_close_by_macro() {
             todo!()
         }
     }

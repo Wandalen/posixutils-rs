@@ -226,6 +226,18 @@ ap = { ".Ap" ~ NEWLINE? }
 
 ar = { ".Ar" ~ macro_arg* ~ NEWLINE? }
 
+// ----- Bt
+
+bt = { ".Bt" ~ macro_arg* ~ NEWLINE? }
+
+// ----- Cd
+
+cd = { ".Cd" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- Cm
+
+cm = { ".Cm" ~ macro_arg+ ~ NEWLINE? }
+
 // ----- Text production
 
 at  = { ".At" ~ macro_arg? ~ NEWLINE? }
@@ -239,7 +251,7 @@ st  = { ".St" ~ macro_arg ~ NEWLINE? }
 
 text_production = { at | bsx | bx | dx | fx | nx | ox | st }
 
-inline = { rs_submacro | ad | an | ap | ar | text_production }
+inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | text_production }
 
 // ----- Document
 
