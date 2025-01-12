@@ -107,6 +107,23 @@ pub enum ItType {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum AnType {
+    Split,
+    NoSplit,
+    Name(String),
+}
+
+impl From<String> for AnType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "-split" => Self::Split,
+            "-nosplit" => Self::NoSplit,
+            _ => Self::Name(value),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum SmMode {
     On,
     Off,

@@ -210,7 +210,36 @@ v = { ".%V" ~ macro_arg+ ~ NEWLINE? }
 
 rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
 
-inline = { rs_submacro }
+// ----- Ad
+
+ad = { ".Ad" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- An
+
+an = { ".An" ~ macro_arg+ ~ NEWLINE? }
+
+// ----- Ap
+
+ap = { ".Ap" ~ NEWLINE? }
+
+// ----- Ar
+
+ar = { ".Ar" ~ macro_arg* ~ NEWLINE? }
+
+// ----- Text production
+
+at  = { ".At" ~ macro_arg? ~ NEWLINE? }
+bsx = { ".Bsx" ~ macro_arg? ~ NEWLINE? }
+bx  = { ".Bx" ~ macro_arg{0, 2} ~ NEWLINE? }
+dx  = { ".Dx" ~ macro_arg? ~ NEWLINE? }
+fx  = { ".Fx" ~ macro_arg? ~ NEWLINE? }
+nx  = { ".Nx" ~ macro_arg? ~ NEWLINE? }
+ox  = { ".Ox" ~ macro_arg? ~ NEWLINE? }
+st  = { ".St" ~ macro_arg ~ NEWLINE? }
+
+text_production = { at | bsx | bx | dx | fx | nx | ox | st }
+
+inline = { rs_submacro | ad | an | ap | ar | text_production }
 
 // ----- Document
 

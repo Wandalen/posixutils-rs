@@ -1,6 +1,7 @@
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use std::collections::HashSet;
+use text_production::AtAndTUnix;
 use thiserror::Error;
 use types::{BdType, BfType, OffsetType};
 
@@ -895,10 +896,136 @@ impl MdocParser {
         }
     }
 
+    fn parse_text_production(pair: Pair<Rule>) -> Element {
+        // Parses (`At`)[https://man.openbsd.org/mdoc#At]:
+        // `At [version]`
+        fn parse_at(pair: Pair<Rule>) -> Element {
+            let arg = pair
+                .into_inner()
+                .next()
+                .map(|p| p.as_str().to_string())
+                .unwrap_or_default();
+            let at = AtAndTUnix::try_from(arg).unwrap();
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::At(at),
+                nodes: vec![],
+            })
+        }
+
+        // Parses (`Bsx`)[https://man.openbsd.org/mdoc#Bsx]:
+        // `Bsx [version]`
+        fn parse_bsx(pair: Pair<Rule>) -> Element {
+            todo!()
+        }
+
+        // Parses (`Bx`)[https://man.openbsd.org/mdoc#Bx]:
+        // `Bx [version [variant]]`
+        fn parse_bx(pair: Pair<Rule>) -> Element {
+            todo!()
+        }
+
+        // Parses (`Dx`)[https://man.openbsd.org/mdoc#Dx]:
+        // `Dx [version]`
+        fn parse_dx(pair: Pair<Rule>) -> Element {
+            todo!()
+        }
+
+        // Parses (`Fx`)[https://man.openbsd.org/mdoc#Fx]:
+        // `Fx [version]`
+        fn parse_fx(pair: Pair<Rule>) -> Element {
+            todo!()
+        }
+
+        // Parses (`Nx`)[http://man.openbsd.org/mdoc#Nx]:
+        // `Nx [version]`
+        fn parse_nx(pair: Pair<Rule>) -> Element {
+            todo!()
+        }
+
+        // Parses (`Ox`)[https://man.openbsd.org/mdoc#Ox]:
+        // `Ox [version]`
+        fn parse_ox(pair: Pair<Rule>) -> Element {
+            todo!()
+        }
+
+        // Parses (`St`)[https://man.openbsd.org/mdoc#St]:
+        // `St -abbreviation`
+        fn parse_st(pair: Pair<Rule>) -> Element {
+            todo!()
+        }
+
+        let pair = pair.into_inner().next().unwrap();
+        match pair.as_rule() {
+            Rule::at => parse_at(pair),
+            Rule::bsx => parse_bsx(pair),
+            Rule::bx => parse_bx(pair),
+            Rule::dx => parse_dx(pair),
+            Rule::fx => parse_fx(pair),
+            Rule::nx => parse_nx(pair),
+            Rule::ox => parse_ox(pair),
+            Rule::st => parse_st(pair),
+            _ => Element::Text("Unsupported macro".to_string()),
+        }
+    }
+
+    // Parses (`Ad`)[https://man.openbsd.org/mdoc#Ad]:
+    // `Ad address`
+    fn parse_ad(pair: Pair<Rule>) -> Element {
+        let addresses = pair.into_inner().map(|p| p.as_str().to_string()).collect();
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ad { addresses },
+            nodes: vec![],
+        })
+    }
+
+    // Parses (`An`)[https://man.openbsd.org/mdoc#An]:
+    // `An -split | -nosplit | first_name ... last_name`
+    fn parse_an(pair: Pair<Rule>) -> Element {
+        let author = pair
+            .into_inner()
+            .map(|p| p.as_str().to_string())
+            .collect::<Vec<String>>()
+            .join(" ");
+        let author_name_type = AnType::from(author);
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::An { author_name_type },
+            nodes: vec![],
+        })
+    }
+
+    // Parses (`Ap`)[https://man.openbsd.org/mdoc#Ap]:
+    // `Ap`
+    fn parse_ap(_pair: Pair<Rule>) -> Element {
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ap,
+            nodes: vec![],
+        })
+    }
+
+    // Parses (`Ar`)[https://man.openbsd.org/mdoc#Ar]:
+    // `Ar [placeholder ...]`
+    fn parse_ar(pair: Pair<Rule>) -> Element {
+        let args = pair
+            .into_inner()
+            .map(|p| p.as_str().to_string())
+            .collect::<Vec<String>>();
+        let placeholder = if !args.is_empty() { Some(args) } else { None };
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ar { placeholder },
+            nodes: vec![],
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
             Rule::rs_submacro => Self::parse_rs_submacro(pair),
+            Rule::text_production => Self::parse_text_production(pair),
+            Rule::ad => Self::parse_ad(pair),
+            Rule::an => Self::parse_an(pair),
+            Rule::ap => Self::parse_ap(pair),
+            Rule::ar => Self::parse_ar(pair),
             _ => Element::Text("Unsupported inline".to_string()),
         }
     }
@@ -2151,6 +2278,8 @@ mod test {
     }
 
     mod inline {
+        use crate::man_util::parser::*;
+
         mod rs_submacros {
             use crate::man_util::parser::*;
 
@@ -2628,6 +2757,161 @@ mod test {
             fn v_no_args() {
                 assert!(MdocParser::parse_mdoc(".%V\n").is_err());
             }
+        }
+
+        #[test]
+        fn ad() {
+            let content = ".Ad addr1 addr2 addr3";
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad {
+                    addresses: vec![
+                        "addr1".to_string(),
+                        "addr2".to_string(),
+                        "addr3".to_string(),
+                    ],
+                },
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn ad_no_args() {
+            assert!(MdocParser::parse_mdoc(".Ad\n").is_err());
+        }
+
+        #[test]
+        fn ad_closed_by_macro() {
+            todo!()
+        }
+
+        #[test]
+        fn an_split() {
+            let content = ".An -split";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::An {
+                    author_name_type: AnType::Split,
+                },
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn an_nosplit() {
+            let content = ".An -nosplit";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::An {
+                    author_name_type: AnType::NoSplit,
+                },
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn an_name() {
+            let content = ".An John Doe";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::An {
+                    author_name_type: AnType::Name("John Doe".to_string()),
+                },
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn an_no_args() {
+            assert!(MdocParser::parse_mdoc(".An\n").is_err());
+        }
+
+        #[test]
+        fn an_closed_by_macro() {
+            todo!()
+        }
+
+        #[test]
+        fn ap() {
+            let content = ".Ap Text Line\n";
+
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ap,
+                    nodes: vec![],
+                }),
+                Element::Text("Text Line\n".to_string()),
+                Element::Text("".to_string()),
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ap_no_args() {
+            let content = ".Ap";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ap,
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn ap_closed_by_macro() {
+            todo!()
+        }
+
+        #[test]
+        fn ar() {
+            let content = ".Ar arg1 arg2 arg3";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ar {
+                    placeholder: Some(vec![
+                        "arg1".to_string(),
+                        "arg2".to_string(),
+                        "arg3".to_string(),
+                    ]),
+                },
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn ar_no_args() {
+            let content = ".Ar";
+
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ar { placeholder: None },
+                nodes: vec![],
+            });
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(*mdoc.elements.get(0).unwrap(), element);
+        }
+
+        #[test]
+        fn ar_close_by_macro() {
+            todo!()
         }
     }
 }

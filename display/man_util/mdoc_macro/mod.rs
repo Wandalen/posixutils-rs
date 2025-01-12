@@ -59,11 +59,10 @@ pub enum Macro {
         volume_number: String,
     },
     Ad {
-        address: String,
+        addresses: Vec<String>,
     },
     An {
-        split: bool,
-        author_names: Vec<String>,
+        author_name_type: AnType,
     },
     Ao, // Begin a block enclosed by angle brackets
     Ac, // Close an Ao block
@@ -72,7 +71,7 @@ pub enum Macro {
     Ar {
         // Command arguments. If an argument is not provided, the string “file ...” is used as a default.
         // https://man.openbsd.org/mdoc#Ar
-        placeholder: Vec<String>,
+        placeholder: Option<Vec<String>>,
     },
     At(AtAndTUnix),
     Bd {
