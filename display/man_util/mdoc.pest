@@ -3,258 +3,260 @@
 WHITESPACE = _{ " " | "\t" }
 NEWLINE    = _{ "\r"? ~ "\n" }
 
-macro_arg = @{ (!WHITESPACE ~ !NEWLINE ~ ANY)+ }
+text_arg = @{ (!(WHITESPACE | NEWLINE) ~ ANY)+ }
 
 text_line = { !"." ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
-// ----- Block full-explicit macros
-
-// ----- Bd
-
-bd_type = {
-    macro_arg
-}
-
-offset = {
-    macro_arg
-}
-
-compact = { "-compact" }
-
-bd_open  = { "." ~ "Bd" ~ bd_type ~ ("-offset" ~ offset)? ~ compact? ~ NEWLINE }
-ed_close = { "." ~ "Ed" ~ NEWLINE* }
-bd_block = { bd_open ~ (!ed_close ~ element)* ~ ed_close }
-
-// ----- Bf
-
-bf_type = {
-    macro_arg
-}
-
-bf_open  = { "." ~ "Bf" ~ bf_type ~ NEWLINE }
-ef_close = { "." ~ "Ef" ~ NEWLINE* }
-bf_block = { bf_open ~ (!ef_close ~ element)* ~ ef_close }
-
-// ----- Bk
-
-bk_words = { "-words" }
-
-bk_open  = { "." ~ "Bk" ~ bk_words ~ macro_arg* ~ NEWLINE }
-ek_close = { "." ~ "Ek" ~ NEWLINE* }
-bk_block = { bk_open ~ (!ek_close ~ element)* ~ ek_close }
-
-// ----- Bl
-
-bl_type = {
-    macro_arg
-}
-
-bl_columns = { macro_arg+ }
-
-bl_open  = { "." ~ "Bl" ~ bl_type ~ ("-width" ~ offset)? ~ ("-offset" ~ offset)? ~ compact? ~ bl_columns* ~ NEWLINE }
-el_close = { "." ~ "El" ~ NEWLINE* }
-bl_block = { bl_open ~ (!el_close ~ element)* ~ el_close }
+// ----- Macro types
 
 block_full_explicit = { bd_block | bf_block | bk_block | bl_block }
 
-// ----- Block full-implicit macros
-
-// ----- Nd
-
-nd_line  = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
-nd_open  = { "." ~ "Nd" ~ nd_line }
-nd_block = { nd_open ~ (!sh_block ~ element)* }
-
-// ----- Nm
-
-nm_name  = { macro_arg+ }
-nm_open  = { "." ~ "Nm" ~ nm_name* ~ NEWLINE }
-nm_block = { nm_open ~ (!nm_open ~ !sh_block ~ !ss_block ~ element)* }
-
-// ----- Sh
-
-sh_title_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
-sh_open       = { "." ~ "Sh" ~ sh_title_line }
-sh_block      = { sh_open ~ (!sh_block ~ element)* }
-
-// ----- Ss
-
-ss_title_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
-ss_open       = { "." ~ "Ss" ~ ss_title_line }
-ss_block      = { ss_open ~ (!sh_block ~ !ss_block ~ element)* }
-
 block_full_implicit = { nd_block | nm_block | sh_block | ss_block }
-
-// ----- Block partial-implicit
-
-block_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
-
-// ----- Aq
-
-aq_block = { "." ~ "Aq" ~ block_line }
-
-// ----- Bq
-
-bq_block = { "." ~ "Bq" ~ block_line }
-
-// ----- Brq
-
-brq_block = { "." ~ "Brq" ~ block_line }
-
-// ----- D1
-
-d1_block = { "." ~ "D1" ~ block_line }
-
-// ----- Dl
-
-dl_block = { "." ~ "Dl" ~ block_line }
-
-// ----- Dq
-
-dq_block = { "." ~ "Dq" ~ block_line }
-
-// ----- En
-
-en_block = { "." ~ "En" ~ macro_arg* ~ NEWLINE }
-
-// ----- Op
-
-op_block = { "." ~ "Op" ~ block_line }
-
-// ----- Pq
-
-pq_block = { "." ~ "Pq" ~ block_line }
-
-// ----- Ql
-
-ql_block = { "." ~ "Ql" ~ block_line }
-
-// ----- Qq
-
-qq_block = { "." ~ "Qq" ~ block_line }
-
-// ----- Sq
-
-sq_block = { "." ~ "Sq" ~ block_line }
-
-// ----- Vt
-
-vt_type       = { macro_arg }
-vt_identifier = { macro_arg }
-vt_block      = { "." ~ "Vt" ~ vt_type ~ vt_identifier* ~ NEWLINE }
 
 block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block | dq_block | en_block | op_block | pq_block | ql_block | qq_block | sq_block | vt_block }
 
-// ----- In-line
-
-// ----- %A
-
-a = { ".%A" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %B
-
-b = { ".%B" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %C
-
-c = { ".%C" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %D
-
-month     =  { macro_arg }
-day       = @{ (!WHITESPACE ~ !NEWLINE ~ ASCII_DIGIT)+ }
-month_day =  { month ~ day ~ "," }
-year      =  { macro_arg }
-d         =  { ".%D" ~ month_day? ~ year ~ NEWLINE? }
-
-// ----- %I
-
-i = { ".%I" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %J
-
-j = { ".%J" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %N
-
-n = { ".%N" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %O
-
-o = { ".%O" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %P
-
-p = { ".%P" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %Q
-
-q = { ".%Q" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %R
-
-r = { ".%R" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %T
-
-t = { ".%T" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- %U
-
-uri = @{ (!"://" ~ ANY)+ ~ "://" ~ macro_arg }
-u   =  { ".%U" ~ uri ~ NEWLINE? }
-
-// ----- %V
-
-v = { ".%V" ~ macro_arg+ ~ NEWLINE? }
-
 rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
-
-// ----- Ad
-
-ad = { ".Ad" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- An
-
-an = { ".An" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- Ap
-
-ap = { ".Ap" ~ NEWLINE? }
-
-// ----- Ar
-
-ar = { ".Ar" ~ macro_arg* ~ NEWLINE? }
-
-// ----- Bt
-
-bt = { ".Bt" ~ macro_arg* ~ NEWLINE? }
-
-// ----- Cd
-
-cd = { ".Cd" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- Cm
-
-cm = { ".Cm" ~ macro_arg+ ~ NEWLINE? }
-
-// ----- Text production
-
-at  = { ".At" ~ macro_arg? ~ NEWLINE? }
-bsx = { ".Bsx" ~ macro_arg? ~ NEWLINE? }
-bx  = { ".Bx" ~ macro_arg{0, 2} ~ NEWLINE? }
-dx  = { ".Dx" ~ macro_arg? ~ NEWLINE? }
-fx  = { ".Fx" ~ macro_arg? ~ NEWLINE? }
-nx  = { ".Nx" ~ macro_arg? ~ NEWLINE? }
-ox  = { ".Ox" ~ macro_arg? ~ NEWLINE? }
-st  = { ".St" ~ macro_arg ~ NEWLINE? }
 
 text_production = { at | bsx | bx | dx | fx | nx | ox | st }
 
 inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | text_production }
 
-// ----- Document
+// ----- Mdoc document
 
-element = { block_full_explicit | block_full_implicit | block_partial_implicit | inline | text_line }
+element = { ("." ~ (block_full_explicit | block_full_implicit | block_partial_implicit | inline)) | text_line }
 
-document = { SOI ~ element* ~ EOI }
+mdoc = { SOI ~ element* ~ EOI }
+
+// ----- Block full-explicit macros
+
+// -- Bd
+
+bd_type = {
+    text_arg
+}
+
+offset = {
+    text_arg
+}
+
+compact = { "-compact" }
+
+bd_open  = { "Bd" ~ bd_type ~ ("-offset" ~ offset)? ~ compact? ~ NEWLINE }
+ed_close = { ".Ed" ~ NEWLINE* }
+bd_block = { bd_open ~ (!ed_close ~ element)* ~ ed_close }
+
+// -- Bf
+
+bf_type = {
+    text_arg
+}
+
+bf_open  = { "Bf" ~ bf_type ~ NEWLINE }
+ef_close = { ".Ef" ~ NEWLINE* }
+bf_block = { bf_open ~ (!ef_close ~ element)* ~ ef_close }
+
+// -- Bk
+
+bk_words = { "-words" }
+
+bk_open  = { "Bk" ~ bk_words ~ text_arg* ~ NEWLINE }
+ek_close = { ".Ek" ~ NEWLINE* }
+bk_block = { bk_open ~ (!ek_close ~ element)* ~ ek_close }
+
+// -- Bl
+
+bl_type = {
+    text_arg
+}
+
+bl_columns = { text_arg+ }
+
+bl_open  = { "Bl" ~ bl_type ~ ("-width" ~ offset)? ~ ("-offset" ~ offset)? ~ compact? ~ bl_columns* ~ NEWLINE }
+el_close = { ".El" ~ NEWLINE* }
+bl_block = { bl_open ~ (!el_close ~ element)* ~ el_close }
+
+// ----- Block full-implicit macros
+
+// -- Nd
+
+nd_line  = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
+nd_open  = { "Nd" ~ nd_line }
+nd_block = { nd_open ~ (!("." ~ sh_block) ~ element)* }
+
+// -- Nm
+
+nm_name  = { text_arg+ }
+nm_open  = { "Nm" ~ nm_name* ~ NEWLINE }
+nm_block = { nm_open ~ (!("." ~ (nm_open | sh_block | ss_block)) ~ element)* }
+
+// -- Sh
+
+sh_title_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
+sh_open       = { "Sh" ~ sh_title_line }
+sh_block      = { sh_open ~ (!("." ~ sh_block) ~ element)* }
+
+// -- Ss
+
+ss_title_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
+ss_open       = { "Ss" ~ ss_title_line }
+ss_block      = { ss_open ~ (!("." ~ (sh_block | ss_block)) ~ element)* }
+
+// ----- Block partial-implicit
+
+block_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
+
+// -- Aq
+
+aq_block = { "Aq" ~ block_line }
+
+// -- Bq
+
+bq_block = { "Bq" ~ block_line }
+
+// -- Brq
+
+brq_block = { "Brq" ~ block_line }
+
+// -- D1
+
+d1_block = { "D1" ~ block_line }
+
+// -- Dl
+
+dl_block = { "Dl" ~ block_line }
+
+// -- Dq
+
+dq_block = { "Dq" ~ block_line }
+
+// -- En
+
+en_block = { "En" ~ text_arg* ~ NEWLINE }
+
+// -- Op
+
+op_block = { "Op" ~ block_line }
+
+// -- Pq
+
+pq_block = { "Pq" ~ block_line }
+
+// -- Ql
+
+ql_block = { "Ql" ~ block_line }
+
+// -- Qq
+
+qq_block = { "Qq" ~ block_line }
+
+// -- Sq
+
+sq_block = { "Sq" ~ block_line }
+
+// -- Vt
+
+vt_type       = { text_arg }
+vt_identifier = { text_arg }
+vt_block      = { "Vt" ~ vt_type ~ vt_identifier* ~ NEWLINE }
+
+// ----- In-line
+
+// -- %A
+
+a = { "%A" ~ text_arg+ ~ NEWLINE? }
+
+// -- %B
+
+b = { "%B" ~ text_arg+ ~ NEWLINE? }
+
+// -- %C
+
+c = { "%C" ~ text_arg+ ~ NEWLINE? }
+
+// -- %D
+
+month     =  { text_arg }
+day       = @{ (!WHITESPACE ~ !NEWLINE ~ ASCII_DIGIT)+ }
+month_day =  { month ~ day ~ "," }
+year      =  { text_arg }
+d         =  { "%D" ~ month_day? ~ year ~ NEWLINE? }
+
+// -- %I
+
+i = { "%I" ~ text_arg+ ~ NEWLINE? }
+
+// -- %J
+
+j = { "%J" ~ text_arg+ ~ NEWLINE? }
+
+// -- %N
+
+n = { "%N" ~ text_arg+ ~ NEWLINE? }
+
+// -- %O
+
+o = { "%O" ~ text_arg+ ~ NEWLINE? }
+
+// -- %P
+
+p = { "%P" ~ text_arg+ ~ NEWLINE? }
+
+// -- %Q
+
+q = { "%Q" ~ text_arg+ ~ NEWLINE? }
+
+// -- %R
+
+r = { "%R" ~ text_arg+ ~ NEWLINE? }
+
+// -- %T
+
+t = { "%T" ~ text_arg+ ~ NEWLINE? }
+
+// -- %U
+
+uri = @{ (!"://" ~ ANY)+ ~ "://" ~ text_arg }
+u   =  { "%U" ~ uri ~ NEWLINE? }
+
+// -- %V
+
+v = { "%V" ~ text_arg+ ~ NEWLINE? }
+
+// -- Ad
+
+ad = { "Ad" ~ text_arg+ ~ NEWLINE? }
+
+// -- An
+
+an = { "An" ~ text_arg+ ~ NEWLINE? }
+
+// -- Ap
+
+ap = { "Ap" ~ NEWLINE? }
+
+// -- Ar
+
+ar = { "Ar" ~ text_arg* ~ NEWLINE? }
+
+// -- Bt
+
+bt = { "Bt" ~ text_arg* ~ NEWLINE? }
+
+// -- Cd
+
+cd = { "Cd" ~ text_arg+ ~ NEWLINE? }
+
+// -- Cm
+
+cm = { "Cm" ~ text_arg+ ~ NEWLINE? }
+
+// -- Text production
+
+at  = { "At" ~ text_arg? ~ NEWLINE? }
+bsx = { "Bsx" ~ text_arg? ~ NEWLINE? }
+bx  = { "Bx" ~ text_arg{0, 2} ~ NEWLINE? }
+dx  = { "Dx" ~ text_arg? ~ NEWLINE? }
+fx  = { "Fx" ~ text_arg? ~ NEWLINE? }
+nx  = { "Nx" ~ text_arg? ~ NEWLINE? }
+ox  = { "Ox" ~ text_arg? ~ NEWLINE? }
+st  = { "St" ~ text_arg ~ NEWLINE? }
