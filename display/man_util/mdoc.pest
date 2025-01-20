@@ -1,9 +1,22 @@
+// 
+// Copyright (c) 2024 Hemi Labs, Inc.
+// 
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+// 
+
 // ----- Basic rules
 
 WHITESPACE = _{ " " | "\t" }
 NEWLINE    = _{ "\r"? ~ "\n" }
 
 text_arg = @{ (!(WHITESPACE | NEWLINE) ~ ANY)+ }
+// -- List of Callable macros
+macro_arg = { !(d1_block | dl_block | rs_submacro | bt) ~ (block_partial_implicit | inline) }
+
+arg = { macro_arg | text_arg }
 
 text_line = { !"." ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
@@ -42,7 +55,7 @@ offset = {
 compact = { "-compact" }
 
 bd_open  = { "Bd" ~ bd_type ~ ("-offset" ~ offset)? ~ compact? ~ NEWLINE }
-ed_close = { ".Ed" ~ NEWLINE* }
+ed_close = { ".Ed" ~ NEWLINE? }
 bd_block = { bd_open ~ (!ed_close ~ element)* ~ ed_close }
 
 // -- Bf
@@ -52,7 +65,7 @@ bf_type = {
 }
 
 bf_open  = { "Bf" ~ bf_type ~ NEWLINE }
-ef_close = { ".Ef" ~ NEWLINE* }
+ef_close = { ".Ef" ~ NEWLINE? }
 bf_block = { bf_open ~ (!ef_close ~ element)* ~ ef_close }
 
 // -- Bk
@@ -60,7 +73,7 @@ bf_block = { bf_open ~ (!ef_close ~ element)* ~ ef_close }
 bk_words = { "-words" }
 
 bk_open  = { "Bk" ~ bk_words ~ text_arg* ~ NEWLINE }
-ek_close = { ".Ek" ~ NEWLINE* }
+ek_close = { ".Ek" ~ NEWLINE? }
 bk_block = { bk_open ~ (!ek_close ~ element)* ~ ek_close }
 
 // -- Bl
@@ -72,92 +85,54 @@ bl_type = {
 bl_columns = { text_arg+ }
 
 bl_open  = { "Bl" ~ bl_type ~ ("-width" ~ offset)? ~ ("-offset" ~ offset)? ~ compact? ~ bl_columns* ~ NEWLINE }
-el_close = { ".El" ~ NEWLINE* }
+el_close = { ".El" ~ NEWLINE? }
 bl_block = { bl_open ~ (!el_close ~ element)* ~ el_close }
 
 // ----- Block full-implicit macros
 
 // -- Nd
 
-nd_line  = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
-nd_open  = { "Nd" ~ nd_line }
-nd_block = { nd_open ~ (!("." ~ sh_block) ~ element)* }
+nd_line          = { (!NEWLINE ~ ANY)+ }
+nd_open          = { "Nd" ~ nd_line }
+nd_block_element = { !("." ~ sh_block) ~ element }
+nd_block         = { nd_open ~ (NEWLINE ~ nd_block_element*)? }
 
 // -- Nm
 
-nm_name  = { text_arg+ }
-nm_open  = { "Nm" ~ nm_name* ~ NEWLINE }
-nm_block = { nm_open ~ (!("." ~ (nm_open | sh_block | ss_block)) ~ element)* }
+nm_name          = { text_arg+ }
+nm_open          = { "Nm" ~ nm_name* }
+nm_block_element = { !("." ~ (nm_open | sh_block | ss_block)) ~ element }
+nm_block         = { nm_open ~ (NEWLINE ~ nm_block_element*)? }
 
 // -- Sh
 
-sh_title_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
-sh_open       = { "Sh" ~ sh_title_line }
-sh_block      = { sh_open ~ (!("." ~ sh_block) ~ element)* }
+sh_title_line    = { (!NEWLINE ~ ANY)+ }
+sh_open          = { "Sh" ~ sh_title_line }
+sh_block_element = { !("." ~ sh_block) ~ element }
+sh_block         = { sh_open ~ (NEWLINE ~ sh_block_element*)? }
 
 // -- Ss
 
-ss_title_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
-ss_open       = { "Ss" ~ ss_title_line }
-ss_block      = { ss_open ~ (!("." ~ (sh_block | ss_block)) ~ element)* }
+ss_title_line    = { (!NEWLINE ~ ANY)+ }
+ss_open          = { "Ss" ~ ss_title_line }
+ss_block_element = { !("." ~ (sh_block | ss_block)) ~ element }
+ss_block         = { ss_open ~ (NEWLINE ~ ss_block_element*)? }
 
 // ----- Block partial-implicit
 
-block_line = { (!NEWLINE ~ ANY)+ ~ NEWLINE }
-
-// -- Aq
-
-aq_block = { "Aq" ~ block_line }
-
-// -- Bq
-
-bq_block = { "Bq" ~ block_line }
-
-// -- Brq
-
-brq_block = { "Brq" ~ block_line }
-
-// -- D1
-
-d1_block = { "D1" ~ block_line }
-
-// -- Dl
-
-dl_block = { "Dl" ~ block_line }
-
-// -- Dq
-
-dq_block = { "Dq" ~ block_line }
-
-// -- En
-
-en_block = { "En" ~ text_arg* ~ NEWLINE }
-
-// -- Op
-
-op_block = { "Op" ~ block_line }
-
-// -- Pq
-
-pq_block = { "Pq" ~ block_line }
-
-// -- Ql
-
-ql_block = { "Ql" ~ block_line }
-
-// -- Qq
-
-qq_block = { "Qq" ~ block_line }
-
-// -- Sq
-
-sq_block = { "Sq" ~ block_line }
-
-// -- Vt
-
-vt_type       = { text_arg }
-vt_identifier = { text_arg }
-vt_block      = { "Vt" ~ vt_type ~ vt_identifier* ~ NEWLINE }
+aq_block  = { "Aq" ~ arg* }
+bq_block  = { "Bq" ~ arg* }
+brq_block = { "Brq" ~ arg* }
+d1_block  = { "D1" ~ arg* }
+dl_block  = { "Dl" ~ arg* }
+dq_block  = { "Dq" ~ arg* }
+en_block  = { "En" ~ arg+ }
+op_block  = { "Op" ~ arg* }
+pq_block  = { "Pq" ~ arg* }
+ql_block  = { "Ql" ~ arg* }
+qq_block  = { "Qq" ~ arg* }
+sq_block  = { "Sq" ~ arg* }
+vt_block  = { "Vt" ~ arg+ }
 
 // ----- In-line
 
@@ -176,7 +151,7 @@ c = { "%C" ~ text_arg+ ~ NEWLINE? }
 // -- %D
 
 month     =  { text_arg }
-day       = @{ (!WHITESPACE ~ !NEWLINE ~ ASCII_DIGIT)+ }
+day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
 month_day =  { month ~ day ~ "," }
 year      =  { text_arg }
 d         =  { "%D" ~ month_day? ~ year ~ NEWLINE? }
@@ -224,31 +199,34 @@ v = { "%V" ~ text_arg+ ~ NEWLINE? }
 
 // -- Ad
 
-ad = { "Ad" ~ text_arg+ ~ NEWLINE? }
+ad = { "Ad" ~ arg+ ~ NEWLINE? }
 
 // -- An
 
-an = { "An" ~ text_arg+ ~ NEWLINE? }
+an_split    = { "-split" }
+an_no_split = { "-nosplit" }
+an_name     = { arg+ }
+an          = { "An" ~ (an_split | an_no_split | an_name) ~ NEWLINE? }
 
 // -- Ap
 
-ap = { "Ap" ~ NEWLINE? }
+ap = { "Ap" ~ arg* ~ NEWLINE? }
 
 // -- Ar
 
-ar = { "Ar" ~ text_arg* ~ NEWLINE? }
+ar = { "Ar" ~ arg* ~ NEWLINE? }
 
 // -- Bt
 
-bt = { "Bt" ~ text_arg* ~ NEWLINE? }
+bt = { "Bt" ~ arg* ~ NEWLINE? }
 
 // -- Cd
 
-cd = { "Cd" ~ text_arg+ ~ NEWLINE? }
+cd = { "Cd" ~ arg+ ~ NEWLINE? }
 
 // -- Cm
 
-cm = { "Cm" ~ text_arg+ ~ NEWLINE? }
+cm = { "Cm" ~ arg+ ~ NEWLINE? }
 
 // -- Text production
 

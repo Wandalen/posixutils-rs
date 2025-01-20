@@ -1,3 +1,12 @@
+//
+// Copyright (c) 2024 Hemi Labs, Inc.
+//
+// This file is part of the posixutils-rs project covered under
+// the MIT License.  For the full license text, please see the LICENSE
+// file in the root directory of this project.
+// SPDX-License-Identifier: MIT
+//
+
 #[derive(Debug, PartialEq)]
 pub enum BdType {
     Centered,
@@ -98,7 +107,6 @@ impl TryFrom<String> for BlType {
 }
 
 #[derive(Debug, PartialEq)]
-
 pub enum ItType {
     MandatoryArgs(Vec<String>),
     OptionalArgs(Vec<String>),
@@ -110,17 +118,7 @@ pub enum ItType {
 pub enum AnType {
     Split,
     NoSplit,
-    Name(String),
-}
-
-impl From<String> for AnType {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            "-split" => Self::Split,
-            "-nosplit" => Self::NoSplit,
-            _ => Self::Name(value),
-        }
-    }
+    Name,
 }
 
 #[derive(Debug, PartialEq)]

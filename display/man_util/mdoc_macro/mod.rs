@@ -58,9 +58,7 @@ pub enum Macro {
     V {
         volume_number: String,
     },
-    Ad {
-        addresses: Vec<String>,
-    },
+    Ad,
     An {
         author_name_type: AnType,
     },
@@ -68,11 +66,7 @@ pub enum Macro {
     Ac, // Close an Ao block
     Ap,
     Aq,
-    Ar {
-        // Command arguments. If an argument is not provided, the string “file ...” is used as a default.
-        // https://man.openbsd.org/mdoc#Ar
-        placeholder: Option<Vec<String>>,
-    },
+    Ar,
     At(AtAndTUnix),
     Bd {
         block_type: BdType,
@@ -100,12 +94,8 @@ pub enum Macro {
     Bsx(BsdOs),
     Bt,
     Bx(Bsd),
-    Cd {
-        line: Vec<String>,
-    },
-    Cm {
-        keywords: Vec<String>,
-    },
+    Cd,
+    Cm,
     D1,
     Db, // Obsolete
     Dd {
@@ -126,10 +116,7 @@ pub enum Macro {
         identifiers: Vec<String>,
     },
     Dx(DragonFly),
-    En {
-        // Obsolete
-        words: Vec<String>,
-    },
+    En,
     Eo {
         opening_delimiter: Option<char>,
     },
@@ -274,10 +261,7 @@ pub enum Macro {
         func_type: Option<String>,
         identifier: Vec<String>,
     },
-    Vt {
-        variable_type: String,
-        identifier: Vec<String>,
-    },
+    Vt,
     Xo,
     Xc, // Close a scope opened by Xo
     Xr {
