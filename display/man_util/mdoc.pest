@@ -56,7 +56,7 @@ compact = { "-compact" }
 
 bd_open  = { "Bd" ~ bd_type ~ ("-offset" ~ offset)? ~ compact? ~ NEWLINE }
 ed_close = { ".Ed" ~ NEWLINE? }
-bd_block = { bd_open ~ (!ed_close ~ element)* ~ ed_close }
+bd_block = { bd_open ~ element* ~ ed_close }
 
 // -- Bf
 
@@ -66,7 +66,7 @@ bf_type = {
 
 bf_open  = { "Bf" ~ bf_type ~ NEWLINE }
 ef_close = { ".Ef" ~ NEWLINE? }
-bf_block = { bf_open ~ (!ef_close ~ element)* ~ ef_close }
+bf_block = { bf_open ~ element* ~ ef_close }
 
 // -- Bk
 
@@ -74,7 +74,7 @@ bk_words = { "-words" }
 
 bk_open  = { "Bk" ~ bk_words ~ text_arg* ~ NEWLINE }
 ek_close = { ".Ek" ~ NEWLINE? }
-bk_block = { bk_open ~ (!ek_close ~ element)* ~ ek_close }
+bk_block = { bk_open ~ element* ~ ek_close }
 
 // -- Bl
 
@@ -84,37 +84,35 @@ bl_type = {
 
 bl_columns = { text_arg+ }
 
-bl_open  = { "Bl" ~ bl_type ~ ("-width" ~ offset)? ~ ("-offset" ~ offset)? ~ compact? ~ bl_columns* ~ NEWLINE }
+bl_open  = { "Bl" ~ bl_type ~ (("-width" | "-offset") ~ offset)? ~ compact? ~ bl_columns* ~ NEWLINE }
 el_close = { ".El" ~ NEWLINE? }
-bl_block = { bl_open ~ (!el_close ~ element)* ~ el_close }
+bl_block = { bl_open ~ element* ~ el_close }
 
 // ----- Block full-implicit macros
 
+block_line = { (!NEWLINE ~ ANY)+ }
+
 // -- Nd
 
-nd_line          = { (!NEWLINE ~ ANY)+ }
-nd_open          = { "Nd" ~ nd_line }
+nd_open          = { "Nd" ~ block_line }
 nd_block_element = { !("." ~ sh_block) ~ element }
 nd_block         = { nd_open ~ (NEWLINE ~ nd_block_element*)? }
 
 // -- Nm
 
-nm_name          = { text_arg+ }
-nm_open          = { "Nm" ~ nm_name* }
-nm_block_element = { !("." ~ (nm_open | sh_block | ss_block)) ~ element }
+nm_open          = { "Nm" ~ arg* }
+nm_block_element = { !("." ~ (nm_block | sh_block | ss_block)) ~ element }
 nm_block         = { nm_open ~ (NEWLINE ~ nm_block_element*)? }
 
 // -- Sh
 
-sh_title_line    = { (!NEWLINE ~ ANY)+ }
-sh_open          = { "Sh" ~ sh_title_line }
+sh_open          = { "Sh" ~ block_line }
 sh_block_element = { !("." ~ sh_block) ~ element }
 sh_block         = { sh_open ~ (NEWLINE ~ sh_block_element*)? }
 
 // -- Ss
 
-ss_title_line    = { (!NEWLINE ~ ANY)+ }
-ss_open          = { "Ss" ~ ss_title_line }
+ss_open          = { "Ss" ~ block_line }
 ss_block_element = { !("." ~ (sh_block | ss_block)) ~ element }
 ss_block         = { ss_open ~ (NEWLINE ~ ss_block_element*)? }
 
@@ -136,19 +134,11 @@ vt_block  = { "Vt" ~ arg+ }
 
 // ----- In-line
 
-// -- %A
+// -- Rs submacros
 
 a = { "%A" ~ text_arg+ ~ NEWLINE? }
-
-// -- %B
-
 b = { "%B" ~ text_arg+ ~ NEWLINE? }
-
-// -- %C
-
 c = { "%C" ~ text_arg+ ~ NEWLINE? }
-
-// -- %D
 
 month     =  { text_arg }
 day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
@@ -156,46 +146,30 @@ month_day =  { month ~ day ~ "," }
 year      =  { text_arg }
 d         =  { "%D" ~ month_day? ~ year ~ NEWLINE? }
 
-// -- %I
-
 i = { "%I" ~ text_arg+ ~ NEWLINE? }
-
-// -- %J
-
 j = { "%J" ~ text_arg+ ~ NEWLINE? }
-
-// -- %N
-
 n = { "%N" ~ text_arg+ ~ NEWLINE? }
-
-// -- %O
-
 o = { "%O" ~ text_arg+ ~ NEWLINE? }
-
-// -- %P
-
 p = { "%P" ~ text_arg+ ~ NEWLINE? }
-
-// -- %Q
-
 q = { "%Q" ~ text_arg+ ~ NEWLINE? }
-
-// -- %R
-
 r = { "%R" ~ text_arg+ ~ NEWLINE? }
-
-// -- %T
-
 t = { "%T" ~ text_arg+ ~ NEWLINE? }
-
-// -- %U
 
 uri = @{ (!"://" ~ ANY)+ ~ "://" ~ text_arg }
 u   =  { "%U" ~ uri ~ NEWLINE? }
 
-// -- %V
-
 v = { "%V" ~ text_arg+ ~ NEWLINE? }
+
+// -- Text production
+
+at  = { "At" ~ text_arg? ~ NEWLINE? }
+bsx = { "Bsx" ~ text_arg? ~ NEWLINE? }
+bx  = { "Bx" ~ text_arg{0, 2} ~ NEWLINE? }
+dx  = { "Dx" ~ text_arg? ~ NEWLINE? }
+fx  = { "Fx" ~ text_arg? ~ NEWLINE? }
+nx  = { "Nx" ~ text_arg? ~ NEWLINE? }
+ox  = { "Ox" ~ text_arg? ~ NEWLINE? }
+st  = { "St" ~ text_arg ~ NEWLINE? }
 
 // -- Ad
 
@@ -227,14 +201,3 @@ cd = { "Cd" ~ arg+ ~ NEWLINE? }
 // -- Cm
 
 cm = { "Cm" ~ arg+ ~ NEWLINE? }
-
-// -- Text production
-
-at  = { "At" ~ text_arg? ~ NEWLINE? }
-bsx = { "Bsx" ~ text_arg? ~ NEWLINE? }
-bx  = { "Bx" ~ text_arg{0, 2} ~ NEWLINE? }
-dx  = { "Dx" ~ text_arg? ~ NEWLINE? }
-fx  = { "Fx" ~ text_arg? ~ NEWLINE? }
-nx  = { "Nx" ~ text_arg? ~ NEWLINE? }
-ox  = { "Ox" ~ text_arg? ~ NEWLINE? }
-st  = { "St" ~ text_arg ~ NEWLINE? }

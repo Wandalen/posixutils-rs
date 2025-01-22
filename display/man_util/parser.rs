@@ -165,7 +165,6 @@ impl MdocParser {
     }
 
     fn parse_arg(pair: Pair<Rule>) -> Element {
-        println!("Arg macro: {pair:?}\n");
         match pair.as_rule() {
             Rule::text_arg => Element::Text(pair.as_str().to_string()),
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
@@ -451,17 +450,28 @@ impl MdocParser {
     fn parse_nm(pair: Pair<Rule>) -> Element {
         let mut inner = pair.into_inner();
 
-        let name: Option<Vec<String>> = inner
-            .next() // `nm_block` -> `nm_open`
+        // `nm_block` -> `nm_open`
+        let nm_pairs = inner
+            .next()
             .unwrap()
             .into_inner()
-            .next() // `nm_open` -> `nm_name`
-            .map(|p| p.into_inner().map(|n| n.as_str().to_string()).collect());
+            .flat_map(|p| p.into_inner());
+
+        let is_name = |item: &Pair<Rule>| matches!(item.as_rule(), Rule::text_arg);
+
+        // While `nm_open` contains `text_arg` consider it as name
+        let name: Vec<String> = nm_pairs
+            .clone()
+            .take_while(is_name)
+            .map(|p| p.as_str().to_string())
+            .collect();
+        // Other arguments are not names
+        let mut nodes: Vec<Element> = nm_pairs.skip_while(is_name).map(Self::parse_arg).collect();
+
+        let name = if name.is_empty() { None } else { Some(name) };
 
         // Parse `nm_block_element`
-        let nodes = inner
-            .filter_map(|p| p.into_inner().next().map(Self::parse_element))
-            .collect();
+        nodes.extend(inner.filter_map(|p| p.into_inner().next().map(Self::parse_element)));
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Nm { name },
@@ -1138,6 +1148,7 @@ mod test {
             let content = ".Bd -literal -offset indent -compact\nLine 1\nLine 2\n";
 
             let mdoc = MdocParser::parse_mdoc(content);
+            // TODO: Format and compare pest errors??
             assert!(mdoc.is_err());
         }
 
@@ -1149,6 +1160,7 @@ mod test {
             for closing_macro in closing_macros {
                 let content = format!("{content}.{closing_macro}");
                 let mdoc = MdocParser::parse_mdoc(content);
+                // TODO: Format and compare pest errors??
                 assert!(mdoc.is_err());
             }
         }
@@ -1240,6 +1252,18 @@ mod test {
         }
 
         #[test]
+        fn bd_not_parsed() {
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Bd -literal -compact Ad addr1\n.Ed").is_err());
+        }
+
+        #[test]
+        fn bd_not_callable() {
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Ad addr1 Bd -literal\n.Ed").is_err());
+        }
+
+        #[test]
         fn bf() {
             let content = ".Bf -emphasis\nLine 1\nLine 2\n.Ef";
             let elements = vec![Element::Macro(MacroNode {
@@ -1259,6 +1283,7 @@ mod test {
             let content = ".Bf -emphasis\nLine 1\nLine 2\n";
 
             let mdoc = MdocParser::parse_mdoc(content);
+            // TODO: Format and compare pest errors??
             assert!(mdoc.is_err());
         }
 
@@ -1270,6 +1295,7 @@ mod test {
             for closing_macro in closing_macros {
                 let content = format!("{content}.{closing_macro}");
                 let mdoc = MdocParser::parse_mdoc(content);
+                // TODO: Format and compare pest errors??
                 assert!(mdoc.is_err());
             }
         }
@@ -1295,6 +1321,18 @@ mod test {
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements, "Bf type: {str_type}");
             }
+        }
+
+        #[test]
+        fn bf_not_parsed() {
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Bf Em Ad addr1\n.Ef").is_err());
+        }
+
+        #[test]
+        fn bf_not_callable() {
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Ad addr1 Bf Em\n.Ef").is_err());
         }
 
         #[test]
@@ -1329,7 +1367,27 @@ mod test {
             let content = ".Bk\n.Ek";
 
             let mdoc = MdocParser::parse_mdoc(content);
+            // TODO: Format and compare pest errors??
             assert!(mdoc.is_err());
+        }
+
+        #[test]
+        fn bk_not_parsed() {
+            // Ignore callable macro as argument
+            let content = ".Bk -words Ad addr1\n.Ek";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Bk,
+                nodes: vec![],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn bk_not_callable() {
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Ad addr1 Bk -words\n.Ek").is_err());
         }
 
         #[test]
@@ -1358,6 +1416,7 @@ mod test {
             let content = ".Bl -bullet\nLine 1\nLine 2\n";
 
             let mdoc = MdocParser::parse_mdoc(content);
+            // TODO: Format and compare pest errors??
             assert!(mdoc.is_err());
         }
 
@@ -1369,6 +1428,7 @@ mod test {
             for closing_macro in closing_macros {
                 let content = format!("{content}.{closing_macro}");
                 let mdoc = MdocParser::parse_mdoc(content);
+                // TODO: Format and compare pest errors??
                 assert!(mdoc.is_err());
             }
         }
@@ -1507,6 +1567,30 @@ mod test {
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
         }
+
+        #[test]
+        fn bl_not_parsed() {
+            // Callable macro as opaque text
+            let content = ".Bl -bullet Ad addr1\n.El";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Bl {
+                    list_type: BlType::Bullet,
+                    offset: None,
+                    compact: false,
+                    columns: vec!["Ad".to_string(), "addr1".to_string()],
+                },
+                nodes: vec![],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn bl_not_callable() {
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Ad addr1 Bl Em\n.El").is_err());
+        }
     }
 
     mod block_full_implicit {
@@ -1595,6 +1679,37 @@ mod test {
                     },
                     nodes: vec![],
                 })],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn nd_not_parsed() {
+            let content = ".Nd name Ad addr1";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Nd {
+                    line: "name Ad addr1".to_string(),
+                },
+                nodes: vec![],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn nd_not_callable() {
+            let content = ".Ad addr1 Nd name description";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Nd".to_string()),
+                    Element::Text("name".to_string()),
+                    Element::Text("description".to_string()),
+                ],
             })];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -1775,6 +1890,40 @@ mod test {
         }
 
         #[test]
+        fn nm_parsed() {
+            let content = ".Nm name1 name2 Ad addr1";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Nm {
+                    name: Some(vec!["name1".to_string(), "name2".to_string()]),
+                },
+                nodes: vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![Element::Text("addr1".to_string())],
+                })],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn nm_not_callable() {
+            let content = ".Ad addr1 Nm name1 name2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Nm".to_string()),
+                    Element::Text("name1".to_string()),
+                    Element::Text("name2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn sh() {
             let content = ".Sh SECTION\nThis is the SECTION section.\n";
             let elements = vec![Element::Macro(MacroNode {
@@ -1941,6 +2090,38 @@ mod test {
         }
 
         #[test]
+        fn sh_parsed() {
+            // Although this macro is parsed, it should not consist of child
+            // node or it may not be linked with Sx.
+            let content = ".Sh SECTION Ad addr1";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Sh {
+                    title: "SECTION Ad addr1".to_string(),
+                },
+                nodes: vec![],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn sh_not_callable() {
+            let content = ".Ad addr1 Sh SECTION";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Sh".to_string()),
+                    Element::Text("SECTION".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn ss() {
             let content = ".Ss Options\nThese are the available options.\n";
             let elements = vec![Element::Macro(MacroNode {
@@ -2083,6 +2264,38 @@ mod test {
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
         }
+
+        #[test]
+        fn ss_parsed() {
+            // Although this macro is parsed, it should not consist of child
+            // node or it may not be linked with Sx.
+            let content = ".Ss Subchapter Ad addr1";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ss {
+                    title: "Subchapter Ad addr1".to_string(),
+                },
+                nodes: vec![],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ss_not_callable() {
+            let content = ".Ad addr1 Ss Subchapter";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Ss".to_string()),
+                    Element::Text("Subchapter".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
     }
 
     mod block_partial_implicit {
@@ -2129,6 +2342,24 @@ mod test {
                             Element::Text("addr1".to_string()),
                             Element::Text("addr2".to_string()),
                         ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn aq_callable() {
+            let content = ".Ad addr1 Aq addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Aq,
+                        nodes: vec![Element::Text("addr2".to_string())],
                     }),
                 ],
             })];
@@ -2187,6 +2418,24 @@ mod test {
         }
 
         #[test]
+        fn bq_callable() {
+            let content = ".Ad addr1 Bq addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Bq,
+                        nodes: vec![Element::Text("addr2".to_string())],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn brq_empty() {
             let content = ".Brq";
             let elements = vec![Element::Macro(MacroNode {
@@ -2227,6 +2476,24 @@ mod test {
                             Element::Text("addr1".to_string()),
                             Element::Text("addr2".to_string()),
                         ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn brq_callable() {
+            let content = ".Ad addr1 Brq addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Brq,
+                        nodes: vec![Element::Text("addr2".to_string())],
                     }),
                 ],
             })];
@@ -2285,6 +2552,22 @@ mod test {
         }
 
         #[test]
+        fn d1_not_callable() {
+            let content = ".Ad addr1 D1 addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("D1".to_string()),
+                    Element::Text("addr2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn dl_empty() {
             let content = ".Dl";
             let elements = vec![Element::Macro(MacroNode {
@@ -2326,6 +2609,22 @@ mod test {
                             Element::Text("addr2".to_string()),
                         ],
                     }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dl_not_callable() {
+            let content = ".Ad addr1 Dl addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Dl".to_string()),
+                    Element::Text("addr2".to_string()),
                 ],
             })];
 
@@ -2383,6 +2682,24 @@ mod test {
         }
 
         #[test]
+        fn dq_callable() {
+            let content = ".Ad addr1 Dq addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Dq,
+                        nodes: vec![Element::Text("addr2".to_string())],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn en() {
             let content = ".En word1 word2 word3";
             let elements = vec![Element::Macro(MacroNode {
@@ -2400,6 +2717,7 @@ mod test {
 
         #[test]
         fn en_no_words() {
+            // TODO: Format and compare pest errors??
             assert!(MdocParser::parse_mdoc(".En").is_err());
         }
 
@@ -2417,6 +2735,24 @@ mod test {
                             Element::Text("addr1".to_string()),
                             Element::Text("addr2".to_string()),
                         ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn en_callable() {
+            let content = ".Ad addr1 En addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::En,
+                        nodes: vec![Element::Text("addr2".to_string())],
                     }),
                 ],
             })];
@@ -2475,6 +2811,24 @@ mod test {
         }
 
         #[test]
+        fn op_callable() {
+            let content = ".Ad addr1 Op addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Op,
+                        nodes: vec![Element::Text("addr2".to_string())],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn pq_empty() {
             let content = ".Pq";
             let elements = vec![Element::Macro(MacroNode {
@@ -2515,6 +2869,24 @@ mod test {
                             Element::Text("addr1".to_string()),
                             Element::Text("addr2".to_string()),
                         ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn pq_callable() {
+            let content = ".Ad addr1 Pq addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Pq,
+                        nodes: vec![Element::Text("addr2".to_string())],
                     }),
                 ],
             })];
@@ -2573,6 +2945,24 @@ mod test {
         }
 
         #[test]
+        fn ql_callable() {
+            let content = ".Ad addr1 Ql addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ql,
+                        nodes: vec![Element::Text("addr2".to_string())],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn qq_empty() {
             let content = ".Qq";
             let elements = vec![Element::Macro(MacroNode {
@@ -2613,6 +3003,24 @@ mod test {
                             Element::Text("addr1".to_string()),
                             Element::Text("addr2".to_string()),
                         ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn qq_callable() {
+            let content = ".Ad addr1 Qq addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Qq,
+                        nodes: vec![Element::Text("addr2".to_string())],
                     }),
                 ],
             })];
@@ -2671,6 +3079,24 @@ mod test {
         }
 
         #[test]
+        fn sq_callable() {
+            let content = ".Ad addr1 Sq addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Sq,
+                        nodes: vec![Element::Text("addr2".to_string())],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn vt() {
             let content = ".Vt type some identifier";
             let elements = vec![Element::Macro(MacroNode {
@@ -2688,6 +3114,7 @@ mod test {
 
         #[test]
         fn vt_empty() {
+            // TODO: Format and compare pest errors??
             assert!(MdocParser::parse_mdoc(".Vt").is_err());
         }
 
@@ -2724,6 +3151,24 @@ mod test {
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
         }
+
+        #[test]
+        fn vt_callable() {
+            let content = ".Ad addr1 Vt addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Vt,
+                        nodes: vec![Element::Text("addr2".to_string())],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
     }
 
     mod inline {
@@ -2734,7 +3179,7 @@ mod test {
 
             #[test]
             fn a() {
-                let content = ".%A John Doe\n";
+                let content = ".%A John Doe";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::A {
                         author_name: "John Doe".to_string(),
@@ -2762,12 +3207,44 @@ mod test {
 
             #[test]
             fn a_no_args() {
-                assert!(MdocParser::parse_mdoc(".%A\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%A").is_err());
+            }
+
+            #[test]
+            fn a_not_parsed() {
+                let content = ".%A John Doe Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::A {
+                        author_name: "John Doe Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn a_not_callable() {
+                let content = ".Ad addr1 %A John Doe";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%A".to_string()),
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn b() {
-                let content = ".%B Title Line\n";
+                let content = ".%B Title Line";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::B {
                         book_title: "Title Line".to_string(),
@@ -2795,12 +3272,44 @@ mod test {
 
             #[test]
             fn b_no_args() {
-                assert!(MdocParser::parse_mdoc(".%B\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%B").is_err());
+            }
+
+            #[test]
+            fn b_not_parsed() {
+                let content = ".%B Title Line Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::B {
+                        book_title: "Title Line Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn b_not_callable() {
+                let content = ".Ad addr1 %B Title Line";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%B".to_string()),
+                        Element::Text("Title".to_string()),
+                        Element::Text("Line".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn c() {
-                let content = ".%C Location line\n";
+                let content = ".%C Location line";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::C {
                         publication_location: "Location line".to_string(),
@@ -2828,12 +3337,44 @@ mod test {
 
             #[test]
             fn c_no_args() {
-                assert!(MdocParser::parse_mdoc(".%C\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%C").is_err());
+            }
+
+            #[test]
+            fn c_not_parsed() {
+                let content = ".%C Location Line Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::C {
+                        publication_location: "Location Line Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn c_not_callable() {
+                let content = ".Ad addr1 %C Location Line";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%C".to_string()),
+                        Element::Text("Location".to_string()),
+                        Element::Text("Line".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn d() {
-                let content = ".%D January 1, 1970\n";
+                let content = ".%D January 1, 1970";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::D {
                         month_day: Some(("January".to_string(), 1)),
@@ -2863,7 +3404,7 @@ mod test {
 
             #[test]
             fn d_no_month_day() {
-                let content = ".%D 1970\n";
+                let content = ".%D 1970";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::D {
                         month_day: None,
@@ -2878,12 +3419,36 @@ mod test {
 
             #[test]
             fn d_no_args() {
-                assert!(MdocParser::parse_mdoc(".%D\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%D").is_err());
+            }
+
+            #[test]
+            fn d_not_parsed() {
+                assert!(MdocParser::parse_mdoc(".%D January 1, 1970 Ad addr1").is_err());
+            }
+
+            #[test]
+            fn d_not_callable() {
+                let content = ".Ad addr1 %D January 1, 1970";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%D".to_string()),
+                        Element::Text("January".to_string()),
+                        Element::Text("1,".to_string()),
+                        Element::Text("1970".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn i() {
-                let content = ".%I John Doe\n";
+                let content = ".%I John Doe";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::I {
                         issuer_name: "John Doe".to_string(),
@@ -2911,12 +3476,44 @@ mod test {
 
             #[test]
             fn i_no_args() {
-                assert!(MdocParser::parse_mdoc(".%I\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%I").is_err());
+            }
+
+            #[test]
+            fn i_not_parsed() {
+                let content = ".%I John Doe Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::I {
+                        issuer_name: "John Doe Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn i_not_callable() {
+                let content = ".Ad addr1 %I John Doe";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%I".to_string()),
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn j() {
-                let content = ".%J Journal Name Line\n";
+                let content = ".%J Journal Name Line";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::J {
                         journal_name: "Journal Name Line".to_string(),
@@ -2944,12 +3541,44 @@ mod test {
 
             #[test]
             fn j_no_args() {
-                assert!(MdocParser::parse_mdoc(".%J\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%J").is_err());
+            }
+
+            #[test]
+            fn j_not_parsed() {
+                let content = ".%J Journal Name Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::J {
+                        journal_name: "Journal Name Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn j_not_callable() {
+                let content = ".Ad addr1 %J Journal Name";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%J".to_string()),
+                        Element::Text("Journal".to_string()),
+                        Element::Text("Name".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn n() {
-                let content = ".%N Issue No. 1\n";
+                let content = ".%N Issue No. 1";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::N {
                         issue_number: "Issue No. 1".to_string(),
@@ -2977,12 +3606,45 @@ mod test {
 
             #[test]
             fn n_no_args() {
-                assert!(MdocParser::parse_mdoc(".%N\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%N").is_err());
+            }
+
+            #[test]
+            fn n_not_parsed() {
+                let content = ".%N Issue No. 1 Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::N {
+                        issue_number: "Issue No. 1 Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn n_not_callable() {
+                let content = ".Ad addr1 %N Issue No. 1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%N".to_string()),
+                        Element::Text("Issue".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn o() {
-                let content = ".%O Optional information line\n";
+                let content = ".%O Optional information line";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::O {
                         information: "Optional information line".to_string(),
@@ -3010,12 +3672,44 @@ mod test {
 
             #[test]
             fn o_no_args() {
-                assert!(MdocParser::parse_mdoc(".%O\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%O").is_err());
+            }
+
+            #[test]
+            fn o_not_parsed() {
+                let content = ".%O Optional information Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::O {
+                        information: "Optional information Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn o_not_callable() {
+                let content = ".Ad addr1 %O Optional information";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%O".to_string()),
+                        Element::Text("Optional".to_string()),
+                        Element::Text("information".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn p() {
-                let content = ".%P pp. 1-100\n";
+                let content = ".%P pp. 1-100";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::P {
                         page_number: "pp. 1-100".to_string(),
@@ -3043,12 +3737,44 @@ mod test {
 
             #[test]
             fn p_no_args() {
-                assert!(MdocParser::parse_mdoc(".%P\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%P").is_err());
+            }
+
+            #[test]
+            fn p_not_parsed() {
+                let content = ".%P pp. 1-100 Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::P {
+                        page_number: "pp. 1-100 Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn p_not_callable() {
+                let content = ".Ad addr1 %P pp. 1-100";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%P".to_string()),
+                        Element::Text("pp.".to_string()),
+                        Element::Text("1-100".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn q() {
-                let content = ".%Q John Doe\n";
+                let content = ".%Q John Doe";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::Q {
                         insitution_author: "John Doe".to_string(),
@@ -3076,12 +3802,44 @@ mod test {
 
             #[test]
             fn q_no_args() {
-                assert!(MdocParser::parse_mdoc(".%Q\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%Q").is_err());
+            }
+
+            #[test]
+            fn q_not_parsed() {
+                let content = ".%Q John Doe Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Q {
+                        insitution_author: "John Doe Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn q_not_callable() {
+                let content = ".Ad addr1 %Q John Doe";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%Q".to_string()),
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn r() {
-                let content = ".%R Technical report No. 1\n";
+                let content = ".%R Technical report No. 1";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::R {
                         report_name: "Technical report No. 1".to_string(),
@@ -3109,12 +3867,44 @@ mod test {
 
             #[test]
             fn r_no_args() {
-                assert!(MdocParser::parse_mdoc(".%R\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%R").is_err());
+            }
+
+            #[test]
+            fn r_not_parsed() {
+                let content = ".%R Technical report Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::R {
+                        report_name: "Technical report Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn r_not_callable() {
+                let content = ".Ad addr1 %R Technical report";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%R".to_string()),
+                        Element::Text("Technical".to_string()),
+                        Element::Text("report".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn t() {
-                let content = ".%T Article title line\n";
+                let content = ".%T Article title line";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::T {
                         article_title: "Article title line".to_string(),
@@ -3142,12 +3932,44 @@ mod test {
 
             #[test]
             fn t_no_args() {
-                assert!(MdocParser::parse_mdoc(".%T\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%T").is_err());
+            }
+
+            #[test]
+            fn t_not_parsed() {
+                let content = ".%T Article title Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::T {
+                        article_title: "Article title Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn t_not_callable() {
+                let content = ".Ad addr1 %T Article title";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%T".to_string()),
+                        Element::Text("Article".to_string()),
+                        Element::Text("title".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn u() {
-                let content = ".%U protocol://path\n";
+                let content = ".%U protocol://path";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::U {
                         uri: "protocol://path".to_string(),
@@ -3161,22 +3983,46 @@ mod test {
 
             #[test]
             fn u_with_whitespaces() {
-                assert!(MdocParser::parse_mdoc(".%U protocol :// path\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%U protocol :// path").is_err());
             }
 
             #[test]
             fn u_invalid_uri() {
-                assert!(MdocParser::parse_mdoc(".%U some_non_uri_text\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%U some_non_uri_text").is_err());
             }
 
             #[test]
             fn u_no_args() {
-                assert!(MdocParser::parse_mdoc(".%U\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%U").is_err());
+            }
+
+            #[test]
+            fn u_not_parsed() {
+                assert!(MdocParser::parse_mdoc(".%U Ad addr1").is_err());
+            }
+
+            #[test]
+            fn u_not_callable() {
+                let content = ".Ad addr1 %U protocol://path";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%U".to_string()),
+                        Element::Text("protocol://path".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
             fn v() {
-                let content = ".%V Volume No. 1\n";
+                let content = ".%V Volume No. 1";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::V {
                         volume_number: "Volume No. 1".to_string(),
@@ -3204,7 +4050,40 @@ mod test {
 
             #[test]
             fn v_no_args() {
-                assert!(MdocParser::parse_mdoc(".%V\n").is_err());
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".%V").is_err());
+            }
+
+            #[test]
+            fn v_not_parsed() {
+                let content = ".%V Volume No. 1 Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::V {
+                        volume_number: "Volume No. 1 Ad addr1".to_string(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn v_not_callable() {
+                let content = ".Ad addr1 %V Volume No. 1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("%V".to_string()),
+                        Element::Text("Volume".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
         }
 
@@ -3226,7 +4105,8 @@ mod test {
 
         #[test]
         fn ad_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ad\n").is_err());
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Ad").is_err());
         }
 
         #[test]
@@ -3241,6 +4121,27 @@ mod test {
                         nodes: vec![
                             Element::Text("arg1".to_string()),
                             Element::Text("arg2".to_string()),
+                        ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ad_callable() {
+            let content = ".Ap word1 Ad addr1 addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ap,
+                nodes: vec![
+                    Element::Text("word1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![
+                            Element::Text("addr1".to_string()),
+                            Element::Text("addr2".to_string()),
                         ],
                     }),
                 ],
@@ -3300,7 +4201,8 @@ mod test {
 
         #[test]
         fn an_no_args() {
-            assert!(MdocParser::parse_mdoc(".An\n").is_err());
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".An").is_err());
         }
 
         #[test]
@@ -3327,8 +4229,28 @@ mod test {
         }
 
         #[test]
+        fn an_callable() {
+            let content = ".Ap word1 An -nosplit";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ap,
+                nodes: vec![
+                    Element::Text("word1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::An {
+                            author_name_type: AnType::NoSplit,
+                        },
+                        nodes: vec![],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn ap() {
-            let content = ".Ap Text Line\n";
+            let content = ".Ap Text Line";
 
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Ap,
@@ -3368,6 +4290,27 @@ mod test {
                         nodes: vec![
                             Element::Text("addr1".to_string()),
                             Element::Text("addr2".to_string()),
+                        ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ap_callable() {
+            let content = ".Ad addr1 Ap word1 word2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ap,
+                        nodes: vec![
+                            Element::Text("word1".to_string()),
+                            Element::Text("word2".to_string()),
                         ],
                     }),
                 ],
@@ -3430,9 +4373,30 @@ mod test {
         }
 
         #[test]
+        fn ar_callable() {
+            let content = ".Ad addr1 Ap word1 word2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ap,
+                        nodes: vec![
+                            Element::Text("word1".to_string()),
+                            Element::Text("word2".to_string()),
+                        ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn bt() {
             // "Text Line" will be ignored
-            let content = ".Bt Text Line\n";
+            let content = ".Bt Text Line";
 
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bt,
@@ -3471,6 +4435,22 @@ mod test {
         }
 
         #[test]
+        fn bt_not_callable() {
+            let content = ".Ad addr1 Bt addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Bt".to_string()),
+                    Element::Text("addr2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
         fn cd() {
             let content = ".Cd kernel configuration declaration";
 
@@ -3489,6 +4469,7 @@ mod test {
 
         #[test]
         fn cd_no_args() {
+            // TODO: Format and compare pest errors??
             assert!(MdocParser::parse_mdoc(".Cd").is_err());
         }
 
@@ -3505,6 +4486,27 @@ mod test {
                         nodes: vec![
                             Element::Text("addr1".to_string()),
                             Element::Text("addr2".to_string()),
+                        ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn cd_callable() {
+            let content = ".Ad addr1 Cd configuration declaration";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Cd,
+                        nodes: vec![
+                            Element::Text("configuration".to_string()),
+                            Element::Text("declaration".to_string()),
                         ],
                     }),
                 ],
@@ -3533,6 +4535,7 @@ mod test {
 
         #[test]
         fn cm_no_args() {
+            // TODO: Format and compare pest errors??
             assert!(MdocParser::parse_mdoc(".Cm").is_err());
         }
 
@@ -3550,6 +4553,27 @@ mod test {
                         nodes: vec![
                             Element::Text("addr1".to_string()),
                             Element::Text("addr2".to_string()),
+                        ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn cm_callable() {
+            let content = ".Ad addr1 Cm mod1 mod2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Cm,
+                        nodes: vec![
+                            Element::Text("mod1".to_string()),
+                            Element::Text("mod2".to_string()),
                         ],
                     }),
                 ],
