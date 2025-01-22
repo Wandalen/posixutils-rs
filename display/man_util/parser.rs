@@ -10,7 +10,7 @@
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use std::collections::HashSet;
-use text_production::AtAndTUnix;
+use text_production::{AtType, BsxType, BxType, DxType, FxType, NxType, OxType, StType};
 use thiserror::Error;
 use types::{BdType, BfType, OffsetType};
 
@@ -944,61 +944,140 @@ impl MdocParser {
     }
 
     fn parse_text_production(pair: Pair<Rule>) -> Element {
+        fn parse_x_args(pair: Pair<Rule>) -> (Vec<String>, Vec<Element>) {
+            let args = pair.into_inner().flat_map(|p| p.into_inner());
+
+            let is_version = |item: &Pair<Rule>| matches!(item.as_rule(), Rule::text_arg);
+
+            // While macro contains `text_arg` consider it as version
+            let version: Vec<String> = args
+                .clone()
+                .take_while(is_version)
+                .map(|p| p.as_str().to_string())
+                .collect();
+            // Other arguments are not version
+            let nodes: Vec<Element> = args
+                .skip_while(is_version)
+                .map(MdocParser::parse_arg)
+                .collect();
+
+            (version, nodes)
+        }
+
         // Parses (`At`)[https://man.openbsd.org/mdoc#At]:
         // `At [version]`
         fn parse_at(pair: Pair<Rule>) -> Element {
-            let arg = pair
-                .into_inner()
-                .next()
-                .map(|p| p.as_str().to_string())
-                .unwrap_or_default();
-            let at = AtAndTUnix::try_from(arg).unwrap();
+            let mut nodes: Vec<Element> =
+                pair.into_inner().map(MdocParser::parse_element).collect();
+
+            // If first node is `Element::Text`, then it may be `[version]`
+            let at_type = match nodes.first() {
+                Some(Element::Text(arg)) => match AtType::try_from(arg.as_str()) {
+                    Ok(at_type) => {
+                        nodes.remove(0);
+                        at_type
+                    }
+                    Err(_) => AtType::General,
+                },
+                _ => AtType::General,
+            };
+
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::At(at),
-                nodes: vec![],
+                mdoc_macro: Macro::At(at_type),
+                nodes,
             })
         }
 
         // Parses (`Bsx`)[https://man.openbsd.org/mdoc#Bsx]:
         // `Bsx [version]`
         fn parse_bsx(pair: Pair<Rule>) -> Element {
-            todo!()
+            let (version, nodes) = parse_x_args(pair);
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::Bsx(BsxType { version }),
+                nodes,
+            })
         }
 
         // Parses (`Bx`)[https://man.openbsd.org/mdoc#Bx]:
         // `Bx [version [variant]]`
         fn parse_bx(pair: Pair<Rule>) -> Element {
-            todo!()
+            let (mut variant, nodes) = parse_x_args(pair);
+
+            let version = if variant.is_empty() {
+                None
+            } else {
+                Some(variant.remove(0))
+            };
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::Bx(BxType { version, variant }),
+                nodes,
+            })
         }
 
         // Parses (`Dx`)[https://man.openbsd.org/mdoc#Dx]:
         // `Dx [version]`
         fn parse_dx(pair: Pair<Rule>) -> Element {
-            todo!()
+            let (version, nodes) = parse_x_args(pair);
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dx(DxType { version }),
+                nodes,
+            })
         }
 
         // Parses (`Fx`)[https://man.openbsd.org/mdoc#Fx]:
         // `Fx [version]`
         fn parse_fx(pair: Pair<Rule>) -> Element {
-            todo!()
+            let (version, nodes) = parse_x_args(pair);
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::Fx(FxType { version }),
+                nodes,
+            })
         }
 
         // Parses (`Nx`)[http://man.openbsd.org/mdoc#Nx]:
         // `Nx [version]`
         fn parse_nx(pair: Pair<Rule>) -> Element {
-            todo!()
+            let (version, nodes) = parse_x_args(pair);
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::Nx(NxType { version }),
+                nodes,
+            })
         }
 
         // Parses (`Ox`)[https://man.openbsd.org/mdoc#Ox]:
         // `Ox [version]`
         fn parse_ox(pair: Pair<Rule>) -> Element {
-            todo!()
+            let (version, nodes) = parse_x_args(pair);
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ox(OxType { version }),
+                nodes,
+            })
         }
 
         // Parses (`St`)[https://man.openbsd.org/mdoc#St]:
         // `St -abbreviation`
         fn parse_st(pair: Pair<Rule>) -> Element {
-            todo!()
+            let mut inner = pair.into_inner();
+
+            let abbreviation = inner
+                .next()
+                .expect("Expected '-abbreviation' for 'St'")
+                .as_str();
+
+            let st_type = StType::try_from(abbreviation).unwrap();
+
+            let nodes = inner.map(MdocParser::parse_element).collect();
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::St(st_type),
+                nodes,
+            })
         }
 
         let pair = pair.into_inner().next().unwrap();
@@ -4079,6 +4158,640 @@ mod test {
                         Element::Text("Volume".to_string()),
                         Element::Text("No.".to_string()),
                         Element::Text("1".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+        }
+
+        mod text_production {
+            use std::collections::HashMap;
+
+            use crate::man_util::parser::*;
+
+            #[test]
+            fn at() {
+                let mut at_types: HashMap<&str, AtType> = Default::default();
+                at_types.insert("", AtType::General);
+                at_types.insert("v1", AtType::Version("1".to_string()));
+                at_types.insert("v2", AtType::Version("2".to_string()));
+                at_types.insert("v3", AtType::Version("3".to_string()));
+                at_types.insert("v4", AtType::Version("4".to_string()));
+                at_types.insert("v5", AtType::Version("5".to_string()));
+                at_types.insert("v6", AtType::Version("6".to_string()));
+                at_types.insert("v7", AtType::Version("7".to_string()));
+                at_types.insert("32v", AtType::V32);
+                at_types.insert("III", AtType::SystemIII);
+                at_types.insert("V", AtType::SystemV(None));
+                at_types.insert("V.1", AtType::SystemV(Some("1".to_string())));
+                at_types.insert("V.2", AtType::SystemV(Some("2".to_string())));
+                at_types.insert("V.3", AtType::SystemV(Some("3".to_string())));
+                at_types.insert("V.4", AtType::SystemV(Some("4".to_string())));
+
+                for (str_type, enum_type) in at_types {
+                    let content = format!(".At {str_type}");
+                    let elements = vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::At(enum_type),
+                        nodes: vec![],
+                    })];
+
+                    let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                    assert_eq!(mdoc.elements, elements, "At type: {str_type}");
+                }
+            }
+
+            #[test]
+            fn at_other_text_values() {
+                let at_args = vec![
+                    "v0".to_string(),
+                    "v8".to_string(),
+                    "V.0".to_string(),
+                    "V.5".to_string(),
+                    "word".to_string(),
+                ];
+
+                for arg in at_args {
+                    let content = format!(".At {arg} word");
+                    let elements = vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::At(AtType::General),
+                        nodes: vec![
+                            Element::Text(arg.clone()),
+                            Element::Text("word".to_string()),
+                        ],
+                    })];
+
+                    let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                    assert_eq!(mdoc.elements, elements, "At type: {arg}");
+                }
+            }
+
+            #[test]
+            fn at_parsed() {
+                let content = ".At v1 Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::At(AtType::Version("1".to_string())),
+                    nodes: vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![Element::Text("addr1".to_string())],
+                    })],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn at_callable_with_arg() {
+                let content = ".Ad addr1 At v1 word";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::At(AtType::Version(1.to_string())),
+                            nodes: vec![Element::Text("word".to_string())],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn at_callable_without_arg() {
+                let content = ".Ad addr1 At word";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::At(AtType::General),
+                            nodes: vec![Element::Text("word".to_string())],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn bsx() {
+                let content = ".Bsx Version 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bsx(BsxType {
+                        version: vec!["Version".to_string(), "1.0".to_string()],
+                    }),
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn bsx_no_args() {
+                let content = ".Bsx";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bsx(BsxType { version: vec![] }),
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn bsx_parsed() {
+                let content = ".Bsx Version 1.0 Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bsx(BsxType {
+                        version: vec!["Version".to_string(), "1.0".to_string()],
+                    }),
+                    nodes: vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![Element::Text("addr1".to_string())],
+                    })],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn bsx_callable_with_arg() {
+                let content = ".Ad addr1 Bsx Version 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Bsx(BsxType {
+                                version: vec!["Version".to_string(), "1.0".to_string()],
+                            }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn bsx_callable_without_arg() {
+                let content = ".Ad addr1 Bsx";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Bsx(BsxType { version: vec![] }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn bx() {
+                let mut bx_args: HashMap<&str, (Option<String>, Vec<String>)> = Default::default();
+                bx_args.insert("", (None, vec![]));
+                bx_args.insert("4.3", (Some("4.3".to_string()), vec![]));
+                bx_args.insert(
+                    "4.3 Tahoe Example",
+                    (
+                        Some("4.3".to_string()),
+                        vec!["Tahoe".to_string(), "Example".to_string()],
+                    ),
+                );
+
+                for (args, (version, variant)) in bx_args {
+                    let content = format!(".Bx {args}");
+                    let elements = vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Bx(BxType { version, variant }),
+                        nodes: vec![],
+                    })];
+
+                    let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                    assert_eq!(mdoc.elements, elements, "Bx args: {args}");
+                }
+            }
+
+            #[test]
+            fn bx_parsed() {
+                let content = ".Bx 4.3 Tahoe Example Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bx(BxType {
+                        version: Some("4.3".to_string()),
+                        variant: vec!["Tahoe".to_string(), "Example".to_string()],
+                    }),
+                    nodes: vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![Element::Text("addr1".to_string())],
+                    })],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn bx_callable_with_arg() {
+                let content = ".Ad addr1 Bx 4.3 Tahoe Example";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Bx(BxType {
+                                version: Some("4.3".to_string()),
+                                variant: vec!["Tahoe".to_string(), "Example".to_string()],
+                            }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn bx_callable_without_arg() {
+                let content = ".Ad addr1 Bx";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Bx(BxType {
+                                version: None,
+                                variant: vec![],
+                            }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn dx() {
+                let content = ".Dx Version 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dx(DxType {
+                        version: vec!["Version".to_string(), "1.0".to_string()],
+                    }),
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn dx_no_args() {
+                let content = ".Dx";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dx(DxType { version: vec![] }),
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn dx_parsed() {
+                let content = ".Dx Version 1.0 Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dx(DxType {
+                        version: vec!["Version".to_string(), "1.0".to_string()],
+                    }),
+                    nodes: vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![Element::Text("addr1".to_string())],
+                    })],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn dx_callable_with_arg() {
+                let content = ".Ad addr1 Dx Version 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dx(DxType {
+                                version: vec!["Version".to_string(), "1.0".to_string()],
+                            }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn dx_callable_without_arg() {
+                let content = ".Ad addr1 Dx";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dx(DxType { version: vec![] }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn nx() {
+                let content = ".Nx Version 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Nx(NxType {
+                        version: vec!["Version".to_string(), "1.0".to_string()],
+                    }),
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn nx_no_args() {
+                let content = ".Nx";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Nx(NxType { version: vec![] }),
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn nx_parsed() {
+                let content = ".Nx Version 1.0 Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Nx(NxType {
+                        version: vec!["Version".to_string(), "1.0".to_string()],
+                    }),
+                    nodes: vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![Element::Text("addr1".to_string())],
+                    })],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn nx_callable_with_arg() {
+                let content = ".Ad addr1 Nx Version 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Nx(NxType {
+                                version: vec!["Version".to_string(), "1.0".to_string()],
+                            }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn nx_callable_without_arg() {
+                let content = ".Ad addr1 Nx";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Nx(NxType { version: vec![] }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn ox() {
+                let content = ".Ox Version 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ox(OxType {
+                        version: vec!["Version".to_string(), "1.0".to_string()],
+                    }),
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn ox_no_args() {
+                let content = ".Ox";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ox(OxType { version: vec![] }),
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn ox_parsed() {
+                let content = ".Ox Version 1.0 Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ox(OxType {
+                        version: vec!["Version".to_string(), "1.0".to_string()],
+                    }),
+                    nodes: vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![Element::Text("addr1".to_string())],
+                    })],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn ox_callable_with_arg() {
+                let content = ".Ad addr1 Ox Version 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Ox(OxType {
+                                version: vec!["Version".to_string(), "1.0".to_string()],
+                            }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn ox_callable_without_arg() {
+                let content = ".Ad addr1 Ox";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Ox(OxType { version: vec![] }),
+                            nodes: vec![],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn st() {
+                let mut st_types: HashMap<&str, StType> = Default::default();
+                // C Language Standards
+                st_types.insert("-ansiC", StType::AnsiC);
+                st_types.insert("-ansiC-89", StType::AnsiC89);
+                st_types.insert("-isoC", StType::IsoC);
+                st_types.insert("-isoC-90", StType::IsoC90);
+                st_types.insert("-isoC-amd1", StType::IsoCAmd1);
+                st_types.insert("-isoC-tcor1", StType::IsoCTcor1);
+                st_types.insert("-isoC-tcor2", StType::IsoCTcor2);
+                st_types.insert("-isoC-99", StType::IsoC99);
+                st_types.insert("-isoC-2011", StType::IsoC2011);
+                // POSIX.1 Standards before XPG4.2
+                st_types.insert("-p1003.1-88", StType::P1003188);
+                st_types.insert("-p1003.1", StType::P10031);
+                st_types.insert("-p1003.1-90", StType::P1003190);
+                st_types.insert("-iso9945-1-90", StType::Iso9945190);
+                st_types.insert("-p1003.1b-93", StType::P10031B93);
+                st_types.insert("-p1003.1b", StType::P10031B);
+                st_types.insert("-p1003.1c-95", StType::P10031C95);
+                st_types.insert("-p1003.1i-95", StType::P10031I95);
+                st_types.insert("-p1003.1-96", StType::P1003196);
+                st_types.insert("-iso9945-1-96", StType::Iso9945196);
+                // X/Open Portability Guide before XPG4.2
+                st_types.insert("-xpg3", StType::Xpg3);
+                st_types.insert("-p1003.2", StType::P10032);
+                st_types.insert("-p1003.2-92", StType::P1003292);
+                st_types.insert("-iso9945-2-93", StType::Iso9945293);
+                st_types.insert("-p1003.2a-92", StType::P10032A92);
+                st_types.insert("-xpg4", StType::Xpg4);
+                // X/Open Portability Guide Issue 4 Version 2 and Related Standards
+                st_types.insert("-susv1", StType::Susv1);
+                st_types.insert("-xpg4.2", StType::Xpg42);
+                st_types.insert("-xcurses4.2", StType::XCurses42);
+                st_types.insert("-p1003.1g-2000", StType::P10031G2000);
+                st_types.insert("-svid4", StType::Svid4);
+                // X/Open Portability Guide Issue 5 and Related Standards
+                st_types.insert("-susv2", StType::Susv2);
+                st_types.insert("-xbd5", StType::Xbd5);
+                st_types.insert("-xsh5", StType::Xsh5);
+                st_types.insert("-xcu5", StType::Xcu5);
+                st_types.insert("-xns5", StType::Xns5);
+                st_types.insert("-xns5.2", StType::Xns52);
+                // POSIX Issue 6 Standards
+                st_types.insert("-p1003.1-2001", StType::P100312001);
+                st_types.insert("-susv3", StType::Susv3);
+                st_types.insert("-p1003.1-2004", StType::P100312004);
+                // POSIX Issues 7 and 8 Standards
+                st_types.insert("-p1003.1-2008", StType::P100312008);
+                st_types.insert("-susv4", StType::Susv4);
+                st_types.insert("-p1003.1-2024", StType::P100312024);
+                // Other Standards
+                st_types.insert("-ieee754", StType::Ieee754);
+                st_types.insert("-iso8601", StType::Iso8601);
+                st_types.insert("-iso8802-3", StType::Iso88023);
+                st_types.insert("-ieee1275-94", StType::Ieee127594);
+
+                for (str_type, enum_type) in st_types {
+                    let content = format!(".St {str_type} word");
+                    let elements = vec![Element::Macro(MacroNode {
+                        mdoc_macro: Macro::St(enum_type),
+                        nodes: vec![Element::Text("word".to_string())],
+                    })];
+
+                    let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                    assert_eq!(mdoc.elements, elements, "St type: {str_type}");
+                }
+            }
+
+            // TODO: rewrite pinics to contolled error??
+            #[test]
+            #[should_panic]
+            fn st_no_abbreviation() {
+                let _ = MdocParser::parse_mdoc(".St word").is_err();
+            }
+
+            #[test]
+            fn st_parsed() {
+                let content = ".St -ansiC word Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::St(StType::AnsiC),
+                    nodes: vec![
+                        Element::Text("word".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Ad,
+                            nodes: vec![Element::Text("addr1".to_string())],
+                        }),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn st_not_callable() {
+                let content = ".Ad addr1 St -ansiC word";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string()),
+                        Element::Text("St".to_string()),
+                        Element::Text("-ansiC".to_string()),
+                        Element::Text("word".to_string()),
                     ],
                 })];
 

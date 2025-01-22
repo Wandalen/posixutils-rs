@@ -10,7 +10,7 @@
 use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
-pub enum AtAndTUnix {
+pub enum AtType {
     General,
     Version(String),
     V32,
@@ -18,11 +18,11 @@ pub enum AtAndTUnix {
     SystemV(Option<String>),
 }
 
-impl TryFrom<String> for AtAndTUnix {
+impl TryFrom<&str> for AtType {
     type Error = String;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
             "" => Ok(Self::General),
             "32v" => Ok(Self::V32),
             "III" => Ok(Self::SystemIII),
@@ -54,15 +54,15 @@ impl TryFrom<String> for AtAndTUnix {
     }
 }
 
-impl Display for AtAndTUnix {
+impl Display for AtType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let at_n_t_unix = match self {
-            AtAndTUnix::General => "AT&T UNIX".to_string(),
-            AtAndTUnix::Version(v) => format!("Version {v} AT&T UNIX"),
-            AtAndTUnix::V32 => "AT&T UNIX v32".to_string(),
-            AtAndTUnix::SystemIII => "AT&T System III UNIX".to_string(),
-            AtAndTUnix::SystemV(None) => "AT&T System V UNIX".to_string(),
-            AtAndTUnix::SystemV(Some(v)) => format!("AT&T System V Release {v} UNIX"),
+            AtType::General => "AT&T UNIX".to_string(),
+            AtType::Version(v) => format!("Version {v} AT&T UNIX"),
+            AtType::V32 => "AT&T UNIX v32".to_string(),
+            AtType::SystemIII => "AT&T System III UNIX".to_string(),
+            AtType::SystemV(None) => "AT&T System V UNIX".to_string(),
+            AtType::SystemV(Some(v)) => format!("AT&T System V Release {v} UNIX"),
         };
 
         write!(f, "{at_n_t_unix}")
@@ -70,165 +70,114 @@ impl Display for AtAndTUnix {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Bsd {
-    version: Option<String>,
-    variant: Option<String>,
+pub struct BsxType {
+    pub version: Vec<String>,
 }
 
-impl TryFrom<String> for Bsd {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        let parts: Vec<&str> = value.split_whitespace().collect();
-
-        let (version, variant) = match parts.as_slice() {
-            [] => (None, None),
-            [version] => (Some(version.to_string()), None),
-            [version, variant] => (Some(version.to_string()), Some(variant.to_string())),
-            _ => return Err(format!("Invalid Bx format: {value}")),
+impl Display for BsxType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let version = if self.version.is_empty() {
+            "".to_string()
+        } else {
+            format!(" {}", self.version.join(" "))
         };
-
-        Ok(Self { version, variant })
-    }
-}
-
-impl Display for Bsd {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = self
-            .version
-            .as_ref()
-            .map_or_else(|| "".to_string(), |v| v.to_string());
-        let variant = self
-            .variant
-            .as_deref()
-            .map_or_else(|| "".to_string(), |v| format!(" {v}"));
-
-        write!(f, "{version}BSD{variant}")
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct BsdOs {
-    version: Option<String>,
-}
-
-impl From<String> for BsdOs {
-    fn from(value: String) -> Self {
-        let version = if value.is_empty() { None } else { Some(value) };
-
-        Self { version }
-    }
-}
-
-impl Display for BsdOs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = self
-            .version
-            .as_ref()
-            .map_or_else(|| "".to_string(), |v| format!(" {v}"));
 
         write!(f, "BSD/OS{version}")
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct NetBsd {
-    version: Option<String>,
+pub struct BxType {
+    pub version: Option<String>,
+    pub variant: Vec<String>,
 }
 
-impl From<String> for NetBsd {
-    fn from(value: String) -> Self {
-        let version = if value.is_empty() { None } else { Some(value) };
-
-        Self { version }
-    }
-}
-
-impl Display for NetBsd {
+impl Display for BxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let version = self
             .version
             .as_ref()
-            .map_or_else(|| "".to_string(), |v| format!(" {v}"));
+            .map_or_else(|| "".to_string(), |v| v.to_string());
+        let variant = if self.variant.is_empty() {
+            "".to_string()
+        } else {
+            format!(" {}", self.variant.join(" "))
+        };
 
-        write!(f, "NetBSD{version}")
+        write!(f, "{version}BSD{variant}")
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct FreeBsd {
-    version: Option<String>,
+pub struct DxType {
+    pub version: Vec<String>,
 }
 
-impl From<String> for FreeBsd {
-    fn from(value: String) -> Self {
-        let version = if value.is_empty() { None } else { Some(value) };
-
-        Self { version }
-    }
-}
-
-impl Display for FreeBsd {
+impl Display for DxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = self
-            .version
-            .as_ref()
-            .map_or_else(|| "".to_string(), |v| format!(" {v}"));
-
-        write!(f, "FreeBSD{version}")
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct OpenBsd {
-    version: Option<String>,
-}
-
-impl From<String> for OpenBsd {
-    fn from(value: String) -> Self {
-        let version = if value.is_empty() { None } else { Some(value) };
-
-        Self { version }
-    }
-}
-
-impl Display for OpenBsd {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = self
-            .version
-            .as_ref()
-            .map_or_else(|| "".to_string(), |v| format!(" {v}"));
-
-        write!(f, "OpenBSD{version}")
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct DragonFly {
-    version: Option<String>,
-}
-
-impl From<String> for DragonFly {
-    fn from(value: String) -> Self {
-        let version = if value.is_empty() { None } else { Some(value) };
-
-        Self { version }
-    }
-}
-
-impl Display for DragonFly {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = self
-            .version
-            .as_ref()
-            .map_or_else(|| "".to_string(), |v| format!(" {v}"));
+        let version = if self.version.is_empty() {
+            "".to_string()
+        } else {
+            format!(" {}", self.version.join(" "))
+        };
 
         write!(f, "DragonFly{version}")
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Standard {
+pub struct FxType {
+    pub version: Vec<String>,
+}
+
+impl Display for FxType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let version = if self.version.is_empty() {
+            "".to_string()
+        } else {
+            format!(" {}", self.version.join(" "))
+        };
+
+        write!(f, "FreeBSD{version}")
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct NxType {
+    pub version: Vec<String>,
+}
+
+impl Display for NxType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let version = if self.version.is_empty() {
+            "".to_string()
+        } else {
+            format!(" {}", self.version.join(" "))
+        };
+
+        write!(f, "NetBSD{version}")
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OxType {
+    pub version: Vec<String>,
+}
+
+impl Display for OxType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let version = if self.version.is_empty() {
+            "".to_string()
+        } else {
+            format!(" {}", self.version.join(" "))
+        };
+
+        write!(f, "OpenBSD{version}")
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum StType {
     // C Language Standards
     AnsiC,
     AnsiC89,
@@ -285,11 +234,11 @@ pub enum Standard {
     Ieee127594,
 }
 
-impl TryFrom<String> for Standard {
+impl TryFrom<&str> for StType {
     type Error = String;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
             // C Language Standards
             "-ansiC" => Ok(Self::AnsiC),
             "-ansiC-89" => Ok(Self::AnsiC89),
@@ -350,70 +299,68 @@ impl TryFrom<String> for Standard {
     }
 }
 
-impl Display for Standard {
+impl Display for StType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let standard = match self {
             // C Language Standards
-            Standard::AnsiC => "ANSI X3.159-1989 (“ANSI C89”)".to_string(),
-            Standard::AnsiC89 => "ANSI X3.159-1989 (“ANSI C89”)".to_string(),
-            Standard::IsoC => "ISO/IEC 9899:1990 (“ISO C90”)".to_string(),
-            Standard::IsoC90 => "ISO/IEC 9899:1990 (“ISO C90”)".to_string(),
-            Standard::IsoCAmd1 => "ISO/IEC 9899/AMD1:1995 (“ISO C90, Amendment 1”)".to_string(),
-            Standard::IsoCTcor1 => {
+            StType::AnsiC => "ANSI X3.159-1989 (“ANSI C89”)".to_string(),
+            StType::AnsiC89 => "ANSI X3.159-1989 (“ANSI C89”)".to_string(),
+            StType::IsoC => "ISO/IEC 9899:1990 (“ISO C90”)".to_string(),
+            StType::IsoC90 => "ISO/IEC 9899:1990 (“ISO C90”)".to_string(),
+            StType::IsoCAmd1 => "ISO/IEC 9899/AMD1:1995 (“ISO C90, Amendment 1”)".to_string(),
+            StType::IsoCTcor1 => {
                 "ISO/IEC 9899/TCOR1:1994 (“ISO C90, Technical Corrigendum 1”)".to_string()
             }
-            Standard::IsoCTcor2 => {
+            StType::IsoCTcor2 => {
                 "ISO/IEC 9899/TCOR2:1995 (“ISO C90, Technical Corrigendum 2”)".to_string()
             }
-            Standard::IsoC99 => "ISO/IEC 9899:1999 (“ISO C99”)".to_string(),
-            Standard::IsoC2011 => "ISO/IEC 9899:2011 (“ISO C11”)".to_string(),
+            StType::IsoC99 => "ISO/IEC 9899:1999 (“ISO C99”)".to_string(),
+            StType::IsoC2011 => "ISO/IEC 9899:2011 (“ISO C11”)".to_string(),
             // POSIX.1 Standards before XPG4.2
-            Standard::P1003188 => "IEEE Std 1003.1-1988 (“POSIX.1”)".to_string(),
-            Standard::P10031 => "IEEE Std 1003.1 (“POSIX.1”)".to_string(),
-            Standard::P1003190 => "IEEE Std 1003.1-1990 (“POSIX.1”)".to_string(),
-            Standard::Iso9945190 => "ISO/IEC 9945-1:1990 (“POSIX.1”)".to_string(),
-            Standard::P10031B93 => "IEEE Std 1003.1b-1993 (“POSIX.1b”)".to_string(),
-            Standard::P10031B => "IEEE Std 1003.1b (“POSIX.1b”)".to_string(),
-            Standard::P10031C95 => "IEEE Std 1003.1c-1995 (“POSIX.1c”)".to_string(),
-            Standard::P10031I95 => "IEEE Std 1003.1i-1995 (“POSIX.1i”)".to_string(),
-            Standard::P1003196 => "ISO/IEC 9945-1:1996 (“POSIX.1”)".to_string(),
-            Standard::Iso9945196 => "ISO/IEC 9945-1:1996 (“POSIX.1”)".to_string(),
+            StType::P1003188 => "IEEE Std 1003.1-1988 (“POSIX.1”)".to_string(),
+            StType::P10031 => "IEEE Std 1003.1 (“POSIX.1”)".to_string(),
+            StType::P1003190 => "IEEE Std 1003.1-1990 (“POSIX.1”)".to_string(),
+            StType::Iso9945190 => "ISO/IEC 9945-1:1990 (“POSIX.1”)".to_string(),
+            StType::P10031B93 => "IEEE Std 1003.1b-1993 (“POSIX.1b”)".to_string(),
+            StType::P10031B => "IEEE Std 1003.1b (“POSIX.1b”)".to_string(),
+            StType::P10031C95 => "IEEE Std 1003.1c-1995 (“POSIX.1c”)".to_string(),
+            StType::P10031I95 => "IEEE Std 1003.1i-1995 (“POSIX.1i”)".to_string(),
+            StType::P1003196 => "ISO/IEC 9945-1:1996 (“POSIX.1”)".to_string(),
+            StType::Iso9945196 => "ISO/IEC 9945-1:1996 (“POSIX.1”)".to_string(),
             // X/Open Portability Guide before XPG4.2
-            Standard::Xpg3 => "X/Open Portability Guide Issue 3 (“XPG3”)".to_string(),
-            Standard::P10032 => "IEEE Std 1003.2 (“POSIX.2”)".to_string(),
-            Standard::P1003292 => "IEEE Std 1003.2-1992 (“POSIX.2”)".to_string(),
-            Standard::Iso9945293 => "ISO/IEC 9945-2:1993 (“POSIX.2”)".to_string(),
-            Standard::P10032A92 => "IEEE Std 1003.2a-1992 (“POSIX.2”)".to_string(),
-            Standard::Xpg4 => "X/Open Portability Guide Issue 4 (“XPG4”)".to_string(),
+            StType::Xpg3 => "X/Open Portability Guide Issue 3 (“XPG3”)".to_string(),
+            StType::P10032 => "IEEE Std 1003.2 (“POSIX.2”)".to_string(),
+            StType::P1003292 => "IEEE Std 1003.2-1992 (“POSIX.2”)".to_string(),
+            StType::Iso9945293 => "ISO/IEC 9945-2:1993 (“POSIX.2”)".to_string(),
+            StType::P10032A92 => "IEEE Std 1003.2a-1992 (“POSIX.2”)".to_string(),
+            StType::Xpg4 => "X/Open Portability Guide Issue 4 (“XPG4”)".to_string(),
             // X/Open Portability Guide Issue 4 Version 2 and Related Standards
-            Standard::Susv1 => "Version 1 of the Single UNIX Specification (“SUSv1”)".to_string(),
-            Standard::Xpg42 => "X/Open Portability Guide Issue 4, Version 2 (“XPG4.2”)".to_string(),
-            Standard::XCurses42 => "X/Open Curses Issue 4, Version 2 (“XCURSES4.2”)".to_string(),
-            Standard::P10031G2000 => "IEEE Std 1003.1g-2000 (“POSIX.1g”)".to_string(),
-            Standard::Svid4 => {
-                "System V Interface Definition, Fourth Edition (“SVID4”)".to_string()
-            }
+            StType::Susv1 => "Version 1 of the Single UNIX Specification (“SUSv1”)".to_string(),
+            StType::Xpg42 => "X/Open Portability Guide Issue 4, Version 2 (“XPG4.2”)".to_string(),
+            StType::XCurses42 => "X/Open Curses Issue 4, Version 2 (“XCURSES4.2”)".to_string(),
+            StType::P10031G2000 => "IEEE Std 1003.1g-2000 (“POSIX.1g”)".to_string(),
+            StType::Svid4 => "System V Interface Definition, Fourth Edition (“SVID4”)".to_string(),
             // X/Open Portability Guide Issue 5 and Related Standards
-            Standard::Susv2 => "Version 2 of the Single UNIX Specification (“SUSv2”)".to_string(),
-            Standard::Xbd5 => "X/Open Base Definitions Issue 5 (“XBD5”)".to_string(),
-            Standard::Xsh5 => "X/Open System Interfaces and Headers Issue 5 (“XSH5”)".to_string(),
-            Standard::Xcu5 => "X/Open Commands and Utilities Issue 5 (“XCU5”)".to_string(),
-            Standard::Xns5 => "X/Open Networking Services Issue 5 (“XNS5”)".to_string(),
-            Standard::Xns52 => "X/Open Networking Services Issue 5.2 (“XNS5.2”)".to_string(),
+            StType::Susv2 => "Version 2 of the Single UNIX Specification (“SUSv2”)".to_string(),
+            StType::Xbd5 => "X/Open Base Definitions Issue 5 (“XBD5”)".to_string(),
+            StType::Xsh5 => "X/Open System Interfaces and Headers Issue 5 (“XSH5”)".to_string(),
+            StType::Xcu5 => "X/Open Commands and Utilities Issue 5 (“XCU5”)".to_string(),
+            StType::Xns5 => "X/Open Networking Services Issue 5 (“XNS5”)".to_string(),
+            StType::Xns52 => "X/Open Networking Services Issue 5.2 (“XNS5.2”)".to_string(),
             // POSIX Issue 6 Standards
-            Standard::P100312001 => "IEEE Std 1003.1-2001 (“POSIX.1”)".to_string(),
-            Standard::Susv3 => "Version 3 of the Single UNIX Specification (“SUSv3”)".to_string(),
-            Standard::P100312004 => "IEEE Std 1003.1-2004 (“POSIX.1”)".to_string(),
+            StType::P100312001 => "IEEE Std 1003.1-2001 (“POSIX.1”)".to_string(),
+            StType::Susv3 => "Version 3 of the Single UNIX Specification (“SUSv3”)".to_string(),
+            StType::P100312004 => "IEEE Std 1003.1-2004 (“POSIX.1”)".to_string(),
             // POSIX Issues 7 and 8 Standards
-            Standard::P100312008 => "IEEE Std 1003.1-2008 (“POSIX.1”)".to_string(),
-            Standard::Susv4 => "Version 4 of the Single UNIX Specification (“SUSv4”)".to_string(),
+            StType::P100312008 => "IEEE Std 1003.1-2008 (“POSIX.1”)".to_string(),
+            StType::Susv4 => "Version 4 of the Single UNIX Specification (“SUSv4”)".to_string(),
             // TODO: documentation doesn't containt needed text.
-            Standard::P100312024 => "".to_string(),
+            StType::P100312024 => "".to_string(),
             // Other Standards
-            Standard::Ieee754 => "IEEE Std 754-1985".to_string(),
-            Standard::Iso8601 => "ISO 8601".to_string(),
-            Standard::Iso88023 => "ISO 8802-3: 1989".to_string(),
-            Standard::Ieee127594 => "IEEE Std 1275-1994 (“Open Firmware”)".to_string(),
+            StType::Ieee754 => "IEEE Std 754-1985".to_string(),
+            StType::Iso8601 => "ISO 8601".to_string(),
+            StType::Iso88023 => "ISO 8802-3: 1989".to_string(),
+            StType::Ieee127594 => "IEEE Std 1275-1994 (“Open Firmware”)".to_string(),
         };
 
         write!(f, "{standard}")

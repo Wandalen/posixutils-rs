@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use text_production::{AtAndTUnix, Bsd, BsdOs, DragonFly, FreeBsd, NetBsd, OpenBsd, Standard};
+use text_production::{AtType, BsxType, BxType, DxType, FxType, NxType, OxType, StType};
 use types::*;
 
 pub mod text_production;
@@ -67,7 +67,7 @@ pub enum Macro {
     Ap,
     Aq,
     Ar,
-    At(AtAndTUnix),
+    At(AtType),
     Bd {
         block_type: BdType,
         offset: Option<OffsetType>,
@@ -91,9 +91,9 @@ pub enum Macro {
     Bro,
     Brc, // Close a Bro block
     Brq,
-    Bsx(BsdOs),
+    Bsx(BsxType),
     Bt,
-    Bx(Bsd),
+    Bx(BxType),
     Cd,
     Cm,
     D1,
@@ -115,7 +115,7 @@ pub enum Macro {
     Dv {
         identifiers: Vec<String>,
     },
-    Dx(DragonFly),
+    Dx(DxType),
     En,
     Eo {
         opening_delimiter: Option<char>,
@@ -162,7 +162,7 @@ pub enum Macro {
     Ft {
         func_type: String,
     },
-    Fx(FreeBsd),
+    Fx(FxType),
     Hf {
         // TODO: Not implemented???
         // https://man.openbsd.org/mdoc#Hf
@@ -199,7 +199,7 @@ pub enum Macro {
         words: Vec<String>,
     },
     Ns,
-    Nx(NetBsd),
+    Nx(NxType),
     Oo,
     Oc, // Close multi-line Oo context
     Op,
@@ -209,7 +209,7 @@ pub enum Macro {
     Ot {
         func_type: String,
     },
-    Ox(OpenBsd),
+    Ox(OxType),
     Pa {
         names: Vec<String>,
     },
@@ -241,7 +241,7 @@ pub enum Macro {
     Ss {
         title: String,
     },
-    St(Standard),
+    St(StType),
     Sx {
         title: String,
     },
