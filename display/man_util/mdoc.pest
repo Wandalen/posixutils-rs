@@ -10,9 +10,12 @@
 // ----- Basic rules
 
 WHITESPACE = _{ " " | "\t" }
-NEWLINE    = _{ "\r"? ~ "\n" }
+// Shortened synonym
+ws      = _{ WHITESPACE }
+NEWLINE = _{ "\r"? ~ "\n" }
+// Macro name separator to not allow merging macro name with arguments
 
-text_arg = @{ (!(WHITESPACE | NEWLINE) ~ ANY)+ }
+text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
 // -- List of Callable macros
 macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st) ~ (block_partial_implicit | inline) }
 
@@ -44,49 +47,98 @@ mdoc = { SOI ~ element* ~ EOI }
 
 // -- Bd
 
-bd_type = {
-    text_arg
+bd_centered = { "-centered" }
+bd_filled   = { "-filled" }
+bd_literal  = { "-literal" }
+bd_ragged   = { "-ragged" }
+bd_unfilled = { "-unfilled" }
+bd_type     = {
+    bd_centered
+  | bd_filled
+  | bd_literal
+  | bd_ragged
+  | bd_unfilled
 }
 
-offset = {
-    text_arg
+// ! Try to parse "indent-two" before "indent"
+off_indent_two = { "indent-two" }
+off_indent     = { "indent" }
+off_left       = { "left" }
+off_right      = { "right" }
+offset         = {
+    off_indent_two
+  | off_indent
+  | off_left
+  | off_right
 }
 
 compact = { "-compact" }
 
-bd_open  = { "Bd" ~ bd_type ~ ("-offset" ~ offset)? ~ compact? ~ NEWLINE }
-ed_close = { ".Ed" ~ NEWLINE? }
-bd_block = { bd_open ~ element* ~ ed_close }
+bd_open  = ${ "Bd" ~ ws+ ~ bd_type ~ (ws+ ~ "-offset" ~ ws+ ~ offset)? ~ (ws+ ~ compact)? ~ ws* ~ NEWLINE }
+ed_close =  { ".Ed" ~ NEWLINE? }
+bd_block =  { bd_open ~ element* ~ ed_close }
 
 // -- Bf
 
-bf_type = {
-    text_arg
+bf_emphasis = { "-emphasis" }
+bf_literal  = { "-literal" }
+bf_symbolic = { "-symbolic" }
+bf_em       = { "Em" }
+bf_li       = { "Li" }
+bf_sy       = { "Sy" }
+bf_type     = {
+    bf_emphasis
+  | bf_literal
+  | bf_symbolic
+  | bf_em
+  | bf_li
+  | bf_sy
 }
 
-bf_open  = { "Bf" ~ bf_type ~ NEWLINE }
-ef_close = { ".Ef" ~ NEWLINE? }
-bf_block = { bf_open ~ element* ~ ef_close }
+bf_open  = ${ "Bf" ~ ws+ ~ bf_type ~ ws* ~ NEWLINE }
+ef_close =  { ".Ef" ~ NEWLINE? }
+bf_block =  { bf_open ~ element* ~ ef_close }
 
 // -- Bk
 
 bk_words = { "-words" }
 
-bk_open  = { "Bk" ~ bk_words ~ text_arg* ~ NEWLINE }
-ek_close = { ".Ek" ~ NEWLINE? }
-bk_block = { bk_open ~ element* ~ ek_close }
+bk_open  = ${ "Bk" ~ ws+ ~ bk_words ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE }
+ek_close =  { ".Ek" ~ NEWLINE? }
+bk_block =  { bk_open ~ element* ~ ek_close }
 
 // -- Bl
 
-bl_type = {
-    text_arg
+bl_bullet = { "-bullet" }
+bl_column = { "-column" }
+bl_dash   = { "-dash" }
+bl_diag   = { "-diag" }
+bl_enum   = { "-enum" }
+bl_hang   = { "-hang" }
+bl_hyphen = { "-hyphen" }
+bl_inset  = { "-inset" }
+bl_item   = { "-item" }
+bl_ohang  = { "-ohang" }
+bl_tag    = { "-tag" }
+bl_type   = {
+    bl_bullet
+  | bl_column
+  | bl_dash
+  | bl_diag
+  | bl_enum
+  | bl_hang
+  | bl_hyphen
+  | bl_inset
+  | bl_item
+  | bl_ohang
+  | bl_tag
 }
 
 bl_columns = { text_arg+ }
 
-bl_open  = { "Bl" ~ bl_type ~ (("-width" | "-offset") ~ offset)? ~ compact? ~ bl_columns* ~ NEWLINE }
-el_close = { ".El" ~ NEWLINE? }
-bl_block = { bl_open ~ element* ~ el_close }
+bl_open  = ${ "Bl" ~ ws+ ~ bl_type ~ (ws+ ~ ("-width" | "-offset") ~ ws+ ~ offset)? ~ (ws+ ~ compact)? ~ (ws+ ~ bl_columns)* ~ ws* ~ NEWLINE }
+el_close =  { ".El" ~ NEWLINE? }
+bl_block =  { bl_open ~ element* ~ el_close }
 
 // ----- Block full-implicit macros
 
@@ -94,110 +146,208 @@ block_line = { (!NEWLINE ~ ANY)+ }
 
 // -- Nd
 
-nd_open          = { "Nd" ~ block_line }
-nd_block_element = { !("." ~ sh_block) ~ element }
-nd_block         = { nd_open ~ (NEWLINE ~ nd_block_element*)? }
+nd_open          = ${ "Nd" ~ ws+ ~ block_line ~ ws* }
+nd_block_element =  { !("." ~ sh_block) ~ element }
+nd_block         =  { nd_open ~ (NEWLINE ~ nd_block_element*)? }
 
 // -- Nm
 
-nm_open          = { "Nm" ~ arg* }
-nm_block_element = { !("." ~ (nm_block | sh_block | ss_block)) ~ element }
-nm_block         = { nm_open ~ (NEWLINE ~ nm_block_element*)? }
+nm_open          = ${ "Nm" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* }
+nm_block_element =  { !("." ~ (nm_block | sh_block | ss_block)) ~ element }
+nm_block         =  { nm_open ~ (NEWLINE ~ nm_block_element*)? }
 
 // -- Sh
 
-sh_open          = { "Sh" ~ block_line }
-sh_block_element = { !("." ~ sh_block) ~ element }
-sh_block         = { sh_open ~ (NEWLINE ~ sh_block_element*)? }
+sh_open          = ${ "Sh" ~ ws+ ~ block_line ~ ws* }
+sh_block_element =  { !("." ~ sh_block) ~ element }
+sh_block         =  { sh_open ~ (NEWLINE ~ sh_block_element*)? }
 
 // -- Ss
 
-ss_open          = { "Ss" ~ block_line }
-ss_block_element = { !("." ~ (sh_block | ss_block)) ~ element }
-ss_block         = { ss_open ~ (NEWLINE ~ ss_block_element*)? }
+ss_open          = ${ "Ss" ~ ws+ ~ block_line ~ ws* }
+ss_block_element =  { !("." ~ (sh_block | ss_block)) ~ element }
+ss_block         =  { ss_open ~ (NEWLINE ~ ss_block_element*)? }
 
 // ----- Block partial-implicit
 
-aq_block  = { "Aq" ~ arg* }
-bq_block  = { "Bq" ~ arg* }
-brq_block = { "Brq" ~ arg* }
-d1_block  = { "D1" ~ arg* }
-dl_block  = { "Dl" ~ arg* }
-dq_block  = { "Dq" ~ arg* }
-en_block  = { "En" ~ arg+ }
-op_block  = { "Op" ~ arg* }
-pq_block  = { "Pq" ~ arg* }
-ql_block  = { "Ql" ~ arg* }
-qq_block  = { "Qq" ~ arg* }
-sq_block  = { "Sq" ~ arg* }
-vt_block  = { "Vt" ~ arg+ }
+aq_block  = ${ "Aq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+bq_block  = ${ "Bq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+brq_block = ${ "Brq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+d1_block  = ${ "D1" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+dl_block  = ${ "Dl" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+dq_block  = ${ "Dq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+en_block  = ${ "En" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+op_block  = ${ "Op" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+pq_block  = ${ "Pq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+ql_block  = ${ "Ql" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+qq_block  = ${ "Qq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+sq_block  = ${ "Sq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+vt_block  = ${ "Vt" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 // ----- In-line
 
 // -- Rs submacros
 
-a = { "%A" ~ text_arg+ ~ NEWLINE? }
-b = { "%B" ~ text_arg+ ~ NEWLINE? }
-c = { "%C" ~ text_arg+ ~ NEWLINE? }
+a = ${ "%A" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+b = ${ "%B" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+c = ${ "%C" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 
 month     =  { text_arg }
 day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
-month_day =  { month ~ day ~ "," }
+month_day =  { month ~ ws+ ~ day ~ ws* ~ "," }
 year      =  { text_arg }
-d         =  { "%D" ~ month_day? ~ year ~ NEWLINE? }
+d         = ${ "%D" ~ !text_arg ~ (ws+ ~ month_day)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
 
-i = { "%I" ~ text_arg+ ~ NEWLINE? }
-j = { "%J" ~ text_arg+ ~ NEWLINE? }
-n = { "%N" ~ text_arg+ ~ NEWLINE? }
-o = { "%O" ~ text_arg+ ~ NEWLINE? }
-p = { "%P" ~ text_arg+ ~ NEWLINE? }
-q = { "%Q" ~ text_arg+ ~ NEWLINE? }
-r = { "%R" ~ text_arg+ ~ NEWLINE? }
-t = { "%T" ~ text_arg+ ~ NEWLINE? }
+i = ${ "%I" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+j = ${ "%J" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+n = ${ "%N" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+o = ${ "%O" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+p = ${ "%P" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+q = ${ "%Q" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+r = ${ "%R" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+t = ${ "%T" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 
 uri = @{ (!"://" ~ ANY)+ ~ "://" ~ text_arg }
-u   =  { "%U" ~ uri ~ NEWLINE? }
+u   = ${ "%U" ~ !text_arg ~ ws+ ~ uri ~ ws* ~ NEWLINE? }
 
-v = { "%V" ~ text_arg+ ~ NEWLINE? }
+v = ${ "%V" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Text production
 
-at  = { "At" ~ arg* ~ NEWLINE? }
-bsx = { "Bsx" ~ arg* ~ NEWLINE? }
-bx  = { "Bx" ~ arg* ~ NEWLINE? }
-dx  = { "Dx" ~ arg* ~ NEWLINE? }
-fx  = { "Fx" ~ arg* ~ NEWLINE? }
-nx  = { "Nx" ~ arg* ~ NEWLINE? }
-ox  = { "Ox" ~ arg* ~ NEWLINE? }
-st  = { "St" ~ text_arg ~ arg* ~ NEWLINE? }
+at_version  = @{ "v" ~ '1'..'7' }
+at_32v      =  { "32v" }
+at_3        =  { "III" }
+at_system_v = @{ "V" ~ (!"." | ("." ~ '1'..'4')) }
+at_type     =  {
+    at_version
+  | at_32v
+  | at_3
+  | at_system_v
+}
+at          = ${ "At" ~ !text_arg ~ (ws+ ~ at_type)? ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+bsx         = ${ "Bsx" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+bx          = ${ "Bx" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+dx          = ${ "Dx" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+fx          = ${ "Fx" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+nx          = ${ "Nx" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+ox          = ${ "Ox" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
-// -- Ad
+// C Language Standards
+st_ansiC      = { "-ansiC" }
+st_ansiC_89   = { "-ansiC-89" }
+st_isoC       = { "-isoC" }
+st_isoC_90    = { "-isoC-90" }
+st_isoC_amd1  = { "-isoC-amd1" }
+st_isoC_tcor1 = { "-isoC-tcor1" }
+st_isoC_tcor2 = { "-isoC-tcor2" }
+st_isoC_99    = { "-isoC-99" }
+st_isoC_2011  = { "-isoC-2011" }
+// POSIX.1 Standards before XPG4.2
+st_p1003_1_88   = { "-p1003.1-88" }
+st_p1003_1      = { "-p1003.1" }
+st_p1003_1_90   = { "-p1003.1-90" }
+st_iso9945_1_90 = { "-iso9945-1-90" }
+st_p1003_1b_93  = { "-p1003.1b-93" }
+st_p1003_1b     = { "-p1003.1b" }
+st_p1003_1c_95  = { "-p1003.1c-95" }
+st_p1003_1i_95  = { "-p1003.1i-95" }
+st_p1003_1_96   = { "-p1003.1-96" }
+st_iso9945_1_96 = { "-iso9945-1-96" }
+// X/Open Portability Guide before XPG4.2
+st_xpg3         = { "-xpg3" }
+st_p1003_2      = { "-p1003.2" }
+st_p1003_2_92   = { "-p1003.2-92" }
+st_iso9945_2_93 = { "-iso9945-2-93" }
+st_p1003_2a_92  = { "-p1003.2a-92" }
+st_xpg4         = { "-xpg4" }
+// X/Open Portability Guide Issue 4 Version 2 and Related Standards
+st_susv1         = { "-susv1" }
+st_xpg4_2        = { "-xpg4.2" }
+st_xcurses4_2    = { "-xcurses4.2" }
+st_p1003_1g_2000 = { "-p1003.1g-2000" }
+st_svid4         = { "-svid4" }
+// X/Open Portability Guide Issue 5 and Related Standards
+st_susv2  = { "-susv2" }
+st_xbd5   = { "-xbd5" }
+st_xsh5   = { "-xsh5" }
+st_xcu5   = { "-xcu5" }
+st_xns5   = { "-xns5" }
+st_xns5_2 = { "-xns5.2" }
+// POSIX Issue 6 Standards
+st_p1003_1_2001 = { "-p1003.1-2001" }
+st_susv3        = { "-susv3" }
+st_p1003_1_2004 = { "-p1003.1-2004" }
+// POSIX Issues 7 and 8 Standards
+st_p1003_1_2008 = { "-p1003.1-2008" }
+st_susv4        = { "-susv4" }
+st_p1003_1_2024 = { "-p1003.1-2024" }
+// Other Standards
+st_ieee754     = { "-ieee754" }
+st_iso8601     = { "-iso8601" }
+st_iso8802_3   = { "-iso8802-3" }
+st_ieee1275_94 = { "-ieee1275-94" }
+// ! This is neccessacy to be reversally sorted
+st_abbreviation =  {
+    st_ansiC_89
+  | st_ansiC
+  | st_ieee1275_94
+  | st_ieee754
+  | st_iso8802_3
+  | st_iso8601
+  | st_isoC_2011
+  | st_isoC_99
+  | st_isoC_90
+  | st_isoC_tcor2
+  | st_isoC_tcor1
+  | st_isoC_amd1
+  | st_isoC
+  | st_iso9945_2_93
+  | st_iso9945_1_96
+  | st_iso9945_1_90
+  | st_p1003_2a_92
+  | st_p1003_2_92
+  | st_p1003_2
+  | st_p1003_1_2024
+  | st_p1003_1_2008
+  | st_p1003_1_2004
+  | st_p1003_1_2001
+  | st_p1003_1_96
+  | st_p1003_1i_95
+  | st_p1003_1g_2000
+  | st_p1003_1c_95
+  | st_p1003_1b_93
+  | st_p1003_1b
+  | st_p1003_1_90
+  | st_p1003_1_88
+  | st_p1003_1
+  | st_svid4
+  | st_xpg4_2
+  | st_xpg4
+  | st_xpg3
+  | st_xcurses4_2
+  | st_xns5_2
+  | st_xns5
+  | st_xsh5
+  | st_xcu5
+  | st_xbd5
+  | st_susv1
+  | st_susv4
+  | st_susv3
+  | st_susv2
+}
+st              = ${ "St" ~ !text_arg ~ ws+ ~ st_abbreviation ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
-ad = { "Ad" ~ arg+ ~ NEWLINE? }
+// -- Other in-line macros
 
-// -- An
+ad = ${ "Ad" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
-an_split    = { "-split" }
-an_no_split = { "-nosplit" }
-an_name     = { arg+ }
-an          = { "An" ~ (an_split | an_no_split | an_name) ~ NEWLINE? }
+an_split    =  { "-split" }
+an_no_split =  { "-nosplit" }
+an_name     = ${ arg ~ (ws+ ~ arg)* }
+an          = ${ "An" ~ !text_arg ~ ws+ ~ (an_split | an_no_split | an_name) ~ ws* ~ NEWLINE? }
 
-// -- Ap
-
-ap = { "Ap" ~ arg* ~ NEWLINE? }
-
-// -- Ar
-
-ar = { "Ar" ~ arg* ~ NEWLINE? }
-
-// -- Bt
-
-bt = { "Bt" ~ arg* ~ NEWLINE? }
-
-// -- Cd
-
-cd = { "Cd" ~ arg+ ~ NEWLINE? }
-
-// -- Cm
-
-cm = { "Cm" ~ arg+ ~ NEWLINE? }
+ap = ${ "Ap" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }

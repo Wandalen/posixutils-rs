@@ -7,6 +7,10 @@
 // SPDX-License-Identifier: MIT
 //
 
+use pest::iterators::Pair;
+
+use crate::man_util::parser::Rule;
+
 #[derive(Debug, PartialEq)]
 pub enum BdType {
     Centered,
@@ -16,17 +20,15 @@ pub enum BdType {
     Unfilled,
 }
 
-impl TryFrom<String> for BdType {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "-centered" => Ok(Self::Centered),
-            "-filled" => Ok(Self::Filled),
-            "-literal" => Ok(Self::Literal),
-            "-ragged" => Ok(Self::Ragged),
-            "-unfilled" => Ok(Self::Unfilled),
-            _ => Err(format!("Unrecognized '.Bd' type argument: {value}")),
+impl From<Pair<'_, Rule>> for BdType {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        match pair.into_inner().next().unwrap().as_rule() {
+            Rule::bd_centered => Self::Centered,
+            Rule::bd_filled => Self::Filled,
+            Rule::bd_literal => Self::Literal,
+            Rule::bd_ragged => Self::Ragged,
+            Rule::bd_unfilled => Self::Unfilled,
+            _ => unreachable!(),
         }
     }
 }
@@ -37,17 +39,16 @@ pub enum OffsetType {
     IndentTwo,
     Left,
     Right,
-    Value(String),
 }
 
-impl From<String> for OffsetType {
-    fn from(value: String) -> Self {
-        match value.as_str() {
-            "indent" => Self::Indent,
-            "indent-two" => Self::IndentTwo,
-            "left" => Self::Left,
-            "right" => Self::Right,
-            _ => Self::Value(value.to_string()),
+impl From<Pair<'_, Rule>> for OffsetType {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        match pair.into_inner().next().unwrap().as_rule() {
+            Rule::off_indent => Self::Indent,
+            Rule::off_indent_two => Self::IndentTwo,
+            Rule::off_left => Self::Left,
+            Rule::off_right => Self::Right,
+            _ => unreachable!(),
         }
     }
 }
@@ -59,15 +60,13 @@ pub enum BfType {
     Symbolic,
 }
 
-impl TryFrom<String> for BfType {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "-centered" | "Em" => Ok(Self::Emphasis),
-            "-literal" | "Li" => Ok(Self::Literal),
-            "-symbolic" | "Sy" => Ok(Self::Symbolic),
-            _ => Err(format!("Unrecognized '.Bf' type argument: {value}")),
+impl From<Pair<'_, Rule>> for BfType {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        match pair.into_inner().next().unwrap().as_rule() {
+            Rule::bf_emphasis | Rule::bf_em => Self::Emphasis,
+            Rule::bf_literal | Rule::bf_li => Self::Literal,
+            Rule::bf_symbolic | Rule::bf_sy => Self::Symbolic,
+            _ => unreachable!(),
         }
     }
 }
@@ -86,22 +85,20 @@ pub enum BlType {
     Tag,
 }
 
-impl TryFrom<String> for BlType {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "-bullet" => Ok(Self::Bullet),
-            "-column" => Ok(Self::Column),
-            "-dash" | "-hyphen" => Ok(Self::Dash),
-            "-diag" => Ok(Self::Diag),
-            "-enum" => Ok(Self::Enum),
-            "-hang" => Ok(Self::Hang),
-            "-inset" => Ok(Self::Inset),
-            "-item" => Ok(Self::Item),
-            "-ohang" => Ok(Self::Ohang),
-            "-tag" => Ok(Self::Tag),
-            _ => Err(format!("Unrecognized '.Bl' type argument: {value}")),
+impl From<Pair<'_, Rule>> for BlType {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        match pair.into_inner().next().unwrap().as_rule() {
+            Rule::bl_bullet => Self::Bullet,
+            Rule::bl_column => Self::Column,
+            Rule::bl_dash | Rule::bl_hyphen => Self::Dash,
+            Rule::bl_diag => Self::Diag,
+            Rule::bl_enum => Self::Enum,
+            Rule::bl_hang => Self::Hang,
+            Rule::bl_inset => Self::Inset,
+            Rule::bl_item => Self::Item,
+            Rule::bl_ohang => Self::Ohang,
+            Rule::bl_tag => Self::Tag,
+            _ => unreachable!(),
         }
     }
 }

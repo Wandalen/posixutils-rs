@@ -9,6 +9,10 @@
 
 use std::fmt::Display;
 
+use pest::iterators::Pair;
+
+use crate::man_util::parser::Rule;
+
 #[derive(Debug, PartialEq)]
 pub enum AtType {
     General,
@@ -18,38 +22,17 @@ pub enum AtType {
     SystemV(Option<String>),
 }
 
-impl TryFrom<&str> for AtType {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "" => Ok(Self::General),
-            "32v" => Ok(Self::V32),
-            "III" => Ok(Self::SystemIII),
-            "V" => Ok(Self::SystemV(None)),
-            version if version.starts_with("v") => {
-                if let Ok(v) = version[1..].parse::<u8>() {
-                    if (1..=7).contains(&v) {
-                        Ok(Self::Version(v.to_string()))
-                    } else {
-                        Err(format!("Invalid version for v[1-7]: {v}"))
-                    }
-                } else {
-                    Err(format!("Invalid numeric value for v[1-7]: {}", version))
-                }
+impl From<Pair<'_, Rule>> for AtType {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        let at_type = pair.into_inner().next().unwrap();
+        match at_type.as_rule() {
+            Rule::at_version => Self::Version(at_type.as_str().chars().nth(1).unwrap().to_string()),
+            Rule::at_32v => Self::V32,
+            Rule::at_3 => Self::SystemIII,
+            Rule::at_system_v => {
+                Self::SystemV(at_type.as_str().chars().nth(2).map(|c| c.to_string()))
             }
-            version if version.starts_with("V.") => {
-                if let Ok(v) = version[2..].parse::<u8>() {
-                    if (1..=4).contains(&v) {
-                        Ok(Self::SystemV(Some(v.to_string())))
-                    } else {
-                        Err(format!("Invalid version for V.[1-4]: {version}"))
-                    }
-                } else {
-                    Err(format!("Invalid numeric value for V.[...]: {version}"))
-                }
-            }
-            _ => Err(format!("Unrecognized .At argument: {value}")),
+            _ => unreachable!(),
         }
     }
 }
@@ -234,67 +217,64 @@ pub enum StType {
     Ieee127594,
 }
 
-impl TryFrom<&str> for StType {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
+impl From<Pair<'_, Rule>> for StType {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        match pair.into_inner().next().unwrap().as_rule() {
             // C Language Standards
-            "-ansiC" => Ok(Self::AnsiC),
-            "-ansiC-89" => Ok(Self::AnsiC89),
-            "-isoC" => Ok(Self::IsoC),
-            "-isoC-90" => Ok(Self::IsoC90),
-            "-isoC-amd1" => Ok(Self::IsoCAmd1),
-            "-isoC-tcor1" => Ok(Self::IsoCTcor1),
-            "-isoC-tcor2" => Ok(Self::IsoCTcor2),
-            "-isoC-99" => Ok(Self::IsoC99),
-            "-isoC-2011" => Ok(Self::IsoC2011),
+            Rule::st_ansiC => Self::AnsiC,
+            Rule::st_ansiC_89 => Self::AnsiC89,
+            Rule::st_isoC => Self::IsoC,
+            Rule::st_isoC_90 => Self::IsoC90,
+            Rule::st_isoC_amd1 => Self::IsoCAmd1,
+            Rule::st_isoC_tcor1 => Self::IsoCTcor1,
+            Rule::st_isoC_tcor2 => Self::IsoCTcor2,
+            Rule::st_isoC_99 => Self::IsoC99,
+            Rule::st_isoC_2011 => Self::IsoC2011,
             // POSIX.1 Standards before XPG4.2
-            "-p1003.1-88" => Ok(Self::P1003188),
-            "-p1003.1" => Ok(Self::P10031),
-            "-p1003.1-90" => Ok(Self::P1003190),
-            "-iso9945-1-90" => Ok(Self::Iso9945190),
-            "-p1003.1b-93" => Ok(Self::P10031B93),
-            "-p1003.1b" => Ok(Self::P10031B),
-            "-p1003.1c-95" => Ok(Self::P10031C95),
-            "-p1003.1i-95" => Ok(Self::P10031I95),
-            "-p1003.1-96" => Ok(Self::P1003196),
-            "-iso9945-1-96" => Ok(Self::Iso9945196),
+            Rule::st_p1003_1_88 => Self::P1003188,
+            Rule::st_p1003_1 => Self::P10031,
+            Rule::st_p1003_1_90 => Self::P1003190,
+            Rule::st_iso9945_1_90 => Self::Iso9945190,
+            Rule::st_p1003_1b_93 => Self::P10031B93,
+            Rule::st_p1003_1b => Self::P10031B,
+            Rule::st_p1003_1c_95 => Self::P10031C95,
+            Rule::st_p1003_1i_95 => Self::P10031I95,
+            Rule::st_p1003_1_96 => Self::P1003196,
+            Rule::st_iso9945_1_96 => Self::Iso9945196,
             // X/Open Portability Guide before XPG4.2
-            "-xpg3" => Ok(Self::Xpg3),
-            "-p1003.2" => Ok(Self::P10032),
-            "-p1003.2-92" => Ok(Self::P1003292),
-            "-iso9945-2-93" => Ok(Self::Iso9945293),
-            "-p1003.2a-92" => Ok(Self::P10032A92),
-            "-xpg4" => Ok(Self::Xpg4),
+            Rule::st_xpg3 => Self::Xpg3,
+            Rule::st_p1003_2 => Self::P10032,
+            Rule::st_p1003_2_92 => Self::P1003292,
+            Rule::st_iso9945_2_93 => Self::Iso9945293,
+            Rule::st_p1003_2a_92 => Self::P10032A92,
+            Rule::st_xpg4 => Self::Xpg4,
             // X/Open Portability Guide Issue 4 Version 2 and Related Standards
-            "-susv1" => Ok(Self::Susv1),
-            "-xpg4.2" => Ok(Self::Xpg42),
-            "-xcurses4.2" => Ok(Self::XCurses42),
-            "-p1003.1g-2000" => Ok(Self::P10031G2000),
-            "-svid4" => Ok(Self::Svid4),
+            Rule::st_susv1 => Self::Susv1,
+            Rule::st_xpg4_2 => Self::Xpg42,
+            Rule::st_xcurses4_2 => Self::XCurses42,
+            Rule::st_p1003_1g_2000 => Self::P10031G2000,
+            Rule::st_svid4 => Self::Svid4,
             // X/Open Portability Guide Issue 5 and Related Standards
-            "-susv2" => Ok(Self::Susv2),
-            "-xbd5" => Ok(Self::Xbd5),
-            "-xsh5" => Ok(Self::Xsh5),
-            "-xcu5" => Ok(Self::Xcu5),
-            "-xns5" => Ok(Self::Xns5),
-            "-xns5.2" => Ok(Self::Xns52),
+            Rule::st_susv2 => Self::Susv2,
+            Rule::st_xbd5 => Self::Xbd5,
+            Rule::st_xsh5 => Self::Xsh5,
+            Rule::st_xcu5 => Self::Xcu5,
+            Rule::st_xns5 => Self::Xns5,
+            Rule::st_xns5_2 => Self::Xns52,
             // POSIX Issue 6 Standards
-            "-p1003.1-2001" => Ok(Self::P100312001),
-            "-susv3" => Ok(Self::Susv3),
-            "-p1003.1-2004" => Ok(Self::P100312004),
+            Rule::st_p1003_1_2001 => Self::P100312001,
+            Rule::st_susv3 => Self::Susv3,
+            Rule::st_p1003_1_2004 => Self::P100312004,
             // POSIX Issues 7 and 8 Standards
-            "-p1003.1-2008" => Ok(Self::P100312008),
-            "-susv4" => Ok(Self::Susv4),
-            "-p1003.1-2024" => Ok(Self::P100312024),
+            Rule::st_p1003_1_2008 => Self::P100312008,
+            Rule::st_susv4 => Self::Susv4,
+            Rule::st_p1003_1_2024 => Self::P100312024,
             // Other Standards
-            "-ieee754" => Ok(Self::Ieee754),
-            "-iso8601" => Ok(Self::Iso8601),
-            "-iso8802-3" => Ok(Self::Iso88023),
-            "-ieee1275-94" => Ok(Self::Ieee127594),
-            // Error
-            _ => Err(format!("Unrecognized .St standard abbreviation: {value}")),
+            Rule::st_ieee754 => Self::Ieee754,
+            Rule::st_iso8601 => Self::Iso8601,
+            Rule::st_iso8802_3 => Self::Iso88023,
+            Rule::st_ieee1275_94 => Self::Ieee127594,
+            _ => unreachable!(),
         }
     }
 }

@@ -207,24 +207,16 @@ impl MdocParser {
             let mut inner = pair.into_inner();
 
             // -type
-            let bd_type_pair = inner.next().expect("Expected '-type' for 'Bd'");
-            let block_type = match BdType::try_from(bd_type_pair.as_str().to_string()) {
-                Ok(bd_type) => bd_type,
-                Err(err) => {
-                    // TODO: return error
-                    eprintln!("{err}");
-                    BdType::Filled
-                }
-            };
+            let block_type = BdType::from(inner.next().unwrap());
 
             let mut offset: Option<OffsetType> = None;
             let mut compact = false;
 
             for opt_pair in inner {
                 match opt_pair.as_rule() {
-                    Rule::offset => offset = Some(OffsetType::from(opt_pair.as_str().to_string())),
+                    Rule::offset => offset = Some(OffsetType::from(opt_pair)),
                     Rule::compact => compact = true,
-                    _ => {}
+                    _ => unreachable!(),
                 }
             }
 
@@ -237,27 +229,17 @@ impl MdocParser {
 
         let mut pairs = pair.into_inner();
 
-        let bd_open = pairs
-            .next()
-            .expect("Expected '.Bd -type [-offset width] [-compact]'");
-        let bd_macro = parse_bd_open(bd_open);
+        let bd_macro = parse_bd_open(pairs.next().unwrap());
 
-        let mut body_elements = vec![];
-        for next_pair in pairs {
-            if next_pair.as_rule() == Rule::ed_close {
-                let node = MacroNode {
-                    mdoc_macro: bd_macro,
-                    nodes: body_elements,
-                };
-                return Element::Macro(node);
-            } else {
-                body_elements.push(Self::parse_element(next_pair));
-            }
-        }
+        let nodes = pairs
+            .take_while(|p| p.as_rule() != Rule::ed_close)
+            .map(Self::parse_element)
+            .collect();
 
-        // TODO: return error
-        eprintln!("Error: Bd block not closed with Ed");
-        Element::Text("[unclosed Bd block]".to_string())
+        Element::Macro(MacroNode {
+            mdoc_macro: bd_macro,
+            nodes,
+        })
     }
 
     /// Parses (`Bf`)[https://man.openbsd.org/mdoc#Bf]:
@@ -267,44 +249,24 @@ impl MdocParser {
             let mut inner = pair.into_inner();
 
             // -type
-            let bf_type_pair = inner
-                .next()
-                .expect("Expected '-emphasis | -literal | -symbolic | Em | Li | Sy' for 'Bd'");
-            let block_type = match BfType::try_from(bf_type_pair.as_str().to_string()) {
-                Ok(bf_type) => bf_type,
-                Err(err) => {
-                    // TODO: return error
-                    eprintln!("{err}");
-                    BfType::Emphasis
-                }
-            };
+            let block_type = BfType::from(inner.next().unwrap());
 
             Macro::Bf(block_type)
         }
 
         let mut pairs = pair.into_inner();
 
-        let bf_open = pairs
-            .next()
-            .expect("Expected '.Bf -emphasis | -literal | -symbolic | Em | Li | Sy'");
-        let bf_macro = parse_bf_open(bf_open);
+        let bf_macro = parse_bf_open(pairs.next().unwrap());
 
-        let mut body_elements = vec![];
-        for next_pair in pairs {
-            if next_pair.as_rule() == Rule::ef_close {
-                let node = MacroNode {
-                    mdoc_macro: bf_macro,
-                    nodes: body_elements,
-                };
-                return Element::Macro(node);
-            } else {
-                body_elements.push(Self::parse_element(next_pair));
-            }
-        }
+        let nodes = pairs
+            .take_while(|p| p.as_rule() != Rule::ef_close)
+            .map(Self::parse_element)
+            .collect();
 
-        // TODO: return error
-        eprintln!("Error: Bf block not closed with Ef");
-        Element::Text("[unclosed Bf block]".to_string())
+        Element::Macro(MacroNode {
+            mdoc_macro: bf_macro,
+            nodes,
+        })
     }
 
     /// Parses (`Bk`)[https://man.openbsd.org/mdoc#Bk]:
@@ -312,28 +274,18 @@ impl MdocParser {
     fn parse_bk_block(pair: Pair<Rule>) -> Element {
         let mut pairs = pair.into_inner();
 
-        let bk_open = pairs.next().expect("Expected '.Bk -words'");
-        bk_open
-            .into_inner()
-            .find(|p| p.as_rule() == Rule::bk_words)
-            .expect("Mandatory argument '-words' is absent");
+        // `bk_open`
+        let _ = pairs.next().unwrap();
 
-        let mut body_elements = vec![];
-        for next_pair in pairs {
-            if next_pair.as_rule() == Rule::ek_close {
-                let node = MacroNode {
-                    mdoc_macro: Macro::Bk,
-                    nodes: body_elements,
-                };
-                return Element::Macro(node);
-            } else {
-                body_elements.push(Self::parse_element(next_pair));
-            }
-        }
+        let nodes = pairs
+            .take_while(|p| p.as_rule() != Rule::ek_close)
+            .map(Self::parse_element)
+            .collect();
 
-        // TODO: return error
-        eprintln!("Error: Bk block not closed with Ek");
-        Element::Text("[unclosed Bk block]".to_string())
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Bk,
+            nodes,
+        })
     }
 
     // Parses (`Bl`)[https://man.openbsd.org/mdoc#Bl]
@@ -343,15 +295,8 @@ impl MdocParser {
             let mut inner = pair.into_inner();
 
             // -type
-            let bl_type_pair = inner.next().expect("Expected '-type' for 'Bl'");
-            let list_type = match BlType::try_from(bl_type_pair.as_str().to_string()) {
-                Ok(bl_type) => bl_type,
-                Err(err) => {
-                    // TODO: return error
-                    eprintln!("{err}");
-                    BlType::Bullet
-                }
-            };
+            let bl_type_pair = inner.next().unwrap();
+            let list_type = BlType::from(bl_type_pair);
 
             let mut offset: Option<OffsetType> = None;
             let mut compact = false;
@@ -359,7 +304,7 @@ impl MdocParser {
 
             for opt_pair in inner {
                 match opt_pair.as_rule() {
-                    Rule::offset => offset = Some(OffsetType::from(opt_pair.as_str().to_string())),
+                    Rule::offset => offset = Some(OffsetType::from(opt_pair)),
                     Rule::compact => compact = true,
                     Rule::bl_columns => {
                         for col in opt_pair.into_inner() {
@@ -380,27 +325,17 @@ impl MdocParser {
 
         let mut pairs = pair.into_inner();
 
-        let bl_open = pairs
-            .next()
-            .expect("Expected '.Bl -type [-width val] [-offset val] [-compact] [col ...]'");
-        let bl_macro = parse_bl_open(bl_open);
+        let bl_macro = parse_bl_open(pairs.next().unwrap());
 
-        let mut body_elements = vec![];
-        for next_pair in pairs {
-            if next_pair.as_rule() == Rule::el_close {
-                let node = MacroNode {
-                    mdoc_macro: bl_macro,
-                    nodes: body_elements,
-                };
-                return Element::Macro(node);
-            } else {
-                body_elements.push(Self::parse_element(next_pair));
-            }
-        }
+        let nodes = pairs
+            .take_while(|p| p.as_rule() != Rule::el_close)
+            .map(Self::parse_element)
+            .collect();
 
-        // TODO: return error
-        eprintln!("Error: Bl block not closed with El");
-        Element::Text("[unclosed Bl block]".to_string())
+        Element::Macro(MacroNode {
+            mdoc_macro: bl_macro,
+            nodes,
+        })
     }
 
     fn parse_block_full_explicit(pair: Pair<Rule>) -> Element {
@@ -967,20 +902,23 @@ impl MdocParser {
         // Parses (`At`)[https://man.openbsd.org/mdoc#At]:
         // `At [version]`
         fn parse_at(pair: Pair<Rule>) -> Element {
-            let mut nodes: Vec<Element> =
-                pair.into_inner().map(MdocParser::parse_element).collect();
+            let mut inner = pair.into_inner();
 
-            // If first node is `Element::Text`, then it may be `[version]`
-            let at_type = match nodes.first() {
-                Some(Element::Text(arg)) => match AtType::try_from(arg.as_str()) {
-                    Ok(at_type) => {
-                        nodes.remove(0);
-                        at_type
+            let mut at_type = AtType::General;
+            let mut nodes = vec![];
+
+            if let Some(first_arg) = inner.next() {
+                match first_arg.as_rule() {
+                    Rule::at_type => {
+                        at_type = AtType::from(first_arg);
                     }
-                    Err(_) => AtType::General,
-                },
-                _ => AtType::General,
-            };
+                    Rule::arg => {
+                        nodes.push(MdocParser::parse_element(first_arg));
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            nodes.extend(inner.map(MdocParser::parse_element));
 
             Element::Macro(MacroNode {
                 mdoc_macro: Macro::At(at_type),
@@ -1065,12 +1003,7 @@ impl MdocParser {
         fn parse_st(pair: Pair<Rule>) -> Element {
             let mut inner = pair.into_inner();
 
-            let abbreviation = inner
-                .next()
-                .expect("Expected '-abbreviation' for 'St'")
-                .as_str();
-
-            let st_type = StType::try_from(abbreviation).unwrap();
+            let st_type = StType::from(inner.next().unwrap());
 
             let nodes = inner.map(MdocParser::parse_element).collect();
 
@@ -1197,6 +1130,21 @@ impl MdocParser {
 
 #[cfg(test)]
 mod test {
+    use crate::man_util::parser::*;
+
+    #[test]
+    fn text_line() {
+        let content = "Line 1\nLine 2\nLine 3\n";
+        let elements = vec![
+            Element::Text("Line 1\n".to_string()),
+            Element::Text("Line 2\n".to_string()),
+            Element::Text("Line 3\n".to_string()),
+        ];
+
+        let mdoc = MdocParser::parse_mdoc(content).unwrap();
+        assert_eq!(mdoc.elements, elements);
+    }
+
     mod block_full_explicit {
         use std::collections::HashMap;
 
@@ -1268,7 +1216,6 @@ mod test {
             bd_types.insert("-literal", BdType::Literal);
             bd_types.insert("-ragged", BdType::Ragged);
             bd_types.insert("-unfilled", BdType::Unfilled);
-            bd_types.insert("invalid_value", BdType::Filled);
 
             for (str_type, enum_type) in bd_types {
                 let content = format!(".Bd {str_type}\n.Ed");
@@ -1293,10 +1240,6 @@ mod test {
             offset_types.insert("indent-two", OffsetType::IndentTwo);
             offset_types.insert("left", OffsetType::Left);
             offset_types.insert("right", OffsetType::Right);
-            offset_types.insert(
-                "custom_value",
-                OffsetType::Value("custom_value".to_string()),
-            );
 
             for (str_type, enum_type) in offset_types {
                 let content = format!(".Bd -literal -offset {str_type}\n.Ed");
@@ -1312,6 +1255,12 @@ mod test {
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements, "Bd offset: {str_type}");
             }
+        }
+
+        #[test]
+        fn bd_invalid_offset() {
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Bd -literal -offset invalid_offset\n.Ed").is_err())
         }
 
         #[test]
@@ -1388,7 +1337,6 @@ mod test {
             bf_types.insert("Li", BfType::Literal);
             bf_types.insert("-symbolic", BfType::Symbolic);
             bf_types.insert("Sy", BfType::Symbolic);
-            bf_types.insert("invalid_value", BfType::Emphasis);
 
             for (str_type, enum_type) in bf_types {
                 let content = format!(".Bf {str_type}\n.Ef");
@@ -1400,6 +1348,12 @@ mod test {
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements, "Bf type: {str_type}");
             }
+        }
+
+        #[test]
+        fn bf_invalid_type() {
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(".Bf -invalid\n.Ef").is_err())
         }
 
         #[test]
@@ -1568,7 +1522,6 @@ mod test {
             width_types.insert("indent-two", OffsetType::IndentTwo);
             width_types.insert("left", OffsetType::Left);
             width_types.insert("right", OffsetType::Right);
-            width_types.insert("custom", OffsetType::Value("custom".to_string()));
 
             for (str_type, enum_type) in width_types {
                 let content = format!(".Bl -bullet -width {str_type}\n.El");
@@ -1594,7 +1547,6 @@ mod test {
             offset_types.insert("indent-two", OffsetType::IndentTwo);
             offset_types.insert("left", OffsetType::Left);
             offset_types.insert("right", OffsetType::Right);
-            offset_types.insert("custom", OffsetType::Value("custom".to_string()));
 
             for (str_type, enum_type) in offset_types {
                 let content = format!(".Bl -bullet -offset {str_type}\n.El");
@@ -1611,6 +1563,24 @@ mod test {
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements, "Bl offset: {str_type}");
             }
+        }
+
+        #[test]
+        fn bl_invalid_offset() {
+            // Because of invalid offset, it is considered as column
+            let content = ".Bl -bullet -offset invalid_offset\n.El";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Bl {
+                    list_type: BlType::Bullet,
+                    offset: None,
+                    compact: false,
+                    columns: vec!["-offset".to_string(), "invalid_offset".to_string()],
+                },
+                nodes: vec![],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -4191,10 +4161,10 @@ mod test {
                 at_types.insert("V.4", AtType::SystemV(Some("4".to_string())));
 
                 for (str_type, enum_type) in at_types {
-                    let content = format!(".At {str_type}");
+                    let content = format!(".At {str_type} word");
                     let elements = vec![Element::Macro(MacroNode {
                         mdoc_macro: Macro::At(enum_type),
-                        nodes: vec![],
+                        nodes: vec![Element::Text("word".to_string())],
                     })];
 
                     let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -4757,11 +4727,10 @@ mod test {
                 }
             }
 
-            // TODO: rewrite pinics to contolled error??
             #[test]
-            #[should_panic]
             fn st_no_abbreviation() {
-                let _ = MdocParser::parse_mdoc(".St word").is_err();
+                // TODO: Format and compare pest errors??
+                assert!(MdocParser::parse_mdoc(".St word").is_err())
             }
 
             #[test]
