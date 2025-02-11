@@ -11,8 +11,9 @@
 
 WHITESPACE = _{ " " | "\t" }
 // Shortened synonym
-ws      = _{ WHITESPACE }
-NEWLINE = _{ "\r"? ~ "\n" }
+ws       = _{ WHITESPACE }
+NEWLINE  = _{ "\r"? ~ "\n" }
+_COMMENT = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 // Macro name separator to not allow merging macro name with arguments
 
 text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
@@ -39,7 +40,7 @@ inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | text_production }
 
 // ----- Mdoc document
 
-element = { ("." ~ (block_full_explicit | block_full_implicit | block_partial_implicit | inline)) | text_line }
+element = { _COMMENT | ("." ~ (block_full_explicit | block_full_implicit | block_partial_implicit | inline)) | text_line }
 
 mdoc = { SOI ~ element* ~ EOI }
 

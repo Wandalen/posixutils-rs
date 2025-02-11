@@ -111,7 +111,7 @@ where
             io::ErrorKind::NotFound => ManError::CommandNotFound(name.to_string()),
             _ => ManError::Io(err),
         })?;
-
+    
     if let Some(stdin) = stdin {
         if let Some(mut process_stdin) = process.stdin.take() {
             process_stdin.write_all(stdin)?;
@@ -190,6 +190,7 @@ fn get_pager_settings() -> Result<FormattingSettings, ManError> {
     };
 
     let result = unsafe { libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut winsize) };
+
     if result != 0 {
         return Err(ManError::GetTerminalSize);
     }
@@ -223,6 +224,7 @@ fn parse_mdoc(
     formatting_settings: FormattingSettings,
 ) -> Result<Vec<u8>, ManError> {
     let content = String::from_utf8(man_page.to_vec()).unwrap();
+    println!("Content:\n\n{content}\n\n");
     let document = MdocParser::parse_mdoc(content);
     println!("{document:#?}");
 
@@ -327,7 +329,6 @@ fn display_summary_database(keyword: &str) -> Result<bool, ManError> {
 /// [ManError] if critical error happened.
 fn man(args: Args) -> Result<bool, ManError> {
     let any_path_exists = MAN_PATHS.iter().any(|path| PathBuf::from(path).exists());
-
     if !any_path_exists {
         return Err(ManError::ManPaths);
     }
