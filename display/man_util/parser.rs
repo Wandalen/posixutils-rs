@@ -1111,11 +1111,58 @@ impl MdocParser {
         })
     }
 
-    fn parse_db(pair: Pair<Rule>) -> Element {
-        let _: Vec<_> = pair.into_inner().map(|p| p.as_str().to_string()).collect();
-
+    fn parse_db(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Db,
+            nodes: vec![]
+        })
+    }
+
+    fn parse_dd(pair: Pair<Rule>) -> Element {
+        let mut inner_pair = pair.into_inner().next().unwrap();
+
+        let date = match inner_pair.as_rule() {
+            Rule::dd_only_date => {
+                let date: Pair<'_, Rule> = inner_pair.into_inner().next().unwrap();
+                date.as_str().to_string()
+            },
+            Rule::dd_no_date => {
+                use chrono;
+                use chrono::Datelike;
+
+                let date = chrono::offset::Utc::now().date_naive();
+                let month = match date.month() {
+                    1  => "January",
+                    2  => "February",
+                    3  => "March",
+                    4  => "April",
+                    5  => "May",
+                    6  => "June",
+                    7  => "July",
+                    8  => "August",
+                    9  => "September",
+                    10 => "October",
+                    11 => "November",
+                    12 => "December",
+                    _  => unreachable!() 
+                };
+
+                format!("{} {}, {}", month, date.day(), date.year())
+            },
+            Rule::dd_date => {
+                let mut inner = inner_pair.into_inner();
+                let _skip = inner.next().unwrap();
+                let date = inner.next().unwrap();
+
+                date.as_str().to_string()
+            },
+            _ => unreachable!(),
+        };
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Dd { 
+                date: date
+            },
             nodes: vec![]
         })
     }
@@ -1133,6 +1180,7 @@ impl MdocParser {
             Rule::cd => Self::parse_cd(pair),
             Rule::cm => Self::parse_cm(pair),
             Rule::db => Self::parse_db(pair),
+            Rule::dd => Self::parse_dd(pair),
             _ => unreachable!(),
         }
     }
@@ -1140,6 +1188,7 @@ impl MdocParser {
 
 #[cfg(test)]
 mod test {
+    use chrono;
     use crate::man_util::parser::*;
 
     #[test]
@@ -3231,6 +3280,8 @@ mod test {
     }
 
     mod inline {
+        use chrono::Datelike;
+
         use crate::man_util::parser::*;
 
         mod rs_submacros {
@@ -5318,6 +5369,104 @@ mod test {
         #[test]
         fn db_not_args() {
             assert!(MdocParser::parse_mdoc(".Db").is_err());
+        }
+
+        #[test]
+        fn dd() {
+            let content = ".Dd $Mdocdate: July 2, 2018$";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { date: "July 2, 2018".to_string() },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_only_date() {
+            let content = ".Dd July 2, 2018";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { date: "July 2, 2018".to_string() },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_no_date() {
+            let content = ".Dd $Mdocdate$";
+            let date = chrono::offset::Utc::now().date_naive();
+            let month = match date.month() {
+                1  => "January",
+                2  => "February",
+                3  => "March",
+                4  => "April",
+                5  => "May",
+                6  => "June",
+                7  => "July",
+                8  => "August",
+                9  => "September",
+                10 => "October",
+                11 => "November",
+                12 => "December",
+                _  => unreachable!() 
+            };
+            let date_str = format!("{} {}, {}", month, date.day(), date.year());
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { date: date_str },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_numeric_date() {
+            let content = ".Dd 2018-12-31";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { date: "2018-12-31".to_string() },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_not_args() {
+            assert!(MdocParser::parse_mdoc(".Dd").is_err())
+        }
+
+        #[test]
+        fn dd_not_callable() {
+            let content = ".Ad addr1 Dd addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Dd".to_string()),
+                    Element::Text("addr2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_not_parsed() {
+            let content = ".Dd Ad 2, 2018";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd{ date: "Ad 2, 2018".to_string() },
+                nodes: vec![]
+            })];
+            
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
     }
 }

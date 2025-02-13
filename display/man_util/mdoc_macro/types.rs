@@ -123,3 +123,15 @@ pub enum SmMode {
     On,
     Off,
 }
+
+// #[derive(Debug, PartialEq)]
+// pub struct MdocDate {
+//     pub month_day: (String, u8),
+//     pub year: u16
+// }
+
+// #[derive(Debug, PartialEq)]
+// pub enum DdDate {
+//     Parsed(MdocDate),
+//     StrDate(String)
+// }

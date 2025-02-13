@@ -18,7 +18,7 @@ _COMMENT = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
 // -- List of Callable macros
-macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st | db) ~ (block_partial_implicit | inline) }
+macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st | db | dd) ~ (block_partial_implicit | inline) }
 
 arg = { macro_arg | text_arg }
 
@@ -36,7 +36,7 @@ rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
 
 text_production = { at | bsx | bx | dx | fx | nx | ox | st }
 
-inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | db | text_production }
+inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | db | dd | text_production }
 
 // ----- Mdoc document
 
@@ -195,8 +195,8 @@ c = ${ "%C" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 
 month     =  { text_arg }
 day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
-month_day =  { month ~ ws+ ~ day ~ ws* ~ "," }
-year      =  { text_arg }
+month_day =  { month ~ ws+ ~ day ~ ws* ~ ","? }
+year      =  { ASCII_DIGIT+ }
 d         = ${ "%D" ~ !text_arg ~ (ws+ ~ month_day)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
 
 i = ${ "%I" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
@@ -354,3 +354,13 @@ cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 db = ${ "Db" ~ ws+ ~ text_arg ~ NEWLINE? }
+
+open_mdocdate    = ${ "$" ~ "Mdocdate" }
+close_mdocdate   = ${ "$" }
+mdocdate         = ${ month_day ~ ws+ ~ year }
+traditional_date = ${ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ }
+date             = ${ (mdocdate | traditional_date) }
+dd_only_date     = ${ date ~ NEWLINE? }
+dd_no_date       = ${ open_mdocdate ~ close_mdocdate ~ NEWLINE? }
+dd_date          = ${ open_mdocdate ~ ":" ~ ws+ ~ date ~ close_mdocdate ~ NEWLINE? }
+dd               = ${ "Dd" ~ ws+ ~ (dd_date | dd_only_date | dd_no_date ) }
