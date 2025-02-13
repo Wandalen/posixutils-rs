@@ -5286,5 +5286,38 @@ mod test {
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
         }
+
+        #[test]
+        fn db_not_callable() {
+            let content = ".Ad addr1 Db addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Db".to_string()),
+                    Element::Text("addr2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn db_not_parsed() {
+            let content = ".Db Ad";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Db,
+                nodes: vec![]
+            })];
+            
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn db_not_args() {
+            assert!(MdocParser::parse_mdoc(".Db").is_err());
+        }
     }
 }
