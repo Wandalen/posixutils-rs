@@ -36,7 +36,7 @@ rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
 
 text_production = { at | bsx | bx | dx | fx | nx | ox | st }
 
-inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | text_production }
+inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | db | text_production }
 
 // ----- Mdoc document
 
@@ -352,3 +352,5 @@ ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
+db = ${ "Db" ~ ws+ ~ text_arg ~ NEWLINE? }

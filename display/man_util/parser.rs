@@ -1111,6 +1111,15 @@ impl MdocParser {
         })
     }
 
+    fn parse_db(pair: Pair<Rule>) -> Element {
+        let _: Vec<_> = pair.into_inner().map(|p| p.as_str().to_string()).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Db,
+            nodes: vec![]
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1123,6 +1132,7 @@ impl MdocParser {
             Rule::bt => Self::parse_bt(pair),
             Rule::cd => Self::parse_cd(pair),
             Rule::cm => Self::parse_cm(pair),
+            Rule::db => Self::parse_db(pair),
             _ => unreachable!(),
         }
     }
@@ -5259,6 +5269,18 @@ mod test {
                         ],
                     }),
                 ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn db() {
+            let content = ".Db text_argument";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Db,
+                nodes: vec![]
             })];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
