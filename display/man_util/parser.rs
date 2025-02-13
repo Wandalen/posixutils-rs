@@ -1111,6 +1111,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Db`)[https://man.openbsd.org/mdoc#Db]
+    // Obsolete
     fn parse_db(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Db,
@@ -1118,6 +1120,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Dd`)[https://man.openbsd.org/mdoc#Dd]
+    // `Dd [date]`
     fn parse_dd(pair: Pair<Rule>) -> Element {
         let mut inner_pair = pair.into_inner().next().unwrap();
 
