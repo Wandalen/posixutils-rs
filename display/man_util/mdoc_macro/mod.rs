@@ -205,9 +205,7 @@ pub enum Macro {
     Nx(NxType),
     Oo,
     Oc, // Close multi-line Oo context
-    Op{
-        line: String
-    },
+    Op,
     Os {
         fotter_text: Option<String>,
     },
@@ -226,17 +224,11 @@ pub enum Macro {
     Po,
     Pc, // Close parenthesised context opened by Po
     Pp,
-    Pq{
-        line: String
-    },
-    Ql{
-        line: String
-    },
+    Pq,
+    Ql,
     Qo,
     Qc, // Close quoted context opened by Qo
-    Qq{
-        line: String
-    },
+    Qq,
     Rs,
     Re, // Close an Rs block
     Rv {
@@ -248,9 +240,7 @@ pub enum Macro {
     Sm(SmMode),
     So,
     Sc, // Close single-quoted context opened by So
-    Sq{
-        line: String
-    },
+    Sq,
     Ss {
         title: String,
     },
@@ -275,7 +265,7 @@ pub enum Macro {
         identifier: Vec<String>,
     },
     Vt{
-        variable_type: String,
+        var_type: String,
         identifier: Option<String> 
     },
     Xo,

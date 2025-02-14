@@ -618,7 +618,10 @@ impl MdocParser {
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::Vt,
+            mdoc_macro: Macro::Vt{
+                var_type: todo!(),
+                identifier: todo!(),
+            },
             nodes,
         })
     }
