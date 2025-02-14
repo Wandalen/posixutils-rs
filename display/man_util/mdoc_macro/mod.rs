@@ -99,12 +99,6 @@ pub enum Macro {
     D1,
     Db, // Obsolete
     Dd {
-        // month: String,
-        // day: u8,
-        // year: i32,
-        // date: (String, u8, i32)
-        // date: String
-        // date: DdDate
         date: String
     },
     Dl,

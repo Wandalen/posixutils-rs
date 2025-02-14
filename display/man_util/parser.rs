@@ -1171,6 +1171,38 @@ impl MdocParser {
         })
     }
 
+    fn parse_dt(pair: Pair<Rule>) -> Element {
+        let mut inner = pair.into_inner();
+
+        let title = inner.next().unwrap().as_str().trim().to_string().to_uppercase();
+        let section = match inner.next().unwrap().as_str().trim() {
+            "1"  => "General Commands",
+            "2"  => "System Calls",
+            "3"  => "Library Functions",
+            "3p" => "Perl Library",
+            "4"  => "Device Drivers",
+            "5"  => "File Formats",
+            "6"  => "Games",
+            "7"  => "Miscellaneous Information",
+            "8"  => "System Manager's Manual",
+            "9"  => "Kernel Developer's Manual",
+            _    => unreachable!()
+        };
+        let arch = match inner.next() {
+            Some(arch) => Some(arch.as_str().trim().to_string()),
+            None => None
+        };
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Dt { 
+                title: title, 
+                section: section.to_string(), 
+                arch: arch 
+            },
+            nodes: vec![]
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1185,6 +1217,7 @@ impl MdocParser {
             Rule::cm => Self::parse_cm(pair),
             Rule::db => Self::parse_db(pair),
             Rule::dd => Self::parse_dd(pair),
+            Rule::dt => Self::parse_dt(pair),
             _ => unreachable!(),
         }
     }
@@ -5471,6 +5504,75 @@ mod test {
             
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt() {
+            let content = ".Dt PROGNAME 1 i386";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dt { 
+                    title: "PROGNAME".to_string(),
+                    section: "General Commands".to_string(),
+                    arch: Some("i386".to_string())
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt_not_arhc() {
+            let content = ".Dt PROGNAME 1";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dt { 
+                    title: "PROGNAME".to_string(),
+                    section: "General Commands".to_string(),
+                    arch: None
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt_not_callable() {
+            let content = ".Ad addr1 Dt addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Dt".to_string()),
+                    Element::Text("addr2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt_not_parsed() {
+            let content = ".Dt Ad 1";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dt { 
+                    title: "AD".to_string(),
+                    section: "General Commands".to_string(),
+                    arch: None
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt_not_args() {
+            assert!(MdocParser::parse_mdoc(".Dt").is_err())
         }
     }
 }
