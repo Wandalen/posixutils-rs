@@ -1123,52 +1123,108 @@ impl MdocParser {
     // Parses (`Dd`)[https://man.openbsd.org/mdoc#Dd]
     // `Dd [date]`
     fn parse_dd(pair: Pair<Rule>) -> Element {
-        let mut inner_pair = pair.into_inner().next().unwrap();
+        use chrono;
+        use chrono::Datelike;
 
-        let date = match inner_pair.as_rule() {
-            Rule::dd_only_date => {
-                let date: Pair<'_, Rule> = inner_pair.into_inner().next().unwrap();
-                date.as_str().to_string()
-            },
-            Rule::dd_no_date => {
-                use chrono;
-                use chrono::Datelike;
+        fn parse_date(date: chrono::NaiveDate) -> DdDate {
+            let month = match date.month() {
+                1  => "January",
+                2  => "February",
+                3  => "March",
+                4  => "April",
+                5  => "May",
+                6  => "June",
+                7  => "July",
+                8  => "August",
+                9  => "September",
+                10 => "October",
+                11 => "November",
+                12 => "December",
+                _  => unreachable!() 
+            };
 
-                let date = chrono::offset::Utc::now().date_naive();
-                let month = match date.month() {
-                    1  => "January",
-                    2  => "February",
-                    3  => "March",
-                    4  => "April",
-                    5  => "May",
-                    6  => "June",
-                    7  => "July",
-                    8  => "August",
-                    9  => "September",
-                    10 => "October",
-                    11 => "November",
-                    12 => "December",
-                    _  => unreachable!() 
-                };
+            DdDate::MDYFormat(Date {
+                month_day: (month.to_string(), date.day() as u8),
+                year: date.year() as u16
+            })
+        }
 
-                format!("{} {}, {}", month, date.day(), date.year())
-            },
-            Rule::dd_date => {
-                let mut inner = inner_pair.into_inner();
-                let _skip = inner.next().unwrap();
-                let date = inner.next().unwrap();
-
-                date.as_str().to_string()
-            },
-            _ => unreachable!(),
+        fn parse_block(pair: Pair<Rule>) -> DdDate {
+            match pair.as_rule() {
+                Rule::mdocdate => {
+                    let mut mdy = pair.clone().into_inner();
+    
+                    let mut md = match mdy.next() {
+                        Some(md) => md.into_inner(),
+                        None => return DdDate::StrFormat(pair.as_str().to_string())
+                    };
+    
+                    let month = match md.next() {
+                        Some(month) => month.as_str().to_string(),
+                        None => return DdDate::StrFormat(pair.as_str().to_string())
+                    };
+                    let day = match md.next() {
+                        Some(day) => match day.as_str().parse::<u8>() {
+                            Ok(day) => day,
+                            Err(_) => return DdDate::StrFormat(pair.as_str().to_string())
+                        },
+                        None => return DdDate::StrFormat(pair.as_str().to_string())
+                    };
+    
+                    let year = match mdy.next() {
+                        Some(year) => match year.as_str().parse::<u16>() {
+                            Ok(year) => year,
+                            Err(_) => return DdDate::StrFormat(pair.as_str().to_string())
+                        },
+                        None => return DdDate::StrFormat(pair.as_str().to_string())
+                    };
+    
+                    DdDate::MDYFormat(Date {
+                        month_day: (month, day),
+                        year: year
+                    })
+                },
+                Rule::traditional_date => {
+                    let date_str = pair.as_str();
+                    let date = match chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                        Ok(date) => date,
+                        Err(_) => return DdDate::StrFormat(date_str.to_string())
+                    };
+                    parse_date(date)
+                },
+                Rule::wrong_date => {
+                    DdDate::StrFormat(pair.as_str().to_string())                    
+                },
+                _ => {
+                    // let date = chrono::offset::Utc::now().date_naive();
+                    // parse_date(date)
+                    unreachable!()
+                },
+            }
         };
 
-        Element::Macro(MacroNode {
-            mdoc_macro: Macro::Dd { 
-                date: date
+        match pair.into_inner().next() {
+            Some(inner_pair) => {
+                let date = parse_block(inner_pair.into_inner().next().unwrap());
+
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dd { 
+                        date: date
+                    },
+                    nodes: vec![]
+                })
             },
-            nodes: vec![]
-        })
+            None => {
+                let date = parse_date(chrono::offset::Utc::now().date_naive());
+
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dd { 
+                        date: date
+                    },
+                    nodes: vec![]
+                })
+            }
+        }
     }
 
     fn parse_dt(pair: Pair<Rule>) -> Element {
@@ -5435,7 +5491,14 @@ mod test {
         fn dd() {
             let content = ".Dd $Mdocdate: July 2, 2018$";
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dd { date: "July 2, 2018".to_string() },
+                mdoc_macro: Macro::Dd { 
+                    date: DdDate::MDYFormat(
+                        Date { 
+                            month_day: ("July".to_string(), 2), 
+                            year: 2018 
+                        }
+                    ) 
+                },
                 nodes: vec![]
             })];
 
@@ -5447,7 +5510,14 @@ mod test {
         fn dd_only_date() {
             let content = ".Dd July 2, 2018";
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dd { date: "July 2, 2018".to_string() },
+                mdoc_macro: Macro::Dd { 
+                    date: DdDate::MDYFormat(
+                        Date { 
+                            month_day: ("July".to_string(), 2), 
+                            year: 2018 
+                        }
+                    )  
+                },
                 nodes: vec![]
             })];
 
@@ -5474,9 +5544,14 @@ mod test {
                 12 => "December",
                 _  => unreachable!() 
             };
-            let date_str = format!("{} {}, {}", month, date.day(), date.year());
+            let date = DdDate::MDYFormat(Date { 
+                month_day: (month.to_string(), date.day() as u8), 
+                year: date.year() as u16 
+            });
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dd { date: date_str },
+                mdoc_macro: Macro::Dd { 
+                    date: date 
+                },
                 nodes: vec![]
             })];
 
@@ -5488,7 +5563,12 @@ mod test {
         fn dd_numeric_date() {
             let content = ".Dd 2018-12-31";
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dd { date: "2018-12-31".to_string() },
+                mdoc_macro: Macro::Dd { 
+                    date: DdDate::MDYFormat(Date { 
+                        month_day: ("December".to_string(), 31), 
+                        year: 2018 
+                    })
+                },
                 nodes: vec![]
             })];
 
@@ -5498,7 +5578,36 @@ mod test {
 
         #[test]
         fn dd_not_args() {
-            assert!(MdocParser::parse_mdoc(".Dd").is_err())
+            let content = ".Dd";
+            let date = chrono::offset::Utc::now().date_naive();
+            let month = match date.month() {
+                1  => "January",
+                2  => "February",
+                3  => "March",
+                4  => "April",
+                5  => "May",
+                6  => "June",
+                7  => "July",
+                8  => "August",
+                9  => "September",
+                10 => "October",
+                11 => "November",
+                12 => "December",
+                _  => unreachable!() 
+            };
+            let date = DdDate::MDYFormat(Date { 
+                month_day: (month.to_string(), date.day() as u8), 
+                year: date.year() as u16 
+            });
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { 
+                    date: date 
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -5521,7 +5630,12 @@ mod test {
         fn dd_not_parsed() {
             let content = ".Dd Ad 2, 2018";
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dd{ date: "Ad 2, 2018".to_string() },
+                mdoc_macro: Macro::Dd { 
+                    date: DdDate::MDYFormat(Date { 
+                        month_day: ("Ad".to_string(), 2), 
+                        year: 2018 
+                    })
+                },
                 nodes: vec![]
             })];
             

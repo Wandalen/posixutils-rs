@@ -99,7 +99,7 @@ pub enum Macro {
     D1,
     Db, // Obsolete
     Dd {
-        date: String
+        date: DdDate
     },
     Dl,
     Do,

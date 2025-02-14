@@ -195,7 +195,7 @@ c = ${ "%C" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 
 month     =  { text_arg }
 day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
-month_day =  { month ~ ws+ ~ day ~ ws* ~ ","? }
+month_day =  { month ~ ws+ ~ day ~ ws* ~ "," }
 year      =  { ASCII_DIGIT+ }
 d         = ${ "%D" ~ !text_arg ~ (ws+ ~ month_day)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
 
@@ -355,17 +355,13 @@ cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 db = ${ "Db" ~ !text_arg ~ ws+ ~ text_arg ~ NEWLINE? }
 
-open_mdocdate    = ${ "$" ~ "Mdocdate" }
-close_mdocdate   = ${ "$" }
-mdocdate         = ${ month_day ~ ws+ ~ year }
 traditional_date = ${ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ }
-date             = ${ (mdocdate | traditional_date) }
-dd_only_date     = ${ date }
-dd_no_date       = ${ open_mdocdate ~ close_mdocdate }
-dd_date          = ${ open_mdocdate ~ ":" ~ ws+ ~ date ~ close_mdocdate }
-dd               = ${ "Dd" ~ !text_arg ~ ws+ ~ (dd_date | dd_only_date | dd_no_date ) ~ NEWLINE? }
+wrong_date       = ${ (!"$" ~ text_arg)+ }
+mdocdate         = ${ month_day ~ ws+ ~ year }
+date             = ${ (mdocdate | traditional_date | wrong_date) }
+dd               = ${ "Dd" ~ !text_arg ~ (ws+ ~ ("$" ~ "Mdocdate" ~ ":"? ~ ws*)? ~ date? ~ "$"?)? ~ NEWLINE? }
 
-dt      = ${ "Dt" ~ title ~ section ~ arch? ~ NEWLINE? }
+dt      = ${ "Dt" ~ !text_arg ~ title ~ section ~ arch? ~ NEWLINE? }
 title   = ${ ws+ ~ text_arg }
 section = ${ ws+ ~ ASCII_DIGIT }
 arch    = ${ ws+ ~ text_arg }

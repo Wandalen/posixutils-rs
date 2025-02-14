@@ -123,3 +123,15 @@ pub enum SmMode {
     On,
     Off,
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Date {
+    pub month_day: (String, u8),
+    pub year: u16
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum DdDate {
+    MDYFormat(Date),
+    StrFormat(String)
+}
