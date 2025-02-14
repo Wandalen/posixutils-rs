@@ -185,6 +185,9 @@ pub enum Macro {
         uri: String,
         display_name: Option<String>,
     },
+    Ms{
+        name: String,
+    }, 
     Mt {
         // https://man.openbsd.org/mdoc#Mt
         mail_to: String,
@@ -202,7 +205,9 @@ pub enum Macro {
     Nx(NxType),
     Oo,
     Oc, // Close multi-line Oo context
-    Op,
+    Op{
+        line: String
+    },
     Os {
         fotter_text: Option<String>,
     },
@@ -221,11 +226,17 @@ pub enum Macro {
     Po,
     Pc, // Close parenthesised context opened by Po
     Pp,
-    Pq,
-    Ql,
+    Pq{
+        line: String
+    },
+    Ql{
+        line: String
+    },
     Qo,
     Qc, // Close quoted context opened by Qo
-    Qq,
+    Qq{
+        line: String
+    },
     Rs,
     Re, // Close an Rs block
     Rv {
@@ -237,7 +248,9 @@ pub enum Macro {
     Sm(SmMode),
     So,
     Sc, // Close single-quoted context opened by So
-    Sq,
+    Sq{
+        line: String
+    },
     Ss {
         title: String,
     },
@@ -261,7 +274,10 @@ pub enum Macro {
         func_type: Option<String>,
         identifier: Vec<String>,
     },
-    Vt,
+    Vt{
+        variable_type: String,
+        identifier: Option<String> 
+    },
     Xo,
     Xc, // Close a scope opened by Xo
     Xr {
