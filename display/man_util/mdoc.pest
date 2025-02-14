@@ -36,7 +36,7 @@ rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
 
 text_production = { at | bsx | bx | dx | fx | nx | ox | st }
 
-inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | db | dd | dt | text_production }
+inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | db | dd | dt | dv | text_production }
 
 // ----- Mdoc document
 
@@ -353,19 +353,21 @@ bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
-db = ${ "Db" ~ ws+ ~ text_arg ~ NEWLINE? }
+db = ${ "Db" ~ !text_arg ~ ws+ ~ text_arg ~ NEWLINE? }
 
 open_mdocdate    = ${ "$" ~ "Mdocdate" }
 close_mdocdate   = ${ "$" }
 mdocdate         = ${ month_day ~ ws+ ~ year }
 traditional_date = ${ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ }
 date             = ${ (mdocdate | traditional_date) }
-dd_only_date     = ${ date ~ NEWLINE? }
-dd_no_date       = ${ open_mdocdate ~ close_mdocdate ~ NEWLINE? }
-dd_date          = ${ open_mdocdate ~ ":" ~ ws+ ~ date ~ close_mdocdate ~ NEWLINE? }
-dd               = ${ "Dd" ~ ws+ ~ (dd_date | dd_only_date | dd_no_date ) }
+dd_only_date     = ${ date }
+dd_no_date       = ${ open_mdocdate ~ close_mdocdate }
+dd_date          = ${ open_mdocdate ~ ":" ~ ws+ ~ date ~ close_mdocdate }
+dd               = ${ "Dd" ~ !text_arg ~ ws+ ~ (dd_date | dd_only_date | dd_no_date ) ~ NEWLINE? }
 
 dt      = ${ "Dt" ~ title ~ section ~ arch? ~ NEWLINE? }
 title   = ${ ws+ ~ text_arg }
 section = ${ ws+ ~ ASCII_DIGIT }
 arch    = ${ ws+ ~ text_arg }
+
+dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }

@@ -1203,6 +1203,28 @@ impl MdocParser {
         })
     }
 
+    fn parse_dv(pair: Pair<Rule>) -> Element {
+        let inner = pair.into_inner();
+        
+        let args = inner.flat_map(|p| p.into_inner());
+        let is_constant = |item: &Pair<Rule>| matches!(item.as_rule(), Rule::text_arg);
+
+        let identifiers: Vec<String> = args
+            .clone()
+            .take_while(is_constant)
+            .map(|p| p.as_str().to_string())
+            .collect();
+
+        let nodes: Vec<Element> = args.skip_while(is_constant).map(Self::parse_arg).collect();
+
+        Element::Macro(MacroNode { 
+            mdoc_macro: Macro::Dv { 
+                identifiers:  identifiers
+            }, 
+            nodes
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1218,6 +1240,7 @@ impl MdocParser {
             Rule::db => Self::parse_db(pair),
             Rule::dd => Self::parse_dd(pair),
             Rule::dt => Self::parse_dt(pair),
+            Rule::dv => Self::parse_dv(pair),
             _ => unreachable!(),
         }
     }
@@ -5573,6 +5596,75 @@ mod test {
         #[test]
         fn dt_not_args() {
             assert!(MdocParser::parse_mdoc(".Dt").is_err())
+        }
+
+        #[test]
+        fn dv() {
+            let content = ".Dv CONSTANT1 CONSTANT2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dv { 
+                    identifiers: vec![
+                        "CONSTANT1".to_string(),
+                        "CONSTANT2".to_string()
+                    ]
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dv_not_args() {
+            assert!(MdocParser::parse_mdoc(".Dv").is_err())
+        }
+
+        #[test]
+        fn dv_callable() {
+            let content = ".Ad addr1 addr2 Dv CONST1";
+            let elemenets = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("addr2".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Dv {
+                            identifiers: vec![
+                                "CONST1".to_string()
+                            ]
+                        },
+                        nodes: vec![]
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elemenets)
+        }
+
+        #[test]
+        fn dv_parsed() {
+            let content = ".Dv CONST1 Ad addr1 addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dv { 
+                    identifiers: vec![
+                        "CONST1".to_string()
+                    ]
+                },
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![
+                            Element::Text("addr1".to_string()),
+                            Element::Text("addr2".to_string()),
+                        ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
     }
 }
