@@ -795,13 +795,13 @@ impl MdocParser {
         // Parses (`%Q`)[https://man.openbsd.org/mdoc#_Q]:
         // `%Q name`
         fn parse_q(pair: Pair<'_, Rule>) -> Element {
-            let insitution_author = pair
+            let institution_author = pair
                 .into_inner()
                 .map(|p| p.as_str().to_string())
                 .collect::<Vec<String>>()
                 .join(" ");
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::Q { insitution_author },
+                mdoc_macro: Macro::Q { institution_author },
                 nodes: vec![],
             })
         }
@@ -3826,7 +3826,7 @@ mod test {
                 let content = ".%Q John Doe";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::Q {
-                        insitution_author: "John Doe".to_string(),
+                        institution_author: "John Doe".to_string(),
                     },
                     nodes: vec![],
                 })];
@@ -3840,7 +3840,7 @@ mod test {
                 let content = ".%Q John  \t  Doe\n";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::Q {
-                        insitution_author: "John Doe".to_string(),
+                        institution_author: "John Doe".to_string(),
                     },
                     nodes: vec![],
                 })];
@@ -3860,7 +3860,7 @@ mod test {
                 let content = ".%Q John Doe Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::Q {
-                        insitution_author: "John Doe Ad addr1".to_string(),
+                        institution_author: "John Doe Ad addr1".to_string(),
                     },
                     nodes: vec![],
                 })];

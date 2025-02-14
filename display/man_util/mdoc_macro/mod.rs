@@ -44,7 +44,7 @@ pub enum Macro {
         page_number: String,
     },
     Q {
-        insitution_author: String,
+        institution_author: String,
     },
     R {
         report_name: String,
