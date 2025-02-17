@@ -114,6 +114,7 @@ pub enum Macro {
         identifiers: Vec<String>,
     },
     Dx(DxType),
+    Em,
     En,
     Eo {
         opening_delimiter: Option<char>,

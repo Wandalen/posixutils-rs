@@ -1196,8 +1196,6 @@ impl MdocParser {
                     DdDate::StrFormat(pair.as_str().to_string())                    
                 },
                 _ => {
-                    // let date = chrono::offset::Utc::now().date_naive();
-                    // parse_date(date)
                     unreachable!()
                 },
             }
@@ -1227,6 +1225,7 @@ impl MdocParser {
         }
     }
 
+    // Parses (`Dt`)[https://man.openbsd.org/mdoc#Dt]
     fn parse_dt(pair: Pair<Rule>) -> Element {
         let mut inner = pair.into_inner();
 
@@ -1259,6 +1258,7 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Dv`)[https://man.openbsd.org/mdoc#Dv]
     fn parse_dv(pair: Pair<Rule>) -> Element {
         let inner = pair.into_inner();
         
@@ -1272,11 +1272,21 @@ impl MdocParser {
             .collect();
 
         let nodes: Vec<Element> = args.skip_while(is_constant).map(Self::parse_arg).collect();
-
         Element::Macro(MacroNode { 
             mdoc_macro: Macro::Dv { 
                 identifiers:  identifiers
             }, 
+            nodes
+        })
+    }
+
+    // Parses (`Em`)[https://man.openbsd.org/mdoc#Em]
+    // .Em word ...
+    fn parse_em(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Em,
             nodes
         })
     }
@@ -1297,6 +1307,7 @@ impl MdocParser {
             Rule::dd => Self::parse_dd(pair),
             Rule::dt => Self::parse_dt(pair),
             Rule::dv => Self::parse_dv(pair),
+            Rule::em => Self::parse_em(pair),
             _ => unreachable!(),
         }
     }
@@ -5779,6 +5790,75 @@ mod test {
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn em() {
+            let input = ".Em word1 word2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Em,
+                nodes: vec![
+                    Element::Text("word1".to_string()),
+                    Element::Text("word2".to_string())
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn em_not_args() {
+            let input = ".Em";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Em,
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn em_parsed() {
+            let input = ".Em word1 Ad addr1 addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Em,
+                nodes: vec![
+                    Element::Text("word1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![
+                            Element::Text("addr1".to_string()),
+                            Element::Text("addr2".to_string())
+                        ]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn em_callable() {
+            let input = ".Ad addr1 addr2 Em word1";
+            let elemenets = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("addr2".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Em,
+                        nodes: vec![
+                            Element::Text("word1".to_string())
+                        ]
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elemenets)
         }
     }
 }
