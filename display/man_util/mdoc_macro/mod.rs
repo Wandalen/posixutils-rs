@@ -129,9 +129,7 @@ pub enum Macro {
         // opening_delimiter: char,
         // closing_delimiter: char,
     // },
-    Ev {
-        identifiers: Vec<String>,
-    },
+    Ev,
     Ex {
         utilities: Vec<String>,
     },

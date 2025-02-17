@@ -1302,12 +1302,36 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Es`)[https://man.openbsd.org/mdoc#Es]
+    // .Es arg1 arg2
     fn parse_es(pair: Pair<Rule>) -> Element {
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode { 
             mdoc_macro: Macro::Es, 
             nodes 
+        })
+    }
+
+    // Parses (`Ev`)[https://man.openbsd.org/mdoc#Ev]
+    // .Ev VAR, ...
+    fn parse_ev(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ev,
+            nodes
+        })
+    }
+
+    fn parse_ex(pair: Pair<Rule>) -> Element {
+        let utilities = pair.into_inner().map(|p| p.as_str().to_string()).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ex {
+                utilities: utilities
+            },
+            nodes: vec![]
         })
     }
 
@@ -1330,6 +1354,8 @@ impl MdocParser {
             Rule::em => Self::parse_em(pair),
             Rule::er => Self::parse_er(pair),
             Rule::es => Self::parse_es(pair),
+            Rule::ev => Self::parse_ev(pair),
+            Rule::ex => Self::parse_ex(pair),
             _ => unreachable!(),
         }
     }
@@ -6000,6 +6026,119 @@ mod test {
             assert_eq!(mdoc.elements, elemenets)
         }
 
-        
+        #[test]
+        fn ev() {
+            let input = ".Ev DISPLAY";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ev,
+                nodes: vec![
+                    Element::Text("DISPLAY".to_string())
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ev_not_args() {
+            assert!(MdocParser::parse_mdoc(".Ev").is_err());
+        }
+
+        #[test]
+        fn ev_parsed() {
+            let input = ".Ev DISPLAY Ad ADDRESS";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ev,
+                nodes: vec![
+                    Element::Text("DISPLAY".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![
+                            Element::Text("ADDRESS".to_string())
+                        ]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ev_callable() {
+            let input = ".Ad addr1 Ev ADDRESS";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ev,
+                        nodes: vec![
+                            Element::Text("ADDRESS".to_string())                            
+                        ]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ex() {
+            let input = ".Ex -std grep";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ex {
+                    utilities: vec![
+                        "grep".to_string()
+                    ]
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ex_not_args() {
+            assert!(MdocParser::parse_mdoc(".Ex").is_err());
+        }
+
+        #[test]
+        fn ex_not_parsed() {
+            let input = ".Ex -std grep Ad addr";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ex {
+                    utilities: vec![
+                        "grep".to_string(),
+                        "Ad".to_string(),
+                        "addr".to_string()
+                    ]
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ex_not_callable() {
+            let input = ".Ad addr Ex -std grep";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad, 
+                nodes: vec![
+                    Element::Text("addr".to_string()),
+                    Element::Text("Ex".to_string()),
+                    Element::Text("-std".to_string()),
+                    Element::Text("grep".to_string()),
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
     }
 }
