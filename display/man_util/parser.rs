@@ -1348,6 +1348,28 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Fd`)[https://man.openbsd.org/mdoc#Fd]
+    // .Fd directive [args]
+    fn parse_fd(pair: Pair<Rule>) -> Element {
+        let mut inner = pair.into_inner();
+
+        let directive = inner.next().unwrap().as_str().to_string();
+
+        let mut args = vec![];
+
+        while let Some(arg) = inner.next() {
+            args.push(arg.as_str().to_string());
+        };
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Fd {
+                directive: directive,
+                arguments: args
+            },
+            nodes: vec![]
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1369,7 +1391,8 @@ impl MdocParser {
             Rule::es => Self::parse_es(pair),
             Rule::ev => Self::parse_ev(pair),
             Rule::ex => Self::parse_ex(pair),
-            Rule::fa => Self::parse_fa(pair),            
+            Rule::fa => Self::parse_fa(pair),
+            Rule::fd => Self::parse_fd(pair),        
             _ => unreachable!(),
         }
     }
@@ -6199,5 +6222,62 @@ mod test {
         // fn fa_callable() {
         //     let input = ""
         // }
+
+        #[test]
+        fn fd() {
+            let input = ".Fd #define sa_handler __sigaction_u.__sa_handler";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Fd {
+                    directive: "#define".to_string(),
+                    arguments: vec![
+                        "sa_handler".to_string(),
+                        "__sigaction_u.__sa_handler".to_string()
+                    ]
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn fd_not_args() {
+            assert!(MdocParser::parse_mdoc(".Fd").is_err());
+        }
+
+        #[test]
+        fn fd_not_parsed() {
+            let input = ".Fd #define Ad addr";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Fd {
+                    directive: "#define".to_string(),
+                    arguments: vec![
+                        "Ad".to_string(),
+                        "addr".to_string()
+                    ]
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn fd_not_callable() {
+            let input = ".Ad Fd #define ADDRESS";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("Fd".to_string()),
+                    Element::Text("#define".to_string()),
+                    Element::Text("ADDRESS".to_string()),
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
     }
 }
