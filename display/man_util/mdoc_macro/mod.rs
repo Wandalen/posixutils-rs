@@ -124,11 +124,11 @@ pub enum Macro {
         closing_dilimiter: Option<char>,
     },
     Er,
-    Es {
-        // Obsolete
-        opening_delimiter: char,
-        closing_delimiter: char,
-    },
+    Es, // Obsolete
+    // {
+        // opening_delimiter: char,
+        // closing_delimiter: char,
+    // },
     Ev {
         identifiers: Vec<String>,
     },

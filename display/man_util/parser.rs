@@ -1302,6 +1302,15 @@ impl MdocParser {
         })
     }
 
+    fn parse_es(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode { 
+            mdoc_macro: Macro::Es, 
+            nodes 
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1320,6 +1329,7 @@ impl MdocParser {
             Rule::dv => Self::parse_dv(pair),
             Rule::em => Self::parse_em(pair),
             Rule::er => Self::parse_er(pair),
+            Rule::es => Self::parse_es(pair),
             _ => unreachable!(),
         }
     }
@@ -5925,5 +5935,71 @@ mod test {
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elemenets)
         }
+
+        #[test]
+        fn es() {
+            let input = ".Es ( )";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Es,
+                nodes: vec![
+                    Element::Text("(".to_string()),
+                    Element::Text(")".to_string())
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn es_bad_args() {
+            assert!(MdocParser::parse_mdoc(".Es").is_err());
+            assert!(MdocParser::parse_mdoc(".Es (").is_err());
+            assert!(MdocParser::parse_mdoc(".Es ( ) (").is_err());
+        }
+
+        // #[test]
+        // fn es_parsed() {
+        //     let input = ".Es At 2.32 )";
+        //     let elements = vec![Element::Macro(MacroNode {
+        //         mdoc_macro: Macro::Es,
+        //         nodes: vec![
+        //             Element::Macro(MacroNode {
+        //                 mdoc_macro: Macro::At,
+        //                 nodes: vec![
+        //                     Element::Text("2.32".to_string())
+        //                 ]
+        //             }),
+        //             Element::Text(")".to_string())
+        //         ]
+        //     })];
+
+        //     let mdoc = MdocParser::parse_mdoc(input).unwrap();
+        //     assert_eq!(mdoc.elements, elements);
+        // }
+
+        #[test]
+        fn es_callable() {
+            let input = ".Ad addr1 addr2 Es ( )";
+            let elemenets = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("addr2".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Es,
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(")".to_string())
+                        ]
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elemenets)
+        }
+
+        
     }
 }

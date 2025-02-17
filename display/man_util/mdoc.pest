@@ -38,8 +38,11 @@ text_production = { at | bsx | bx | dx | fx | nx | ox | st }
 
 inline = { 
     rs_submacro 
-  | ad | an | ap | ar | bt | cd | cm 
-  | db | dd | dt | dv | em | er |
+  | ad | an | ap | ar 
+  | bt 
+  | cd | cm 
+  | db | dd | dt | dv 
+  | em | er | es |
     text_production 
 }
 
@@ -374,3 +377,4 @@ arch    = ${ ws+ ~ text_arg }
 dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 em = ${ "Em" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 er = ${ "Er" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+es = ${ "Es" ~ !text_arg ~ ws+ ~ arg ~ ws+ ~ arg ~ NEWLINE? }
