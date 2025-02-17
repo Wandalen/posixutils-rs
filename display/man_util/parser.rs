@@ -1114,6 +1114,278 @@ impl MdocParser {
         })
     }
 
+    // ---------------------------------------------------------------------------
+
+    // Parses (`Ms`)[https://man.openbsd.org/mdoc#Ms]:
+    // `Ms name`
+    fn parse_ms(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ms{
+                name: todo!()
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Mt`)[https://man.openbsd.org/mdoc#Mt]:
+    // `Mt mail to`
+    fn parse_mt(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Mt{
+                mail_to: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Nm`)[https://man.openbsd.org/mdoc#Nm]:
+    // `Nm [name]`
+    fn parse_nm(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Nm{
+                name: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`No`)[https://man.openbsd.org/mdoc#No]:
+    // `No word ...`
+    fn parse_no(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::No{
+                words: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Ns`)[https://man.openbsd.org/mdoc#Ns]:
+    // `Ns`
+    fn parse_ns(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ns,
+            nodes,
+        })
+    }
+
+    // Parses (`Os`)[https://man.openbsd.org/mdoc#Os]:
+    // `Os [footer text]`
+    fn parse_os(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Os{
+                fotter_text: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Ot`)[https://man.openbsd.org/mdoc#Ot]:
+    // `Ot functype`
+    fn parse_ot(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ot{
+                func_type: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Pa`)[https://man.openbsd.org/mdoc#Pa]:
+    // `Pa name ...`
+    fn parse_pa(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Pa{
+                names: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Pf`)[https://man.openbsd.org/mdoc#Pf]:
+    // `Pf prefix macro [argument ...]`
+    fn parse_pf(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Pf{
+                prefix: todo!(),
+                macro_name: todo!(),
+                arguments: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Pp`)[https://man.openbsd.org/mdoc#Pp]:
+    // `Pp`
+    fn parse_pp(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Pp,
+            nodes,
+        })
+    }
+
+    // Parses (`Rv`)[https://man.openbsd.org/mdoc#Rv]:
+    // `Rv -std [function ...]`
+    fn parse_rv(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Rv{
+                functions: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Sm`)[https://man.openbsd.org/mdoc#Sm]:
+    // `Sm [on | off]`
+    fn parse_sm(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Sm(todo!()),
+            nodes,
+        })
+    }
+
+    // Parses (`Sx`)[https://man.openbsd.org/mdoc#Sx]:
+    // `Sx Title line`
+    fn parse_sx(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Sx{
+                title: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Sy`)[https://man.openbsd.org/mdoc#Sy]:
+    // `Sy word ...`
+    fn parse_sy(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Sy{
+                words: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Tg`)[https://man.openbsd.org/mdoc#Tg]:
+    // `Tg [term]`
+    fn parse_tg(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Tg{
+                term: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Tn`)[https://man.openbsd.org/mdoc#Tn]:
+    // `Tn word ...`
+    fn parse_tn(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Tn{
+                words: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Ud`)[https://man.openbsd.org/mdoc#Ud]:
+    // `Ud`
+    fn parse_ud(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ud,
+            nodes,
+        })
+    }
+
+    // Parses (`Ux`)[https://man.openbsd.org/mdoc#Ux]:
+    // `Ux`
+    fn parse_ux(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ux,
+            nodes,
+        })
+    }
+
+    // Parses (`Va`)[https://man.openbsd.org/mdoc#Va]:
+    // `Va [type] identifier ...`
+    fn parse_va(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Va{
+                func_type: todo!(),
+                identifier: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Vt`)[https://man.openbsd.org/mdoc#Vt]:
+    // `Vt type [identifier]`
+    fn parse_vt(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Vt{
+                var_type: todo!(),
+                identifier: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // Parses (`Xr`)[https://man.openbsd.org/mdoc#Xr]:
+    // `Xr name section`
+    fn parse_xr(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Xr{
+                name: todo!(),
+                section: todo!(),
+            },
+            nodes,
+        })
+    }
+
+    // ---------------------------------------------------------------------------
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1126,6 +1398,27 @@ impl MdocParser {
             Rule::bt => Self::parse_bt(pair),
             Rule::cd => Self::parse_cd(pair),
             Rule::cm => Self::parse_cm(pair),
+            Rule::ms => Self::parse_ms(pair),
+            Rule::mt => Self::parse_mt(pair),
+            Rule::nm => Self::parse_nm(pair),
+            Rule::no => Self::parse_no(pair),
+            Rule::ns => Self::parse_ns(pair),
+            Rule::os => Self::parse_os(pair),
+            Rule::ot => Self::parse_ot(pair),
+            Rule::pa => Self::parse_pa(pair),
+            Rule::pf => Self::parse_pf(pair),
+            Rule::pp => Self::parse_pp(pair),
+            Rule::rv => Self::parse_rv(pair),
+            Rule::sm => Self::parse_sm(pair),
+            Rule::sx => Self::parse_sx(pair),
+            Rule::sy => Self::parse_sy(pair),
+            Rule::tg => Self::parse_tg(pair),
+            Rule::tn => Self::parse_tn(pair),
+            Rule::ud => Self::parse_ud(pair),
+            Rule::ux => Self::parse_ux(pair),
+            Rule::va => Self::parse_va(pair),
+            Rule::vt => Self::parse_vt(pair),
+            Rule::xr => Self::parse_xr(pair),
             _ => unreachable!(),
         }
     }
