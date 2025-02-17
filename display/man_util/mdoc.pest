@@ -34,9 +34,15 @@ block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block
 
 rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
 
-text_production = { at | bsx | bx | dx | fx | nx | ox | st }
+text_production = { at | bsx | bx | dx | fx | nx | ox | st | rv }
 
-inline = { rs_submacro | ad | an | ap | ar | bt | cd | cm | text_production }
+inline = { 
+  rs_submacro | 
+  ad | an | ap | ar | bt | cd | cm | 
+  ms | mt | nm | no | ns | os | ot | pa | pf | pp |
+  sm | sx | sy | tg | tn | ud | ux | va | vt | xr |
+  text_production 
+}
 
 // ----- Mdoc document
 
@@ -233,6 +239,8 @@ fx          = ${ "Fx" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 nx          = ${ "Nx" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 ox          = ${ "Ox" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
+rv          = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+
 // C Language Standards
 st_ansiC      = { "-ansiC" }
 st_ansiC_89   = { "-ansiC-89" }
@@ -352,3 +360,46 @@ ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Document preamble and NAME section macros
+os = ${ "Os" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+nm = ${ "Nm" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+
+// -- Sections and cross references
+// sx = ${ "Sx" ~ }
+xr = ${ "Xr" ~ ws+ ~ text_arg ~ ws+ ~ text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+tg = ${ "Tg" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+pp = ${ "Pp" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+
+// -- Spacing control
+pf = ${ "Pf" ~ ws+ ~ text_arg ~ ws+ ~ macro_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+ns = ${ "Ns" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+
+on = { "on" }
+off = { "off" }
+spacing_mode = { on | off }
+sm = ${ "Sm"  ~ !text_arg ~ (ws+ ~ spacing_mode)? ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+
+// -- Semantic markup for command line utilities
+pa = ${ "Pa" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Semantic markup for function libraries
+ot = ${ "Ot" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+// vt = ${ "Vt" ~ }
+// va = ${ "Va" ~ }
+
+// -- Various semantic markup
+mt = ${ "Mt" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+ms = ${ "Ms" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Physical markup
+sy = ${ "Sy" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+no = ${ "No" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
+tn = ${ "Tn" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+// “currently under development”
+ud = ${ "Ud" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+// “UNIX”
+ux = ${ "Ux" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+
+
