@@ -123,9 +123,7 @@ pub enum Macro {
         // Close a scope started by Eo
         closing_dilimiter: Option<char>,
     },
-    Er {
-        identifiers: Vec<String>,
-    },
+    Er,
     Es {
         // Obsolete
         opening_delimiter: char,

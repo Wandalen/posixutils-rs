@@ -1291,6 +1291,17 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Er`)[https://man.openbsd.org/mdoc#Er]
+    // .Er CONSTANT ...
+    fn parse_er(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Er,
+            nodes
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1308,6 +1319,7 @@ impl MdocParser {
             Rule::dt => Self::parse_dt(pair),
             Rule::dv => Self::parse_dv(pair),
             Rule::em => Self::parse_em(pair),
+            Rule::er => Self::parse_er(pair),
             _ => unreachable!(),
         }
     }
@@ -5809,14 +5821,7 @@ mod test {
 
         #[test]
         fn em_not_args() {
-            let input = ".Em";
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Em,
-                nodes: vec![]
-            })];
-
-            let mdoc = MdocParser::parse_mdoc(input).unwrap();
-            assert_eq!(mdoc.elements, elements);
+            assert!(MdocParser::parse_mdoc(".Em").is_err());
         }
 
         #[test]
@@ -5852,6 +5857,66 @@ mod test {
                         mdoc_macro: Macro::Em,
                         nodes: vec![
                             Element::Text("word1".to_string())
+                        ]
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elemenets)
+        }
+
+        #[test]
+        fn er() {
+            let input = ".Er ERROR";
+            let elements = vec![Element::Macro(MacroNode { 
+                mdoc_macro: Macro::Er, 
+                nodes: vec![
+                    Element::Text("ERROR".to_string())
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn er_not_args() {
+            assert!(MdocParser::parse_mdoc(".Er").is_err());
+        }
+
+        #[test]
+        fn er_parsed() {
+            let input = ".Er ERROR Ad addr1";
+            let elements = vec![Element::Macro(MacroNode { 
+                mdoc_macro: Macro::Er, 
+                nodes: vec![
+                    Element::Text("ERROR".to_string()),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Ad, 
+                        nodes: vec![
+                            Element::Text("addr1".to_string())
+                        ] 
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn er_callable() {
+            let input = ".Ad addr1 addr2 Er ERROR";
+            let elemenets = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("addr2".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Er,
+                        nodes: vec![
+                            Element::Text("ERROR".to_string())
                         ]
                     }),
                 ],
