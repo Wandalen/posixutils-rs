@@ -18,7 +18,7 @@ _COMMENT = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
 // -- List of Callable macros
-macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st) ~ (block_partial_implicit | inline) }
+macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st | db | dd | dt) ~ (block_partial_implicit | inline) }
 
 arg = { macro_arg | text_arg }
 
@@ -38,7 +38,7 @@ text_production = { at | bsx | bx | dx | fx | nx | ox | st | rv }
 
 inline = { 
   rs_submacro | 
-  ad | an | ap | ar | bt | cd | cm | 
+  ad | an | ap | ar | bt | cd | cm | db | dd | dt | dv |
   ms | mt | nm | no | ns | os | ot | pa | pf | pp |
   sm | sx | sy | tg | tn | ud | ux | va | vt | xr |
   text_production 
@@ -202,7 +202,7 @@ c = ${ "%C" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 month     =  { text_arg }
 day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
 month_day =  { month ~ ws+ ~ day ~ ws* ~ "," }
-year      =  { text_arg }
+year      =  { ASCII_DIGIT+ }
 d         = ${ "%D" ~ !text_arg ~ (ws+ ~ month_day)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
 
 i = ${ "%I" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
@@ -361,6 +361,21 @@ bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
+db = ${ "Db" ~ !text_arg ~ ws+ ~ text_arg ~ NEWLINE? }
+
+traditional_date = ${ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ }
+wrong_date       = ${ (!"$" ~ text_arg)+ }
+mdocdate         = ${ month_day ~ ws+ ~ year }
+date             = ${ (mdocdate | traditional_date | wrong_date) }
+dd               = ${ "Dd" ~ !text_arg ~ (ws+ ~ ("$" ~ "Mdocdate" ~ ":"? ~ ws*)? ~ date? ~ "$"?)? ~ NEWLINE? }
+
+dt      = ${ "Dt" ~ !text_arg ~ title ~ section ~ arch? ~ NEWLINE? }
+title   = ${ ws+ ~ text_arg }
+section = ${ ws+ ~ ASCII_DIGIT }
+arch    = ${ ws+ ~ text_arg }
+
+dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
 // -- Document preamble and NAME section macros
 os = ${ "Os" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 nm = ${ "Nm" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
@@ -401,5 +416,3 @@ tn = ${ "Tn" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 ud = ${ "Ud" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 // “UNIX”
 ux = ${ "Ux" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-
-

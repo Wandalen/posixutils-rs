@@ -1114,6 +1114,176 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Db`)[https://man.openbsd.org/mdoc#Db]
+    // Obsolete
+    fn parse_db(_pair: Pair<Rule>) -> Element {
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Db,
+            nodes: vec![]
+        })
+    }
+
+    // Parses (`Dd`)[https://man.openbsd.org/mdoc#Dd]
+    // `Dd [date]`
+    fn parse_dd(pair: Pair<Rule>) -> Element {
+        use chrono;
+        use chrono::Datelike;
+
+        fn parse_date(date: chrono::NaiveDate) -> DdDate {
+            let month = match date.month() {
+                1  => "January",
+                2  => "February",
+                3  => "March",
+                4  => "April",
+                5  => "May",
+                6  => "June",
+                7  => "July",
+                8  => "August",
+                9  => "September",
+                10 => "October",
+                11 => "November",
+                12 => "December",
+                _  => unreachable!() 
+            };
+
+            DdDate::MDYFormat(Date {
+                month_day: (month.to_string(), date.day() as u8),
+                year: date.year() as u16
+            })
+        }
+
+        fn parse_block(pair: Pair<Rule>) -> DdDate {
+            match pair.as_rule() {
+                Rule::mdocdate => {
+                    let mut mdy = pair.clone().into_inner();
+    
+                    let mut md = match mdy.next() {
+                        Some(md) => md.into_inner(),
+                        None => return DdDate::StrFormat(pair.as_str().to_string())
+                    };
+    
+                    let month = match md.next() {
+                        Some(month) => month.as_str().to_string(),
+                        None => return DdDate::StrFormat(pair.as_str().to_string())
+                    };
+                    let day = match md.next() {
+                        Some(day) => match day.as_str().parse::<u8>() {
+                            Ok(day) => day,
+                            Err(_) => return DdDate::StrFormat(pair.as_str().to_string())
+                        },
+                        None => return DdDate::StrFormat(pair.as_str().to_string())
+                    };
+    
+                    let year = match mdy.next() {
+                        Some(year) => match year.as_str().parse::<u16>() {
+                            Ok(year) => year,
+                            Err(_) => return DdDate::StrFormat(pair.as_str().to_string())
+                        },
+                        None => return DdDate::StrFormat(pair.as_str().to_string())
+                    };
+    
+                    DdDate::MDYFormat(Date {
+                        month_day: (month, day),
+                        year: year
+                    })
+                },
+                Rule::traditional_date => {
+                    let date_str = pair.as_str();
+                    let date = match chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                        Ok(date) => date,
+                        Err(_) => return DdDate::StrFormat(date_str.to_string())
+                    };
+                    parse_date(date)
+                },
+                Rule::wrong_date => {
+                    DdDate::StrFormat(pair.as_str().to_string())                    
+                },
+                _ => {
+                    // let date = chrono::offset::Utc::now().date_naive();
+                    // parse_date(date)
+                    unreachable!()
+                },
+            }
+        };
+
+        match pair.into_inner().next() {
+            Some(inner_pair) => {
+                let date = parse_block(inner_pair.into_inner().next().unwrap());
+
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dd { 
+                        date: date
+                    },
+                    nodes: vec![]
+                })
+            },
+            None => {
+                let date = parse_date(chrono::offset::Utc::now().date_naive());
+
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dd { 
+                        date: date
+                    },
+                    nodes: vec![]
+                })
+            }
+        }
+    }
+
+    fn parse_dt(pair: Pair<Rule>) -> Element {
+        let mut inner = pair.into_inner();
+
+        let title = inner.next().unwrap().as_str().trim().to_string().to_uppercase();
+        let section = match inner.next().unwrap().as_str().trim() {
+            "1"  => "General Commands",
+            "2"  => "System Calls",
+            "3"  => "Library Functions",
+            "3p" => "Perl Library",
+            "4"  => "Device Drivers",
+            "5"  => "File Formats",
+            "6"  => "Games",
+            "7"  => "Miscellaneous Information",
+            "8"  => "System Manager's Manual",
+            "9"  => "Kernel Developer's Manual",
+            _    => unreachable!()
+        };
+        let arch = match inner.next() {
+            Some(arch) => Some(arch.as_str().trim().to_string()),
+            None => None
+        };
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Dt { 
+                title: title, 
+                section: section.to_string(), 
+                arch: arch 
+            },
+            nodes: vec![]
+        })
+    }
+
+    fn parse_dv(pair: Pair<Rule>) -> Element {
+        let inner = pair.into_inner();
+        
+        let args = inner.flat_map(|p| p.into_inner());
+        let is_constant = |item: &Pair<Rule>| matches!(item.as_rule(), Rule::text_arg);
+
+        let identifiers: Vec<String> = args
+            .clone()
+            .take_while(is_constant)
+            .map(|p| p.as_str().to_string())
+            .collect();
+
+        let nodes: Vec<Element> = args.skip_while(is_constant).map(Self::parse_arg).collect();
+
+        Element::Macro(MacroNode { 
+            mdoc_macro: Macro::Dv { 
+                identifiers:  identifiers
+            }, 
+            nodes
+        })
+    }
+
     // ---------------------------------------------------------------------------
 
     // Parses (`Ms`)[https://man.openbsd.org/mdoc#Ms]:
@@ -1398,6 +1568,12 @@ impl MdocParser {
             Rule::bt => Self::parse_bt(pair),
             Rule::cd => Self::parse_cd(pair),
             Rule::cm => Self::parse_cm(pair),
+
+            Rule::db => Self::parse_db(pair),
+            Rule::dd => Self::parse_dd(pair),
+            Rule::dt => Self::parse_dt(pair),
+            Rule::dv => Self::parse_dv(pair),
+
             Rule::ms => Self::parse_ms(pair),
             Rule::mt => Self::parse_mt(pair),
             Rule::nm => Self::parse_nm(pair),
@@ -1426,6 +1602,7 @@ impl MdocParser {
 
 #[cfg(test)]
 mod test {
+    use chrono;
     use crate::man_util::parser::*;
 
     #[test]
@@ -3517,6 +3694,8 @@ mod test {
     }
 
     mod inline {
+        use chrono::Datelike;
+
         use crate::man_util::parser::*;
 
         mod rs_submacros {
@@ -5552,6 +5731,345 @@ mod test {
                         nodes: vec![
                             Element::Text("mod1".to_string()),
                             Element::Text("mod2".to_string()),
+                        ],
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn db() {
+            let content = ".Db text_argument";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Db,
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn db_not_callable() {
+            let content = ".Ad addr1 Db addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Db".to_string()),
+                    Element::Text("addr2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn db_not_parsed() {
+            let content = ".Db Ad";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Db,
+                nodes: vec![]
+            })];
+            
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn db_not_args() {
+            assert!(MdocParser::parse_mdoc(".Db").is_err());
+        }
+
+        #[test]
+        fn dd() {
+            let content = ".Dd $Mdocdate: July 2, 2018$";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { 
+                    date: DdDate::MDYFormat(
+                        Date { 
+                            month_day: ("July".to_string(), 2), 
+                            year: 2018 
+                        }
+                    ) 
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_only_date() {
+            let content = ".Dd July 2, 2018";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { 
+                    date: DdDate::MDYFormat(
+                        Date { 
+                            month_day: ("July".to_string(), 2), 
+                            year: 2018 
+                        }
+                    )  
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_no_date() {
+            let content = ".Dd $Mdocdate$";
+            let date = chrono::offset::Utc::now().date_naive();
+            let month = match date.month() {
+                1  => "January",
+                2  => "February",
+                3  => "March",
+                4  => "April",
+                5  => "May",
+                6  => "June",
+                7  => "July",
+                8  => "August",
+                9  => "September",
+                10 => "October",
+                11 => "November",
+                12 => "December",
+                _  => unreachable!() 
+            };
+            let date = DdDate::MDYFormat(Date { 
+                month_day: (month.to_string(), date.day() as u8), 
+                year: date.year() as u16 
+            });
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { 
+                    date: date 
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_numeric_date() {
+            let content = ".Dd 2018-12-31";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { 
+                    date: DdDate::MDYFormat(Date { 
+                        month_day: ("December".to_string(), 31), 
+                        year: 2018 
+                    })
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_not_args() {
+            let content = ".Dd";
+            let date = chrono::offset::Utc::now().date_naive();
+            let month = match date.month() {
+                1  => "January",
+                2  => "February",
+                3  => "March",
+                4  => "April",
+                5  => "May",
+                6  => "June",
+                7  => "July",
+                8  => "August",
+                9  => "September",
+                10 => "October",
+                11 => "November",
+                12 => "December",
+                _  => unreachable!() 
+            };
+            let date = DdDate::MDYFormat(Date { 
+                month_day: (month.to_string(), date.day() as u8), 
+                year: date.year() as u16 
+            });
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { 
+                    date: date 
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_not_callable() {
+            let content = ".Ad addr1 Dd addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Dd".to_string()),
+                    Element::Text("addr2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dd_not_parsed() {
+            let content = ".Dd Ad 2, 2018";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dd { 
+                    date: DdDate::MDYFormat(Date { 
+                        month_day: ("Ad".to_string(), 2), 
+                        year: 2018 
+                    })
+                },
+                nodes: vec![]
+            })];
+            
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt() {
+            let content = ".Dt PROGNAME 1 i386";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dt { 
+                    title: "PROGNAME".to_string(),
+                    section: "General Commands".to_string(),
+                    arch: Some("i386".to_string())
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt_not_arhc() {
+            let content = ".Dt PROGNAME 1";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dt { 
+                    title: "PROGNAME".to_string(),
+                    section: "General Commands".to_string(),
+                    arch: None
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt_not_callable() {
+            let content = ".Ad addr1 Dt addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("Dt".to_string()),
+                    Element::Text("addr2".to_string()),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt_not_parsed() {
+            let content = ".Dt Ad 1";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dt { 
+                    title: "AD".to_string(),
+                    section: "General Commands".to_string(),
+                    arch: None
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dt_not_args() {
+            assert!(MdocParser::parse_mdoc(".Dt").is_err())
+        }
+
+        #[test]
+        fn dv() {
+            let content = ".Dv CONSTANT1 CONSTANT2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dv { 
+                    identifiers: vec![
+                        "CONSTANT1".to_string(),
+                        "CONSTANT2".to_string()
+                    ]
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn dv_not_args() {
+            assert!(MdocParser::parse_mdoc(".Dv").is_err())
+        }
+
+        #[test]
+        fn dv_callable() {
+            let content = ".Ad addr1 addr2 Dv CONST1";
+            let elemenets = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()),
+                    Element::Text("addr2".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Dv {
+                            identifiers: vec![
+                                "CONST1".to_string()
+                            ]
+                        },
+                        nodes: vec![]
+                    }),
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elemenets)
+        }
+
+        #[test]
+        fn dv_parsed() {
+            let content = ".Dv CONST1 Ad addr1 addr2";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Dv { 
+                    identifiers: vec![
+                        "CONST1".to_string()
+                    ]
+                },
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![
+                            Element::Text("addr1".to_string()),
+                            Element::Text("addr2".to_string()),
                         ],
                     }),
                 ],
