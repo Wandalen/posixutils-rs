@@ -133,9 +133,7 @@ pub enum Macro {
     Ex {
         utilities: Vec<String>,
     },
-    Fa {
-        arguments: Vec<String>,
-    },
+    Fa,
     Fd {
         directive: String,
         arguments: Vec<String>,

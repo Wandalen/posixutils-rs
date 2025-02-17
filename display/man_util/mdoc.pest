@@ -42,7 +42,8 @@ inline = {
   | bt 
   | cd | cm 
   | db | dd | dt | dv 
-  | em | er | es | ev | ex |
+  | em | er | es | ev | ex
+  | fa |
     text_production 
 }
 
@@ -380,3 +381,8 @@ er = ${ "Er" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 es = ${ "Es" ~ !text_arg ~ ws+ ~ arg ~ ws+ ~ arg ~ NEWLINE? }
 ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 ex = ${ "Ex" ~ !text_arg ~ ws+ ~ "-std" ~ (ws+ ~ text_arg)* ~ NEWLINE? }
+
+quote    = ${ "\"" | "\'" }
+expr_arg = @{ (!(quote | ws | NEWLINE) ~ ANY)+ }
+fa_body  = ${ quote ~ (ws* ~ expr_arg)+ ~ ws* ~ quote }
+fa       = ${ "Fa" ~ !text_arg ~ (ws* ~ (fa_body | arg))+ ~ ws* ~ NEWLINE? }
