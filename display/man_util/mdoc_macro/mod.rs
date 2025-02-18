@@ -196,28 +196,26 @@ pub enum Macro {
     Nm {
         name: Option<Vec<String>>,
     },
-    No {
-        words: Vec<String>,
+    No{ 
+        words: Vec<String> 
     },
     Ns,
     Nx(NxType),
     Oo,
     Oc, // Close multi-line Oo context
     Op,
-    Os {
-        fotter_text: Option<String>,
+    Os{ 
+        footer_text: Option<String>, 
     },
     Ot {
-        func_type: String,
+        functype: String,
     },
     Ox(OxType),
-    Pa {
-        names: Vec<String>,
+    Pa{ 
+        names: Vec<String> 
     },
     Pf {
-        prefix: String,
-        macro_name: String,
-        arguments: Vec<String>,
+        prefix: String
     },
     Po,
     Pc, // Close parenthesised context opened by Po
@@ -229,13 +227,13 @@ pub enum Macro {
     Qq,
     Rs,
     Re, // Close an Rs block
-    Rv {
-        functions: Vec<String>,
+    Rv{ 
+        functions: Vec<String> 
     },
     Sh {
         title: String,
     },
-    Sm(SmMode),
+    Sm(Option<SmMode>),
     So,
     Sc, // Close single-quoted context opened by So
     Sq,
