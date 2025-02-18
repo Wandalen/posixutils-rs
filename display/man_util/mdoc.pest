@@ -38,8 +38,8 @@ text_production = { at | bsx | bx | dx | fx | nx | ox | st | rv }
 
 inline = { 
   rs_submacro | 
-  ad | an | ap | ar | bt | cd | cm | db | dd | dt | dv |
-  ms | mt | nm | no | ns | os | ot | pa | pf | pp |
+  ad | an | ap | ar | bt | cd | cm | db | dd | dt | 
+  dv | ms | mt | no | ns | os | ot | pa | pf | pp |
   sm | sx | sy | tg | tn | ud | ux | va | vt | xr |
   text_production 
 }
@@ -378,21 +378,21 @@ dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Document preamble and NAME section macros
 os = ${ "Os" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-nm = ${ "Nm" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
 // -- Sections and cross references
 // sx = ${ "Sx" ~ }
 xr = ${ "Xr" ~ ws+ ~ text_arg ~ ws+ ~ text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-tg = ${ "Tg" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+term = ${ text_arg }
+tg = ${ "Tg" ~ ws+ ~ term ~ ws* ~ NEWLINE? }
 pp = ${ "Pp" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
 // -- Spacing control
-pf = ${ "Pf" ~ ws+ ~ text_arg ~ ws+ ~ macro_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+pf = ${ "Pf" ~ ws+ ~ text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 ns = ${ "Ns" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
-on = { "on" }
-off = { "off" }
-spacing_mode = { on | off }
+sm_on = { "on" }
+sm_off = { "off" }
+spacing_mode = { sm_on | sm_off }
 sm = ${ "Sm"  ~ !text_arg ~ (ws+ ~ spacing_mode)? ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
 // -- Semantic markup for command line utilities
@@ -400,11 +400,14 @@ pa = ${ "Pa" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Semantic markup for function libraries
 ot = ${ "Ot" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
-// vt = ${ "Vt" ~ }
 // va = ${ "Va" ~ }
 
 // -- Various semantic markup
-mt = ${ "Mt" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+mail_to = ${ localpart "@" domain }  
+localpart = ${ text_arg }  
+domain = ${ subdomain ~ ("." ~ subdomain)+ }  
+subdomain = ${ text_arg }  
+mt = ${ "Mt" ~ ws+ ~ mail_to ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 ms = ${ "Ms" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Physical markup
