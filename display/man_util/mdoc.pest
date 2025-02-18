@@ -40,7 +40,7 @@ inline = {
   rs_submacro | 
   ad | an | ap | ar | bt | cd | cm | db | dd | dt | 
   dv | ms | mt | no | ns | os | ot | pa | pf | pp |
-  sm | sx | sy | tg | tn | ud | ux | va | vt | xr |
+  sm | sx | sy | tg | tn | ud | ux | va | xr |
   text_production 
 }
 
