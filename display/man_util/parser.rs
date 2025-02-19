@@ -1495,6 +1495,26 @@ impl MdocParser {
         })
     }
 
+    fn parse_in(pair: Pair<Rule>) -> Element {
+        let arg = pair.into_inner().next().unwrap().into_inner().next().unwrap();
+
+        let mut file_name = None;
+        let mut nodes = Vec::new();
+
+        if matches!(arg.as_rule(), Rule::macro_arg) {
+            nodes.push(Self::parse_element(arg));
+        } else {
+            file_name = Some(arg.as_str().to_string());
+        }
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::In { 
+                file_name: file_name 
+            },
+            nodes
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1524,6 +1544,7 @@ impl MdocParser {
             Rule::ft => Self::parse_ft(pair),
             Rule::hf => Self::parse_hf(pair),
             Rule::ic => Self::parse_ic(pair),
+            Rule::In => Self::parse_in(pair),
             _ => unreachable!(),
         }
     }
@@ -6869,6 +6890,69 @@ mod test {
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ic {
                             keyword: ":wq".to_string()
+                        },
+                        nodes: vec![]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        #[allow(non_snake_case)]
+        fn In() {
+            let input = ".In stdatomic.h";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::In {
+                    file_name: Some("stdatomic.h".to_string())
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        #[allow(non_snake_case)]
+        fn In_not_args() {
+            assert!(MdocParser::parse_mdoc(".In").is_err());
+        }
+
+        #[test]
+        #[allow(non_snake_case)]
+        fn In_parsed() {
+            let input = ".In Ad addr";
+            let elements = vec![Element::Macro(MacroNode { 
+                mdoc_macro: Macro::In {
+                    file_name: None
+                }, 
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![
+                            Element::Text("addr".to_string())
+                        ]
+                    })
+                ] 
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        #[allow(non_snake_case)]
+        fn In_callable() {
+            let input = ".Ad In stdatomic.c";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::In {
+                            file_name: Some("stdatomic.c".to_string())
                         },
                         nodes: vec![]
                     })

@@ -45,7 +45,7 @@ inline = {
   | em | er | es | ev | ex
   | fa | fd | fl | fr | ft | Fn 
   | hf 
-  | ic |
+  | ic | In |
     text_production 
 }
 
@@ -413,3 +413,4 @@ closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
 
 hf = ${ "Hf" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 ic = ${ "Ic" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+In = ${ "In" ~ !text_arg ~ ws+ ~ arg ~ ws* ~ NEWLINE? }

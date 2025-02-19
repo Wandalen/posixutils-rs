@@ -159,7 +159,7 @@ pub enum Macro {
         keyword: String,
     },
     In {
-        file_name: String,
+        file_name: Option<String>,
     },
     It(ItType),
     Lb {
