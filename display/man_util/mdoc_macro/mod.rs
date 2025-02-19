@@ -124,11 +124,10 @@ pub enum Macro {
         closing_dilimiter: Option<char>,
     },
     Er,
-    Es, // Obsolete
-    // {
-        // opening_delimiter: char,
-        // closing_delimiter: char,
-    // },
+    Es { // Obsolete
+        opening_delimiter: Option<char>,
+        closing_delimiter: Option<char>,
+    },
     Ev,
     Ex {
         utilities: Vec<String>,
@@ -138,23 +137,16 @@ pub enum Macro {
         directive: String,
         arguments: Vec<String>,
     },
-    Fl {
-        words: Vec<String>,
-    },
-    Fn {
-        func_name: String,
-        arguments: Vec<String>,
-    },
+    Fl,
+    Fn,
     Fo {
         func_name: String,
     },
     Fc, // End a function context started by Fo
     Fr {
-        number: i32,
+        num: i32
     },
-    Ft {
-        func_type: String,
-    },
+    Ft,
     Fx(FxType),
     Hf {
         // TODO: Not implemented???

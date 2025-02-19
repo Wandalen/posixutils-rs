@@ -43,7 +43,7 @@ inline = {
   | cd | cm 
   | db | dd | dt | dv 
   | em | er | es | ev | ex
-  | fa | fd |
+  | fa | fd | fl | fr | ft | Fn |
     text_production 
 }
 
@@ -378,16 +378,31 @@ arch    = ${ ws+ ~ text_arg }
 dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 em = ${ "Em" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 er = ${ "Er" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
-es = ${ "Es" ~ !text_arg ~ ws+ ~ arg ~ ws+ ~ arg ~ NEWLINE? }
+es = ${ "Es" ~ !text_arg ~ ws+ ~ (opening_delimiter | macro_arg) ~ ws+ ~ (closing_delimiter | macro_arg) ~ NEWLINE? }
 ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 ex = ${ "Ex" ~ !text_arg ~ ws+ ~ "-std" ~ (ws+ ~ text_arg)* ~ NEWLINE? }
 
-// -- Fa
-quote    = ${ "\"" | "\'" }
 expr_arg = @{ (!(quote | ws | NEWLINE) ~ ANY)+ }
-fa_body  = ${ quote ~ (ws* ~ expr_arg)+ ~ ws* ~ quote }
+
+// -- Fa
+quote    = { "\"" | "\'" }
+fa_body  = ${ quote? ~ (ws* ~ expr_arg)+ ~ quote? }
 fa       = ${ "Fa" ~ !text_arg ~ (ws+ ~ (fa_body | arg))+ ~ ws* ~ NEWLINE? }
 
 // -- Fd
 directive = ${ "#" ~ text_arg }
 fd        = ${ "Fd" ~ !text_arg ~ ws+ ~ directive ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+
+// -- Fn
+fn_body = ${ quote? ~ (ws* ~ expr_arg)+ ~ quote? }
+Fn      = ${ "Fn" ~ !text_arg ~ (ws+ ~ (fn_body | arg)) }
+
+fl = ${ "Fl" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+
+fr = ${ "Fr" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+ft = ${ "Ft" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Delimeters
+
+opening_delimiter = { "(" | "[" }
+closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
