@@ -1515,6 +1515,59 @@ impl MdocParser {
         })
     }
 
+    fn parse_lb(pair: Pair<Rule>) -> Element {
+        let lib_name = pair.into_inner().next().unwrap().as_str().to_string();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Lb {
+                lib_name: lib_name
+            },
+            nodes: vec![]
+        })
+    }
+
+    fn parse_li(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Li,
+            nodes
+        })
+    }
+
+    fn parse_lk(pair: Pair<Rule>) -> Element {
+        let mut inner = pair.into_inner();
+
+        let uri = inner.next().unwrap().as_str().to_string();
+        let mut display_name = None;
+        let mut nodes = Vec::new();
+
+        if let Some(arg) = inner.next() {
+            if matches!(arg.as_rule(), Rule::macro_arg) {
+                nodes.push(Self::parse_element(arg));
+            } else {
+                display_name = Some(arg.as_str().to_string())
+            }
+        };
+
+        nodes.extend(inner.map(Self::parse_element));
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Lk {
+                uri: uri,
+                display_name: display_name
+            },
+            nodes
+        })
+    }
+
+    fn parse_lp(pair: Pair<Rule>) -> Element {
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Lp,
+            nodes: vec![]
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1545,6 +1598,10 @@ impl MdocParser {
             Rule::hf => Self::parse_hf(pair),
             Rule::ic => Self::parse_ic(pair),
             Rule::In => Self::parse_in(pair),
+            Rule::lb => Self::parse_lb(pair),
+            Rule::li => Self::parse_li(pair),
+            Rule::lk => Self::parse_lk(pair),
+            Rule::lp => Self::parse_lp(pair),
             _ => unreachable!(),
         }
     }
@@ -6956,6 +7013,208 @@ mod test {
                         },
                         nodes: vec![]
                     })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn lb() {
+            let input = ".Lb libname";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Lb {
+                    lib_name: "libname".to_string()
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn lb_wrong_args() {
+            assert!(MdocParser::parse_mdoc(".Lb").is_err());
+            assert!(MdocParser::parse_mdoc(".Lb libname1 libname2").is_err());
+        }
+
+        #[test]
+        fn lb_not_parsed() {
+            let input = ".Lb Ar";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Lb { 
+                    lib_name: "Ar".to_string() 
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn lb_not_callable() {
+            let input = ".Ad Lb stdio.h";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("Lb".to_string()),
+                    Element::Text("stdio.h".to_string())
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn li() {
+            let input = ".Li Book Antiqua";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Li,
+                nodes: vec![
+                    Element::Text("Book".to_string()),
+                    Element::Text("Antiqua".to_string())
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn li_not_args() {
+            assert!(MdocParser::parse_mdoc(".Li").is_err());
+        }
+
+        #[test]
+        fn li_parsed() {
+            let input = ".Li Ev DEFAULT_FONT";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Li,
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ev,
+                        nodes: vec![
+                            Element::Text("DEFAULT_FONT".to_string())
+                        ]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn li_callable() {
+            let input = ".Ad Li font";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Li,
+                        nodes: vec![
+                            Element::Text("font".to_string())
+                        ]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn lk() {
+            let input = ".Lk https://bsd.lv \"The BSD.lv Project\"";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Lk {
+                    uri: "https://bsd.lv".to_string(),
+                    display_name: Some("\"The BSD.lv Project\"".to_string())
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn lk_not_args() {
+            assert!(MdocParser::parse_mdoc(".Lk").is_err());
+        }
+
+        #[test]
+        fn lk_parsed() {
+            let input = ".Lk https://bsd.lv Ev NAME";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Lk {
+                    uri: "https://bsd.lv".to_string(),
+                    display_name: None
+                },
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ev,
+                        nodes: vec![
+                            Element::Text("NAME".to_string())
+                        ]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn lk_callable() {
+            let input = ".Ad addr Lk https://bsd.lv";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Lk {
+                            uri: "https://bsd.lv".to_string(),
+                            display_name: None
+                        },
+                        nodes: vec![]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn lp() {
+            let input = ".Lp";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Lp,
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn lp_not_parsed() {
+            assert!(MdocParser::parse_mdoc(".Lp Ad addr").is_err());
+        }
+
+        #[test]
+        fn lp_not_callable() {
+            let input = ".Ad addr Lp";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr".to_string()),
+                    Element::Text("Lp".to_string())
                 ]
             })];
 

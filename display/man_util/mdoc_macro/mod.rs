@@ -165,13 +165,12 @@ pub enum Macro {
     Lb {
         lib_name: String,
     },
-    Li {
-        words: Vec<String>,
-    },
+    Li,
     Lk {
         uri: String,
         display_name: Option<String>,
     },
+    Lp,
     Mt {
         // https://man.openbsd.org/mdoc#Mt
         mail_to: String,

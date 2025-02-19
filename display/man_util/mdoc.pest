@@ -18,7 +18,7 @@ _COMMENT = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
 // -- List of Callable macros
-macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st | db | dd | dt | ex | fd | hf) ~ (block_partial_implicit | inline) }
+macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st | db | dd | dt | ex | fd | hf | lb | lp) ~ (block_partial_implicit | inline) }
 
 arg = { macro_arg | text_arg }
 
@@ -45,8 +45,9 @@ inline = {
   | em | er | es | ev | ex
   | fa | fd | fl | fr | ft | Fn 
   | hf 
-  | ic | In |
-    text_production 
+  | ic | In 
+  | lb | li | lk | lp |
+   text_production 
 }
 
 // ----- Mdoc document
@@ -414,3 +415,11 @@ closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
 hf = ${ "Hf" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 ic = ${ "Ic" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 In = ${ "In" ~ !text_arg ~ ws+ ~ arg ~ ws* ~ NEWLINE? }
+lb = ${ "Lb" ~ !text_arg ~ ws+ ~ text_arg ~ NEWLINE? }
+li = ${ "Li" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Lk
+link = { text_arg }
+display_name = @{ ("\""? ~ (ws* ~ expr_arg)+ ~ "\""?)+ }
+lk = ${ "Lk" ~ !text_arg ~ ws+ ~ link ~ (ws* ~ (macro_arg | display_name))? ~ ws* ~ NEWLINE? }
+lp = ${ "Lp" ~ !text_arg ~ ws* ~ NEWLINE? }
