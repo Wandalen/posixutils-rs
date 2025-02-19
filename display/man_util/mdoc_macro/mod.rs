@@ -138,20 +138,22 @@ pub enum Macro {
         arguments: Vec<String>,
     },
     Fl,
-    Fn,
+    Fn {
+        funcname: Option<String>
+    },
     Fo {
         func_name: String,
     },
     Fc, // End a function context started by Fo
-    Fr {
-        num: i32
+    Fr { // Obsolete
+        num: Option<i64>
     },
     Ft,
     Fx(FxType),
     Hf {
         // TODO: Not implemented???
         // https://man.openbsd.org/mdoc#Hf
-        file_name: String,
+        file_name: Option<String>,
     },
     Ic {
         keywords: Vec<String>,

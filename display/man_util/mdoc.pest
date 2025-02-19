@@ -18,7 +18,7 @@ _COMMENT = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
 // -- List of Callable macros
-macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st | db | dd | dt | ex | fd) ~ (block_partial_implicit | inline) }
+macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st | db | dd | dt | ex | fd | hf) ~ (block_partial_implicit | inline) }
 
 arg = { macro_arg | text_arg }
 
@@ -43,7 +43,8 @@ inline = {
   | cd | cm 
   | db | dd | dt | dv 
   | em | er | es | ev | ex
-  | fa | fd | fl | fr | ft | Fn |
+  | fa | fd | fl | fr | ft | Fn 
+  | hf |
     text_production 
 }
 
@@ -381,28 +382,32 @@ er = ${ "Er" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 es = ${ "Es" ~ !text_arg ~ ws+ ~ (opening_delimiter | macro_arg) ~ ws+ ~ (closing_delimiter | macro_arg) ~ NEWLINE? }
 ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 ex = ${ "Ex" ~ !text_arg ~ ws+ ~ "-std" ~ (ws+ ~ text_arg)* ~ NEWLINE? }
-
 expr_arg = @{ (!(quote | ws | NEWLINE) ~ ANY)+ }
 
 // -- Fa
 quote    = { "\"" | "\'" }
 fa_body  = ${ quote? ~ (ws* ~ expr_arg)+ ~ quote? }
-fa       = ${ "Fa" ~ !text_arg ~ (ws+ ~ (fa_body | arg))+ ~ ws* ~ NEWLINE? }
+fa       = ${ "Fa" ~ !text_arg ~ (ws+ ~ (macro_arg | fa_body))+ ~ ws* ~ NEWLINE? }
 
 // -- Fd
 directive = ${ "#" ~ text_arg }
 fd        = ${ "Fd" ~ !text_arg ~ ws+ ~ directive ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 
 // -- Fn
-fn_body = ${ quote? ~ (ws* ~ expr_arg)+ ~ quote? }
-Fn      = ${ "Fn" ~ !text_arg ~ (ws+ ~ (fn_body | arg)) }
+fn_funcname = { expr_arg }
+fn_arg  = ${ quote? ~ (ws* ~ expr_arg)+ ~ quote? }
+Fn      = ${ "Fn" ~ !text_arg ~ ws+ ~ fn_funcname? ~ (ws* ~ (macro_arg | fn_arg))+ ~ ws* ~ NEWLINE? }
 
 fl = ${ "Fl" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-
-fr = ${ "Fr" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 ft = ${ "Ft" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Fr
+number = { ASCII_DIGIT+ }
+fr     = ${ "Fr" ~ !text_arg ~ (ws+ ~ (number | arg))+ ~ ws* ~ NEWLINE? }
 
 // -- Delimeters
 
 opening_delimiter = { "(" | "[" }
 closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
+
+hf = ${ "Hf" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
