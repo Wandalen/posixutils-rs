@@ -1481,6 +1481,20 @@ impl MdocParser {
         })
     }
 
+    fn parse_ic(pair: Pair<Rule>) -> Element {
+        let mut inner = pair.into_inner();
+
+        let command = inner.next().unwrap().as_str().to_string();
+        let nodes = inner.map(Self::parse_element).collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ic { 
+                keyword: command
+            },
+            nodes
+        })
+    }
+
     fn parse_inline(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -1509,6 +1523,7 @@ impl MdocParser {
             Rule::fr => Self::parse_fr(pair),
             Rule::ft => Self::parse_ft(pair),
             Rule::hf => Self::parse_hf(pair),
+            Rule::ic => Self::parse_ic(pair),
             _ => unreachable!(),
         }
     }
@@ -6797,6 +6812,66 @@ mod test {
                 nodes: vec![
                     Element::Text("Hf".to_string()),
                     Element::Text("path/to/some/file".to_string()),
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ic() {
+            let input = ".Ic :wq";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ic {
+                    keyword: ":wq".to_string()
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ic_not_args() {
+            assert!(MdocParser::parse_mdoc(".Ic").is_err());
+        }
+
+        #[test]
+        fn ic_parsed() {
+            let input = ".Ic lookup Cm file bind";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ic {
+                    keyword: "lookup".to_string()
+                },
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Cm,
+                        nodes: vec![
+                            Element::Text("file".to_string()),
+                            Element::Text("bind".to_string())
+                        ]
+                    })
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ic_callable() {
+            let input = ".Ad Ic :wq";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ic {
+                            keyword: ":wq".to_string()
+                        },
+                        nodes: vec![]
+                    })
                 ]
             })];
 

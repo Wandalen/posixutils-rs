@@ -156,7 +156,7 @@ pub enum Macro {
         file_name: Option<String>,
     },
     Ic {
-        keywords: Vec<String>,
+        keyword: String,
     },
     In {
         file_name: String,
