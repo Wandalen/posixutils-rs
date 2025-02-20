@@ -978,6 +978,20 @@ impl MdocParser {
             })
         }
 
+        
+        // Parses (`Ex`)[https://man.openbsd.org/mdoc#Ex]
+        // .Ex VAR, ...
+        fn parse_ex(pair: Pair<Rule>) -> Element {
+            let utilities = pair.into_inner().map(|p| p.as_str().to_string()).collect();
+
+            Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ex {
+                    utilities: utilities
+                },
+                nodes: vec![]
+            })
+        }
+
         // Parses (`Nx`)[http://man.openbsd.org/mdoc#Nx]:
         // `Nx [version]`
         fn parse_nx(pair: Pair<Rule>) -> Element {
@@ -1022,6 +1036,7 @@ impl MdocParser {
             Rule::bx => parse_bx(pair),
             Rule::dx => parse_dx(pair),
             Rule::fx => parse_fx(pair),
+            Rule::ex => parse_ex(pair),
             Rule::nx => parse_nx(pair),
             Rule::ox => parse_ox(pair),
             Rule::st => parse_st(pair),
@@ -1115,10 +1130,12 @@ impl MdocParser {
 
     // Parses (`Db`)[https://man.openbsd.org/mdoc#Db]
     // Obsolete
-    fn parse_db(_pair: Pair<Rule>) -> Element {
+    fn parse_db(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Db,
-            nodes: vec![]
+            nodes
         })
     }
 
@@ -1231,20 +1248,21 @@ impl MdocParser {
     fn parse_dt(pair: Pair<Rule>) -> Element {
         let mut inner = pair.into_inner();
 
-        let title = inner.next().unwrap().as_str().trim().to_string().to_uppercase();
-        let section = match inner.next().unwrap().as_str().trim() {
-            "1"  => "General Commands",
-            "2"  => "System Calls",
-            "3"  => "Library Functions",
-            "3p" => "Perl Library",
-            "4"  => "Device Drivers",
-            "5"  => "File Formats",
-            "6"  => "Games",
-            "7"  => "Miscellaneous Information",
-            "8"  => "System Manager's Manual",
-            "9"  => "Kernel Developer's Manual",
-            _    => unreachable!()
+        let (title, section) = if let Some(arg) = inner.next() {
+            if matches!(arg.as_rule(), Rule::title) {
+                let title = Some(arg.as_str().to_string());
+                let section = inner.next().unwrap().as_str().to_string();
+                
+                (title, section)
+            } else {
+                let section = arg.as_str().to_string();
+                
+                (None, section)
+            }
+        } else {
+            unreachable!()
         };
+        
         let arch = match inner.next() {
             Some(arch) => Some(arch.as_str().trim().to_string()),
             None => None
@@ -1253,7 +1271,7 @@ impl MdocParser {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Dt { 
                 title: title, 
-                section: section.to_string(), 
+                section: section, 
                 arch: arch 
             },
             nodes: vec![]
@@ -1262,22 +1280,10 @@ impl MdocParser {
 
     // Parses (`Dv`)[https://man.openbsd.org/mdoc#Dv]
     fn parse_dv(pair: Pair<Rule>) -> Element {
-        let inner = pair.into_inner();
-        
-        let args = inner.flat_map(|p| p.into_inner());
-        let is_constant = |item: &Pair<Rule>| matches!(item.as_rule(), Rule::text_arg);
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
 
-        let identifiers: Vec<String> = args
-            .clone()
-            .take_while(is_constant)
-            .map(|p| p.as_str().to_string())
-            .collect();
-
-        let nodes: Vec<Element> = args.skip_while(is_constant).map(Self::parse_arg).collect();
-        Element::Macro(MacroNode { 
-            mdoc_macro: Macro::Dv { 
-                identifiers:  identifiers
-            }, 
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Dv,
             nodes
         })
     }
@@ -1345,19 +1351,6 @@ impl MdocParser {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Ev,
             nodes
-        })
-    }
-
-    // Parses (`Ex`)[https://man.openbsd.org/mdoc#Ex]
-    // .Ex VAR, ...
-    fn parse_ex(pair: Pair<Rule>) -> Element {
-        let utilities = pair.into_inner().map(|p| p.as_str().to_string()).collect();
-
-        Element::Macro(MacroNode {
-            mdoc_macro: Macro::Ex {
-                utilities: utilities
-            },
-            nodes: vec![]
         })
     }
 
@@ -1467,6 +1460,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Hf`)[https://man.openbsd.org/mdoc#Hf]
+    // .Hf filename
     fn parse_hf(pair: Pair<Rule>) -> Element {
         let file_name = match pair.into_inner().next() {
             Some(file_name) => Some(file_name.as_str().to_string()),
@@ -1481,6 +1476,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Ic`)[https://man.openbsd.org/mdoc#Ic]
+    // .Ic keyword
     fn parse_ic(pair: Pair<Rule>) -> Element {
         let mut inner = pair.into_inner();
 
@@ -1495,6 +1492,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`In`)[https://man.openbsd.org/mdoc#In]
+    // .In filename
     fn parse_in(pair: Pair<Rule>) -> Element {
         let arg = pair.into_inner().next().unwrap().into_inner().next().unwrap();
 
@@ -1515,6 +1514,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Lb`)[https://man.openbsd.org/mdoc#Lb]
+    // .Lb libname
     fn parse_lb(pair: Pair<Rule>) -> Element {
         let lib_name = pair.into_inner().next().unwrap().as_str().to_string();
 
@@ -1526,6 +1527,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Li`)[https://man.openbsd.org/mdoc#Li]
+    // .Li word ...
     fn parse_li(pair: Pair<Rule>) -> Element {
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
@@ -1535,6 +1538,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Lk`)[https://man.openbsd.org/mdoc#Lk]
+    // .Lk link [display_name]
     fn parse_lk(pair: Pair<Rule>) -> Element {
         let mut inner = pair.into_inner();
 
@@ -1561,6 +1566,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Lp`)[https://man.openbsd.org/mdoc#Lp]
+    // Deprecated
     fn parse_lp(pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Lp,
@@ -1588,7 +1595,6 @@ impl MdocParser {
             Rule::er => Self::parse_er(pair),
             Rule::es => Self::parse_es(pair),
             Rule::ev => Self::parse_ev(pair),
-            Rule::ex => Self::parse_ex(pair),
             Rule::fa => Self::parse_fa(pair),
             Rule::fd => Self::parse_fd(pair),
             Rule::fl => Self::parse_fl(pair),
@@ -5752,7 +5758,9 @@ mod test {
             let content = ".Db text_argument";
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Db,
-                nodes: vec![]
+                nodes: vec![
+                    Element::Text("text_argument".to_string())
+                ]
             })];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -5780,7 +5788,9 @@ mod test {
             let content = ".Db Ad";
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Db,
-                nodes: vec![]
+                nodes: vec![
+                    Element::Text("Ad".to_string())
+                ]
             })];
             
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -5790,6 +5800,7 @@ mod test {
         #[test]
         fn db_not_args() {
             assert!(MdocParser::parse_mdoc(".Db").is_err());
+            assert!(MdocParser::parse_mdoc(".Db arg1 arg2").is_err());
         }
 
         #[test]
@@ -5950,31 +5961,33 @@ mod test {
 
         #[test]
         fn dt() {
-            let content = ".Dt PROGNAME 1 i386";
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dt { 
-                    title: "PROGNAME".to_string(),
-                    section: "General Commands".to_string(),
-                    arch: Some("i386".to_string())
-                },
-                nodes: vec![]
-            })];
-
-            let mdoc = MdocParser::parse_mdoc(content).unwrap();
-            assert_eq!(mdoc.elements, elements);
-        }
-
-        #[test]
-        fn dt_not_arhc() {
-            let content = ".Dt PROGNAME 1";
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dt { 
-                    title: "PROGNAME".to_string(),
-                    section: "General Commands".to_string(),
-                    arch: None
-                },
-                nodes: vec![]
-            })];
+            let content = ".Dt PROGNAME 1 i386\n.Dt 1 i386 \n.Dt PROGNAME 1";
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dt { 
+                        title: Some("PROGNAME".to_string()),
+                        section: "1".to_string(),
+                        arch: Some("i386".to_string())
+                    },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dt { 
+                        title: None,
+                        section: "1".to_string(),
+                        arch: Some("i386".to_string())
+                    },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Dt { 
+                        title: Some("PROGNAME".to_string()),
+                        section: "1".to_string(),
+                        arch: None
+                    },
+                    nodes: vec![]
+                })
+            ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
@@ -6001,8 +6014,8 @@ mod test {
             let content = ".Dt Ad 1";
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Dt { 
-                    title: "AD".to_string(),
-                    section: "General Commands".to_string(),
+                    title: Some("Ad".to_string()),
+                    section: "1".to_string(),
                     arch: None
                 },
                 nodes: vec![]
@@ -6021,13 +6034,11 @@ mod test {
         fn dv() {
             let content = ".Dv CONSTANT1 CONSTANT2";
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dv { 
-                    identifiers: vec![
-                        "CONSTANT1".to_string(),
-                        "CONSTANT2".to_string()
-                    ]
-                },
-                nodes: vec![]
+                mdoc_macro: Macro::Dv,
+                nodes: vec![
+                    Element::Text("CONSTANT1".to_string()),
+                    Element::Text("CONSTANT2".to_string())
+                ]
             })];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6048,12 +6059,10 @@ mod test {
                     Element::Text("addr1".to_string()),
                     Element::Text("addr2".to_string()),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Dv {
-                            identifiers: vec![
-                                "CONST1".to_string()
-                            ]
-                        },
-                        nodes: vec![]
+                        mdoc_macro: Macro::Dv,
+                        nodes: vec![
+                            Element::Text("CONST1".to_string())
+                        ]
                     }),
                 ],
             })];
@@ -6066,12 +6075,9 @@ mod test {
         fn dv_parsed() {
             let content = ".Dv CONST1 Ad addr1 addr2";
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dv { 
-                    identifiers: vec![
-                        "CONST1".to_string()
-                    ]
-                },
+                mdoc_macro: Macro::Dv,
                 nodes: vec![
+                    Element::Text("CONST1".to_string()),
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
                         nodes: vec![

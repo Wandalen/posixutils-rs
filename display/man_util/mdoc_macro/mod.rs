@@ -106,13 +106,14 @@ pub enum Macro {
     Dc, // Close a Do block
     Dq,
     Dt {
-        title: String,
+        title: Option<String>,
         section: String,
         arch: Option<String>,
     },
-    Dv {
-        identifiers: Vec<String>,
-    },
+    // Dv {
+    //     identifiers: Vec<String>,
+    // },
+    Dv,
     Dx(DxType),
     Em,
     En,
