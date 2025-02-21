@@ -18,7 +18,14 @@ _COMMENT = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
 // -- List of Callable macros
-macro_arg = { !(d1_block | dl_block | rs_submacro | bt | st | db | dd | dt) ~ (block_partial_implicit | inline) }
+macro_arg = { 
+  !(
+    d1_block | dl_block | rs_submacro | 
+    bt | st | db | dd | dt | 
+    os | pp | rv | sm | tg | ud 
+  ) ~ 
+  (block_partial_implicit | inline) 
+}
 
 arg = { macro_arg | text_arg }
 
@@ -380,10 +387,9 @@ dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 os = ${ "Os" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
 // -- Sections and cross references
-// sx = ${ "Sx" ~ }
+sx = ${ "Sx" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 xr = ${ "Xr" ~ ws+ ~ text_arg ~ ws+ ~ text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-term = ${ text_arg }
-tg = ${ "Tg" ~ ws+ ~ term ~ ws* ~ NEWLINE? }
+tg = ${ "Tg" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 pp = ${ "Pp" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
 // -- Spacing control
@@ -400,14 +406,12 @@ pa = ${ "Pa" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Semantic markup for function libraries
 ot = ${ "Ot" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
-// va = ${ "Va" ~ }
+va = ${ "Va" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Various semantic markup
-mail_to = ${ localpart "@" domain }  
-localpart = ${ text_arg }  
-domain = ${ subdomain ~ ("." ~ subdomain)+ }  
-subdomain = ${ text_arg }  
-mt = ${ "Mt" ~ ws+ ~ mail_to ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+mailpart = ${ (!(ws | NEWLINE | "@") ~ ANY)+ }
+mail_to = @{ mailpart ~ "@" ~ mailpart }
+mt = ${ "Mt" ~ (ws+ ~ mail_to)+ ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 ms = ${ "Ms" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Physical markup
@@ -415,7 +419,7 @@ sy = ${ "Sy" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 no = ${ "No" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 tn = ${ "Tn" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
-// “currently under development”
+// Prints “currently under development”
 ud = ${ "Ud" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-// “UNIX”
+// Prints “UNIX”
 ux = ${ "Ux" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
