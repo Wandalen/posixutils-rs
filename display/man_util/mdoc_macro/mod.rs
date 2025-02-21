@@ -183,12 +183,9 @@ pub enum Macro {
         uri: String,
         display_name: Option<String>,
     },
-    Ms{
-        name: String,
-    }, 
+    Ms, 
     Mt {
-        // https://man.openbsd.org/mdoc#Mt
-        mail_to: String,
+        mails: Vec<String>,
     },
     Nd {
         line: String,
@@ -196,9 +193,7 @@ pub enum Macro {
     Nm {
         name: Option<Vec<String>>,
     },
-    No{ 
-        words: Vec<String> 
-    },
+    No,
     Ns,
     Nx(NxType),
     Oo,
@@ -207,13 +202,9 @@ pub enum Macro {
     Os{ 
         footer_text: Option<String>, 
     },
-    Ot {
-        functype: String,
-    },
+    Ot,
     Ox(OxType),
-    Pa{ 
-        names: Vec<String> 
-    },
+    Pa,
     Pf {
         prefix: String
     },
@@ -227,9 +218,7 @@ pub enum Macro {
     Qq,
     Rs,
     Re, // Close an Rs block
-    Rv{ 
-        functions: Vec<String> 
-    },
+    Rv,
     Sh {
         title: String,
     },
@@ -241,29 +230,17 @@ pub enum Macro {
         title: String,
     },
     St(StType),
-    Sx {
-        title: String,
-    },
-    Sy {
-        words: Vec<String>,
-    },
+    Sx,
+    Sy,
     Ta,
     Tg {
         term: Option<String>,
     },
-    Tn {
-        words: Vec<String>,
-    },
+    Tn,
     Ud,
     Ux,
-    Va {
-        func_type: Option<String>,
-        identifier: Vec<String>,
-    },
-    Vt{
-        var_type: String,
-        identifier: Option<String> 
-    },
+    Va,
+    Vt,
     Xo,
     Xc, // Close a scope opened by Xo
     Xr {
