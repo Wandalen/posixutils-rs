@@ -649,33 +649,61 @@ impl MdocParser {
 
 // Block partial-explicit parsing
 impl MdocParser {
-    // Parses a_block
-    fn parse_a_block(pair: Pair<Rule>) -> Element {
-        let mut block_inner = pair
-            .into_inner()
-            .next()
-            .unwrap()
-            .into_inner();
+    fn contains_end(pair: &Pair<Rule>, target: Rule) -> bool {
+        if matches!(pair.as_rule(), target) {
+            return true;
+        }
+        let mut pairs = pair.clone().into_inner();
+        while let Some(ref arg) = pairs.next() {
+            return Self::contains_end(arg, target)
+        }
+        false
+    }
 
-        // Skip a_opened        
-        let _ = block_inner.next().unwrap();
-        
-        let nodes = block_inner
-            .take_while(|p| p.as_rule() != Rule::a_closed)
+    // Parses ao
+    fn parse_ao(pair: Pair<Rule>) -> Element {
+        let nodes = pair
+            .into_inner()
+            .take_while(|p| p.as_rule() != Rule::ac)
             .map(Self::parse_element)
             .collect();
 
         Element::Macro(MacroNode { 
             mdoc_macro: Macro::Ao, 
-            nodes 
+            nodes
         })
     }
+
+    // Parses ac
+    fn parse_ac(pair: Pair<Rule>) -> Element {
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ac,
+            nodes: vec![]
+        })
+    }
+
+    // Prases 
+    // fn parse_bo(pair: Pair<Rule>) -> Element {
+    //     let mut inner = pair.into_inner();
+        
+    //     let nodes = inner
+    //         .take_while(|p| p.as_rule() != Rule::bc)
+    //         .map(Self::parse_element)
+    //         .collect();
+
+    //     Element::Macro(MacroNode { 
+    //         mdoc_macro: Macro::Ao, 
+    //         nodes 
+    //     })
+    // }
 
 
     fn parse_block_partial_explicit(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
-            Rule::a_block => Self::parse_a_block(pair),
+            Rule::ao => Self::parse_ao(pair),
+            Rule::ac => Self::parse_ac(pair),
+            // Rule::bo => Self::parse_bo(pair),
             _ => unreachable!(),
         }
     }
@@ -3746,28 +3774,54 @@ mod test {
         
         #[test]
         fn ao() {
-            let input = ".Ao \nLine\n.Ac\n.Ao\nLine1\nLine2\n.Ac\n.Ao El1 El2 El3 .Ac";
+
+
+            let input = r#".Ao
+Line1
+Line2
+.Ac
+.Ao El1 El2 El3 Ac
+.Ao
+arg Ac
+.Ao
+Line
+.Ac
+"#;
             let elements = vec![
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ao,
                     nodes: vec![
-                        Element::Text("Line\n".to_string())
+                        Element::Text("Line1".to_string()),
+                        Element::Text("Line2".to_string()),
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line1\n".to_string()),
-                        Element::Text("Line2\n".to_string())
-                    ]
+                    mdoc_macro: Macro::Ac,
+                    nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ao,
                     nodes: vec![
                         Element::Text("El1".to_string()),
                         Element::Text("El2".to_string()),
-                        Element::Text("El3".to_string())
+                        Element::Text("El3".to_string()),
                     ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ao,
+                    nodes: vec![
+                        Element::Text("arg".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ao,
+                    nodes: vec![
+                        Element::Text("Line".to_string()),
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ac,
+                    nodes: vec![]
                 })
             ];
 
@@ -3777,18 +3831,29 @@ mod test {
 
         #[test]
         fn ao_not_args() {
-            let input = ".Ao.Ac\n.Ao .Ac\n.Ao\n.Ac";
+            let input = r#".Ao.Ac
+.Ao Ac
+.Ao
+.Ac"#;
             let elements = vec![
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ao,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ac,
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ao,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ao,
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ac,
                     nodes: vec![]
                 })
             ];
@@ -3799,10 +3864,158 @@ mod test {
 
         #[test]
         fn ao_parsed() {
-            let input = ".Ao\n.Ad addr\n.Ac";
+            let input = r#".Ao
+.Ad addr
+.Ac
+.Ao
+Line
+.Ac
+"#;
             let elements = vec![
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ao,
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Ad,
+                            nodes: vec![
+                                Element::Text("addr".to_string())
+                            ]
+                        }),
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ac,
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ao,
+                    nodes: vec![
+                        Element::Text("Line".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ac,
+                    nodes: vec![]
+                }),
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn ao_bad_parsed() {
+            let input = r#".Ao El1
+.Dv CONSTANT Ac
+.Ao
+Line
+.Ac
+"#;
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ao,
+                    nodes: vec![
+                        Element::Text("El1".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dv,
+                            nodes: vec![
+                                Element::Text("CONSTANT".to_string()),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ac,
+                                    nodes: vec![]
+                                }),
+                            ]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Ao,
+                            nodes: vec![
+                                Element::Text("Line".to_string())
+                            ]
+                        })
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ac,
+                    nodes: vec![]
+                })
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn bo() {
+            let input = ".Bo \nLine\n.Bc\n.Bo\nLine1\nLine2\n.Bc\n.Bo El1 El2 El3 Bc\n.Bo Ad addr\nEl2 El3 .Bc";
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bo,
+                    nodes: vec![
+                        Element::Text("Line\n".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bo,
+                    nodes: vec![
+                        Element::Text("Line1\n".to_string()),
+                        Element::Text("Line2\n".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bo,
+                    nodes: vec![
+                        Element::Text("El1".to_string()),
+                        Element::Text("El2".to_string()),
+                        Element::Text("El3".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bo,
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Ad,
+                            nodes: vec![
+                                Element::Text("addr".to_string())
+                            ]
+                        }),
+                        Element::Text("El2".to_string()),
+                        Element::Text("El3".to_string()),
+                    ]
+                })
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn bo_not_args() {
+            let input = ".Bo.Bc\n.Bo .Bc\n.Bo\n.Bc";
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bo,
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bo,
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bo,
+                    nodes: vec![]
+                })
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn bo_parsed() {
+            let input = ".Bo\n.Ad addr\n.Bc\n.Bo Ad addr Bc\n.Bo El1\n.Bd addr Bc";
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bo,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Ad,
@@ -3816,7 +4029,7 @@ mod test {
 
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elements);
-            assert!(MdocParser::parse_mdoc(".Ao Ad addr .Ac").is_err());
+            assert!(MdocParser::parse_mdoc(".Bo Ad addr .Bc").is_err());
         }
     }
 

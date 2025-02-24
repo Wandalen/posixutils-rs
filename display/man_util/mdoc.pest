@@ -52,7 +52,7 @@ block_full_implicit = { nd_block | nm_block | sh_block | ss_block }
 
 block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block | dq_block | en_block | op_block | pq_block | ql_block | qq_block | sq_block | vt_block }
 
-block_partial_explicit = { a_block }
+block_partial_explicit = { ao | ac | bo | bc }
 
 rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
 
@@ -210,11 +210,13 @@ ss_block         =  { ss_open ~ (NEWLINE ~ ss_block_element*)? }
 // ----- Block partial-explicit
 
 // -- Ao & Ac
-a_opened = ${ "Ao" ~ ws* ~ NEWLINE? }
-a_closed = ${ ".Ac" ~ ws* ~ NEWLINE? }
-a_multi_line_block  = ${ a_opened ~ element* ~ a_closed }
-a_single_line_block = ${ a_opened ~ (!(".Ac" | ".Ao") ~ arg ~ ws*)* ~ a_closed }
-a_block = { a_multi_line_block | a_single_line_block }
+ac = ${ "Ac" ~ ws* ~ NEWLINE? }
+ao = ${ "Ao" ~ ws* ~ NEWLINE? ~ (!("."? ~ "Ac") ~ "."? ~ arg ~ ws* ~ NEWLINE?)* ~ ws* ~ ac? ~ NEWLINE? }
+
+// -- Bo & Bc
+// bo = ${ "Bo" ~ ws* ~ (NEWLINE? ~ (element | arg) ~ ws*)* ~ NEWLINE? }
+// bc = ${ "Bc" ~ ws* ~ NEWLINE? }
+
 
 // ----- Block partial-implicit
 
