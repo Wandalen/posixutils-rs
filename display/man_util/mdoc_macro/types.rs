@@ -105,10 +105,10 @@ impl From<Pair<'_, Rule>> for BlType {
 
 #[derive(Debug, PartialEq)]
 pub enum ItType {
-    MandatoryArgs(Vec<String>),
-    OptionalArgs(Vec<String>),
+    MandatoryArgs,
+    OptionalArgs,
     None,
-    Cell { cells: Vec<String> },
+    Column,
 }
 
 #[derive(Debug, PartialEq)]

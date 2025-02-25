@@ -332,7 +332,7 @@ impl MdocParser {
 
         let nodes = pairs
             .take_while(|p| p.as_rule() != Rule::el_close)
-            .map(Self::parse_element)
+            .filter_map(|p| p.into_inner().next().map(Self::parse_it_block))
             .collect();
 
         Element::Macro(MacroNode {
@@ -355,6 +355,28 @@ impl MdocParser {
 
 // Block full-implicit macros parsing
 impl MdocParser {
+    fn parse_it_block(pair: Pair<Rule>) -> Element {
+        let it_type = match pair.as_rule() {
+            Rule::it_var1 => ItType::MandatoryArgs,
+            Rule::it_var2 => ItType::None,
+            // TODO: Not sure that we need this variant.
+            // Rule::it_var3 => ItType::OptionalArgs,
+            // TODO: Implement it.
+            // Rule::it_var4 => ItType::Column,
+            _ => unreachable!()
+        };
+
+        let nodes = pair
+            .into_inner()
+            .filter_map(|p| p.into_inner().next().map(Self::parse_element))
+            .collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::It(it_type),
+            nodes
+        })
+    }
+
     // Parses (`Nd`)[https://man.openbsd.org/mdoc#Nd]
     // `Nd line`
     fn parse_nd(pair: Pair<Rule>) -> Element {
@@ -472,6 +494,7 @@ impl MdocParser {
     fn parse_block_full_implicit(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
+            Rule::it_block => Self::parse_it_block(pair),
             Rule::nd_block => Self::parse_nd(pair),
             Rule::nm_block => Self::parse_nm(pair),
             Rule::sh_block => Self::parse_sh_block(pair),
@@ -2062,7 +2085,7 @@ mod test {
         #[test]
         fn bl() {
             let content =
-                ".Bl -bullet -width indent-two -compact col1 col2 col3\nLine 1\nLine 2\n.El";
+                ".Bl -bullet -width indent-two -compact col1 col2 col3\n.It Line 1\n.It Line 2\n.El";
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
@@ -2071,8 +2094,18 @@ mod test {
                     columns: vec!["col1".to_string(), "col2".to_string(), "col3".to_string()],
                 },
                 nodes: vec![
-                    Element::Text("Line 1\n".to_string()),
-                    Element::Text("Line 2\n".to_string()),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::It(ItType::MandatoryArgs),
+                        nodes: vec![
+                            Element::Text(" Line 1\n".to_string())
+                        ]
+                    }),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::It(ItType::MandatoryArgs),
+                        nodes: vec![
+                            Element::Text(" Line 2\n".to_string())
+                        ]
+                    }),
                 ],
             })];
 
@@ -2280,6 +2313,78 @@ mod test {
 
     mod block_full_implicit {
         use crate::man_util::parser::*;
+
+        #[test]
+        fn it_var2() {
+            let input = r#".Bl -item
+.It
+Line
+.Ad addr
+.It
+Line
+.El
+            "#;
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Bl { 
+                    list_type: BlType::Item, 
+                    offset: None, 
+                    compact: false, 
+                    columns: vec![] 
+                },
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::It(ItType::None),
+                        nodes: vec![
+                            Element::Text("Line\n".to_string()),
+                            Element::Macro(MacroNode {
+                                mdoc_macro: Macro::Ad,
+                                nodes: vec![
+                                    Element::Text("addr".to_string())
+                                ]
+                            })
+                        ]
+                    }),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::It(ItType::None),
+                        nodes: vec![
+                            Element::Text("Line\n".to_string())
+                        ]
+                    }),
+                ]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+//         #[test]
+//         fn it_var3() {
+//             let input = r#".Bl -tag -width Ds
+// .It text Ad addr
+// Other line
+// Another line
+// .It 
+// Line 
+// .Ad addr 
+// .El            
+// "#;
+//             let input = vec![Element::Macro(MacroNode {
+//                 mdoc_macro: Macro::Bl { 
+//                     list_type: BlType::Tag, 
+//                     offset: None, 
+//                     compact: true, 
+//                     columns: vec![] 
+//                 },
+//                 nodes: vec![
+//                     Element::Macro(MacroNode {
+//                         mdoc_macro: Macro::It(ItType::OptionalArgs),
+//                         nodes: vec![
+
+//                         ]
+//                     })
+//                 ]
+//             })]
+//         }
 
         #[test]
         fn nd() {

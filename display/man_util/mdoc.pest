@@ -28,9 +28,10 @@ macro_arg = {
   !(
     d1_block | 
     dl_block | 
+    f_block  |
+    it_block |
     rs_submacro | 
-    bt | st | db | dd | dt | ex | fd | hf | lb | lp | 
-    f_block
+    bt | st | db | dd | dt | ex | fd | hf | lb | lp
   ) 
   ~ 
   (
@@ -49,7 +50,7 @@ inline_text = @{ !"." ~ (!("." | NEWLINE) ~ ANY)* }
 
 block_full_explicit = { bd_block | bf_block | bk_block | bl_block }
 
-block_full_implicit = { nd_block | nm_block | sh_block | ss_block }
+block_full_implicit = { it_block | nd_block | nm_block | sh_block | ss_block }
 
 block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block | dq_block | en_block | op_block | pq_block | ql_block | qq_block | sq_block | vt_block }
 
@@ -178,11 +179,20 @@ bl_columns = { text_arg+ }
 
 bl_open  = ${ "Bl" ~ ws+ ~ bl_type ~ (ws+ ~ ("-width" | "-offset") ~ ws+ ~ offset)? ~ (ws+ ~ compact)? ~ (ws+ ~ bl_columns)* ~ ws* ~ NEWLINE }
 el_close =  { ".El" ~ NEWLINE? }
-bl_block =  { bl_open ~ element* ~ el_close }
+bl_block =  { bl_open ~ it_block* ~ el_close }
 
 // ----- Block full-implicit macros
 
 block_line = { (!NEWLINE ~ ANY)+ }
+
+// -- It
+
+it_elem  = ${ !(".It") ~ !(".El") ~ element }
+it_var1  = ${ ".It" ~ !NEWLINE ~ it_elem+ }
+it_var2  = ${ ".It" ~ ws* ~ NEWLINE ~ it_elem+ }
+// it_var3  = ${ ".It" ~ (ws* ~ NEWLINE)? ~ it_elem+ }
+it_block =  { it_var1 | it_var2 }
+
 
 // -- Nd
 
