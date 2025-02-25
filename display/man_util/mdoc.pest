@@ -28,7 +28,8 @@ macro_arg = {
     d1_block | 
     dl_block | 
     rs_submacro | 
-    bt | st | db | dd | dt | ex | fd | hf | lb | lp | os | pp | rv | sm | tg | ud 
+    bt | st | db | dd | dt | ex | fd | hf | 
+    lb | lp | os | pp | rv | sm | tg | ud | rs
   ) 
   ~ 
   (
