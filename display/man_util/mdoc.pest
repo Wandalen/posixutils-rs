@@ -52,7 +52,7 @@ block_full_implicit = { nd_block | nm_block | sh_block | ss_block }
 
 block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block | dq_block | en_block | op_block | pq_block | ql_block | qq_block | sq_block | vt_block }
 
-block_partial_explicit = { a_block | b_block | br_block | d_block }
+block_partial_explicit = { a_block | b_block | br_block | d_block | e_block | f_block }
 
 rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
 
@@ -213,25 +213,38 @@ ss_block         =  { ss_open ~ (NEWLINE ~ ss_block_element*)? }
 a_closed  = ${ "."? ~ "Ac" ~ ws* ~ NEWLINE? }
 a_opened  = ${ "Ao" ~ ws* ~ NEWLINE? }
 a_element = ${ !("."? ~ "Ac") ~ "."? ~ arg }
-a_block   =  { a_opened ~ (a_element ~ ws* ~ NEWLINE?)* ~ a_closed }
+a_block   = ${ a_opened ~ (a_element ~ ws* ~ NEWLINE?)* ~ a_closed }
 
 // --- Bo & Bc
 b_closed  = ${ "."? ~ "Bc" ~ ws* ~ NEWLINE? }
 b_opened  = ${ "Bo" ~ ws* ~ NEWLINE? }
 b_element = ${ !("."? ~ "Bc") ~ "."? ~ arg }
-b_block   =  { b_opened ~ (b_element ~ ws* ~ NEWLINE?)* ~ b_closed }
+b_block   = ${ b_opened ~ (b_element ~ ws* ~ NEWLINE?)* ~ b_closed }
 
 // --- Bro & Brc
 br_closed  = ${ "."? ~ "Brc" ~ ws* ~ NEWLINE? }
 br_opened  = ${ "Bro" ~ ws* ~ NEWLINE? }
 br_element = ${ !("."? ~ "Brc") ~ "."? ~ arg }
-br_block   =  { br_opened ~ (br_element ~ ws* ~ NEWLINE?)* ~ br_closed }
+br_block   = ${ br_opened ~ (br_element ~ ws* ~ NEWLINE?)* ~ br_closed }
 
 // --- Do & Dc
 d_closed  = ${ "."? ~ "Dc" ~ ws* ~ NEWLINE? }
 d_opened  = ${ "Do" ~ ws* ~ NEWLINE? }
 d_element = ${ !("."? ~ "Dc") ~ "."? ~ arg }
-d_block   =  { d_opened ~ (d_element ~ ws* ~ NEWLINE?)* ~ d_closed }
+d_block   = ${ d_opened ~ (d_element ~ ws* ~ NEWLINE?)* ~ d_closed }
+
+// --- Eo & Ec
+e_closed  = ${ "."? ~ "Ec" ~ ws* ~ closing_delimiter? ~ ws* ~ NEWLINE? }
+e_opened  = ${ "Eo" ~ ws* ~ opening_delimiter? ~ ws* ~ NEWLINE? }
+e_element = ${ !("."? ~ "Ec") ~ "."? ~ arg }
+e_block   = ${ e_opened ~ (e_element ~ ws* ~ NEWLINE?)* ~ e_closed }
+
+// --- Fo & Fc
+f_closed  = ${ "."? ~ "Fc" ~ ws* ~ NEWLINE? }
+f_opened  = ${ "Fo" ~ ws* ~ text_arg ~ ws* ~ NEWLINE? }
+f_element = ${ !("."? ~ "Fc") ~ text_arg }
+f_block   = ${ f_opened ~ (f_element ~ ws* ~ NEWLINE?)* ~ f_closed }
+
 
 // ----- Block partial-implicit
 

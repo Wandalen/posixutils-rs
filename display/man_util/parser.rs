@@ -721,6 +721,65 @@ impl MdocParser {
         })
     }
 
+    fn parse_e_block(pair: Pair<Rule>) -> Element {
+        let mut inner_pair = pair.into_inner();
+
+        let e_opened = inner_pair.next().unwrap();
+        let opening_delimiter = if let Some(delimiter) = e_opened.into_inner().next() {
+            Some(delimiter.as_str().parse::<char>().unwrap())
+        } else {
+            None
+        };
+
+        let mut nodes = Vec::new();
+        let mut closing_delimiter = None;
+
+        while let Some(node) = inner_pair.next() {
+            if matches!(node.as_rule(), Rule::e_closed) {
+                if let Some(delimiter) = node.into_inner().next() {
+                    closing_delimiter = Some(delimiter.as_str().parse::<char>().unwrap());
+                }
+            } else {
+                if let Some(arg) = node.into_inner().next() {
+                    nodes.push(Self::parse_element(arg));
+                }
+            }
+        }
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Eo {
+                opening_delimiter: opening_delimiter,
+                closing_dilimiter: closing_delimiter
+            },
+            nodes
+        })
+    }
+
+    fn parse_f_block(pair: Pair<Rule>) -> Element {
+        let mut inner_pairs = pair.into_inner();
+
+        let funcname = inner_pairs
+            .next()
+            .unwrap()
+            .into_inner()
+            .next()
+            .unwrap()
+            .as_str()
+            .to_string();
+
+        let nodes = inner_pairs
+            .take_while(|p| p.as_rule() != Rule::f_closed)
+            .filter_map(|p| p.into_inner().next().map(Self::parse_element))
+            .collect();
+
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Fo { 
+                funcname: funcname 
+            },
+            nodes
+        })
+    }
+
     fn parse_block_partial_explicit(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
         match pair.as_rule() {
@@ -728,6 +787,8 @@ impl MdocParser {
             Rule::b_block  => Self::parse_b_block(pair),
             Rule::br_block => Self::parse_br_block(pair),
             Rule::d_block  => Self::parse_d_block(pair),
+            Rule::e_block  => Self::parse_e_block(pair),
+            Rule::f_block  => Self::parse_f_block(pair),
             _ => unreachable!(),
         }
     }
@@ -4199,6 +4260,7 @@ Line
         }
 
         #[test]
+        #[allow(non_snake_case)]
         fn Do_not_args() {
             let input = r#".Do.Dc
 .Do .Dc
@@ -4224,6 +4286,7 @@ Line
         }
 
         #[test]
+        #[allow(non_snake_case)]
         fn Do_parsed() {
             let input = r#".Do
 .Ad addr
@@ -4261,6 +4324,302 @@ Line
                     mdoc_macro: Macro::Do,
                     nodes: vec![
                         Element::Text("Line".to_string())
+                    ]
+                })
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn eo() {
+            let input = r#".Eo
+Line
+.Ec
+.Eo [
+Line
+.Ec ]
+.Eo
+Line
+.Ec .
+.Eo [ arg1 arg2 Ec ]
+.Eo arg1 arg2 Ec
+.Eo arg1 arg2 Ec .
+.Eo arg1
+arg2 Ec
+.Eo
+Line
+.Ec         
+"#;
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: None
+                    },
+                    nodes: vec![
+                        Element::Text("Line".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: Some('['),
+                        closing_dilimiter: Some(']')
+                    },
+                    nodes: vec![
+                        Element::Text("Line".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: Some('.')
+                    },
+                    nodes: vec![
+                        Element::Text("Line".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: Some('['),
+                        closing_dilimiter: Some(']')
+                    },
+                    nodes: vec![
+                        Element::Text("arg1".to_string()),
+                        Element::Text("arg2".to_string()),
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: None
+                    },
+                    nodes: vec![
+                        Element::Text("arg1".to_string()),
+                        Element::Text("arg2".to_string()),
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: Some('.')
+                    },
+                    nodes: vec![
+                        Element::Text("arg1".to_string()),
+                        Element::Text("arg2".to_string()),
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: None
+                    },
+                    nodes: vec![
+                        Element::Text("arg1".to_string()),
+                        Element::Text("arg2".to_string()),
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: None
+                    },
+                    nodes: vec![
+                        Element::Text("Line".to_string())
+                    ]
+                }),
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn eo_not_args() {
+            let input = ".Eo.Ec";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Eo {
+                    opening_delimiter: None,
+                    closing_dilimiter: None
+                },
+                nodes: vec![]
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn eo_parsed() {
+            let input = r#".Eo
+.Dv ARG
+.Ec
+.Eo
+.Dv ARG
+.Ec .
+.Eo [
+.Dv ARG
+.Ec ]
+.Eo Dv ARG
+.Ec
+.Eo Dv ARG
+.Ec .
+.Eo [ Dv ARG
+.Ec ]
+"#;
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: None
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dv,
+                            nodes: vec![
+                                Element::Text("ARG".to_string())
+                            ]
+                        })
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: Some('.')
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dv,
+                            nodes: vec![
+                                Element::Text("ARG".to_string())
+                            ]
+                        })
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: Some('['),
+                        closing_dilimiter: Some(']')
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dv,
+                            nodes: vec![
+                                Element::Text("ARG".to_string())
+                            ]
+                        })
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: None
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dv,
+                            nodes: vec![
+                                Element::Text("ARG".to_string())
+                            ]
+                        })
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: None,
+                        closing_dilimiter: Some('.')
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dv,
+                            nodes: vec![
+                                Element::Text("ARG".to_string())
+                            ]
+                        })
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Eo {
+                        opening_delimiter: Some('['),
+                        closing_dilimiter: Some(']')
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Dv,
+                            nodes: vec![
+                                Element::Text("ARG".to_string())
+                            ]
+                        })
+                    ]
+                }),
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn fo() {
+            let input = r#".Fo funcname
+Line
+.Fc
+.Fo funcname arg1 arg2 Fc
+.Fo funcname arg1
+arg2 Fc
+"#;
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Fo {
+                        funcname: "funcname".to_string()
+                    },
+                    nodes: vec![
+                        Element::Text("Line".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Fo {
+                        funcname: "funcname".to_string()
+                    },
+                    nodes: vec![
+                        Element::Text("arg1".to_string()),
+                        Element::Text("arg2".to_string()),
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Fo {
+                        funcname: "funcname".to_string()
+                    },
+                    nodes: vec![
+                        Element::Text("arg1".to_string()),
+                        Element::Text("arg2".to_string()),
+                    ]
+                })
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn fo_not_args() {
+            assert!(MdocParser::parse_mdoc(".Fo.Fc").is_err());
+        }
+
+        #[test]
+        fn fo_not_parsed() {
+            let input = r#".Fo funcname
+.Dv ARG
+.Fc            
+"#;
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Fo {
+                        funcname: "funcname".to_string()
+                    },
+                    nodes: vec![
+                        Element::Text(".Dv".to_string()),
+                        Element::Text("ARG".to_string())
                     ]
                 })
             ];
