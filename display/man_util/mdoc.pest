@@ -10,26 +10,38 @@
 // ----- Basic rules
 
 WHITESPACE = _{ " " | "\t" }
-// Shortened synonym
+
+// -- Shortened synonym
+
 ws       = _{ WHITESPACE }
 NEWLINE  = _{ "\r"? ~ "\n" }
 _COMMENT = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
-// Macro name separator to not allow merging macro name with arguments
 
+// -- Macro name separator to not allow merging macro name with arguments
+
+expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
 text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
+
 // -- List of Callable macros
 macro_arg = { 
   !(
-    d1_block | dl_block | rs_submacro | 
-    bt | st | db | dd | dt | 
-    os | pp | rv | sm | tg | ud 
-  ) ~ 
-  (block_partial_implicit | inline) 
+    d1_block | 
+    dl_block | 
+    rs_submacro | 
+    bt | st | db | dd | dt | ex | fd | hf | lb | lp | os | pp | rv | sm | tg | ud 
+  ) 
+  ~ 
+  (
+    block_partial_implicit |
+    block_partial_explicit |
+    inline
+  ) 
 }
 
 arg = { macro_arg | text_arg }
 
 text_line = { !"." ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+inline_text = @{ !"." ~ (!("." | NEWLINE) ~ ANY)* }
 
 // ----- Macro types
 
@@ -39,21 +51,42 @@ block_full_implicit = { nd_block | nm_block | sh_block | ss_block }
 
 block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block | dq_block | en_block | op_block | pq_block | ql_block | qq_block | sq_block | vt_block }
 
+block_partial_explicit = { a_block | b_block | br_block | d_block }
+
 rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
 
-text_production = { at | bsx | bx | dx | fx | nx | ox | st | rv }
+text_production = { at | bsx | bx | dx | ex | fx | nx | ox | st | rv }
 
 inline = { 
-  rs_submacro | 
-  ad | an | ap | ar | bt | cd | cm | db | dd | dt | 
-  dv | ms | mt | no | ns | os | ot | pa | pf | pp |
-  sm | sx | sy | tg | tn | ud | ux | va | xr |
-  text_production 
+    rs_submacro 
+  | ad | an | ap | ar 
+  | bt 
+  | cd | cm 
+  | db | dd | dt | dv 
+  | em | er | es | ev
+  | fa | fd | fl | fr | ft | Fn 
+  | hf 
+  | ic | In 
+  | lb | li | lk | lp 
+  | ms | mt 
+  | no | ns 
+  | os | ot 
+  | pa | pf | pp 
+  | sm | sx | sy 
+  | tg | tn 
+  | ud | ux 
+  | va 
+  | xr 
+  | text_production 
 }
 
 // ----- Mdoc document
 
-element = { _COMMENT | ("." ~ (block_full_explicit | block_full_implicit | block_partial_implicit | inline)) | text_line }
+element = { 
+  _COMMENT | 
+  ("." ~ (block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) 
+  | text_line
+}
 
 mdoc = { SOI ~ element* ~ EOI }
 
@@ -181,6 +214,32 @@ sh_block         =  { sh_open ~ (NEWLINE ~ sh_block_element*)? }
 ss_open          = ${ "Ss" ~ ws+ ~ block_line ~ ws* }
 ss_block_element =  { !("." ~ (sh_block | ss_block)) ~ element }
 ss_block         =  { ss_open ~ (NEWLINE ~ ss_block_element*)? }
+
+// ----- Block partial-explicit
+
+// --- Ao & Ac
+a_closed  = ${ "."? ~ "Ac" ~ ws* ~ NEWLINE? }
+a_opened  = ${ "Ao" ~ ws* ~ NEWLINE? }
+a_element = ${ !("."? ~ "Ac") ~ "."? ~ arg }
+a_block   =  { a_opened ~ (a_element ~ ws* ~ NEWLINE?)* ~ a_closed }
+
+// --- Bo & Bc
+b_closed  = ${ "."? ~ "Bc" ~ ws* ~ NEWLINE? }
+b_opened  = ${ "Bo" ~ ws* ~ NEWLINE? }
+b_element = ${ !("."? ~ "Bc") ~ "."? ~ arg }
+b_block   =  { b_opened ~ (b_element ~ ws* ~ NEWLINE?)* ~ b_closed }
+
+// --- Bro & Brc
+br_closed  = ${ "."? ~ "Brc" ~ ws* ~ NEWLINE? }
+br_opened  = ${ "Bro" ~ ws* ~ NEWLINE? }
+br_element = ${ !("."? ~ "Brc") ~ "."? ~ arg }
+br_block   =  { br_opened ~ (br_element ~ ws* ~ NEWLINE?)* ~ br_closed }
+
+// --- Do & Dc
+d_closed  = ${ "."? ~ "Dc" ~ ws* ~ NEWLINE? }
+d_opened  = ${ "Do" ~ ws* ~ NEWLINE? }
+d_element = ${ !("."? ~ "Dc") ~ "."? ~ arg }
+d_block   =  { d_opened ~ (d_element ~ ws* ~ NEWLINE?)* ~ d_closed }
 
 // ----- Block partial-implicit
 
@@ -367,8 +426,9 @@ ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
-
 db = ${ "Db" ~ !text_arg ~ ws+ ~ text_arg ~ NEWLINE? }
+
+// -- Dd
 
 traditional_date = ${ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ }
 wrong_date       = ${ (!"$" ~ text_arg)+ }
@@ -376,12 +436,58 @@ mdocdate         = ${ month_day ~ ws+ ~ year }
 date             = ${ (mdocdate | traditional_date | wrong_date) }
 dd               = ${ "Dd" ~ !text_arg ~ (ws+ ~ ("$" ~ "Mdocdate" ~ ":"? ~ ws*)? ~ date? ~ "$"?)? ~ NEWLINE? }
 
-dt      = ${ "Dt" ~ !text_arg ~ title ~ section ~ arch? ~ NEWLINE? }
-title   = ${ ws+ ~ text_arg }
-section = ${ ws+ ~ ASCII_DIGIT }
-arch    = ${ ws+ ~ text_arg }
+// -- Dt
+
+dt      = ${ "Dt" ~ !text_arg ~ (ws+ ~ title)? ~ (ws+ ~ section) ~ (ws+ ~ arch)? ~ ws* ~ NEWLINE? }
+title   = ${ !ASCII_DIGIT ~ text_arg }
+section = ${ ASCII_DIGIT }
+arch    = ${ text_arg }
+
+// -- Fa
+
+fa_body  = ${ "\""? ~ (ws* ~ expr_arg)+ ~ "\""? }
+fa       = ${ "Fa" ~ !text_arg ~ (ws+ ~ (macro_arg | fa_body))+ ~ ws* ~ NEWLINE? }
+
+// -- Fd
+
+directive = ${ "#" ~ text_arg }
+fd        = ${ "Fd" ~ !text_arg ~ ws+ ~ directive ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+
+// -- Fn
+
+fn_funcname = { expr_arg }
+fn_arg  = ${ "\""? ~ (ws* ~ expr_arg)+ ~ "\""? }
+Fn      = ${ "Fn" ~ !text_arg ~ ws+ ~ fn_funcname? ~ (ws* ~ (macro_arg | fn_arg))+ ~ ws* ~ NEWLINE? }
+
+// -- Fr
+number = { ASCII_DIGIT+ }
+fr     = ${ "Fr" ~ !text_arg ~ (ws+ ~ (number | arg))+ ~ ws* ~ NEWLINE? }
+
+// -- Lk
+link         = { text_arg }
+display_name = @{ ("\""? ~ (ws* ~ expr_arg)+ ~ "\""?)+ }
+lk           = ${ "Lk" ~ !text_arg ~ ws+ ~ link ~ (ws* ~ (macro_arg | display_name))* ~ ws* ~ NEWLINE? }
+
+// -- Other in-line macros
 
 dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+em = ${ "Em" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+er = ${ "Er" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+es = ${ "Es" ~ !text_arg ~ ws+ ~ (opening_delimiter | macro_arg) ~ ws+ ~ (closing_delimiter | macro_arg) ~ NEWLINE? }
+ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+ex = ${ "Ex" ~ !text_arg ~ ws+ ~ "-std" ~ (ws+ ~ text_arg)* ~ NEWLINE? }
+fl = ${ "Fl" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+ft = ${ "Ft" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+hf = ${ "Hf" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+ic = ${ "Ic" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+In = ${ "In" ~ !text_arg ~ ws+ ~ arg ~ ws* ~ NEWLINE? }
+lb = ${ "Lb" ~ !text_arg ~ ws+ ~ text_arg ~ NEWLINE? }
+li = ${ "Li" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+lp = ${ "Lp" ~ !text_arg ~ ws* ~ NEWLINE? }
+
+// -- Delimeters
+opening_delimiter = { "(" | "[" }
+closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
 
 // -- Document preamble and NAME section macros
 os = ${ "Os" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }

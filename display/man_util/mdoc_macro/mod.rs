@@ -106,14 +106,16 @@ pub enum Macro {
     Dc, // Close a Do block
     Dq,
     Dt {
-        title: String,
+        title: Option<String>,
         section: String,
         arch: Option<String>,
     },
-    Dv {
-        identifiers: Vec<String>,
-    },
+    // Dv {
+    //     identifiers: Vec<String>,
+    // },
+    Dv,
     Dx(DxType),
+    Em,
     En,
     Eo {
         opening_delimiter: Option<char>,
@@ -122,67 +124,54 @@ pub enum Macro {
         // Close a scope started by Eo
         closing_dilimiter: Option<char>,
     },
-    Er {
-        identifiers: Vec<String>,
+    Er,
+    Es { // Obsolete
+        opening_delimiter: Option<char>,
+        closing_delimiter: Option<char>,
     },
-    Es {
-        // Obsolete
-        opening_delimiter: char,
-        closing_delimiter: char,
-    },
-    Ev {
-        identifiers: Vec<String>,
-    },
+    Ev,
     Ex {
         utilities: Vec<String>,
     },
-    Fa {
-        arguments: Vec<String>,
-    },
+    Fa,
     Fd {
         directive: String,
         arguments: Vec<String>,
     },
-    Fl {
-        words: Vec<String>,
-    },
+    Fl,
     Fn {
-        func_name: String,
-        arguments: Vec<String>,
+        funcname: Option<String>
     },
     Fo {
         func_name: String,
     },
     Fc, // End a function context started by Fo
-    Fr {
-        number: i32,
+    Fr { // Obsolete
+        num: Option<i64>
     },
-    Ft {
-        func_type: String,
-    },
+    Ft,
     Fx(FxType),
     Hf {
         // TODO: Not implemented???
         // https://man.openbsd.org/mdoc#Hf
-        file_name: String,
+        file_name: Option<String>,
     },
     Ic {
-        keywords: Vec<String>,
+        keyword: String,
     },
     In {
-        file_name: String,
+        file_name: Option<String>,
     },
     It(ItType),
     Lb {
         lib_name: String,
     },
-    Li {
-        words: Vec<String>,
-    },
+    Li,
     Lk {
         uri: String,
         display_name: Option<String>,
     },
+    Lp,
     Ms, 
     Mt {
         mails: Vec<String>,
