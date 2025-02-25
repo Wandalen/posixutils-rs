@@ -241,6 +241,42 @@ d_opened  = ${ "Do" ~ ws* ~ NEWLINE? }
 d_element = ${ !("."? ~ "Dc") ~ "."? ~ arg }
 d_block   =  { d_opened ~ (d_element ~ ws* ~ NEWLINE?)* ~ d_closed }
 
+// --- Oo & Oc
+o_closed  = ${ "."? ~ "Oc" ~ ws* ~ NEWLINE? }
+o_opened  = ${ "Oo" ~ ws* ~ NEWLINE? }
+o_element = ${ !("."? ~ "Oc") ~ "."? ~ arg }
+o_block   =  { o_opened ~ (o_element ~ ws* ~ NEWLINE?)* ~ o_closed }
+
+// --- Po & Pc
+p_closed  = ${ "."? ~ "Pc" ~ ws* ~ NEWLINE? }
+p_opened  = ${ "Po" ~ ws* ~ NEWLINE? }
+p_element = ${ !("."? ~ "Pc") ~ "."? ~ arg }
+p_block   =  { p_opened ~ (p_element ~ ws* ~ NEWLINE?)* ~ p_closed }
+
+// --- Qo & Qc
+q_closed  = ${ "."? ~ "Qc" ~ ws* ~ NEWLINE? }
+q_opened  = ${ "Qo" ~ ws* ~ NEWLINE? }
+q_element = ${ !("."? ~ "Qc") ~ "."? ~ arg }
+q_block   =  { q_opened ~ (q_element ~ ws* ~ NEWLINE?)* ~ q_closed }
+
+// --- Rs & Re
+rs_closed  = ${ "."? ~ "Re" ~ ws* ~ NEWLINE? }
+rs_opened  = ${ "Rs" ~ ws* ~ NEWLINE? }
+rs_element = ${ !("."? ~ "Re") ~ "."? ~ rs_submacro }
+rs_block   =  { rs_opened ~ (rs_element ~ ws* ~ NEWLINE?)+ ~ rs_closed }
+
+// --- So & Sc
+s_closed  = ${ "."? ~ "Sc" ~ ws* ~ NEWLINE? }
+s_opened  = ${ "So" ~ ws* ~ NEWLINE? }
+s_element = ${ !("."? ~ "Sc") ~ "."? ~ arg }
+s_block   =  { s_opened ~ (s_element ~ ws* ~ NEWLINE?)* ~ s_closed }
+
+// --- Xo & Xc
+x_closed  = ${ "."? ~ "Xc" ~ ws* ~ NEWLINE? }
+x_opened  = ${ "Xo" ~ ws* ~ NEWLINE? }
+x_element = ${ !("."? ~ "Xc") ~ "."? ~ arg }
+x_block   =  { x_opened ~ (x_element ~ ws* ~ NEWLINE?)* ~ x_closed }
+
 // ----- Block partial-implicit
 
 aq_block  = ${ "Aq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
