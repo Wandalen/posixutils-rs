@@ -13,18 +13,20 @@ WHITESPACE = _{ " " | "\t" }
 
 // -- Shortened synonym
 
-ws       = _{ WHITESPACE }
-NEWLINE  = _{ "\r"? ~ "\n" }
-_COMMENT = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+ws         = _{ WHITESPACE }
+NEWLINE    = _{ "\r"? ~ "\n" }
+_COMMENT   = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+IDENT_CHAR = _{ ASCII_ALPHANUMERIC | "_" | "-" }
 
 // -- Macro name separator to not allow merging macro name with arguments
 
 expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
-text_arg = @{ (!(ws | NEWLINE) ~ ANY)+ }
+text_arg = @{ (!(ws | NEWLINE | macro_arg) ~ ANY)+ }
+word     = @{ (!(ws | NEWLINE) ~ ANY)+ }
 
 // -- List of Callable macros
 
-macro_arg = { 
+macro_arg = {
   !(
     d1_block | 
     dl_block | 
@@ -41,24 +43,81 @@ macro_arg = {
   ) 
 }
 
-arg = { macro_arg | text_arg }
+arg = { !ta ~ (macro_arg | text_arg) }
 
 text_line = { !"." ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
-inline_text = @{ !"." ~ (!("." | NEWLINE) ~ ANY)* }
+line = { !"." ~ (!NEWLINE ~ ANY)* }
 
 // ----- Macro types
 
-block_full_explicit = { bd_block | bf_block | bk_block | bl_block }
+block_full_explicit = { 
+  bd_block | 
+  bf_block | 
+  bk_block | 
+  bl_block 
+}
 
-block_full_implicit = { it_block | nd_block | nm_block | sh_block | ss_block }
+block_full_implicit = { 
+  it_block | 
+  nd_block | 
+  nm_block | 
+  sh_block | 
+  ss_block 
+}
 
-block_partial_implicit = { aq_block | bq_block | brq_block | d1_block | dl_block | dq_block | en_block | op_block | pq_block | ql_block | qq_block | sq_block | vt_block }
+block_partial_implicit = { 
+  aq_block  | 
+  bq_block  | 
+  brq_block | 
+  d1_block  | 
+  dl_block  | 
+  dq_block  | 
+  en_block  | 
+  op_block  | 
+  pq_block  | 
+  ql_block  | 
+  qq_block  | 
+  sq_block  | 
+  vt_block 
+}
 
-block_partial_explicit = { a_block | b_block | br_block | d_block | e_block | f_block }
+block_partial_explicit = { 
+  a_block  | 
+  b_block  | 
+  br_block | 
+  d_block  | 
+  e_block  | 
+  f_block 
+}
 
-rs_submacro = { a | b | c | d | i | j | n | o | p | q | r | t | u | v }
+rs_submacro = { 
+  a | 
+  b | 
+  c | 
+  d | 
+  i | 
+  j | 
+  n | 
+  o | 
+  p | 
+  q | 
+  r | 
+  t | 
+  u | 
+  v 
+}
 
-text_production = { at | bsx | bx | dx | ex | fx | nx | ox | st }
+text_production = { 
+  at  | 
+  bsx | 
+  bx  | 
+  dx  | 
+  ex  | 
+  fx  | 
+  nx  | 
+  ox  | 
+  st 
+}
 
 inline = { 
     rs_submacro 
@@ -78,8 +137,8 @@ inline = {
 
 element = { 
   _COMMENT | 
-  ("." ~ (block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) 
-  | text_line
+  ("."? ~ (block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  text_line
 }
 
 mdoc = { SOI ~ element* ~ EOI }
@@ -186,13 +245,14 @@ bl_block =  { bl_open ~ it_block* ~ el_close }
 block_line = { (!NEWLINE ~ ANY)+ }
 
 // -- It
+ta          = @{ "."? ~ "Ta" ~ !IDENT_CHAR ~ NEWLINE? }
+tab         = @{ (ws ~ ws ~ ws ~ ws) | "\t" }
+cell_ending =  { ta | tab }
 
-it_elem  = ${ !(".It") ~ !(".El") ~ element }
-it_var1  = ${ ".It" ~ !NEWLINE ~ it_elem+ }
-it_var2  = ${ ".It" ~ ws* ~ NEWLINE ~ it_elem+ }
-// it_var3  = ${ ".It" ~ (ws* ~ NEWLINE)? ~ it_elem+ }
-it_block =  { it_var1 | it_var2 }
-
+it_cell  = ${ ".It" ~ ((ws+ ~ arg)* ~ ws ~ cell_ending)* }
+it_head  = ${ ".It" ~ (ws+ ~ arg)* }
+it_body  = ${ (!(".It") ~ !(".El") ~ element)* }
+it_block = ${ (it_head | it_cell) ~ NEWLINE? ~ it_body }
 
 // -- Nd
 
@@ -277,29 +337,28 @@ vt_block  = ${ "Vt" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Rs submacros
 
-a = ${ "%A" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-b = ${ "%B" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-c = ${ "%C" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+// -- Additional rules
 
-month     =  { text_arg }
+month     =  { (!("." | NEWLINE | ws) ~ ANY)* }
 day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
 month_day =  { month ~ ws+ ~ day ~ ws* ~ "," }
 year      =  { ASCII_DIGIT+ }
-d         = ${ "%D" ~ !text_arg ~ (ws+ ~ month_day)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
+uri       = @{ (!"://" ~ ANY)+ ~ "://" ~ word* }
 
-i = ${ "%I" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-j = ${ "%J" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-n = ${ "%N" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-o = ${ "%O" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-p = ${ "%P" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-q = ${ "%Q" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-r = ${ "%R" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-t = ${ "%T" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-
-uri = @{ (!"://" ~ ANY)+ ~ "://" ~ text_arg }
-u   = ${ "%U" ~ !text_arg ~ ws+ ~ uri ~ ws* ~ NEWLINE? }
-
-v = ${ "%V" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+a = ${ "%A" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+b = ${ "%B" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+c = ${ "%C" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+d = ${ "%D" ~ !text_arg ~ (ws+ ~ month_day)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
+i = ${ "%I" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+j = ${ "%J" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+n = ${ "%N" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+o = ${ "%O" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+p = ${ "%P" ~ !text_arg ~ (ws+ ~ word)+ ~ ws* ~ NEWLINE? }
+q = ${ "%Q" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+r = ${ "%R" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+t = ${ "%T" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
+u = ${ "%U" ~ !text_arg ~ ws+ ~ uri ~ ws* ~ NEWLINE? }
+v = ${ "%V" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 
 // -- Text production
 
@@ -427,15 +486,14 @@ st_abbreviation =  {
 st              = ${ "St" ~ !text_arg ~ ws+ ~ st_abbreviation ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
 // -- Other in-line macros
-
-ad = ${ "Ad" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+ad = ${ "Ad" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 
 an_split    =  { "-split" }
 an_no_split =  { "-nosplit" }
-an_name     = ${ arg ~ (ws+ ~ arg)* }
+an_name     = ${ text_arg ~ (ws+ ~ text_arg)* }
 an          = ${ "An" ~ !text_arg ~ ws+ ~ (an_split | an_no_split | an_name) ~ ws* ~ NEWLINE? }
 
-ap = ${ "Ap" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+ap = ${ "Ap" ~ !text_arg ~ ws* ~ NEWLINE? }
 ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }

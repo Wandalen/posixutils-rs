@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
+use crate::man_util::parser::Element;
 use text_production::{AtType, BsxType, BxType, DxType, FxType, NxType, OxType, StType};
 use types::*;
 
@@ -40,9 +41,7 @@ pub enum Macro {
     O {
         information: String,
     },
-    P {
-        page_number: String,
-    },
+    P,
     Q {
         insitution_author: String,
     },
@@ -163,7 +162,9 @@ pub enum Macro {
     In {
         file_name: Option<String>,
     },
-    It(ItType),
+    It {
+        args: Vec<Element>
+    },
     Lb {
         lib_name: String,
     },

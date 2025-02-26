@@ -105,10 +105,11 @@ impl From<Pair<'_, Rule>> for BlType {
 
 #[derive(Debug, PartialEq)]
 pub enum ItType {
-    MandatoryArgs,
-    OptionalArgs,
+    // MandatoryArgs,
+    // OptionalArgs,
+    WithArgs,
     None,
-    Column,
+    // Column,
 }
 
 #[derive(Debug, PartialEq)]
