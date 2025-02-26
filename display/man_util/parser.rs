@@ -4696,27 +4696,27 @@ Line
 
         #[test]
         fn oo() {
-            let input = r#".Ao
+            let input = r#".Oo
 Line1
 Line2
-.Ac
-.Ao El1 El2 El3 Ac
-.Ao
-arg Ac
-.Ao
+.Oc
+.Oo El1 El2 El3 Oc
+.Oo
+arg Oc
+.Oo
 Line
-.Ac
+.Oc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![
                         Element::Text("Line1".to_string()),
                         Element::Text("Line2".to_string()),
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![
                         Element::Text("El1".to_string()),
                         Element::Text("El2".to_string()),
@@ -4724,13 +4724,13 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![
                         Element::Text("arg".to_string())
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![
                         Element::Text("Line".to_string()),
                     ]
@@ -4743,21 +4743,21 @@ Line
 
         #[test]
         fn oo_not_args() {
-            let input = r#".Ao.Ac
-.Ao Ac
-.Ao
-.Ac"#;
+            let input = r#".Oo.Oc
+.Oo Oc
+.Oo
+.Oc"#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![]
                 })
             ];
@@ -4768,18 +4768,18 @@ Line
 
         #[test]
         fn oo_parsed() {
-            let input = r#".Ao
+            let input = r#".Oo
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Oc
+.Oo Dv CONSTANT
+.Oc
+.Oo
 Line
-.Ac
+.Oc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Ad,
@@ -4790,7 +4790,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Dv,
@@ -4801,7 +4801,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Oo,
                     nodes: vec![
                         Element::Text("Line".to_string())
                     ]
@@ -4815,12 +4815,14 @@ Line
         #[test]
         fn oo_called() {
             let input = r#".Ao
+.Oo
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Oc
+.Oo Dv CONSTANT
+.Oc
+.Oo
 Line
+.Oc
 .Ac
 "#;
             let elements = vec![
@@ -4828,28 +4830,33 @@ Line
                     mdoc_macro: Macro::Ao,
                     nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
+                            mdoc_macro: Macro::Oo,
                             nodes: vec![
-                                Element::Text("addr".to_string())
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string())
+                                    ]
+                                }),
                             ]
                         }),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Dv,
+                            mdoc_macro: Macro::Oo,
                             nodes: vec![
-                                Element::Text("CONSTANT".to_string()),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Dv,
+                                    nodes: vec![
+                                        Element::Text("CONSTANT".to_string()),
+                                    ]
+                                })
+                            ]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Oo,
+                            nodes: vec![
+                                Element::Text("Line".to_string())
                             ]
                         })
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string())
                     ]
                 })
             ];
@@ -4862,27 +4869,27 @@ Line
 
         #[test]
         fn po() {
-            let input = r#".Ao
+            let input = r#".Po
 Line1
 Line2
-.Ac
-.Ao El1 El2 El3 Ac
-.Ao
-arg Ac
-.Ao
+.Pc
+.Po El1 El2 El3 Pc
+.Po
+arg Pc
+.Po
 Line
-.Ac
+.Pc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![
                         Element::Text("Line1".to_string()),
                         Element::Text("Line2".to_string()),
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![
                         Element::Text("El1".to_string()),
                         Element::Text("El2".to_string()),
@@ -4890,13 +4897,13 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![
                         Element::Text("arg".to_string())
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![
                         Element::Text("Line".to_string()),
                     ]
@@ -4909,21 +4916,21 @@ Line
 
         #[test]
         fn po_not_args() {
-            let input = r#".Ao.Ac
-.Ao Ac
-.Ao
-.Ac"#;
+            let input = r#".Po.Pc
+.Po Pc
+.Po
+.Pc"#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![]
                 })
             ];
@@ -4934,18 +4941,18 @@ Line
 
         #[test]
         fn po_parsed() {
-            let input = r#".Ao
+            let input = r#".Po
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Pc
+.Po Dv CONSTANT
+.Pc
+.Po
 Line
-.Ac
+.Pc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Ad,
@@ -4956,7 +4963,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Dv,
@@ -4967,7 +4974,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Po,
                     nodes: vec![
                         Element::Text("Line".to_string())
                     ]
@@ -4981,12 +4988,14 @@ Line
         #[test]
         fn po_called() {
             let input = r#".Ao
+.Po
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Pc
+.Po Dv CONSTANT
+.Pc
+.Po
 Line
+.Pc
 .Ac
 "#;
             let elements = vec![
@@ -4994,28 +5003,33 @@ Line
                     mdoc_macro: Macro::Ao,
                     nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
+                            mdoc_macro: Macro::Po,
                             nodes: vec![
-                                Element::Text("addr".to_string())
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string())
+                                    ]
+                                }),
                             ]
                         }),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Dv,
+                            mdoc_macro: Macro::Po,
                             nodes: vec![
-                                Element::Text("CONSTANT".to_string()),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Dv,
+                                    nodes: vec![
+                                        Element::Text("CONSTANT".to_string()),
+                                    ]
+                                })
+                            ]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Po,
+                            nodes: vec![
+                                Element::Text("Line".to_string())
                             ]
                         })
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string())
                     ]
                 })
             ];
@@ -5028,27 +5042,27 @@ Line
 
         #[test]
         fn qo() {
-            let input = r#".Ao
+            let input = r#".Qo
 Line1
 Line2
-.Ac
-.Ao El1 El2 El3 Ac
-.Ao
-arg Ac
-.Ao
+.Qc
+.Qo El1 El2 El3 Qc
+.Qo
+arg Qc
+.Qo
 Line
-.Ac
+.Qc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![
                         Element::Text("Line1".to_string()),
                         Element::Text("Line2".to_string()),
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![
                         Element::Text("El1".to_string()),
                         Element::Text("El2".to_string()),
@@ -5056,13 +5070,13 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![
                         Element::Text("arg".to_string())
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![
                         Element::Text("Line".to_string()),
                     ]
@@ -5075,21 +5089,21 @@ Line
 
         #[test]
         fn qo_not_args() {
-            let input = r#".Ao.Ac
-.Ao Ac
-.Ao
-.Ac"#;
+            let input = r#".Qo.Qc
+.Qo Qc
+.Qo
+.Qc"#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![]
                 })
             ];
@@ -5100,18 +5114,18 @@ Line
 
         #[test]
         fn qo_parsed() {
-            let input = r#".Ao
+            let input = r#".Qo
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Qc
+.Qo Dv CONSTANT
+.Qc
+.Qo
 Line
-.Ac
+.Qc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Ad,
@@ -5122,7 +5136,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Dv,
@@ -5133,7 +5147,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Qo,
                     nodes: vec![
                         Element::Text("Line".to_string())
                     ]
@@ -5147,12 +5161,14 @@ Line
         #[test]
         fn qo_called() {
             let input = r#".Ao
+.Qo
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Qc
+.Qo Dv CONSTANT
+.Qc
+.Qo
 Line
+.Qc
 .Ac
 "#;
             let elements = vec![
@@ -5160,28 +5176,33 @@ Line
                     mdoc_macro: Macro::Ao,
                     nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
+                            mdoc_macro: Macro::Qo,
                             nodes: vec![
-                                Element::Text("addr".to_string())
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string())
+                                    ]
+                                }),
                             ]
                         }),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Dv,
+                            mdoc_macro: Macro::Qo,
                             nodes: vec![
-                                Element::Text("CONSTANT".to_string()),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Dv,
+                                    nodes: vec![
+                                        Element::Text("CONSTANT".to_string()),
+                                    ]
+                                })
+                            ]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Qo,
+                            nodes: vec![
+                                Element::Text("Line".to_string())
                             ]
                         })
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string())
                     ]
                 })
             ];
@@ -5194,222 +5215,160 @@ Line
 
         #[test]
         fn rs() {
-            let input = r#".Ao
-Line1
-Line2
-.Ac
-.Ao El1 El2 El3 Ac
-.Ao
-arg Ac
-.Ao
-Line
-.Ac
+            let input = r#".Rs
+.%A John Doe
+.%B Title Line Ad addr1
+.%D January 1, 1970
+.%U protocol://path
+.Re
+.Rs %A John Doe %B Title Line Ad addr1 %D January 1, 1970 %U protocol://path Re
+.Rs %A John Doe 
+.%B Title Line Ad addr1
+.%D January 1, 1970
+.%U protocol://path
+.Re
 "#;
+            
+            let element = Element::Macro(MacroNode {
+                mdoc_macro: Macro::Rs,
+                nodes: vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::A{
+                            author_name: "John Doe".to_string(),
+                        },
+                        nodes: vec![]
+                    }),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::B{
+                            book_title: "Title Line".to_string(),
+                        },
+                        nodes: vec![]
+                    }),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::D{
+                            month_day: Some(("January".to_string(), 1)),
+                            year: 1970,
+                        },
+                        nodes: vec![]
+                    }),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::U{
+                            uri: "protocol://path".to_string(),
+                        },
+                        nodes: vec![]
+                    }),
+                ]
+            });
+            
             let elements = vec![
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line1".to_string()),
-                        Element::Text("Line2".to_string()),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("El1".to_string()),
-                        Element::Text("El2".to_string()),
-                        Element::Text("El3".to_string()),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("arg".to_string())
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string()),
-                    ]
-                })
+                element.clone(),
+                element.clone(),
+                element.clone()
             ];
 
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elements);
-        }
-
-        #[test]
-        fn rs_not_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(r#".Rs
-.Re"#
-            ).is_err());
         }
 
         #[test]
         fn rs_wrong_args() {
-            let input = r#".Ao
-.Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+            // TODO: Format and compare pest errors??
+            assert!(MdocParser::parse_mdoc(let input = r#".Rs
+Line1
+Line2
+.Re
+"#
+            ).is_err());
+            assert!(MdocParser::parse_mdoc(let input = r#".Rs El1 El2 El3 Re"#
+            ).is_err());
+            assert!(MdocParser::parse_mdoc(let input = r#".Rs
+arg Re"#
+            ).is_err());
+            assert!(MdocParser::parse_mdoc(let input = r#".Rs
 Line
-.Ac
-"#;
-            let elements = vec![
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
-                            nodes: vec![
-                                Element::Text("addr".to_string())
-                            ]
-                        }),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Dv,
-                            nodes: vec![
-                                Element::Text("CONSTANT".to_string()),
-                            ]
-                        })
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string())
-                    ]
-                })
-            ];
+.Re
+"#
+            ).is_err());
+        }
 
-            let mdoc = MdocParser::parse_mdoc(input).unwrap();
-            assert_eq!(mdoc.elements, elements);
+        #[test]
+        fn rs_not_args() {
+            assert!(MdocParser::parse_mdoc(r#".Rs
+            .Re"#
+            ).is_err());
         }
 
         #[test]
         fn rs_not_parsed() {
-            let input = r#".Ao
+            assert!(MdocParser::parse_mdoc(r#".Rs
+.%A John Doe
+.%B Title Line Ad addr1
+.%D January 1, 1970
+.%U protocol://path
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
-Line
-.Ac
-"#;
-            let elements = vec![
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
-                            nodes: vec![
-                                Element::Text("addr".to_string())
-                            ]
-                        }),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Dv,
-                            nodes: vec![
-                                Element::Text("CONSTANT".to_string()),
-                            ]
-                        })
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string())
-                    ]
-                })
-            ];
-
-            let mdoc = MdocParser::parse_mdoc(input).unwrap();
-            assert_eq!(mdoc.elements, elements);
+.Re"#
+            ).is_err());
+            assert!(MdocParser::parse_mdoc( 
+                r#".Rs .Ad addr %A John Doe %B Title Line Ad addr1 %D January 1, 1970 %U protocol://path Re"#
+            ).is_err());
+            assert!(MdocParser::parse_mdoc(r#".Rs %A John Doe 
+.%B Title Line Ad addr1
+.%D January 1, 1970
+.%U protocol://path
+.Ad addr
+.Re"#
+            ).is_err());  
         }
 
         #[test]
         fn rs_not_called() {
-            let input = r#".Ao
-.Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
-Line
-.Ac
-"#;
-            let elements = vec![
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
-                            nodes: vec![
-                                Element::Text("addr".to_string())
-                            ]
-                        }),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Dv,
-                            nodes: vec![
-                                Element::Text("CONSTANT".to_string()),
-                            ]
-                        })
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string())
-                    ]
-                })
-            ];
-
-            let mdoc = MdocParser::parse_mdoc(input).unwrap();
-            assert_eq!(mdoc.elements, elements);
+            assert!(MdocParser::parse_mdoc(r#".Ao
+.Rs
+.%A John Doe
+.%B Title Line Ad addr1
+.%D January 1, 1970
+.%U protocol://path
+.Re
+.Ac"#
+            ).is_err());
+            assert!(MdocParser::parse_mdoc( 
+                r#".Ao Rs %A John Doe %B Title Line Ad addr1 %D January 1, 1970 %U protocol://path Re Ac"#
+            ).is_err());
+            assert!(MdocParser::parse_mdoc(r#".Ao
+.Rs %A John Doe 
+.%B Title Line Ad addr1
+.%D January 1, 1970
+.%U protocol://path
+.Re
+.Ac"#
+            ).is_err());  
         }
 
         // .So -----------------------------------------------------------
 
         #[test]
         fn so() {
-            let input = r#".Ao
+            let input = r#".So
 Line1
 Line2
-.Ac
-.Ao El1 El2 El3 Ac
-.Ao
-arg Ac
-.Ao
+.Sc
+.So El1 El2 El3 Sc
+.So
+arg Sc
+.So
 Line
-.Ac
+.Sc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![
                         Element::Text("Line1".to_string()),
                         Element::Text("Line2".to_string()),
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![
                         Element::Text("El1".to_string()),
                         Element::Text("El2".to_string()),
@@ -5417,13 +5376,13 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![
                         Element::Text("arg".to_string())
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![
                         Element::Text("Line".to_string()),
                     ]
@@ -5436,21 +5395,21 @@ Line
 
         #[test]
         fn so_not_args() {
-            let input = r#".Ao.Ac
-.Ao Ac
-.Ao
-.Ac"#;
+            let input = r#".So.Sc
+.So Sc
+.So
+.Sc"#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![]
                 })
             ];
@@ -5461,18 +5420,18 @@ Line
 
         #[test]
         fn so_parsed() {
-            let input = r#".Ao
+            let input = r#".So
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Sc
+.So Dv CONSTANT
+.Sc
+.So
 Line
-.Ac
+.Sc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Ad,
@@ -5483,7 +5442,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Dv,
@@ -5494,7 +5453,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::So,
                     nodes: vec![
                         Element::Text("Line".to_string())
                     ]
@@ -5508,12 +5467,14 @@ Line
         #[test]
         fn so_called() {
             let input = r#".Ao
+.So
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Sc
+.So Dv CONSTANT
+.Sc
+.So
 Line
+.Sc
 .Ac
 "#;
             let elements = vec![
@@ -5521,28 +5482,33 @@ Line
                     mdoc_macro: Macro::Ao,
                     nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
+                            mdoc_macro: Macro::So,
                             nodes: vec![
-                                Element::Text("addr".to_string())
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string())
+                                    ]
+                                }),
                             ]
                         }),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Dv,
+                            mdoc_macro: Macro::So,
                             nodes: vec![
-                                Element::Text("CONSTANT".to_string()),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Dv,
+                                    nodes: vec![
+                                        Element::Text("CONSTANT".to_string()),
+                                    ]
+                                })
+                            ]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::So,
+                            nodes: vec![
+                                Element::Text("Line".to_string())
                             ]
                         })
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string())
                     ]
                 })
             ];
@@ -5555,27 +5521,27 @@ Line
 
         #[test]
         fn xo() {
-            let input = r#".Ao
+            let input = r#".Xo
 Line1
 Line2
-.Ac
-.Ao El1 El2 El3 Ac
-.Ao
-arg Ac
-.Ao
+.Xc
+.Xo El1 El2 El3 Xc
+.Xo
+arg Xc
+.Xo
 Line
-.Ac
+.Xc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![
                         Element::Text("Line1".to_string()),
                         Element::Text("Line2".to_string()),
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![
                         Element::Text("El1".to_string()),
                         Element::Text("El2".to_string()),
@@ -5583,13 +5549,13 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![
                         Element::Text("arg".to_string())
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![
                         Element::Text("Line".to_string()),
                     ]
@@ -5602,21 +5568,21 @@ Line
 
         #[test]
         fn xo_not_args() {
-            let input = r#".Ao.Ac
-.Ao Ac
-.Ao
-.Ac"#;
+            let input = r#".Xo.Xc
+.Xo Xc
+.Xo
+.Xc"#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![]
                 })
             ];
@@ -5627,18 +5593,18 @@ Line
 
         #[test]
         fn xo_parsed() {
-            let input = r#".Ao
+            let input = r#".Xo
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Xc
+.Xo Dv CONSTANT
+.Xc
+.Xo
 Line
-.Ac
+.Xc
 "#;
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Ad,
@@ -5649,7 +5615,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::Dv,
@@ -5660,7 +5626,7 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
+                    mdoc_macro: Macro::Xo,
                     nodes: vec![
                         Element::Text("Line".to_string())
                     ]
@@ -5674,12 +5640,14 @@ Line
         #[test]
         fn xo_called() {
             let input = r#".Ao
+.Xo
 .Ad addr
-.Ac
-.Ao Dv CONSTANT
-.Ac
-.Ao
+.Xc
+.Xo Dv CONSTANT
+.Xc
+.Xo
 Line
+.Xc
 .Ac
 "#;
             let elements = vec![
@@ -5687,28 +5655,33 @@ Line
                     mdoc_macro: Macro::Ao,
                     nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
+                            mdoc_macro: Macro::Xo,
                             nodes: vec![
-                                Element::Text("addr".to_string())
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string())
+                                    ]
+                                }),
                             ]
                         }),
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Dv,
+                            mdoc_macro: Macro::Xo,
                             nodes: vec![
-                                Element::Text("CONSTANT".to_string()),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Dv,
+                                    nodes: vec![
+                                        Element::Text("CONSTANT".to_string()),
+                                    ]
+                                })
+                            ]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Xo,
+                            nodes: vec![
+                                Element::Text("Line".to_string())
                             ]
                         })
-                    ]
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ao,
-                    nodes: vec![
-                        Element::Text("Line".to_string())
                     ]
                 })
             ];
