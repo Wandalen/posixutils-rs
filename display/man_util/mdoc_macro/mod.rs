@@ -173,9 +173,7 @@ pub enum Macro {
     },
     Lp,
     Ms, 
-    Mt {
-        mails: Vec<String>,
-    },
+    Mt,
     Nd {
         line: String,
     },
@@ -188,13 +186,11 @@ pub enum Macro {
     Oo,
     Oc, // Close multi-line Oo context
     Op,
-    Os{ 
-        footer_text: Option<String>, 
-    },
+    Os,
     Ot,
     Ox(OxType),
     Pa,
-    Pf {
+    Pf{
         prefix: String
     },
     Po,
@@ -222,8 +218,8 @@ pub enum Macro {
     Sx,
     Sy,
     Ta,
-    Tg {
-        term: Option<String>,
+    Tg{
+        term: Option<String>
     },
     Tn,
     Ud,
