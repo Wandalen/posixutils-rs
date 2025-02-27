@@ -28,12 +28,14 @@ word     = @{ (!(ws | NEWLINE) ~ ANY)+ }
 
 macro_arg = {
   !(
-    d1_block | 
-    dl_block | 
-    f_block  |
-    it_block |
-    rs_submacro | 
-    bt | st | db | dd | dt | ex | fd | hf | lb | lp
+    d1_block     | 
+    dl_block     | 
+    it_block     |
+    rs_submacro  | 
+    bt | st | db | 
+    dd | dt | ex | 
+    fd | hf | lb | 
+    lp
   ) 
   ~ 
   (
@@ -43,7 +45,7 @@ macro_arg = {
   ) 
 }
 
-arg = { !ta ~ (macro_arg | text_arg) }
+arg = { macro_arg | text_arg }
 
 text_line = { !"." ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 line = { !"." ~ (!NEWLINE ~ ANY)* }
@@ -81,13 +83,19 @@ block_partial_implicit = {
   vt_block 
 }
 
-block_partial_explicit = { 
-  a_block  | 
-  b_block  | 
-  br_block | 
-  d_block  | 
-  e_block  | 
-  f_block 
+block_partial_explicit = {
+  ao_block  |
+  ac        |
+  bo_block  |
+  bc        | 
+  bro_block |
+  brc       | 
+  do_block  |
+  dc        | 
+  eo_block  |
+  ec        | 
+  fo_block  |
+  fc
 }
 
 rs_submacro = { 
@@ -281,40 +289,41 @@ ss_block         =  { ss_open ~ (NEWLINE ~ ss_block_element*)? }
 // ----- Block partial-explicit
 
 // --- Ao & Ac
-a_closed  = ${ "."? ~ "Ac" ~ ws* ~ NEWLINE? }
-a_opened  = ${ "Ao" ~ ws* ~ NEWLINE? }
-a_element = ${ !("."? ~ "Ac") ~ "."? ~ arg }
-a_block   = ${ a_opened ~ (a_element ~ ws* ~ NEWLINE?)* ~ a_closed }
+
+ac       = ${ "Ac" ~ !text_arg ~ ws* ~ NEWLINE? }
+ao_head  = ${ "Ao" ~ !text_arg ~ (ws+ ~ !ac ~ text_arg)* ~ ws* ~ NEWLINE? }
+ao_body  = ${ !("."? ~ ac) ~ element }
+ao_block = ${ ao_head ~ ao_body* ~ "."? ~ ac }
 
 // --- Bo & Bc
-b_closed  = ${ "."? ~ "Bc" ~ ws* ~ NEWLINE? }
-b_opened  = ${ "Bo" ~ ws* ~ NEWLINE? }
-b_element = ${ !("."? ~ "Bc") ~ "."? ~ arg }
-b_block   = ${ b_opened ~ (b_element ~ ws* ~ NEWLINE?)* ~ b_closed }
+bc       = ${ "Bc" ~ !text_arg ~ ws* ~ NEWLINE? }
+bo_head  = ${ "Bo" ~ !text_arg ~ (ws+ ~ !bc ~ text_arg)* ~ ws* ~ NEWLINE? }
+bo_body  = ${ !("."? ~ bc) ~ element }
+bo_block = ${ bo_head ~ bo_body* ~ "."? ~ bc }
 
 // --- Bro & Brc
-br_closed  = ${ "."? ~ "Brc" ~ ws* ~ NEWLINE? }
-br_opened  = ${ "Bro" ~ ws* ~ NEWLINE? }
-br_element = ${ !("."? ~ "Brc") ~ "."? ~ arg }
-br_block   = ${ br_opened ~ (br_element ~ ws* ~ NEWLINE?)* ~ br_closed }
+brc       = ${ "Brc" ~ !text_arg ~ ws* ~ NEWLINE? }
+bro_head  = ${ "Bro" ~ !text_arg ~ (ws+ ~ !brc ~ text_arg)* ~ ws* ~ NEWLINE? }
+bro_body  = ${ !("."? ~ brc) ~ element }
+bro_block = ${ bro_head ~ bro_body* ~ "."? ~ brc }
 
 // --- Do & Dc
-d_closed  = ${ "."? ~ "Dc" ~ ws* ~ NEWLINE? }
-d_opened  = ${ "Do" ~ ws* ~ NEWLINE? }
-d_element = ${ !("."? ~ "Dc") ~ "."? ~ arg }
-d_block   = ${ d_opened ~ (d_element ~ ws* ~ NEWLINE?)* ~ d_closed }
+dc       = ${ "Dc" ~ !text_arg ~ ws* ~ NEWLINE? }
+do_head  = ${ "Do" ~ !text_arg ~ (ws+ ~ !dc ~ text_arg)* ~ ws* ~ NEWLINE? }
+do_body  = ${ !("."? ~ dc) ~ element }
+do_block = ${ do_head ~ do_body* ~ "."? ~ dc }
 
 // --- Eo & Ec
-e_closed  = ${ "."? ~ "Ec" ~ ws* ~ closing_delimiter? ~ ws* ~ NEWLINE? }
-e_opened  = ${ "Eo" ~ ws* ~ opening_delimiter? ~ ws* ~ NEWLINE? }
-e_element = ${ !("."? ~ "Ec") ~ "."? ~ arg }
-e_block   = ${ e_opened ~ (e_element ~ ws* ~ NEWLINE?)* ~ e_closed }
+ec       = ${ "Ec" ~ !text_arg ~ (ws+ ~ closing_delimiter)? ~ ws* ~ NEWLINE? }
+eo_head  = ${ "Eo" ~ !text_arg ~ (ws+ ~ opening_delimiter)? ~ (ws+ ~ !ec ~ text_arg)* ~ ws* ~ NEWLINE? }
+eo_body  = ${ !("."? ~ ec) ~ element }
+eo_block = ${ eo_head ~ eo_body* ~ "."? ~ ec }
 
 // --- Fo & Fc
-f_closed  = ${ "."? ~ "Fc" ~ ws* ~ NEWLINE? }
-f_opened  = ${ "Fo" ~ ws* ~ text_arg ~ ws* ~ NEWLINE? }
-f_element = ${ !("."? ~ "Fc") ~ text_arg }
-f_block   = ${ f_opened ~ (f_element ~ ws* ~ NEWLINE?)* ~ f_closed }
+fc       = ${ "Fc" ~ !text_arg ~ ws* ~ NEWLINE? }
+fo_head  = ${ "Fo" ~ !text_arg ~ ws+ ~ word ~ (ws+ ~ !fc ~ line)? ~ ws* ~ NEWLINE? }
+fo_body  = ${ !("."? ~ fc) ~ element }
+fo_block = ${ fo_head ~ fo_body* ~ "."? ~ fc }
 
 
 // ----- Block partial-implicit
@@ -515,20 +524,10 @@ section = ${ ASCII_DIGIT }
 arch    = ${ text_arg }
 dt      = ${ "Dt" ~ !text_arg ~ (ws+ ~ title)? ~ ws+ ~ section ~ (ws+ ~ arch)? ~ ws* ~ NEWLINE? }
 
-// -- Fa
-
-//fa_body  = ${ "\""? ~ (ws* ~ expr_arg)+ ~ "\""? }
-//fa       = ${ "Fa" ~ !text_arg ~ (ws+ ~ (macro_arg | fa_body))+ ~ ws* ~ NEWLINE? }
-
 // -- Fd
 
 directive = ${ "#" ~ word }
 fd        = ${ "Fd" ~ !text_arg ~ ws+ ~ directive ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
-
-// -- Lk
-// link         = { text_arg }
-// display_name = @{ ("\""? ~ (ws* ~ expr_arg)+ ~ "\""?)+ }
-// lk           = ${ "Lk" ~ !text_arg ~ ws+ ~ link ~ (ws* ~ (macro_arg | display_name))* ~ ws* ~ NEWLINE? }
 
 // -- Other in-line macros
 

@@ -62,7 +62,7 @@ pub enum Macro {
         author_name_type: AnType,
     },
     Ao, // Begin a block enclosed by angle brackets
-    // Ac, // Close an Ao block
+    Ac, // Close an Ao block
     Ap,
     Aq,
     Ar,
@@ -85,10 +85,10 @@ pub enum Macro {
     },
     El, // End a list context started by Bl
     Bo,
-    // Bc, // Close a Bo block
+    Bc, // Close a Bo block
     Bq,
     Bro,
-    // Brc, // Close a Bro block
+    Brc, // Close a Bro block
     Brq,
     Bsx(BsxType),
     Bt,
@@ -102,28 +102,22 @@ pub enum Macro {
     },
     Dl,
     Do,
-    // Dc, // Close a Do block
+    Dc, // Close a Do block
     Dq,
     Dt {
         title: Option<String>,
         section: String,
         arch: Option<String>,
     },
-    // Dv {
-    //     identifiers: Vec<String>,
-    // },
     Dv,
     Dx(DxType),
     Em,
     En,
     Eo {
         opening_delimiter: Option<char>,
-        closing_dilimiter: Option<char>,
+        closing_delimiter: Option<char>,
     },
-    // Ec {
-    //     // Close a scope started by Eo
-    //     closing_dilimiter: Option<char>,
-    // },
+    Ec,
     Er,
     Es { // Obsolete
         opening_delimiter: char,
