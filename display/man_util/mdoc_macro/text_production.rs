@@ -54,15 +54,15 @@ impl Display for AtType {
 
 #[derive(Debug, PartialEq)]
 pub struct BsxType {
-    pub version: Vec<String>,
+    pub version: Option<String>,
 }
 
 impl Display for BsxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = if self.version.is_empty() {
+        let version = if self.version.is_none() {
             "".to_string()
         } else {
-            format!(" {}", self.version.join(" "))
+            format!(" {}", self.version.clone().unwrap())
         };
 
         write!(f, "BSD/OS{version}")
@@ -72,7 +72,7 @@ impl Display for BsxType {
 #[derive(Debug, PartialEq)]
 pub struct BxType {
     pub version: Option<String>,
-    pub variant: Vec<String>,
+    pub variant: Option<String>,
 }
 
 impl Display for BxType {
@@ -81,10 +81,10 @@ impl Display for BxType {
             .version
             .as_ref()
             .map_or_else(|| "".to_string(), |v| v.to_string());
-        let variant = if self.variant.is_empty() {
+        let variant = if self.variant.is_none() {
             "".to_string()
         } else {
-            format!(" {}", self.variant.join(" "))
+            format!(" {}", self.variant.clone().unwrap())
         };
 
         write!(f, "{version}BSD{variant}")
@@ -93,15 +93,15 @@ impl Display for BxType {
 
 #[derive(Debug, PartialEq)]
 pub struct DxType {
-    pub version: Vec<String>,
+    pub version: Option<String>,
 }
 
 impl Display for DxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = if self.version.is_empty() {
+        let version = if self.version.is_none() {
             "".to_string()
         } else {
-            format!(" {}", self.version.join(" "))
+            format!(" {}", self.version.clone().unwrap())
         };
 
         write!(f, "DragonFly{version}")
@@ -110,15 +110,15 @@ impl Display for DxType {
 
 #[derive(Debug, PartialEq)]
 pub struct FxType {
-    pub version: Vec<String>,
+    pub version: Option<String>,
 }
 
 impl Display for FxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = if self.version.is_empty() {
+        let version = if self.version.is_none() {
             "".to_string()
         } else {
-            format!(" {}", self.version.join(" "))
+            format!(" {}", self.version.clone().unwrap())
         };
 
         write!(f, "FreeBSD{version}")

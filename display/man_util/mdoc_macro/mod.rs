@@ -126,13 +126,11 @@ pub enum Macro {
     // },
     Er,
     Es { // Obsolete
-        opening_delimiter: Option<char>,
-        closing_delimiter: Option<char>,
+        opening_delimiter: char,
+        closing_delimiter: char,
     },
     Ev,
-    Ex {
-        utilities: Vec<String>,
-    },
+    Ex,
     Fa,
     Fd {
         directive: String,
@@ -140,27 +138,19 @@ pub enum Macro {
     },
     Fl,
     Fn {
-        funcname: Option<String>
+        funcname: String
     },
     Fo {
         funcname: String,
     },
     Fc, // End a function context started by Fo
-    Fr { // Obsolete
-        num: Option<i64>
-    },
+    Fr, // Obsolete
     Ft,
     Fx(FxType),
-    Hf {
-        // TODO: Not implemented???
-        // https://man.openbsd.org/mdoc#Hf
-        file_name: Option<String>,
-    },
-    Ic {
-        keyword: String,
-    },
+    Hf,
+    Ic,
     In {
-        file_name: Option<String>,
+        filename: String,
     },
     It {
         args: Vec<Element>
@@ -171,7 +161,6 @@ pub enum Macro {
     Li,
     Lk {
         uri: String,
-        display_name: Option<String>,
     },
     Lp,
     Mt {
