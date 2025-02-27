@@ -16,7 +16,6 @@ WHITESPACE = _{ " " | "\t" }
 ws         = _{ WHITESPACE }
 NEWLINE    = _{ "\r"? ~ "\n" }
 _COMMENT   = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
-IDENT_CHAR = _{ ASCII_ALPHANUMERIC | "_" | "-" }
 
 // -- Macro name separator to not allow merging macro name with arguments
 
@@ -41,7 +40,7 @@ macro_arg = {
   (
     block_partial_implicit |
     block_partial_explicit |
-    inline
+    inline | ta 
   ) 
 }
 
@@ -145,7 +144,7 @@ inline = {
 
 element = { 
   _COMMENT | 
-  ("."? ~ (block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  ("."? ~ (ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
   text_line
 }
 
@@ -253,14 +252,12 @@ bl_block =  { bl_open ~ it_block* ~ el_close }
 block_line = { (!NEWLINE ~ ANY)+ }
 
 // -- It
-ta          = @{ "."? ~ "Ta" ~ !IDENT_CHAR ~ NEWLINE? }
-tab         = @{ (ws ~ ws ~ ws ~ ws) | "\t" }
-cell_ending =  { ta | tab }
+ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
+// tab = @{ ta | (ws ~ ws ~ ws ~ ws) | "\t" }
 
-it_cell  = ${ ".It" ~ ((ws+ ~ arg)* ~ ws ~ cell_ending)* }
-it_head  = ${ ".It" ~ (ws+ ~ arg)* }
+it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 it_body  = ${ (!(".It") ~ !(".El") ~ element)* }
-it_block = ${ (it_head | it_cell) ~ NEWLINE? ~ it_body }
+it_block = ${ it_head ~ it_body }
 
 // -- Nd
 

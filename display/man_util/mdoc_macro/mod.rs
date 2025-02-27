@@ -146,9 +146,7 @@ pub enum Macro {
     In {
         filename: String,
     },
-    It {
-        args: Vec<Element>
-    },
+    It,
     Lb {
         lib_name: String,
     },

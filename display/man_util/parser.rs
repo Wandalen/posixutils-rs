@@ -162,6 +162,7 @@ impl MdocParser {
             Rule::inline => Self::parse_inline(pair),
             Rule::arg => Self::parse_arg(pair.into_inner().next().unwrap()),
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
+            Rule::ta => Self::parse_ta(pair),
             Rule::EOI => Element::Eoi,
             _ => Element::Text(pair.as_str().to_string()),
         }
@@ -173,6 +174,13 @@ impl MdocParser {
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
             _ => unreachable!(),
         }
+    }
+
+    fn parse_ta(pair: Pair<Rule>) -> Element {
+        Element::Macro(MacroNode {
+            mdoc_macro: Macro::Ta,
+            nodes: vec![]
+        })
     }
 
     pub fn parse_mdoc(input: impl AsRef<str>) -> Result<MdocDocument, MdocError> {
@@ -359,24 +367,23 @@ impl MdocParser {
     fn parse_it_block(pair: Pair<Rule>) -> Element {
         let mut inner_pairs = pair.into_inner();
 
-        let args = inner_pairs
+        let mut nodes: Vec<_> = inner_pairs
             .next()
             .unwrap()
             .into_inner()
             .map(Self::parse_element)
             .collect();
         
-        let nodes = inner_pairs
+        let iter = inner_pairs
             .next()
             .unwrap()
             .into_inner()
-            .map(Self::parse_element)
-            .collect();
+            .map(Self::parse_element);
 
+        nodes.extend(iter);
+        
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::It {
-                args: args
-            },
+            mdoc_macro: Macro::It,
             nodes
         })
     }
@@ -2158,22 +2165,18 @@ mod test {
                 },
                 nodes: vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It {
-                            args: vec![
-                                Element::Text("Line".to_string()),
-                                Element::Text("1".to_string())
-                            ]
-                        },
-                        nodes: vec![]
+                        mdoc_macro: Macro::It,
+                        nodes: vec![
+                            Element::Text("Line".to_string()),
+                            Element::Text("1".to_string())
+                        ]
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It {
-                            args: vec![
-                                Element::Text("Line".to_string()),
-                                Element::Text("2".to_string())
-                            ]
-                        },
-                        nodes: vec![]
+                        mdoc_macro: Macro::It,
+                        nodes: vec![
+                            Element::Text("Line".to_string()),
+                            Element::Text("2".to_string())
+                        ]
                     }),
                 ],
             })];
@@ -2384,107 +2387,160 @@ mod test {
         use crate::man_util::parser::*;
 
         #[test]
-        fn it_with_args() {
+        fn it_first_variant() {
             let input = r#".Bl -hang
 .It arg Ad addr1
 Some text
 .It arg1 arg2
 .Ad addr
 Some text
-.El"#;
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Bl { 
-                    list_type: BlType::Hang, 
-                    offset: None, 
-                    compact: false, 
-                    columns: vec![] 
-                },
-                nodes: vec![
-                    Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It {
-                            args: vec![
+.El
+"#;
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bl { 
+                        list_type: BlType::Hang, 
+                        offset: None, 
+                        compact: false, 
+                        columns: vec![] 
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::It,
+                            nodes: vec![
                                 Element::Text("arg".to_string()),
                                 Element::Macro(MacroNode {
                                     mdoc_macro: Macro::Ad,
                                     nodes: vec![
                                         Element::Text("addr1".to_string())
                                     ]
-                                })
+                                }),
+                                Element::Text("Some text\n".to_string())
                             ]
-                        },
-                        nodes: vec![
-                            Element::Text("Some text\n".to_string())
-                        ]
-                    }),
-                    Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It {
-                            args: vec![
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::It,
+                            nodes: vec![
                                 Element::Text("arg1".to_string()),
                                 Element::Text("arg2".to_string()),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string())
+                                    ]
+                                }),
+                                Element::Text("Some text\n".to_string())
                             ]
-                        },
-                        nodes: vec![
-                            Element::Macro(MacroNode {
-                                mdoc_macro: Macro::Ad,
-                                nodes: vec![
-                                    Element::Text("addr".to_string())
-                                ]
-                            }),
-                            Element::Text("Some text\n".to_string())
-                        ]
-                    }),
-                ]
-            })];
+                        }),
+                    ]
+                })
+            ];
 
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elements)
         }
 
         #[test]
-        fn it_no_args() {
-            let input = r#".Bl -item
+        fn it_second_variant() {
+            let input = r#".Bl -bullet
 .It
 Line
-.Ad addr
 .It
-Line
+.Ad addr Ad addr
 .El
-            "#;
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Bl { 
-                    list_type: BlType::Item, 
-                    offset: None, 
-                    compact: false, 
-                    columns: vec![] 
-                },
-                nodes: vec![
-                    Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It {
-                            args: vec![]
-                        },
-                        nodes: vec![
-                            Element::Text("Line\n".to_string()),
-                            Element::Macro(MacroNode {
-                                mdoc_macro: Macro::Ad,
-                                nodes: vec![
-                                    Element::Text("addr".to_string())
-                                ]
-                            })
-                        ]
-                    }),
-                    Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It {
-                            args: vec![]
-                        },
-                        nodes: vec![
-                            Element::Text("Line\n".to_string())
-                        ]
-                    }),
-                ]
-            })];
+"#;
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bl {
+                        list_type: BlType::Bullet,
+                        offset: None,
+                        compact: false,
+                        columns: vec![]
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::It,
+                            nodes: vec![
+                                Element::Text("Line\n".to_string())
+                            ]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::It,
+                            nodes: vec![
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string()),
+                                    ]
+                                }),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string())
+                                    ]
+                                })
+                            ]
+                        })
+                    ]
+                })
+            ];
 
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
-            assert_eq!(mdoc.elements, elements);
+            assert_eq!(mdoc.elements, elements)
+        }
+
+        #[test]
+        fn it_column_variant() {
+            let input = r#".Bl -column
+.It Em Command Ta Em External Ta Ad addr
+.El"#;
+
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bl {
+                        list_type: BlType::Column,
+                        offset: None,
+                        compact: false,
+                        columns: vec![]
+                    },
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::It,
+                            nodes: vec![
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Em,
+                                    nodes: vec![
+                                        Element::Text("Command".to_string())
+                                    ]
+                                }),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ta,
+                                    nodes: vec![]
+                                }),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Em,
+                                    nodes: vec![
+                                        Element::Text("External".to_string())
+                                    ]
+                                }),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ta,
+                                    nodes: vec![]
+                                }),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![
+                                        Element::Text("addr".to_string())
+                                    ]
+                                }),
+                            ]
+                        })
+                    ]
+                })
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements)
         }
 
         #[test]
@@ -8621,4 +8677,4 @@ arg2 Fc
             assert_eq!(mdoc.elements, elements);
         }
     }
-}
+}}
