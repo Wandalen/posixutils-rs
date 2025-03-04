@@ -15,14 +15,13 @@ WHITESPACE = _{ " " | "\t" }
 
 ws         = _{ WHITESPACE }
 NEWLINE    = _{ "\r"? ~ "\n" }
-_COMMENT   = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+// _COMMENT   = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 // -- Macro name separator to not allow merging macro name with arguments
 
 expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
-// text_arg = @{ (!(ws | NEWLINE | macro_arg) ~ ANY)+ }
 word     = @{ (!(ws | NEWLINE) ~ ANY)+ }
-text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg) ~ ANY)+ }
+text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ }
 
 // -- List of Callable macros
 
@@ -45,10 +44,14 @@ macro_arg = {
   ) 
 }
 
-arg = { macro_arg | text_arg }
+comment_start = _{ "\\" ~ "\"" }
+comment_macro = _{ comment_start ~ (!(NEWLINE | EOI) ~ ANY)* }
 
-text_line = { !"." ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
-line = { !"." ~ (!NEWLINE ~ ANY)* }
+text_non_comment = @{ (!comment_start ~ !NEWLINE ~ ANY)+ }
+text_line = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE | EOI) }
+line      = { !"." ~ (comment_macro | text_non_comment)+ }
+
+arg = { macro_arg | text_arg }
 
 // ----- Macro types
 
@@ -143,13 +146,12 @@ inline = {
 
 // ----- Mdoc document
 
-element = { 
-  _COMMENT | 
-  ("."? ~ (ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+element = {
+  ("."? ~ ( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
   text_line
 }
 
-mdoc = { SOI ~ element* ~ EOI }
+mdoc = { SOI ~ (("." ~ comment_macro ~ NEWLINE)* ~ element)* ~ EOI }
 
 // ----- Block full-explicit macros
 
@@ -319,7 +321,7 @@ eo_block = ${ eo_head ~ eo_body* ~ "."? ~ ec }
 
 // --- Fo & Fc
 fc       = ${ "Fc" ~ !text_arg ~ ws* ~ NEWLINE? }
-fo_head  = ${ "Fo" ~ !text_arg ~ ws+ ~ word ~ (ws+ ~ !fc ~ line)? ~ ws* ~ NEWLINE? }
+fo_head  = ${ "Fo" ~ !text_arg ~ ws+ ~ word ~ (ws+ ~ !fc ~ (comment_macro | line))? ~ ws* ~ NEWLINE? }
 fo_body  = ${ !("."? ~ fc) ~ element }
 fo_block = ${ fo_head ~ fo_body* ~ "."? ~ fc }
 

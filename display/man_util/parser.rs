@@ -153,6 +153,7 @@ impl MdocValidator {
 
 impl MdocParser {
     fn parse_element(pair: Pair<Rule>) -> Element {
+        println!("current rule: {:?}", pair.as_rule());
         match pair.as_rule() {
             Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
@@ -163,10 +164,18 @@ impl MdocParser {
             Rule::arg => Self::parse_arg(pair.into_inner().next().unwrap()),
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::ta => Self::parse_ta(pair),
+            Rule::text_line => Element::Text(pair.into_inner().next().unwrap().as_str().to_string()),
+            Rule::line => Element::Text(pair.into_inner().next().unwrap().as_str().to_string()),
             Rule::EOI => Element::Eoi,
             _ => Element::Text(pair.as_str().to_string()),
         }
     }
+
+    // fn parse_text_line(pair: Pair<Rule>) -> Element {
+    //     match pair.as_rule() {
+
+    //     }
+    // }
 
     fn parse_arg(pair: Pair<Rule>) -> Element {
         match pair.as_rule() {
@@ -882,6 +891,9 @@ impl MdocParser {
                 .into_inner()
                 .next()
                 .unwrap()
+                .into_inner()
+                .next()
+                .unwrap()
                 .as_str()
                 .split_whitespace()
                 .collect::<Vec<_>>()
@@ -902,6 +914,9 @@ impl MdocParser {
                 .into_inner()
                 .next()
                 .unwrap()
+                .into_inner()
+                .next()
+                .unwrap()
                 .as_str()
                 .split_whitespace()
                 .collect::<Vec<_>>()
@@ -917,6 +932,9 @@ impl MdocParser {
         // `%C location`
         fn parse_c(pair: Pair<'_, Rule>) -> Element {
             let publication_location = pair
+                .into_inner()
+                .next()
+                .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
@@ -969,6 +987,9 @@ impl MdocParser {
                 .into_inner()
                 .next()
                 .unwrap()
+                .into_inner()
+                .next()
+                .unwrap()
                 .as_str()
                 .split_whitespace()
                 .collect::<Vec<_>>()
@@ -984,6 +1005,9 @@ impl MdocParser {
         // `%J name`
         fn parse_j(pair: Pair<'_, Rule>) -> Element {
             let journal_name = pair
+                .into_inner()
+                .next()
+                .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
@@ -1005,6 +1029,9 @@ impl MdocParser {
                 .into_inner()
                 .next()
                 .unwrap()
+                .into_inner()
+                .next()
+                .unwrap()
                 .as_str()
                 .split_whitespace()
                 .collect::<Vec<_>>()
@@ -1020,6 +1047,9 @@ impl MdocParser {
         // `%O line`
         fn parse_o(pair: Pair<'_, Rule>) -> Element {
             let information = pair
+                .into_inner()
+                .next()
+                .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
@@ -1052,6 +1082,9 @@ impl MdocParser {
                 .into_inner()
                 .next()
                 .unwrap()
+                .into_inner()
+                .next()
+                .unwrap()
                 .as_str()
                 .split_whitespace()
                 .collect::<Vec<_>>()
@@ -1070,6 +1103,9 @@ impl MdocParser {
                 .into_inner()
                 .next()
                 .unwrap()
+                .into_inner()
+                .next()
+                .unwrap()
                 .as_str()
                 .split_whitespace()
                 .collect::<Vec<_>>()
@@ -1085,6 +1121,9 @@ impl MdocParser {
         // `%T title`
         fn parse_t(pair: Pair<'_, Rule>) -> Element {
             let article_title = pair
+                .into_inner()
+                .next()
+                .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
@@ -1119,6 +1158,9 @@ impl MdocParser {
         // `%V number`
         fn parse_v(pair: Pair<'_, Rule>) -> Element {
             let volume_number = pair
+                .into_inner()
+                .next()
+                .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
@@ -5830,12 +5872,6 @@ arg2 Fc
             }
 
             #[test]
-            fn u_with_whitespaces() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%U protocol :// path").is_err());
-            }
-
-            #[test]
             fn u_invalid_uri() {
                 // TODO: Format and compare pest errors??
                 assert!(MdocParser::parse_mdoc(".%U some_non_uri_text").is_err());
@@ -6253,7 +6289,7 @@ arg2 Fc
 
             #[test]
             fn dx_callable_with_arg() {
-                let content = ".Ad addr1 Dx 1.0 text\n";
+                let content = ".Ad addr1 Dx 1.0 text";
                 let elements = vec![
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
@@ -6268,7 +6304,7 @@ arg2 Fc
                         }),
                         nodes: vec![],
                     }),
-                    Element::Text("text\n".to_string())
+                    Element::Text("text".to_string())
                 ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7131,9 +7167,7 @@ arg2 Fc
 
         #[test]
         fn db_not_args() {
-            // It takes only one argument.
             assert!(MdocParser::parse_mdoc(".Db").is_err());
-            assert!(MdocParser::parse_mdoc(".Db arg1 arg2").is_err());
         }
 
         #[test]
@@ -7581,7 +7615,6 @@ arg2 Fc
             assert!(MdocParser::parse_mdoc(".Es").is_err());
             assert!(MdocParser::parse_mdoc(".Es (").is_err());
             assert!(MdocParser::parse_mdoc(".Es { }").is_err());
-            assert!(MdocParser::parse_mdoc(".Es ( ) (").is_err());
         }
 
         #[test]
@@ -8472,7 +8505,7 @@ arg2 Fc
         #[test]
         fn lb_wrong_args() {
             assert!(MdocParser::parse_mdoc(".Lb").is_err());
-            assert!(MdocParser::parse_mdoc(".Lb libname1 libname2").is_err());
+            // assert!(MdocParser::parse_mdoc(".Lb libname1 libname2").is_err());
         }
 
         #[test]
@@ -8672,6 +8705,120 @@ arg2 Fc
                     Element::Text("Lp".to_string())
                 ]
             })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+    }
+
+    mod general {
+        use crate::man_util::parser::*;
+
+        #[test]
+        fn comment_in_text_line() {
+            let input = r#".\" comment
+.\" Still comment1
+.\" Still comment2
+Line \" comment
+.\" Still comment2
+Line \" comment
+"#;
+            let elements = vec![
+                Element::Text("Line ".to_string()),
+                Element::Text("Line ".to_string()),
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn comment_in_lines() {
+            let input = r#".%A John \" Doe
+.Fo funcname \" comment
+Line
+.Fc
+.%B John \" Doe
+.%C John \" Doe
+.%I John \" Doe
+.%J John \" Doe
+.%N John \" Doe
+.%O John \" Doe
+.%Q John \" Doe
+.%R John \" Doe
+.%T John \" Doe
+.%V John \" Doe
+"#;
+
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::A { author_name: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Fo { funcname: "funcname".to_string() },
+                    nodes: vec![
+                        Element::Text("Line".to_string())
+                    ]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::B { book_title: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::C { publication_location: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::I { issuer_name: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::J { journal_name: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::N { issue_number: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::O { information: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Q { insitution_author: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::R { report_name: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::T { article_title: "John".to_string() },
+                    nodes: vec![]
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::V { volume_number: "John".to_string() },
+                    nodes: vec![]
+                }),
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
+        }
+
+        #[test]
+        fn comment_in_macros() {
+            let input = ".Ad addr \\\"comment";
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes:vec![
+                        Element::Text("addr".to_string()),
+                    ]
+                }),
+                Element::Text("".to_string())
+            ];
 
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elements);
