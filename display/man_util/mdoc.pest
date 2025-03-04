@@ -20,8 +20,9 @@ _COMMENT   = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 // -- Macro name separator to not allow merging macro name with arguments
 
 expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
-text_arg = @{ (!(ws | NEWLINE | macro_arg) ~ ANY)+ }
+// text_arg = @{ (!(ws | NEWLINE | macro_arg) ~ ANY)+ }
 word     = @{ (!(ws | NEWLINE) ~ ANY)+ }
+text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg) ~ ANY)+ }
 
 // -- List of Callable macros
 

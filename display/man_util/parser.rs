@@ -4586,8 +4586,8 @@ Line
         #[test]
         #[allow(non_snake_case)]
         fn Do_not_args() {
-            let input = r#".Do.Dc
-.Do .Dc
+            let input = r#".Do Dc
+.Do Dc
 .Do
 .Dc"#;
             let elements = vec![
