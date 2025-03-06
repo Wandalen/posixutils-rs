@@ -224,7 +224,6 @@ fn parse_mdoc(
     formatting_settings: FormattingSettings,
 ) -> Result<Vec<u8>, ManError> {
     let content = String::from_utf8(man_page.to_vec()).unwrap();
-    println!("Content:\n\n{content}\n\n");
     let document = MdocParser::parse_mdoc(content);
     println!("{document:#?}");
 

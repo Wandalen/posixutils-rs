@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
+use crate::man_util::parser::Element;
 use text_production::{AtType, BsxType, BxType, DxType, FxType, NxType, OxType, StType};
 use types::*;
 
@@ -40,9 +41,7 @@ pub enum Macro {
     O {
         information: String,
     },
-    P {
-        page_number: String,
-    },
+    P,
     Q {
         institution_author: String,
     },
@@ -110,29 +109,22 @@ pub enum Macro {
         section: String,
         arch: Option<String>,
     },
-    // Dv {
-    //     identifiers: Vec<String>,
-    // },
     Dv,
     Dx(DxType),
     Em,
     En,
     Eo {
         opening_delimiter: Option<char>,
-    },
-    Ec {
-        // Close a scope started by Eo
-        closing_dilimiter: Option<char>,
-    },
-    Er,
-    Es { // Obsolete
-        opening_delimiter: Option<char>,
         closing_delimiter: Option<char>,
     },
-    Ev,
-    Ex {
-        utilities: Vec<String>,
+    Ec,
+    Er,
+    Es { // Obsolete
+        opening_delimiter: char,
+        closing_delimiter: char,
     },
+    Ev,
+    Ex,
     Fa,
     Fd {
         directive: String,
@@ -140,36 +132,27 @@ pub enum Macro {
     },
     Fl,
     Fn {
-        funcname: Option<String>
+        funcname: String
     },
     Fo {
-        func_name: String,
+        funcname: String,
     },
     Fc, // End a function context started by Fo
-    Fr { // Obsolete
-        num: Option<i64>
-    },
+    Fr, // Obsolete
     Ft,
     Fx(FxType),
-    Hf {
-        // TODO: Not implemented???
-        // https://man.openbsd.org/mdoc#Hf
-        file_name: Option<String>,
-    },
-    Ic {
-        keyword: String,
-    },
+    Hf,
+    Ic,
     In {
-        file_name: Option<String>,
+        filename: String,
     },
-    It(ItType),
+    It,
     Lb {
         lib_name: String,
     },
     Li,
     Lk {
         uri: String,
-        display_name: Option<String>,
     },
     Lp,
     Ms, 
