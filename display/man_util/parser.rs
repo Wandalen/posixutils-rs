@@ -153,7 +153,6 @@ impl MdocValidator {
 
 impl MdocParser {
     fn parse_element(pair: Pair<Rule>) -> Element {
-        println!("current rule: {:?}", pair.as_rule());
         match pair.as_rule() {
             Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
@@ -170,12 +169,6 @@ impl MdocParser {
             _ => Element::Text(pair.as_str().to_string()),
         }
     }
-
-    // fn parse_text_line(pair: Pair<Rule>) -> Element {
-    //     match pair.as_rule() {
-
-    //     }
-    // }
 
     fn parse_arg(pair: Pair<Rule>) -> Element {
         match pair.as_rule() {
@@ -1736,26 +1729,6 @@ impl MdocParser {
     // Obsolete
     // .Fr num
     fn parse_fr(pair: Pair<Rule>) -> Element {
-        // let mut inner = pair.into_inner();
-
-        // let mut num = None;
-        // let mut nodes = Vec::new();
-        
-        // let arg = inner.next().unwrap();
-        // if !matches!(arg.as_rule(), Rule::arg) {
-        //     num = Some(arg.as_str().parse::<i64>().unwrap());
-        // } else {
-        //     nodes.push(Self::parse_element(arg));
-        // }
-
-        // nodes.extend(inner.map(Self::parse_element));
-
-        // Element::Macro(MacroNode {
-        //     mdoc_macro: Macro::Fr {
-        //         num: num
-        //     },
-        //     nodes
-        // })
         let nodes = pair.into_inner().map(MdocParser::parse_element).collect();
 
         Element::Macro(MacroNode {
