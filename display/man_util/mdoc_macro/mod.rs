@@ -7,7 +7,6 @@
 // SPDX-License-Identifier: MIT
 //
 
-use crate::man_util::parser::Element;
 use text_production::{AtType, BsxType, BxType, DxType, FxType, NxType, OxType, StType};
 use types::*;
 
