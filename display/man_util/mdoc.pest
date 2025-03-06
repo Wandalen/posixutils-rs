@@ -333,42 +333,41 @@ fo_head  = ${ "Fo" ~ !text_arg ~ ws+ ~ word ~ (ws+ ~ !fc ~ (comment_macro | line
 fo_body  = ${ !("."? ~ fc) ~ element }
 fo_block = ${ fo_head ~ fo_body* ~ "."? ~ fc }
 
-
 // --- Oo & Oc
-o_closed  = ${ "."? ~ "Oc" ~ ws* ~ NEWLINE? }
-o_opened  = ${ "Oo" ~ ws* ~ NEWLINE? }
-o_element = ${ !("."? ~ "Oc") ~ "."? ~ arg }
-o_block   =  { o_opened ~ (o_element ~ ws* ~ NEWLINE?)* ~ o_closed }
+oc       = ${ "Oc" ~ !text_arg ~ ws* ~ NEWLINE? }
+oo_head  = ${ "Oo" ~ !text_arg ~ (ws+ ~ !oc ~ element)* ~ ws* ~ NEWLINE? }
+oo_body  = ${ !("."? ~ oc) ~ arg ~ ws* ~ NEWLINE? }
+oo_block = ${ oo_head ~ oo_body* ~ "."? ~ oc }
 
 // --- Po & Pc
-p_closed  = ${ "."? ~ "Pc" ~ ws* ~ NEWLINE? }
-p_opened  = ${ "Po" ~ ws* ~ NEWLINE? }
-p_element = ${ !("."? ~ "Pc") ~ "."? ~ arg }
-p_block   =  { p_opened ~ (p_element ~ ws* ~ NEWLINE?)* ~ p_closed }
+pc       = ${ "Pc" ~ !text_arg ~ ws* ~ NEWLINE? }
+po_head  = ${ "Po" ~ !text_arg ~ (ws+ ~ !pc ~ arg)* ~ ws* ~ NEWLINE? }
+po_body  = ${ !("."? ~ pc) ~ arg ~ ws* ~ NEWLINE? }
+po_block = ${ po_head ~ po_body* ~ "."? ~ pc }
 
 // --- Qo & Qc
-q_closed  = ${ "."? ~ "Qc" ~ ws* ~ NEWLINE? }
-q_opened  = ${ "Qo" ~ ws* ~ NEWLINE? }
-q_element = ${ !("."? ~ "Qc") ~ "."? ~ arg }
-q_block   =  { q_opened ~ (q_element ~ ws* ~ NEWLINE?)* ~ q_closed }
+qc       = ${ "Qc" ~ !text_arg ~ ws* ~ NEWLINE? }
+qo_head  = ${ "Qo" ~ !text_arg ~ (ws+ ~ !qc ~ arg)* ~ ws* ~ NEWLINE? }
+qo_body  = ${ !("."? ~ qc) ~ arg ~ ws* ~ NEWLINE? }
+qo_block = ${ qo_head ~ qo_body* ~ "."? ~ qc }
 
 // --- Rs & Re
-rs_closed  = ${ "."? ~ "Re" ~ ws* ~ NEWLINE? }
-rs_opened  = ${ "Rs" ~ ws* ~ NEWLINE? }
-rs_element = ${ !("."? ~ "Re") ~ "."? ~ rs_submacro }
-rs_block   =  { rs_opened ~ (rs_element ~ ws* ~ NEWLINE?)+ ~ rs_closed }
+re       = ${ "Re" ~ !text_arg ~ ws* ~ NEWLINE? }
+rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ !re ~ rs_submacro)* ~ ws* ~ NEWLINE? }
+rs_body  = ${ !("."? ~ re) ~ rs_submacro ~ ws* ~ NEWLINE? }
+rs_block = ${ rs_head ~ rs_body* ~ "."? ~ re }
 
 // --- So & Sc
-s_closed  = ${ "."? ~ "Sc" ~ ws* ~ NEWLINE? }
-s_opened  = ${ "So" ~ ws* ~ NEWLINE? }
-s_element = ${ !("."? ~ "Sc") ~ "."? ~ arg }
-s_block   =  { s_opened ~ (s_element ~ ws* ~ NEWLINE?)* ~ s_closed }
+sc       = ${ "Sc" ~ !text_arg ~ ws* ~ NEWLINE? }
+so_head  = ${ "So" ~ !text_arg ~ (ws+ ~ !sc ~ arg)* ~ ws* ~ NEWLINE? }
+so_body  = ${ !("."? ~ sc) ~ arg ~ ws* ~ NEWLINE? }
+so_block = ${ so_head ~ so_body* ~ "."? ~ sc }
 
 // --- Xo & Xc
-x_closed  = ${ "."? ~ "Xc" ~ ws* ~ NEWLINE? }
-x_opened  = ${ "Xo" ~ ws* ~ NEWLINE? }
-x_element = ${ !("."? ~ "Xc") ~ "."? ~ arg }
-x_block   =  { x_opened ~ (x_element ~ ws* ~ NEWLINE?)* ~ x_closed }
+xc       = ${ "Xc" ~ !text_arg ~ ws* ~ NEWLINE? }
+xo_head  = ${ "Xo" ~ !text_arg ~ (ws+ ~ !xc ~ arg)* ~ ws* ~ NEWLINE? }
+xo_body  = ${ !("."? ~ xc) ~ arg ~ ws* ~ NEWLINE? }
+xo_block = ${ xo_head ~ xo_body* ~ "."? ~ xc }
 
 // ----- Block partial-implicit
 
@@ -433,7 +432,7 @@ fx          = ${ "Fx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
 nx          = ${ "Nx"  ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 ox          = ${ "Ox"  ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
-rv          = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+rv          = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 
 // C Language Standards
 st_ansiC      = { "-ansiC" }
@@ -601,13 +600,13 @@ opening_delimiter = { "(" | "[" }
 closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
 
 // -- Document preamble and NAME section macros
-os = ${ "Os" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+os = ${ "Os" ~ !text_arg ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 
 // -- Sections and cross references
 sx = ${ "Sx" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 xr = ${ "Xr" ~ ws+ ~ text_arg ~ ws+ ~ text_arg ~ ws* ~ NEWLINE? }
 tg = ${ "Tg" ~ !text_arg ~ (ws+ ~ arg){, 1} ~ ws* ~ NEWLINE? }
-pp = ${ "Pp" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+pp = ${ "Pp" ~ !text_arg ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 
 // -- Spacing control
 pf = ${ "Pf" ~ ws+ ~ text_arg ~ ws* ~ NEWLINE? }
