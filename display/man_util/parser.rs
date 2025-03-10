@@ -443,11 +443,11 @@ impl MdocParser {
         let name = if name.is_empty() { None } else { Some(name) };
 
         // Parse `nm_block_element`
-        nodes.extend(inner.filter_map(|p| p.into_inner().next().map(Self::parse_element)));
+        //nodes.extend(inner.filter_map(|p| p.into_inner().next().map(Self::parse_element)));
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Nm { name },
-            nodes,
+            nodes: vec![],
         })
     }
 
@@ -3290,17 +3290,20 @@ Line
         #[test]
         fn nm_macro_in_body() {
             let content = ".Nm name1 name2\n.Nd name description";
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Nm {
-                    name: Some(vec!["name1".to_string(), "name2".to_string()]),
-                },
-                nodes: vec![Element::Macro(MacroNode {
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Nm {
+                        name: Some(vec!["name1".to_string(), "name2".to_string()]),
+                    },
+                    nodes: vec![],
+                }),
+                Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nd {
                         line: "name description".to_string(),
                     },
                     nodes: vec![],
-                })],
-            })];
+                })
+            ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
@@ -3309,15 +3312,18 @@ Line
         #[test]
         fn nm_parsed() {
             let content = ".Nm name1 name2 Ad addr1";
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Nm {
-                    name: Some(vec!["name1".to_string(), "name2".to_string()]),
-                },
-                nodes: vec![Element::Macro(MacroNode {
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Nm {
+                        name: Some(vec!["name1".to_string(), "name2".to_string()]),
+                    },
+                    nodes: vec![],
+                }),
+                Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ad,
                     nodes: vec![Element::Text("addr1".to_string())],
-                })],
-            })];
+                })
+            ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
