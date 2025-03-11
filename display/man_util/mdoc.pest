@@ -24,17 +24,14 @@ word     = @{ (!(ws | NEWLINE) ~ ANY)+ }
 text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ }
 
 // -- List of Callable macros
-
-macro_arg = {
+macro_arg = { 
   !(
-    d1_block     | 
-    dl_block     | 
-    it_block     |
-    rs_submacro  | 
-    bt | st | db | 
-    dd | dt | ex | 
-    fd | hf | lb | 
-    lp
+    d1_block | 
+    dl_block | 
+    rs_submacro | 
+    bt | st | db | dd | dt | ex | fd | hf | 
+    lb | lp | os | pp | rv | sm | tg | ud | 
+    rs_block
   ) 
   ~ 
   (
@@ -98,7 +95,19 @@ block_partial_explicit = {
   eo_block  |
   ec        | 
   fo_block  |
-  fc
+  fc        |
+  oo_block  |
+  oc        | 
+  po_block  |
+  pc        | 
+  qo_block  |
+  qc        | 
+  rs_block  |
+  re        | 
+  so_block  |
+  sc        | 
+  xo_block  |
+  xc     
 }
 
 rs_submacro = { 
@@ -118,17 +127,7 @@ rs_submacro = {
   v 
 }
 
-text_production = { 
-  at  | 
-  bsx | 
-  bx  | 
-  dx  | 
-  ex  | 
-  fx  | 
-  nx  | 
-  ox  | 
-  st 
-}
+text_production = { at | bsx | bx | dx | ex | fx | nx | ox | st | rv }
 
 inline = { 
     rs_submacro 
@@ -140,8 +139,17 @@ inline = {
   | fa | fd | fl | fr | ft | Fn 
   | hf 
   | ic | In 
-  | lb | li | lk | lp |
-   text_production 
+  | lb | li | lk | lp 
+  | ms | mt 
+  | no | ns 
+  | os | ot 
+  | pa | pf | pp 
+  | sm | sx | sy 
+  | tg | tn 
+  | ud | ux 
+  | va 
+  | xr 
+  | text_production 
 }
 
 // ----- Mdoc document
@@ -270,9 +278,10 @@ nd_block         =  { nd_open ~ (NEWLINE ~ nd_block_element*)? }
 
 // -- Nm
 
-nm_open          = ${ "Nm" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* }
-nm_block_element =  { !("." ~ (nm_block | sh_block | ss_block)) ~ element }
-nm_block         =  { nm_open ~ (NEWLINE ~ nm_block_element*)? }
+nm_block           = ${ "Nm" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+//nm_open          = ${ "Nm" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* }
+//nm_block_element =  { !("." ~ (nm_block | sh_block | ss_block)) ~ element }
+//nm_block         =  { nm_open ~ (NEWLINE ~ nm_block_element*)? }
 
 // -- Sh
 
@@ -325,6 +334,41 @@ fo_head  = ${ "Fo" ~ !text_arg ~ ws+ ~ word ~ (ws+ ~ !fc ~ (comment_macro | line
 fo_body  = ${ !("."? ~ fc) ~ element }
 fo_block = ${ fo_head ~ fo_body* ~ "."? ~ fc }
 
+// --- Oo & Oc
+oc       = ${ "Oc" ~ !text_arg ~ ws* ~ NEWLINE? }
+oo_head  = ${ "Oo" ~ !text_arg ~ (ws+ ~ !oc ~ arg)* ~ ws* ~ NEWLINE? }
+oo_body  = ${ !("."? ~ oc) ~ arg ~ ws* ~ NEWLINE? }
+oo_block = ${ oo_head ~ oo_body* ~ "."? ~ oc }
+
+// --- Po & Pc
+pc       = ${ "Pc" ~ !text_arg ~ ws* ~ NEWLINE? }
+po_head  = ${ "Po" ~ !text_arg ~ (ws+ ~ !pc ~ arg)* ~ ws* ~ NEWLINE? }
+po_body  = ${ !("."? ~ pc) ~ arg ~ ws* ~ NEWLINE? }
+po_block = ${ po_head ~ po_body* ~ "."? ~ pc }
+
+// --- Qo & Qc
+qc       = ${ "Qc" ~ !text_arg ~ ws* ~ NEWLINE? }
+qo_head  = ${ "Qo" ~ !text_arg ~ (ws+ ~ !qc ~ arg)* ~ ws* ~ NEWLINE? }
+qo_body  = ${ !("."? ~ qc) ~ arg ~ ws* ~ NEWLINE? }
+qo_block = ${ qo_head ~ qo_body* ~ "."? ~ qc }
+
+// --- Rs & Re
+re       = ${ "Re" ~ !text_arg ~ ws* ~ NEWLINE? }
+rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ !re ~ rs_submacro)* ~ ws* ~ NEWLINE? }
+rs_body  = ${ !("."? ~ re) ~ rs_submacro ~ ws* ~ NEWLINE? }
+rs_block = ${ rs_head ~ rs_body* ~ "."? ~ re }
+
+// --- So & Sc
+sc       = ${ "Sc" ~ !text_arg ~ ws* ~ NEWLINE? }
+so_head  = ${ "So" ~ !text_arg ~ (ws+ ~ !sc ~ arg)* ~ ws* ~ NEWLINE? }
+so_body  = ${ !("."? ~ sc) ~ arg ~ ws* ~ NEWLINE? }
+so_block = ${ so_head ~ so_body* ~ "."? ~ sc }
+
+// --- Xo & Xc
+xc       = ${ "Xc" ~ !text_arg ~ ws* ~ NEWLINE? }
+xo_head  = ${ "Xo" ~ !text_arg ~ (ws+ ~ !xc ~ arg)* ~ ws* ~ NEWLINE? }
+xo_body  = ${ !("."? ~ xc) ~ arg ~ ws* ~ NEWLINE? }
+xo_block = ${ xo_head ~ xo_body* ~ "."? ~ xc }
 
 // ----- Block partial-implicit
 
@@ -388,6 +432,8 @@ dx          = ${ "Dx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
 fx          = ${ "Fx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
 nx          = ${ "Nx"  ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 ox          = ${ "Ox"  ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+
+rv          = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 
 // C Language Standards
 st_ansiC      = { "-ansiC" }
@@ -553,3 +599,44 @@ lp = ${ "Lp" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 // -- Delimeters
 opening_delimiter = { "(" | "[" }
 closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
+
+// -- Document preamble and NAME section macros
+os = ${ "Os" ~ !text_arg ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
+
+// -- Sections and cross references
+sx = ${ "Sx" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+xr = ${ "Xr" ~ ws+ ~ text_arg ~ ws+ ~ text_arg ~ ws* ~ NEWLINE? }
+tg = ${ "Tg" ~ !text_arg ~ (ws+ ~ arg){, 1} ~ ws* ~ NEWLINE? }
+pp = ${ "Pp" ~ !text_arg ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
+
+// -- Spacing control
+pf = ${ "Pf" ~ ws+ ~ text_arg ~ ws* ~ NEWLINE? }
+ns = ${ "Ns" ~ !text_arg ~ ws* ~ NEWLINE? }
+
+sm_on = { "on" }
+sm_off = { "off" }
+spacing_mode = { sm_on | sm_off }
+sm = ${ "Sm"  ~ !text_arg ~ (ws+ ~ spacing_mode)? ~ ws* ~ NEWLINE? }
+
+// -- Semantic markup for command line utilities
+pa = ${ "Pa" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Semantic markup for function libraries
+ot = ${ "Ot" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+va = ${ "Va" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Various semantic markup
+mailpart = ${ (!(ws | NEWLINE | "@") ~ ANY)+ }
+mail_to = @{ mailpart ~ "@" ~ mailpart }
+mt = ${ "Mt" ~ (ws+ ~ mail_to)+ ~ ws* ~ NEWLINE? }
+ms = ${ "Ms" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+
+// -- Physical markup
+sy = ${ "Sy" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+no = ${ "No" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+
+tn = ${ "Tn" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+// Prints “currently under development”
+ud = ${ "Ud" ~ !text_arg ~ ws* ~ NEWLINE? }
+// Prints “UNIX”
+ux = ${ "Ux" ~ !text_arg ~ ws* ~ NEWLINE? }

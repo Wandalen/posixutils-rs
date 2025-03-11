@@ -7,7 +7,6 @@
 // SPDX-License-Identifier: MIT
 //
 
-use crate::man_util::parser::Element;
 use text_production::{AtType, BsxType, BxType, DxType, FxType, NxType, OxType, StType};
 use types::*;
 
@@ -43,7 +42,7 @@ pub enum Macro {
     },
     P,
     Q {
-        insitution_author: String,
+        institution_author: String,
     },
     R {
         report_name: String,
@@ -155,38 +154,26 @@ pub enum Macro {
         uri: String,
     },
     Lp,
-    Mt {
-        // https://man.openbsd.org/mdoc#Mt
-        mail_to: String,
-    },
+    Ms, 
+    Mt,
     Nd {
         line: String,
     },
     Nm {
         name: Option<Vec<String>>,
     },
-    No {
-        words: Vec<String>,
-    },
+    No,
     Ns,
     Nx(NxType),
     Oo,
     Oc, // Close multi-line Oo context
     Op,
-    Os {
-        fotter_text: Option<String>,
-    },
-    Ot {
-        func_type: String,
-    },
+    Os,
+    Ot,
     Ox(OxType),
-    Pa {
-        names: Vec<String>,
-    },
-    Pf {
-        prefix: String,
-        macro_name: String,
-        arguments: Vec<String>,
+    Pa,
+    Pf{
+        prefix: String
     },
     Po,
     Pc, // Close parenthesised context opened by Po
@@ -198,13 +185,11 @@ pub enum Macro {
     Qq,
     Rs,
     Re, // Close an Rs block
-    Rv {
-        functions: Vec<String>,
-    },
+    Rv,
     Sh {
         title: String,
     },
-    Sm(SmMode),
+    Sm(Option<SmMode>),
     So,
     Sc, // Close single-quoted context opened by So
     Sq,
@@ -212,25 +197,16 @@ pub enum Macro {
         title: String,
     },
     St(StType),
-    Sx {
-        title: String,
-    },
-    Sy {
-        words: Vec<String>,
-    },
+    Sx,
+    Sy,
     Ta,
-    Tg {
-        term: Option<String>,
+    Tg{
+        term: Option<String>
     },
-    Tn {
-        words: Vec<String>,
-    },
+    Tn,
     Ud,
     Ux,
-    Va {
-        func_type: Option<String>,
-        identifier: Vec<String>,
-    },
+    Va,
     Vt,
     Xo,
     Xc, // Close a scope opened by Xo
