@@ -1097,7 +1097,7 @@ impl MdocParser {
                     // let day = md.next().unwrap().as_str().parse().unwrap();
 
                     // month_day = Some((month, day));
-                    month_day = inner_pair.as_str().to_string();
+                    month_day = Some( inner_pair.as_str().to_string() );
                     inner.next().unwrap().as_str().parse::<i32>().unwrap()
                 }
                 Rule::year => inner_pair.as_str().parse::<i32>().unwrap(),
