@@ -1090,14 +1090,14 @@ impl MdocParser {
 
             let inner_pair = inner.next().unwrap();
             let year = match inner_pair.as_rule() {
-                Rule::month_day => {
-                    let mut md = inner_pair.into_inner();
+                Rule::line => {
+                    // let mut md = inner_pair.into_inner();
 
-                    let month = md.next().unwrap().as_str().to_string();
-                    let day = md.next().unwrap().as_str().parse().unwrap();
+                    // let month = md.next().unwrap().as_str().to_string();
+                    // let day = md.next().unwrap().as_str().parse().unwrap();
 
-                    month_day = Some((month, day));
-
+                    // month_day = Some((month, day));
+                    month_day = inner_pair.as_str().to_string();
                     inner.next().unwrap().as_str().parse::<i32>().unwrap()
                 }
                 Rule::year => inner_pair.as_str().parse::<i32>().unwrap(),

@@ -25,7 +25,7 @@ pub enum Macro {
         publication_location: String,
     },
     D {
-        month_day: Option<(String, u8)>,
+        month_day: Option<String>,
         year: i32,
     },
     I {
