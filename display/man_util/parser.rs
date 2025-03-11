@@ -24,8 +24,8 @@ pub struct MdocParser;
 
 #[derive(Debug, PartialEq)]
 pub struct MacroNode {
-    mdoc_macro: Macro,
-    nodes: Vec<Element>,
+    pub mdoc_macro: Macro,
+    pub nodes: Vec<Element>,
 }
 
 #[derive(Debug, PartialEq)]
