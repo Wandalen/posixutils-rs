@@ -1,65 +1,421 @@
 use std::collections::HashMap;
 use aho_corasick::AhoCorasick;
-use libc::EOF;
 use super::{mdoc_macro::Macro, parser::{Element, MacroNode, MdocDocument}};
 
 #[derive(Debug)]
-pub struct MdocFormatter {
-    pub formatted_mdoc: String
-}
+pub struct MdocFormatter;
 
 // Base formatting functions.
 impl MdocFormatter {
-    pub fn format_mdoc(&mut self, ast: MdocDocument) -> String {
-        for node in ast.iter() {
-            let formatted_node = format_node(node);
-            self.formatted_mdoc.push_str(&formatted_node);
+    pub fn format_mdoc(ast: MdocDocument) -> String {
+        let mut formatted_mdoc = String::new();
+
+        for node in ast.elements {
+            let formatted_node = Self::format_node(node);
+            formatted_mdoc.push_str(&formatted_node);
         }
 
-        self.formatted_mdoc
+        formatted_mdoc
     }
 
-    pub fn format_node(&self, node: Element) -> String {
+    pub fn format_node(node: Element) -> String {
         match node {
-            Element::Macro(macro_node) => Self::format_macro_node(node),
+            Element::Macro(macro_node) => Self::format_macro_node(macro_node),
             Element::Text(text) => Self::format_text_node(text.as_str()),
-            Element::Eoi => EOF
+            Element::Eoi => "".to_string()
         }
     }
 
     pub fn format_macro_node(macro_node: MacroNode) -> String {
         match macro_node.mdoc_macro {
-            Macro::Rs => format_rs_block(macro_node),
+            Macro::Rs => Self::format_rs_block(macro_node),
             _ => unimplemented!()   
         }
     }
 
-    // TODO: Add all cases
     pub fn format_text_node(text: &str) -> String {
-        let patterns = vec![
-            r"\(ba", r"\(br", r"\(rs",
-            r"\(ul", r"\(ru", r"\(rn",
-            r"\(bb", r"\(sl", 
-        ];
-
         let replacements: HashMap<&str, &str> = [
-            (r"\(ba", r"|"),
-            (r"\(br", r"│"),
-            (r"\(ul", r"_"),
-            (r"\(ru", r"_"),
-            (r"\(rn", r"‾"),
-            (r"\(bb", r"¦"),
-            (r"\(sl", r"/"),
-            (r"\(rs", r"\"),
+            // Lines:
+            (r"\(ba", r"|"),  // bar
+            (r"\(br", r"│"),  // box rule
+            (r"\(ul", r"_"),  // underscore
+            (r"\(ru", r"_"),  // underscore (width 0.5m)
+            (r"\(rn", r"‾"),  // overline
+            (r"\(bb", r"¦"),  // broken bar
+            (r"\(sl", r"/"),  // forward slash
+            (r"\(rs", r"\"), // backward slash
+
+            // Text markers:
+            (r"\(ci", r"○"),  // circle
+            (r"\(bu", r"•"),  // bullet
+            (r"\(dd", r"‡"),  // double dagger
+            (r"\(dg", r"†"),  // dagger
+            (r"\(lz", r"◊"),  // lozenge
+            (r"\(sq", r"□"),  // white square
+            (r"\(ps", r"¶"),  // paragraph
+            (r"\(sc", r"§"),  // section
+            (r"\(lh", r"☜"),  // left hand
+            (r"\(rh", r"☞"),  // right hand
+            (r"\(at", r"@"),  // at
+            (r"\(sh", r"#"),  // hash (pound)
+            (r"\(CR", r"↵"),  // carriage return
+            (r"\(OK", r"✓"),  // check mark
+            (r"\(CL", r"♣"),  // club suit
+            (r"\(SP", r"♠"),  // spade suit
+            (r"\(HE", r"♥"),  // heart suit
+            (r"\(DI", r"♦"),  // diamond suit
+
+            // Legal symbols:
+            (r"\(co", r"©"),  // copyright
+            (r"\(rg", r"®"),  // registered
+            (r"\(tm", r"™"),  // trademarked
+
+            // Punctuation:
+            (r"\(em", r"—"),  // em-dash
+            (r"\(en", r"–"),  // en-dash
+            (r"\(hy", r"‐"),  // hyphen
+            (r"\e", r"\\"),    // back-slash
+            (r"\(r!", r"¡"),  // upside-down exclamation
+            (r"\(r?", r"¿"),  // upside-down question
+
+            // Quotes:
+            (r"\(Bq", r"„"),  // right low double-quote
+            (r"\(bq", r"‚"),  // right low single-quote
+            (r"\(lq", r"“"),  // left double-quote
+            (r"\(rq", r"”"),  // right double-quote
+            (r"\(oq", r"‘"),  // left single-quote
+            (r"\(cq", r"’"),  // right single-quote
+            (r"\(aq", r"'"),  // apostrophe quote (ASCII character)
+            (r"\(dq", "\""),  // double quote (ASCII character)
+            (r"\(Fo", r"«"),  // left guillemet
+            (r"\(Fc", r"»"),  // right guillemet
+            (r"\(fo", r"‹"),  // left single guillemet
+            (r"\(fc", r"›"),  // right single guillemet
+
+            // Brackets:
+            (r"\(lB", r"["),   // left bracket
+            (r"\(rB", r"]"),   // right bracket
+            (r"\(lC", r"{"),   // left brace
+            (r"\(rC", r"}"),   // right brace
+            (r"\(la", r"⟨"),   // left angle
+            (r"\(ra", r"⟩"),   // right angle
+            (r"\(bv", r"⎪"),   // brace extension (special font)
+            (r"\[braceex]", r"⎪"), // brace extension
+            (r"\[bracketlefttp]", r"⎡"), // top-left hooked bracket
+            (r"\[bracketleftbt]", r"⎣"), // bottom-left hooked bracket
+            (r"\[bracketleftex]", r"⎢"), // left hooked bracket extension
+            (r"\[bracketrighttp]", r"⎤"), // top-right hooked bracket
+            (r"\[bracketrightbt]", r"⎦"), // bottom-right hooked bracket
+            (r"\[bracketrightex]", r"⎥"), // right hooked bracket extension
+            (r"\(lt", r"⎧"),   // top-left hooked brace
+            (r"\[bracelefttp]", r"⎧"), // top-left hooked brace
+            (r"\(lk", r"⎨"),   // mid-left hooked brace
+            (r"\[braceleftmid]", r"⎨"), // mid-left hooked brace
+            (r"\(lb", r"⎩"),   // bottom-left hooked brace
+            (r"\[braceleftbt]", r"⎩"), // bottom-left hooked brace
+            (r"\[braceleftex]", r"⎪"), // left hooked brace extension
+            (r"\(rt", r"⎫"),   // top-right hooked brace
+            (r"\[bracerighttp]", r"⎫"), // top-right hooked brace
+            (r"\(rk", r"⎬"),   // mid-right hooked brace
+            (r"\[bracerightmid]", r"⎬"), // mid-right hooked brace
+            (r"\(rb", r"⎭"),   // bottom-right hooked brace
+            (r"\[bracerightbt]", r"⎭"), // bottom-right hooked brace
+            (r"\[bracerightex]", r"⎪"), // right hooked brace extension
+            (r"\[parenlefttp]", r"⎛"),  // top-left hooked parenthesis
+            (r"\[parenleftbt]", r"⎝"),  // bottom-left hooked parenthesis
+            (r"\[parenleftex]", r"⎜"),  // left hooked parenthesis extension
+            (r"\[parenrighttp]", r"⎞"), // top-right hooked parenthesis
+            (r"\[parenrightbt]", r"⎠"), // bottom-right hooked parenthesis
+            (r"\[parenrightex]", r"⎟"), // right hooked parenthesis extension
+
+            // Arrows:
+            (r"\(<-", r"←"),   // left arrow
+            (r"\(->", r"→"),   // right arrow
+            (r"\(<>", r"↔"),   // left-right arrow
+            (r"\(da", r"↓"),   // down arrow
+            (r"\(ua", r"↑"),   // up arrow
+            (r"\(va", r"↕"),   // up-down arrow
+            (r"\(lA", r"⇐"),   // left double-arrow
+            (r"\(rA", r"⇒"),   // right double-arrow
+            (r"\(hA", r"⇔"),   // left-right double-arrow
+            (r"\(uA", r"⇑"),   // up double-arrow
+            (r"\(dA", r"⇓"),   // down double-arrow
+            (r"\(vA", r"⇕"),   // up-down double-arrow
+            (r"\(an", r"⎯"),   // horizontal arrow extension
+
+            // Logical:
+            (r"\(AN", r"∧"),   // logical and
+            (r"\(OR", r"∨"),   // logical or
+            (r"\[tno]", r"¬"), // logical not (text font)
+            (r"\(no", r"¬"),   // logical not (special font)
+            (r"\(te", r"∃"),   // existential quantifier
+            (r"\(fa", r"∀"),   // universal quantifier
+            (r"\(st", r"∋"),   // such that
+            (r"\(tf", r"∴"),   // therefore
+            (r"\(3d", r"∴"),   // therefore
+            (r"\(or", r"|"),   // bitwise or
+
+            // Mathematical:
+            (r"\-", r"-"),          // minus (text font)
+            (r"\(mi", r"−"),         // minus (special font)
+            (r"\+", r"+"),           // plus (text font)
+            (r"\(pl", r"+"),         // plus (special font)
+            (r"\(-+", r"∓"),         // minus-plus
+            (r"\[t+-]", r"±"),       // plus-minus (text font)
+            (r"\(+-", r"±"),         // plus-minus (special font)
+            (r"\(pc", r"·"),         // center-dot
+            (r"\[tmu]", r"×"),       // multiply (text font)
+            (r"\(mu", r"×"),         // multiply (special font)
+            (r"\(c*", r"⊗"),         // circle-multiply
+            (r"\(c+", r"⊕"),         // circle-plus
+            (r"\[tdi]", r"÷"),       // divide (text font)
+            (r"\(di", r"÷"),         // divide (special font)
+            (r"\(f/", r"⁄"),         // fraction
+            (r"\(**", r"∗"),         // asterisk
+            (r"\(<=", r"≤"),        // less-than-equal
+            (r"\(>=", r"≥"),         // greater-than-equal
+            (r"\(<<", r"≪"),         // much less
+            (r"\(>>", r"≫"),         // much greater
+            (r"\(eq", r"="),         // equal
+            (r"\(!=", r"≠"),         // not equal
+            (r"\(==", r"≡"),         // equivalent
+            (r"\(ne", r"≢"),         // not equivalent
+            (r"\(ap", r"∼"),         // tilde operator
+            (r"\(|=", r"≃"),         // asymptotically equal
+            (r"\(=~", r"≅"),         // approximately equal
+            (r"\(~~", r"≈"),         // almost equal
+            (r"\(~=", r"≈"),         // almost equal
+            (r"\(pt", r"∝"),         // proportionate
+            (r"\(es", r"∅"),         // empty set
+            (r"\(mo", r"∈"),         // element
+            (r"\(nm", r"∉"),         // not element
+            (r"\(sb", r"⊂"),         // proper subset
+            (r"\(nb", r"⊄"),         // not subset
+            (r"\(sp", r"⊃"),         // proper superset
+            (r"\(nc", r"⊅"),         // not superset
+            (r"\(ib", r"⊆"),         // reflexive subset
+            (r"\(ip", r"⊇"),         // reflexive superset
+            (r"\(ca", r"∩"),         // intersection
+            (r"\(cu", r"∪"),         // union
+            (r"\(/_", r"∠"),         // angle
+            (r"\(pp", r"⊥"),         // perpendicular
+            (r"\(is", r"∫"),         // integral
+            (r"\[integral]", r"∫"),   // integral
+            (r"\[sum]", r"∑"),        // summation
+            (r"\[product]", r"∏"),    // product
+            (r"\[coproduct]", r"∐"),  // coproduct
+            (r"\(gr", r"∇"),         // gradient
+            (r"\(sr", r"√"),         // square root
+            (r"\[sqrt]", r"√"),       // square root
+            (r"\(lc", r"⌈"),         // left-ceiling
+            (r"\(rc", r"⌉"),         // right-ceiling
+            (r"\(lf", r"⌊"),         // left-floor
+            (r"\(rf", r"⌋"),         // right-floor
+            (r"\(if", r"∞"),         // infinity
+            (r"\(Ah", r"ℵ"),         // aleph
+            (r"\(Im", r"ℑ"),         // imaginary
+            (r"\(Re", r"ℜ"),         // real
+            (r"\(wp", r"℘"),         // Weierstrass p
+            (r"\(pd", r"∂"),         // partial differential
+            (r"\(-h", r"ℏ"),         // Planck constant over 2π
+            (r"\[hbar]", r"ℏ"),       // Planck constant over 2π
+            (r"\(12", r"½"),         // one-half
+            (r"\(14", r"¼"),         // one-fourth
+            (r"\(34", r"¾"),         // three-fourths
+            (r"\(18", r"⅛"),         // one-eighth
+            (r"\(38", r"⅜"),         // three-eighths
+            (r"\(58", r"⅝"),         // five-eighths
+            (r"\(78", r"⅞"),         // seven-eighths
+            (r"\(S1", r"¹"),         // superscript 1
+            (r"\(S2", r"²"),         // superscript 2
+            (r"\(S3", r"³"),         // superscript 3
+            
+            // Ligatures:
+            (r"\(ff", r"ﬀ"), // ff ligature
+            (r"\(fi", r"ﬁ"), // fi ligature
+            (r"\(fl", r"ﬂ"), // fl ligature
+            (r"\(Fi", r"ﬃ"), // ffi ligature
+            (r"\(Fl", r"ﬄ"), // ffl ligature
+            (r"\(AE", r"Æ"), // AE
+            (r"\(ae", r"æ"), // ae
+            (r"\(OE", r"Œ"), // OE
+            (r"\(oe", r"œ"), // oe
+            (r"\(ss", r"ß"), // German eszett
+            (r"\(IJ", r"Ĳ"), // IJ ligature
+            (r"\(ij", r"ĳ"), // ij ligature
+
+            // Accents:
+            ("\\(a\"", r"˝"), // Hungarian umlaut
+            (r"\(a-", r"¯"),  // macron
+            (r"\(a.", r"˙"),  // dotted
+            (r"\(a^", r"^"),  // circumflex
+            (r"\(aa", r"´"),  // acute
+            (r"\'", r"´"),    // acute
+            (r"\(ga", r"`"),  // grave
+            (r"\`", r"`"),    // grave
+            (r"\(ab", r"˘"),  // breve
+            (r"\(ac", r"¸"),  // cedilla
+            (r"\(ad", r"¨"),  // dieresis
+            (r"\(ah", r"ˇ"),  // caron
+            (r"\(ao", r"˚"),  // ring
+            (r"\(a~", r"~"),  // tilde
+            (r"\(ho", r"˛"),  // ogonek
+            (r"\(ha", r"^"),  // hat (ASCII character)
+            (r"\(ti", r"~"),  // tilde (ASCII character)
+
+            // Accented letters:
+            (r"\('A", r"Á"), // acute A
+            (r"\('E", r"É"), // acute E
+            (r"\('I", r"Í"), // acute I
+            (r"\('O", r"Ó"), // acute O
+            (r"\('U", r"Ú"), // acute U
+            (r"\('Y", r"Ý"), // acute Y
+            (r"\('a", r"á"), // acute a
+            (r"\('e", r"é"), // acute e
+            (r"\('i", r"í"), // acute i
+            (r"\('o", r"ó"), // acute o
+            (r"\('u", r"ú"), // acute u
+            (r"\('y", r"ý"), // acute y
+            (r"\(`A", r"À"), // grave A
+            (r"\(`E", r"È"), // grave E
+            (r"\(`I", r"Ì"), // grave I
+            (r"\(`O", r"Ò"), // grave O
+            (r"\(`U", r"Ù"), // grave U
+            (r"\(`a", r"à"), // grave a
+            (r"\(`e", r"è"), // grave e
+            (r"\(`i", r"ì"), // grave i
+            (r"\(`o", r"ò"), // grave o
+            (r"\(`u", r"ù"), // grave u
+            (r"\(~A", r"Ã"), // tilde A
+            (r"\(~N", r"Ñ"), // tilde N
+            (r"\(~O", r"Õ"), // tilde O
+            (r"\(~a", r"ã"), // tilde a
+            (r"\(~n", r"ñ"), // tilde n
+            (r"\(~o", r"õ"), // tilde o
+            (r"\(:A", r"Ä"), // dieresis A
+            (r"\(:E", r"Ë"), // dieresis E
+            (r"\(:I", r"Ï"), // dieresis I
+            (r"\(:O", r"Ö"), // dieresis O
+            (r"\(:U", r"Ü"), // dieresis U
+            (r"\(:a", r"ä"), // dieresis a
+            (r"\(:e", r"ë"), // dieresis e
+            (r"\(:i", r"ï"), // dieresis i
+            (r"\(:o", r"ö"), // dieresis o
+            (r"\(:u", r"ü"), // dieresis u
+            (r"\(:y", r"ÿ"), // dieresis y
+            (r"\(^A", r"Â"), // circumflex A
+            (r"\(^E", r"Ê"), // circumflex E
+            (r"\(^I", r"Î"), // circumflex I
+            (r"\(^O", r"Ô"), // circumflex O
+            (r"\(^U", r"Û"), // circumflex U
+            (r"\(^a", r"â"), // circumflex a
+            (r"\(^e", r"ê"), // circumflex e
+            (r"\(^i", r"î"), // circumflex i
+            (r"\(^o", r"ô"), // circumflex o
+            (r"\(^u", r"û"), // circumflex u
+            (r"\(,C", r"Ç"),  // cedilla C
+            (r"\(,c", r"ç"),  // cedilla c
+            (r"\(/L", r"Ł"),  // stroke L
+            (r"\(/l", r"ł"),  // stroke l
+            (r"\(/O", r"Ø"),  // stroke O
+            (r"\(/o", r"ø"),  // stroke o
+            (r"\(oA", r"Å"),  // ring A
+            (r"\(oa", r"å"),  // ring a
+
+            // Special letters:
+            (r"\(-D", r"Ð"),  // Eth
+            (r"\(Sd", r"ð"),  // eth
+            (r"\(TP", r"Þ"),  // Thorn
+            (r"\(Tp", r"þ"),  // thorn
+            (r"\(.i", r"ı"),  // dotless i
+            (r"\(.j", r"ȷ"),  // dotless j
+
+            // Currency:
+            (r"\(Do", r"$"),  // dollar
+            (r"\(ct", r"¢"),  // cent
+            (r"\(Eu", r"€"),  // Euro symbol
+            (r"\(eu", r"€"),  // Euro symbol
+            (r"\(Ye", r"¥"),  // yen
+            (r"\(Po", r"£"),  // pound
+            (r"\(Cs", r"¤"),  // Scandinavian
+            (r"\(Fn", r"ƒ"),  // florin
+
+            // Units:
+            (r"\(de", r"°"),  // degree
+            (r"\(%0", r"‰"),  // per-thousand
+            (r"\(fm", r"′"),  // minute
+            (r"\(sd", r"″"),  // second
+            (r"\(mc", r"µ"),  // micro
+            (r"\(Of", r"ª"),  // Spanish female ordinal
+            (r"\(Om", r"º"),  // Spanish masculine ordinal
+
+            // Greek letters:
+            (r"\(*A", r"Α"), // Alpha
+            (r"\(*B", r"Β"), // Beta
+            (r"\(*G", r"Γ"), // Gamma
+            (r"\(*D", r"Δ"), // Delta
+            (r"\(*E", r"Ε"), // Epsilon
+            (r"\(*Z", r"Ζ"), // Zeta
+            (r"\(*Y", r"Η"), // Eta
+            (r"\(*H", r"Θ"), // Theta
+            (r"\(*I", r"Ι"), // Iota
+            (r"\(*K", r"Κ"), // Kappa
+            (r"\(*L", r"Λ"), // Lambda
+            (r"\(*M", r"Μ"), // Mu
+            (r"\(*N", r"Ν"), // Nu
+            (r"\(*C", r"Ξ"), // Xi
+            (r"\(*O", r"Ο"), // Omicron
+            (r"\(*P", r"Π"), // Pi
+            (r"\(*R", r"Ρ"), // Rho
+            (r"\(*S", r"Σ"), // Sigma
+            (r"\(*T", r"Τ"), // Tau
+            (r"\(*U", r"Υ"), // Upsilon
+            (r"\(*F", r"Φ"), // Phi
+            (r"\(*X", r"Χ"), // Chi
+            (r"\(*Q", r"Ψ"), // Psi
+            (r"\(*W", r"Ω"), // Omega
+            (r"\(*a", r"α"), // alpha
+            (r"\(*b", r"β"), // beta
+            (r"\(*g", r"γ"), // gamma
+            (r"\(*d", r"δ"), // delta
+            (r"\(*e", r"ε"), // epsilon
+            (r"\(*z", r"ζ"), // zeta
+            (r"\(*y", r"η"), // eta
+            (r"\(*h", r"θ"), // theta
+            (r"\(*i", r"ι"), // iota
+            (r"\(*k", r"κ"), // kappa
+            (r"\(*l", r"λ"), // lambda
+            (r"\(*m", r"μ"), // mu
+            (r"\(*n", r"ν"), // nu
+            (r"\(*c", r"ξ"), // xi
+            (r"\(*o", r"ο"), // omicron
+            (r"\(*p", r"π"), // pi
+            (r"\(*r", r"ρ"), // rho
+            (r"\(*s", r"σ"), // sigma
+            (r"\(*t", r"τ"), // tau
+            (r"\(*u", r"υ"), // upsilon
+            (r"\(*f", r"ϕ"), // phi
+            (r"\(*x", r"χ"), // chi
+            (r"\(*q", r"ψ"), // psi
+            (r"\(*w", r"ω"), // omega
+            (r"\(+h", r"ϑ"), // theta variant
+            (r"\(+f", r"φ"), // phi variant
+            (r"\(+p", r"ϖ"), // pi variant
+            (r"\(+e", r"ϵ"), // epsilon variant
+            (r"\(ts", r"ς"), // sigma terminal
         ].iter().cloned().collect();
 
-        let ac = AhoCorasick::new(&patterns)
+        let mut result = String::new();
+
+        let ac = AhoCorasick::new(replacements.keys())
             .expect("Build error");
 
-        ac.replace_all(text, |mat| {
-            let pat = patterns[mat.pattern()];
-            replacements.get(pat).unwrap_or(&"")
-        })
+        ac.replace_all_with(text, &mut result, |_, key, dst| {
+            dst.push_str(replacements[key]);
+            true
+        });
+
+        result
     }
 }
 
@@ -83,9 +439,208 @@ impl MdocFormatter {
     }
 
     pub fn format_p(macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .iter()
-            .map(|el| el.as_str().to_string())
-            .collect::<String>()
+        let mut result = String::new();
+
+        for node in macro_node.nodes {
+            match node {
+                Element::Text(text) => result.push_str(&text),
+                _ => unreachable!("%P macro can not contain another macro or EOF in subnodes!")
+            }
+        }
+
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    mod special_chars {
+        use crate::man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}, *};
+
+        fn get_ast(input: &str) -> MdocDocument {
+            MdocParser::parse_mdoc(input).unwrap()
+        }
+
+        #[test]
+        fn test_lines() {
+            let input = r"\(ba \(br \(ul \(ru \(rn \(bb \(sl \(rs";
+            let output = r"| │ _ _ ‾ ¦ / \".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_text_markers() {
+            let input = r"\(ci \(bu \(dd \(dg \(lz \(sq \(ps \(sc \(lh \(rh \(at \(sh \(CR \(OK \(CL \(SP \(HE \(DI";
+            let output = r"○ • ‡ † ◊ □ ¶ § ☜ ☞ @ # ↵ ✓ ♣ ♠ ♥ ♦".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_legal_symbols() {
+            let input = r"\(co \(rg \(tm";
+            let output = r"© ® ™".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_punctuation() {
+            let input = r"\(em \(en \(hy \e \(r! \(r?";
+            let output = r"— – ‐ \\ ¡ ¿".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_quotes() {
+            let input = r"\(Bq \(bq \(lq \(rq \(oq \(cq \(aq \(dq \(Fo \(Fc \(fo \(fc";
+            let output = "„ ‚ “ ” ‘ ’ ' \" « » ‹ ›".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_brackets() {
+            let input = r"\(lB \(rB \(lC \(rC \(la \(ra \(bv \[braceex] \[bracketlefttp] \[bracketleftbt] 
+\[bracketleftex] \[bracketrighttp] \[bracketrightbt] \[bracketrightex] 
+\(lt \[bracelefttp] \(lk \[braceleftmid] \(lb \[braceleftbt] \[braceleftex] 
+\(rt \[bracerighttp] \(rk \[bracerightmid] \(rb \[bracerightbt] \[bracerightex] 
+\[parenlefttp] \[parenleftbt] \[parenleftex] \[parenrighttp] \[parenrightbt] \[parenrightex]
+";
+            let output = r"[ ] { } ⟨ ⟩ ⎪ ⎪ ⎡ ⎣ ⎢ ⎤ ⎦ ⎥ ⎧ ⎧ ⎨ ⎨ ⎩ ⎩ ⎪ ⎫ ⎫ ⎬ ⎬ ⎭ ⎭ ⎪ ⎛ ⎝ ⎜ ⎞ ⎠ ⎟".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_arrows() {
+            let input = r"\(<- \(-> \(<> \(da \(ua \(va \(lA \(rA \(hA \(uA \(dA \(vA \(an";
+            let output = r"← → ↔ ↓ ↑ ↕ ⇐ ⇒ ⇔ ⇑ ⇓ ⇕ ⎯".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_logical() {
+            let input = r"\(AN \(OR \[tno] \(no \(te \(fa \(st \(tf \(3d \(or";
+            let output = r"∧ ∨ ¬ ¬ ∃ ∀ ∋ ∴ ∴ |".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_mathematical() {
+            let input = r"\- \(mi \+ \(pl \(-+ \[t+-] \(+- \(pc \[tmu] 
+\(mu \(c* \(c+ \[tdi] \(di \(f/ \(** \(<= \(>= \(<< \(>> \(eq \(!= \(== 
+\(ne \(ap \(|= \(=~ \(~~ \(~= \(pt \(es \(mo \(nm \(sb \(nb \(sp 
+\(nc \(ib \(ip \(ca \(cu \(/_ \(pp \(is \[integral] \[sum] \[product] 
+\[coproduct] \(gr \(sr \[sqrt] \(lc \(rc \(lf \(rf \(if \(Ah \(Im \(Re 
+\(wp \(pd \(-h \[hbar] \(12 \(14 \(34 \(18 \(38 \(58 \(78 \(S1 \(S2 \(S3
+";
+            let output = r"- − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆ ⊇ ∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_ligatures() {
+            let input = r"\(ff \(fi \(fl \(Fi \(Fl \(AE \(ae \(OE \(oe \(ss \(IJ \(ij";
+            let output = r"ﬀ ﬁ ﬂ ﬃ ﬄ Æ æ Œ œ ß Ĳ ĳ".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_accents() {
+            let input = "\\(a\" \\(a- \\(a. \\(a^ \\(aa \\\' \\(ga \\` \\(ab \\(ac \\(ad \\(ah \\(ao \\(a~ \\(ho \\(ha \\(ti";
+            let output = r"˝ ¯ ˙ ^ ´ ´ ` ` ˘ ¸ ¨ ˇ ˚ ~ ˛ ^ ~".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_accented_letters() {
+            let input = r"\('A \('E \('I \('O \('U \('Y \('a \('e 
+\('i \('o \('u \('y \(`A \(`E \(`I \(`O \(`U \(`a \(`e \(`i \(`o \(`u 
+\(~A \(~N \(~O \(~a \(~n \(~o \(:A \(:E \(:I \(:O \(:U \(:a \(:e \(:i 
+\(:o \(:u \(:y \(^A \(^E \(^I \(^O \(^U \(^a \(^e \(^i \(^o \(^u \(,C 
+\(,c \(/L \(/l \(/O \(/o \(oA \(oa
+";
+            let output = r"Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü ÿ Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+        
+        #[test]
+        fn test_special_letters() {
+            let input = r"\(-D \(Sd \(TP \(Tp \(.i \(.j";
+            let output = r"Ð ð Þ þ ı ȷ".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_currency() {
+            let input = r"\(Do \(ct \(Eu \(eu \(Ye \(Po \(Cs \(Fn";
+            let output = r"$ ¢ € € ¥ £ ¤ ƒ".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_units() {
+            let input = r"\(de \(%0 \(fm \(sd \(mc \(Of \(Om";
+            let output = r"° ‰ ′ ″ µ ª º".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_greek_leters() {
+            let input = r"\(*A \(*B \(*G \(*D \(*E \(*Z 
+\(*Y \(*H \(*I \(*K \(*L \(*M \(*N \(*C \(*O \(*P \(*R \(*S 
+\(*T \(*U \(*F \(*X \(*Q \(*W \(*a \(*b \(*g \(*d \(*e \(*z 
+\(*y \(*h \(*i \(*k \(*l \(*m \(*n \(*c \(*o \(*p \(*r \(*s 
+\(*t \(*u \(*f \(*x \(*q \(*w \(+h \(+f \(+p \(+e \(ts
+";
+            let output = r"Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
     }
 }

@@ -6016,7 +6016,7 @@ Line
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some(("January".to_string(), 1)),
+                                month_day: Some("January 1".to_string()),
                                 year: 1970,
                             },
                             nodes: vec![]
@@ -6046,7 +6046,7 @@ Line
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some(("January".to_string(), 1)),
+                                month_day: Some("January 1".to_string()),
                                 year: 1970,
                             },
                             nodes: vec![]
@@ -6076,7 +6076,7 @@ Line
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some(("January".to_string(), 1)),
+                                month_day: Some("January 1".to_string()),
                                 year: 1970,
                             },
                             nodes: vec![]
@@ -6714,7 +6714,7 @@ Line
                 let content = ".%D January 1, 1970";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::D {
-                        month_day: Some(("January".to_string(), 1)),
+                        month_day: Some("January 1".to_string()),
                         year: 1970,
                     },
                     nodes: vec![],
@@ -6729,7 +6729,7 @@ Line
                 let content = ".%D January  \t  1,  \t  1970\n";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::D {
-                        month_day: Some(("January".to_string(), 1)),
+                        month_day: Some("January 1".to_string()),
                         year: 1970,
                     },
                     nodes: vec![],
@@ -6766,7 +6766,7 @@ Line
                 let elements = vec![
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::D { 
-                            month_day: Some(("Ad".to_string(), 1)), 
+                            month_day: Some("Ad 1".to_string()), 
                             year: 1970 
                         },
                         nodes: vec![]
