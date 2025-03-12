@@ -2,6 +2,17 @@ use std::collections::HashMap;
 use aho_corasick::AhoCorasick;
 use super::{mdoc_macro::Macro, parser::{Element, MacroNode, MdocDocument}};
 
+static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(r"(?x)
+        (?:
+            (?P<unicode_bracket>\\\[u(?P<hex1>[0-9A-F]{4,6})\])      |
+            (?P<unicode_c>\\C'u(?P<hex2>[0-9A-F]{4,6})')             |
+            (?P<number_n>\\N'(?P<dec1>[0-9]+)')                      |
+            (?P<number_char>\\\[char(?P<dec2>[0-9]+)\])
+        )
+    ").unwrap()
+});
+
 #[derive(Debug)]
 pub struct MdocFormatter;
 
@@ -35,6 +46,17 @@ impl MdocFormatter {
 
     pub fn format_text_node(text: &str) -> String {
         let replacements: HashMap<&str, &str> = [
+            // Spaces:
+            (r"\ ", " "),    // unpaddable space
+            (r"\~", " "),    // paddable space
+            (r"\0", " "),    // digit-width space
+            (r"\|", " "),    // one-sixth \(em narrow space
+            (r"\^", " "),    // one-twelfth \(em half-narrow space
+            (r"\&", ""),     // zero-width space
+            (r"\)", ""),     // zero-width space (transparent to end-of-sentence detection)
+            (r"\%", ""),     // zero-width space allowing hyphenation
+            (r"\:", ""),     // zero-width space allowing line break
+
             // Lines:
             (r"\(ba", r"|"),  // bar
             (r"\(br", r"│"),  // box rule
@@ -403,6 +425,36 @@ impl MdocFormatter {
             (r"\(+p", r"ϖ"), // pi variant
             (r"\(+e", r"ϵ"), // epsilon variant
             (r"\(ts", r"ς"), // sigma terminal
+
+            // Predefined strings:
+            (r"\*(Ba", r"|"),    // vertical bar
+            (r"\*(Ne", r"≠"),    // not equal
+            (r"\*(Ge", r"≥"),    // greater-than-equal
+            (r"\*(Le", r"≤"),    // less-than-equal
+            (r"\*(Gt", r">"),    // greater-than
+            (r"\*(Lt", r"<"),    // less-than
+            (r"\*(Pm", r"±"),    // plus-minus
+            (r"\*(If", r"infinity"), // infinity
+            (r"\*(Pi", r"pi"),   // pi
+            (r"\*(Na", r"NaN"),  // NaN
+            (r"\*(Am", r"&"),    // ampersand
+            (r"\*R", r"®"),      // restricted mark
+            (r"\*(Tm", r"(Tm)"), // trade mark
+            (r"\*q", "\""),      // double-quote
+            (r"\*(Rq", r"”"),    // right-double-quote
+            (r"\*(Lq", r"“"),    // left-double-quote
+            (r"\*(lp", r"("),    // right-parenthesis
+            (r"\*(rp", r")"),    // left-parenthesis
+            (r"\*(lq", r"“"),    // left double-quote
+            (r"\*(rq", r"”"),    // right double-quote
+            (r"\*(ua", r"↑"),    // up arrow
+            (r"\*(va", r"↕"),    // up-down arrow
+            (r"\*(<=", r"≤"),    // less-than-equal
+            (r"\*(>=", r"≥"),    // greater-than-equal
+            (r"\*(aa", r"´"),    // acute
+            (r"\*(ga", r"`"),    // grave
+            (r"\*(Px", r"POSIX"),// POSIX standard name
+            (r"\*(Ai", r"ANSI"), // ANSI standard name
         ].iter().cloned().collect();
 
         let mut result = String::new();
@@ -415,7 +467,32 @@ impl MdocFormatter {
             true
         });
 
-        result
+        Self::replace_unicode_escapes(&result) 
+    }
+
+    fn replace_unicode_escapes(text: &str) -> String {
+        REGEX_UNICODE.replace_all(text, |caps: &regex::Captures| {
+            if let Some(hex) = caps.name("hex1").or_else(|| caps.name("hex2")).map(|m| m.as_str()) {
+                if let Ok(codepoint) = u32::from_str_radix(hex, 16) {
+                    if codepoint < 0x80 {
+                        return "\u{FFFD}".to_string();
+                    }
+                    if codepoint < 0x10FFFF && !(0xD800 <= codepoint && codepoint <= 0xDFFF) {
+                        if let Some(ch) = char::from_u32(codepoint) {
+                            return ch.to_string();
+                        }
+                    }
+                }
+            } 
+            else if let Some(dec) = caps.name("dec1").or_else(|| caps.name("dec2")).map(|m| m.as_str()) {
+                if let Ok(codepoint) = dec.parse::<u32>() {
+                    if let Some(ch) = char::from_u32(codepoint) {
+                        return ch.to_string();
+                    }
+                }
+            }
+            caps.get(0).unwrap().as_str().to_string()
+        }).to_string()
     }
 }
 
@@ -459,6 +536,16 @@ mod tests {
 
         fn get_ast(input: &str) -> MdocDocument {
             MdocParser::parse_mdoc(input).unwrap()
+        }
+
+        #[test]
+        fn test_spaces() {
+            let input = r"\ \~\0\|\^\&\)\%\:";
+            let output = r"     ".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
         }
 
         #[test]
@@ -636,6 +723,36 @@ mod tests {
 \(*t \(*u \(*f \(*x \(*q \(*w \(+h \(+f \(+p \(+e \(ts
 ";
             let output = r"Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_predefined_strings() {
+            let input = r"\*(Ba \*(Ne \*(Ge \*(Le \*(Gt \*(Lt \*(Pm \*(If \*(Pi \*(Na \*(Am \*R \*(Tm \*q \*(Rq \*(Lq \*(lp \*(rp \*(lq \*(rq \*(ua \*(va \*(<= \*(>= \*(aa \*(ga \*(Px \*(Ai";
+            let output = "| ≠ ≥ ≤ > < ± infinity pi NaN & ® (Tm) \" ” “ ( ) “ ” ↑ ↕ ≤ ≥ ´ ` POSIX ANSI".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_unicode() {
+            let input = r"\[u0100] \C'u01230' \[u025600]";
+            let output = "Ā ሰ 𥘀".to_string();
+            let ast = get_ast(input);
+
+            let result = MdocFormatter::format_mdoc(ast);
+            assert_eq!(output, result)
+        }
+
+        #[test]
+        fn test_numbered() {
+            let input = r"\N'34' \[char43]";
+            let output = "\" +".to_string();
             let ast = get_ast(input);
 
             let result = MdocFormatter::format_mdoc(ast);
