@@ -71,7 +71,7 @@ impl MdocFormatter {
             // In-line.
             Macro::B { book_title } => unimplemented!(),
             Macro::T { article_title } => unimplemented!(),
-            Macro::U { uri } => unimplemented!()
+            Macro::U { uri } => unimplemented!(),
             Macro::Ad => Self::format_ad(macro_node),
             Macro::An { author_name_type } => unimplemented!(),
             Macro::Ap => unimplemented!(),
