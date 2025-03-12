@@ -1,6 +1,24 @@
-.Dd December 21, 2010
-.Dt BUILTIN 1
+.Dd March 12, 2025
+.Dt COPY 1
 .Os
 .Sh NAME
-\[u0001] \C'u0001' \[u0034]
-\N'34' and \[char43]
+.Nm copy
+.Nd example of the Ar macro
+.Sh SYNOPSIS
+.Nm
+.Op Fl r
+.Ar source
+.Ar destination
+.Sh DESCRIPTION
+The command
+.Nm
+copies the contents of
+.Ar source
+to the location specified by
+.Ar destination .
+.Pp
+If the
+.Fl r
+flag is specified,
+.Nm
+recursively copies directories.

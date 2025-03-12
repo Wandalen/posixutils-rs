@@ -39,8 +39,58 @@ impl MdocFormatter {
 
     pub fn format_macro_node(macro_node: MacroNode) -> String {
         match macro_node.mdoc_macro {
-            Macro::Rs => Self::format_rs_block(macro_node),
-            _ => unimplemented!()   
+            // Block partial-explicit.
+            Macro::Ao  => unimplemented!(),
+            Macro::Bo  => unimplemented!(),
+            Macro::Bro => unimplemented!(),
+            Macro::Do  => unimplemented!(),
+            Macro::Eo { opening_delimiter, closing_delimiter } => unimplemented!(),
+            Macro::Fo  => unimplemented!(),
+            Macro::Oo  => unimplemented!(),
+            Macro::Po  => unimplemented!(),
+            Macro::Qo  => unimplemented!(),
+            Macro::Rs  => Self::format_rs_block(macro_node),
+            Macro::So  => unimplemented!(),
+            Macro::Xo  => unimplemented!(),
+
+            // Block partial-implicit.
+            Macro::Aq  => unimplemented!(),
+            Macro::Bq  => unimplemented!(),
+            Macro::Brq => unimplemented!(),
+            Macro::D1  => unimplemented!(),
+            Macro::Dl  => unimplemented!(),
+            Macro::Dq  => unimplemented!(),
+            Macro::En  => unimplemented!(),
+            Macro::Op  => unimplemented!(),
+            Macro::Pq  => unimplemented!(),
+            Macro::Ql  => unimplemented!(),
+            Macro::Qq  => unimplemented!(),
+            Macro::Sq  => unimplemented!(),
+            Macro::Vt  => unimplemented!(),
+
+            // In-line.
+            Macro::B { book_title } => unimplemented!(),
+            Macro::T { article_title } => unimplemented!(),
+            Macro::U { uri } => unimplemented!()
+            Macro::Ad => Self::format_ad(macro_node),
+            Macro::An { author_name_type } => unimplemented!(),
+            Macro::Ap => unimplemented!(),
+            Macro::Ar => unimplemented!(),
+            // TODO: Fix it.
+            // Macro::At()
+            // Macro::Bsx()
+            Macro::Bt => unimplemented!(),
+            // TODO: Fix it.
+            // Macro::Bx()
+            Macro::Cd => unimplemented!(),
+            Macro::Cm => unimplemented!(),
+            Macro::Db => unimplemented!(),
+            Macro::Dd { date } => unimplemented!(),
+            Macro::Dt => unimplemented!(),
+            Macro::Dv => unimplemented!(),
+            Macro::Dx => unimplemented!(),
+            Macro::Em => unimplemented!(),
+            _ => unreachable!()   
         }
     }
 
@@ -516,16 +566,24 @@ impl MdocFormatter {
     }
 
     pub fn format_p(macro_node: MacroNode) -> String {
-        let mut result = String::new();
-
-        for node in macro_node.nodes {
+        macro_node.nodes.iter().map(|node| {
             match node {
-                Element::Text(text) => result.push_str(&text),
-                _ => unreachable!("%P macro can not contain another macro or EOF in subnodes!")
+                Element::Text(text) => Self::format_text_node(text),
+                _ => unreachable!(".%P macro can not contain macro node or EOI!")
             }
-        }
+        }).collect::<String>()
+    }
+}
 
-        result
+// Format other in-line macros.
+impl MdocFormatter {
+    pub fn format_ad(macro_node: MacroNode) -> String {
+        macro_node.nodes.iter().map(|node| {
+            match node {
+                Element::Text(text) => Self::format_text_node(text),
+                _ => unreachable!(".Ad macro can not contain macro node or EOI!")
+            }
+        }).collect::<String>()
     }
 }
 
