@@ -3,7 +3,7 @@ use aho_corasick::AhoCorasick;
 use terminfo::Database;
 use crate::FormattingSettings;
 
-use super::{mdoc_macro::Macro, parser::{Element, MacroNode, MdocDocument}};
+use super::{mdoc_macro::{types::{AnType, DdDate}, Macro}, parser::{Element, MacroNode, MdocDocument}};
 
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(r"(?x)
@@ -42,19 +42,42 @@ impl MdocFormatter {
         }
         false
     }
+
+    
+    fn replace_unicode_escapes(&self, text: &str) -> String {
+        REGEX_UNICODE.replace_all(text, |caps: &regex::Captures| {
+            if let Some(hex) = caps.name("hex1").or_else(|| caps.name("hex2")).map(|m| m.as_str()) {
+                if let Ok(codepoint) = u32::from_str_radix(hex, 16) {
+                    if codepoint < 0x80 {
+                        return "\u{FFFD}".to_string();
+                    }
+                    if codepoint < 0x10FFFF && !(0xD800 <= codepoint && codepoint <= 0xDFFF) {
+                        if let Some(ch) = char::from_u32(codepoint) {
+                            return ch.to_string();
+                        }
+                    }
+                }
+            } 
+            else if let Some(dec) = caps.name("dec1").or_else(|| caps.name("dec2")).map(|m| m.as_str()) {
+                if let Ok(codepoint) = dec.parse::<u32>() {
+                    if let Some(ch) = char::from_u32(codepoint) {
+                        return ch.to_string();
+                    }
+                }
+            }
+            caps.get(0).unwrap().as_str().to_string()
+        }).to_string()
+    }
 }
 
 // Base formatting functions.
 impl MdocFormatter {
     pub fn format_mdoc(&self, ast: MdocDocument) -> Vec<u8> {
-        let mut formatted_mdoc = String::new();
-
-        for node in ast.elements {
-            let formatted_node = self.format_node(node);
-            formatted_mdoc.push_str(&formatted_node);
-        }
-
-        formatted_mdoc.into_bytes()
+        ast.elements
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>()
+            .into_bytes()
     }
 
     fn format_node(&self, node: Element) -> String {
@@ -101,7 +124,7 @@ impl MdocFormatter {
             Macro::T { article_title } => self.format_t(&article_title),
             Macro::U { uri } => self.format_u(&uri),
             Macro::Ad => self.format_ad(macro_node),
-            Macro::An { author_name_type } => unimplemented!(),
+            // Macro::An { author_name_type } => unimplemented!(),
             Macro::Ap => self.format_ap(),
             Macro::Ar => self.format_ar(macro_node),
             // TODO: Fix it.
@@ -113,7 +136,7 @@ impl MdocFormatter {
             Macro::Cd => self.format_cd(macro_node),
             Macro::Cm => self.format_cm(macro_node),
             Macro::Db => self.format_db(),
-            Macro::Dd { date } => unimplemented!(),
+            // Macro::Dd { date } => unimplemented!(),
             Macro::Dt { title, section, arch } => self.format_dt(title, section, arch),
             Macro::Dv => self.format_dv(macro_node),
             // Macro::Dx() => unimplemented!(),
@@ -547,32 +570,14 @@ impl MdocFormatter {
 
         self.replace_unicode_escapes(&result) 
     }
-
-    fn replace_unicode_escapes(&self, text: &str) -> String {
-        REGEX_UNICODE.replace_all(text, |caps: &regex::Captures| {
-            if let Some(hex) = caps.name("hex1").or_else(|| caps.name("hex2")).map(|m| m.as_str()) {
-                if let Ok(codepoint) = u32::from_str_radix(hex, 16) {
-                    if codepoint < 0x80 {
-                        return "\u{FFFD}".to_string();
-                    }
-                    if codepoint < 0x10FFFF && !(0xD800 <= codepoint && codepoint <= 0xDFFF) {
-                        if let Some(ch) = char::from_u32(codepoint) {
-                            return ch.to_string();
-                        }
-                    }
-                }
-            } 
-            else if let Some(dec) = caps.name("dec1").or_else(|| caps.name("dec2")).map(|m| m.as_str()) {
-                if let Ok(codepoint) = dec.parse::<u32>() {
-                    if let Some(ch) = char::from_u32(codepoint) {
-                        return ch.to_string();
-                    }
-                }
-            }
-            caps.get(0).unwrap().as_str().to_string()
-        }).to_string()
-    }
 }
+
+// Formatting block partial-explicit.
+// impl MdocFormatter {
+//     fn format_a_block(&self, macro_node: MacroNode) -> String {
+
+//     }
+// }
 
 // Formatting Rs-Re bloock. Can contain only %* macros
 // Notes:
@@ -747,6 +752,7 @@ impl MdocFormatter {
 
         line
     }
+
 }
 
 #[cfg(test)]
