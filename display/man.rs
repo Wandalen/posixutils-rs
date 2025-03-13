@@ -9,7 +9,8 @@
 
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
-use man_util::parser::MdocParser;
+use man_util::formatter::MdocFormatter;
+use man_util::parser::{MdocDocument, MdocParser};
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
@@ -48,11 +49,14 @@ enum ManError {
     CommandNotFound(String),
     #[error("failed to execute command: {0}")]
     Io(#[from] io::Error),
+    #[error("parsing error: {0}")]
+    Mdoc(#[from] man_util::parser::MdocError)
 }
 
-struct FormattingSettings {
-    width: u16,
-    indent: u16,
+#[derive(Debug)]
+pub struct FormattingSettings {
+    pub width: usize,
+    pub indent: usize,
 }
 
 /// Gets system documentation path by passed name.
@@ -174,7 +178,7 @@ fn get_man_page(name: &str) -> Result<Vec<u8>, ManError> {
 /// Returns [ManError] if working on terminal and failed to get terminal size.
 fn get_pager_settings() -> Result<FormattingSettings, ManError> {
     let mut ps = FormattingSettings {
-        width: 79,
+        width: 78,
         indent: 5,
     };
 
@@ -196,7 +200,7 @@ fn get_pager_settings() -> Result<FormattingSettings, ManError> {
     }
 
     if winsize.ws_col < 79 {
-        ps.width = winsize.ws_col - 1;
+        ps.width = (winsize.ws_col - 1) as usize;
         if winsize.ws_col < 66 {
             ps.indent = 3;
         }
@@ -221,13 +225,15 @@ fn get_pager_settings() -> Result<FormattingSettings, ManError> {
 /// [ManError] if file failed to execute `groff(1)` formatter.
 fn parse_mdoc(
     man_page: &[u8],
-    _formatting_settings: FormattingSettings,
+    formatting_settings: FormattingSettings,
 ) -> Result<Vec<u8>, ManError> {
     let content = String::from_utf8(man_page.to_vec()).unwrap();
-    let document = MdocParser::parse_mdoc(content);
-    println!("{document:#?}");
+    let document = MdocParser::parse_mdoc(content)?;
+    
+    let formatter = MdocFormatter::new(formatting_settings);
+    let formatted_document = formatter.format_mdoc(document);
 
-    Ok(vec![])
+    Ok(formatted_document)
 }
 
 /// Formats man page content into appropriate format.

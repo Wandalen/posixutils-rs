@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 use aho_corasick::AhoCorasick;
+use terminfo::Database;
+use crate::FormattingSettings;
+
 use super::{mdoc_macro::Macro, parser::{Element, MacroNode, MdocDocument}};
 
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
@@ -14,30 +17,55 @@ static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Laz
 });
 
 #[derive(Debug)]
-pub struct MdocFormatter;
+pub struct MdocFormatter {
+    formatting_settings: FormattingSettings
+}
+
+// Helper funcitons.
+impl MdocFormatter {
+    pub fn new(settings: FormattingSettings) -> Self {
+        Self {
+            formatting_settings: settings
+        }
+    }
+
+    fn supports_italic(&self) -> bool {
+        if let Ok(info) = Database::from_env() {
+            return info.raw("sitm").is_some();
+        }
+        false
+    }
+    
+    fn supports_underline(&self) -> bool {
+        if let Ok(info) = Database::from_env() {
+            return info.raw("smul").is_some();
+        }
+        false
+    }
+}
 
 // Base formatting functions.
 impl MdocFormatter {
-    pub fn format_mdoc(ast: MdocDocument) -> String {
+    pub fn format_mdoc(&self, ast: MdocDocument) -> Vec<u8> {
         let mut formatted_mdoc = String::new();
 
         for node in ast.elements {
-            let formatted_node = Self::format_node(node);
+            let formatted_node = self.format_node(node);
             formatted_mdoc.push_str(&formatted_node);
         }
 
-        formatted_mdoc
+        formatted_mdoc.into_bytes()
     }
 
-    pub fn format_node(node: Element) -> String {
+    fn format_node(&self, node: Element) -> String {
         match node {
-            Element::Macro(macro_node) => Self::format_macro_node(macro_node),
-            Element::Text(text) => Self::format_text_node(text.as_str()),
+            Element::Macro(macro_node) => self.format_macro_node(macro_node),
+            Element::Text(text) => self.format_text_node(text.as_str()),
             Element::Eoi => "".to_string()
         }
     }
 
-    pub fn format_macro_node(macro_node: MacroNode) -> String {
+    fn format_macro_node(&self, macro_node: MacroNode) -> String {
         match macro_node.mdoc_macro {
             // Block partial-explicit.
             Macro::Ao  => unimplemented!(),
@@ -45,11 +73,11 @@ impl MdocFormatter {
             Macro::Bro => unimplemented!(),
             Macro::Do  => unimplemented!(),
             Macro::Eo { opening_delimiter, closing_delimiter } => unimplemented!(),
-            Macro::Fo  => unimplemented!(),
+            Macro::Fo { funcname }  => unimplemented!(),
             Macro::Oo  => unimplemented!(),
             Macro::Po  => unimplemented!(),
             Macro::Qo  => unimplemented!(),
-            Macro::Rs  => Self::format_rs_block(macro_node),
+            Macro::Rs  => self.format_rs_block(macro_node),
             Macro::So  => unimplemented!(),
             Macro::Xo  => unimplemented!(),
 
@@ -69,32 +97,32 @@ impl MdocFormatter {
             Macro::Vt  => unimplemented!(),
 
             // In-line.
-            Macro::B { book_title } => unimplemented!(),
-            Macro::T { article_title } => unimplemented!(),
-            Macro::U { uri } => unimplemented!(),
-            Macro::Ad => Self::format_ad(macro_node),
+            Macro::B { book_title } => self.format_b(&book_title),
+            Macro::T { article_title } => self.format_t(&article_title),
+            Macro::U { uri } => self.format_u(&uri),
+            Macro::Ad => self.format_ad(macro_node),
             Macro::An { author_name_type } => unimplemented!(),
-            Macro::Ap => unimplemented!(),
-            Macro::Ar => unimplemented!(),
+            Macro::Ap => self.format_ap(),
+            Macro::Ar => self.format_ar(macro_node),
             // TODO: Fix it.
             // Macro::At()
             // Macro::Bsx()
-            Macro::Bt => unimplemented!(),
+            Macro::Bt => self.format_bt(),
             // TODO: Fix it.
             // Macro::Bx()
-            Macro::Cd => unimplemented!(),
-            Macro::Cm => unimplemented!(),
-            Macro::Db => unimplemented!(),
+            Macro::Cd => self.format_cd(macro_node),
+            Macro::Cm => self.format_cm(macro_node),
+            Macro::Db => self.format_db(),
             Macro::Dd { date } => unimplemented!(),
-            Macro::Dt => unimplemented!(),
-            Macro::Dv => unimplemented!(),
-            Macro::Dx => unimplemented!(),
-            Macro::Em => unimplemented!(),
+            Macro::Dt { title, section, arch } => self.format_dt(title, section, arch),
+            Macro::Dv => self.format_dv(macro_node),
+            // Macro::Dx() => unimplemented!(),
+            Macro::Em => self.format_em(macro_node),
             _ => unreachable!()   
         }
     }
 
-    pub fn format_text_node(text: &str) -> String {
+    fn format_text_node(&self, text: &str) -> String {
         let replacements: HashMap<&str, &str> = [
             // Spaces:
             (r"\ ", " "),    // unpaddable space
@@ -517,10 +545,10 @@ impl MdocFormatter {
             true
         });
 
-        Self::replace_unicode_escapes(&result) 
+        self.replace_unicode_escapes(&result) 
     }
 
-    fn replace_unicode_escapes(text: &str) -> String {
+    fn replace_unicode_escapes(&self, text: &str) -> String {
         REGEX_UNICODE.replace_all(text, |caps: &regex::Captures| {
             if let Some(hex) = caps.name("hex1").or_else(|| caps.name("hex2")).map(|m| m.as_str()) {
                 if let Ok(codepoint) = u32::from_str_radix(hex, 16) {
@@ -547,28 +575,26 @@ impl MdocFormatter {
 }
 
 // Formatting Rs-Re bloock. Can contain only %* macros
-// TODO:
-//  - RsMacro instead of MacroNode.
 // Notes:
 //  - All macros are comma separated.
 //  - Before the last '%A' macro has to be 'and' word. 
 //  - These macros have order!
 impl MdocFormatter {
-    pub fn format_rs_block(macro_node: MacroNode) -> String {
+    fn format_rs_block(&self, macro_node: MacroNode) -> String {
         unimplemented!()
     }
 
-    pub fn format_d(month_day: Option<String>, year: i32) -> String {
+    fn format_d(&self, month_day: Option<String>, year: i32) -> String {
         match month_day {
             Some(md) => format!("{md} {year}"),
             None => format!("{year}")
         }
     }
 
-    pub fn format_p(macro_node: MacroNode) -> String {
+    fn format_p(&self, macro_node: MacroNode) -> String {
         macro_node.nodes.iter().map(|node| {
             match node {
-                Element::Text(text) => Self::format_text_node(text),
+                Element::Text(text) => self.format_text_node(text),
                 _ => unreachable!(".%P macro can not contain macro node or EOI!")
             }
         }).collect::<String>()
@@ -577,20 +603,156 @@ impl MdocFormatter {
 
 // Format other in-line macros.
 impl MdocFormatter {
-    pub fn format_ad(macro_node: MacroNode) -> String {
+    fn format_ad(&self, macro_node: MacroNode) -> String {
         macro_node.nodes.iter().map(|node| {
             match node {
-                Element::Text(text) => Self::format_text_node(text),
+                Element::Text(text) => self.format_text_node(text),
                 _ => unreachable!(".Ad macro can not contain macro node or EOI!")
             }
         }).collect::<String>()
+    }
+
+    fn format_b(&self, book_title: &str) -> String {
+        self.format_text_node(book_title)
+    }
+
+    fn format_t(&self, article_title: &str) -> String {
+        self.format_text_node(article_title)
+    }
+
+    fn format_u(&self, uri: &str) -> String {
+        self.format_text_node(uri)
+    }
+
+    fn format_ap(&self) -> String {
+        "'".to_string()
+    }
+
+    fn format_ar(&self, macro_node: MacroNode) -> String {
+        if macro_node.nodes.is_empty() {
+            return "file ...".to_string();
+        }
+
+        macro_node.nodes.iter().map(|node| {
+            match node {
+                Element::Text(text) => self.format_text_node(text),
+                _ => unreachable!(".Ar can not contain macro or EOI in subnodes!")
+            }
+        }).collect::<String>()
+    }
+
+    fn format_bt(&self) -> String {
+        "is currently in beta test.".to_string()
+    }
+
+    fn format_cd(&self, macro_node: MacroNode) -> String {
+        macro_node.nodes.iter().map(|node| {
+            match node {
+                Element::Text(text) => self.format_text_node(text),
+                _ => unreachable!(".Cd macro can not contain macro node or EOI!")
+            }
+        }).collect::<String>()
+    }
+
+    fn format_cm(&self, macro_node: MacroNode) -> String {
+        macro_node.nodes.iter().map(|node| {
+            match node {
+                Element::Text(text) => self.format_text_node(text),
+                _ => unreachable!(".Cm macro can not contain macro node or EOI!")
+            }
+        }).collect::<String>()
+    }
+    
+    fn format_db(&self) -> String {
+        "".to_string()
+    }
+
+    fn format_dv(&self, macro_node: MacroNode) -> String {
+        macro_node.nodes.iter().map(|node| {
+            match node {
+                Element::Text(text) => self.format_text_node(text),
+                _ => unreachable!(".Dv macro can not contain macro node or EOI!")
+            }
+        }).collect::<String>()
+    }
+
+    fn format_em(&self, macro_node: MacroNode) -> String {
+        let line = macro_node.nodes.iter().map(|node| {
+            match node {
+                Element::Text(text) => self.format_text_node(text),
+                _ => unreachable!(".Em macro can not contain macro node or EOI!")
+            }
+        }).collect::<String>();
+
+        if self.supports_italic() {
+            format!("\x1b[3m{line}\x1b[0m")
+        } else if self.supports_underline() {
+            format!("\x1b[4m{line}\x1b[0m")
+        } else {
+            line
+        }
+    }
+
+    fn format_dt(&self, title: Option<String>, section: String, arch: Option<String>) -> String {
+        let title = match title {
+            Some(name) => format!("{name}({section})"),
+            None => format!("UNTITLED({section})")
+        };
+
+        let section = match section.as_str() {
+            "1" => "General Commands Manual",
+            "2" => "System Calls Manual",
+            "3" => "Library Functions Manual",
+            "4" => "Device Drivers Manual",
+            "5" => "File Formats Manual",
+            "6" => "Games Manual",
+            "7" => "Miscellaneous Information Manual",
+            "8" => "System Manager's Manual",
+            "9" => "Kernel Developer's Manual",
+            _   => ""
+        };
+
+        let section = if let Some(val) = arch {
+            format!("{section} ({val})")
+        } else {
+            section.to_string()
+        };
+
+        let side_len = title.len();
+        let center_len = section.len();
+
+        let center_start = (self.formatting_settings.width / 2).saturating_sub(center_len / 2);
+
+        let right_start = self.formatting_settings.width.saturating_sub(side_len);
+
+        let mut line = String::with_capacity(self.formatting_settings.width);
+
+        line.push_str(&title);
+
+        if center_start > side_len {
+            line.push_str(&" ".repeat(center_start - side_len));
+        }
+        line.push_str(&section);
+
+        let current_len = line.len();
+        if right_start > current_len {
+            line.push_str(&" ".repeat(right_start - current_len));
+        }
+        line.push_str(&title);
+
+        let final_len = line.len();
+        if final_len < self.formatting_settings.width {
+            line.push_str(&" ".repeat(self.formatting_settings.width - final_len));
+        }
+
+        line
     }
 }
 
 #[cfg(test)]
 mod tests {
     mod special_chars {
-        use crate::man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}, *};
+        use crate::{man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}}, FormattingSettings};
 
         fn get_ast(input: &str) -> MdocDocument {
             MdocParser::parse_mdoc(input).unwrap()
@@ -602,7 +764,9 @@ mod tests {
             let output = r"     ".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -612,7 +776,9 @@ mod tests {
             let output = r"| │ _ _ ‾ ¦ / \".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -622,7 +788,9 @@ mod tests {
             let output = r"○ • ‡ † ◊ □ ¶ § ☜ ☞ @ # ↵ ✓ ♣ ♠ ♥ ♦".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -632,7 +800,9 @@ mod tests {
             let output = r"© ® ™".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -642,7 +812,9 @@ mod tests {
             let output = r"— – ‐ \\ ¡ ¿".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -652,7 +824,9 @@ mod tests {
             let output = "„ ‚ “ ” ‘ ’ ' \" « » ‹ ›".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -667,7 +841,9 @@ mod tests {
             let output = r"[ ] { } ⟨ ⟩ ⎪ ⎪ ⎡ ⎣ ⎢ ⎤ ⎦ ⎥ ⎧ ⎧ ⎨ ⎨ ⎩ ⎩ ⎪ ⎫ ⎫ ⎬ ⎬ ⎭ ⎭ ⎪ ⎛ ⎝ ⎜ ⎞ ⎠ ⎟".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -677,7 +853,9 @@ mod tests {
             let output = r"← → ↔ ↓ ↑ ↕ ⇐ ⇒ ⇔ ⇑ ⇓ ⇕ ⎯".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -687,7 +865,9 @@ mod tests {
             let output = r"∧ ∨ ¬ ¬ ∃ ∀ ∋ ∴ ∴ |".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -703,7 +883,9 @@ mod tests {
             let output = r"- − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆ ⊇ ∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -713,7 +895,9 @@ mod tests {
             let output = r"ﬀ ﬁ ﬂ ﬃ ﬄ Æ æ Œ œ ß Ĳ ĳ".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -723,7 +907,9 @@ mod tests {
             let output = r"˝ ¯ ˙ ^ ´ ´ ` ` ˘ ¸ ¨ ˇ ˚ ~ ˛ ^ ~".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -738,7 +924,9 @@ mod tests {
             let output = r"Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü ÿ Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
         
@@ -748,7 +936,9 @@ mod tests {
             let output = r"Ð ð Þ þ ı ȷ".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -758,7 +948,9 @@ mod tests {
             let output = r"$ ¢ € € ¥ £ ¤ ƒ".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -768,7 +960,9 @@ mod tests {
             let output = r"° ‰ ′ ″ µ ª º".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -783,7 +977,9 @@ mod tests {
             let output = r"Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -793,7 +989,9 @@ mod tests {
             let output = "| ≠ ≥ ≤ > < ± infinity pi NaN & ® (Tm) \" ” “ ( ) “ ” ↑ ↕ ≤ ≥ ´ ` POSIX ANSI".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -803,7 +1001,9 @@ mod tests {
             let output = "Ā ሰ 𥘀".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
 
@@ -813,9 +1013,30 @@ mod tests {
             let output = "\" +".to_string();
             let ast = get_ast(input);
 
-            let result = MdocFormatter::format_mdoc(ast);
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
+    }
 
+    mod macros {
+        use crate::{man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}}, FormattingSettings};
+
+        fn get_ast(input: &str) -> MdocDocument {
+            MdocParser::parse_mdoc(input).unwrap()
+        }
+
+        #[test]
+        fn test_dt() {
+            let input = ".Dt TITLE 7 arch";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)";
+            let ast = get_ast(input);
+
+            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
+            let formatter = MdocFormatter::new(formatting_settings);
+            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
+            assert_eq!(output, result)
+        }
     }
 }
