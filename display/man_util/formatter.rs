@@ -95,8 +95,8 @@ impl MdocFormatter {
             Macro::Bo  => self.format_b_block(macro_node),
             Macro::Bro => self.format_br_block(macro_node),
             Macro::Do  => self.format_d_block(macro_node),
-            Macro::Eo { opening_delimiter, closing_delimiter } => unimplemented!(),
-            Macro::Fo { funcname }  => unimplemented!(),
+            Macro::Eo { opening_delimiter, closing_delimiter } => self.format_e_block(opening_delimiter, closed_delimiter, macro_node),
+            Macro::Fo { funcname }  => self.format_f_block(funcname, macro_node),
             Macro::Oo  => self.format_o_block(macro_node),
             Macro::Po  => self.format_p_block(macro_node),
             Macro::Qo  => self.format_q_block(macro_node),
@@ -129,7 +129,7 @@ impl MdocFormatter {
             Macro::Ar => self.format_ar(macro_node),
             // TODO: Fix it.
             // Macro::At()
-            // Macro::Bsx()
+            // Macro::Bsx()     
             Macro::Bt => self.format_bt(),
             // TODO: Fix it.
             // Macro::Bx()
