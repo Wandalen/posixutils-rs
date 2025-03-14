@@ -3,7 +3,7 @@ use aho_corasick::AhoCorasick;
 use terminfo::Database;
 use crate::FormattingSettings;
 
-use super::{mdoc_macro::{types::{AnType, DdDate}, Macro}, parser::{Element, MacroNode, MdocDocument}};
+use super::{mdoc_macro::{text_production::{AtType, BsxType, BxType, DxType}, types::{AnType, DdDate}, Macro}, parser::{Element, MacroNode, MdocDocument}};
 
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(r"(?x)
@@ -95,52 +95,59 @@ impl MdocFormatter {
             Macro::Bo  => self.format_b_block(macro_node),
             Macro::Bro => self.format_br_block(macro_node),
             Macro::Do  => self.format_d_block(macro_node),
-            Macro::Eo { opening_delimiter, closing_delimiter } => self.format_e_block(opening_delimiter, closed_delimiter, macro_node),
-            Macro::Fo { funcname }  => self.format_f_block(funcname, macro_node),
             Macro::Oo  => self.format_o_block(macro_node),
             Macro::Po  => self.format_p_block(macro_node),
             Macro::Qo  => self.format_q_block(macro_node),
-            Macro::Rs  => unimplemented!(),
+            Macro::Rs  => self.format_rs_block(macro_node),
             Macro::So  => self.format_s_block(macro_node),
             Macro::Xo  => self.format_x_block(macro_node),
+            Macro::Eo { opening_delimiter, closing_delimiter } => self.format_e_block(opening_delimiter, closing_delimiter, macro_node),
+            Macro::Fo { ref funcname }  => {
+                let funcname_copy = funcname.clone();
+                self.format_f_block(funcname_copy, macro_node)
+            },
 
             // Block partial-implicit.
-            Macro::Aq  => unimplemented!(),
-            Macro::Bq  => unimplemented!(),
-            Macro::Brq => unimplemented!(),
-            Macro::D1  => unimplemented!(),
-            Macro::Dl  => unimplemented!(),
-            Macro::Dq  => unimplemented!(),
-            Macro::En  => unimplemented!(),
-            Macro::Op  => unimplemented!(),
-            Macro::Pq  => unimplemented!(),
-            Macro::Ql  => unimplemented!(),
-            Macro::Qq  => unimplemented!(),
-            Macro::Sq  => unimplemented!(),
-            Macro::Vt  => unimplemented!(),
+            Macro::Aq  => self.format_aq(macro_node),
+            Macro::Bq  => self.format_bq(macro_node),
+            Macro::Brq => self.format_brq(macro_node),
+            Macro::D1  => self.format_d1(macro_node),
+            Macro::Dl  => self.format_dl(macro_node),
+            Macro::Dq  => self.format_dq(macro_node),
+            Macro::En  => self.format_en(macro_node),
+            Macro::Op  => self.format_op(macro_node),
+            Macro::Pq  => self.format_pq(macro_node),
+            Macro::Ql  => self.format_ql(macro_node),
+            Macro::Qq  => self.format_qq(macro_node),
+            Macro::Sq  => self.format_sq(macro_node),
+            Macro::Vt  => self.format_vt(macro_node),
 
             // In-line.
-            Macro::B { book_title } => self.format_b(&book_title),
+            // Rs block macros which can appears outside Rs-Re block.
+            Macro::B { book_title    } => self.format_b(&book_title),
             Macro::T { article_title } => self.format_t(&article_title),
-            Macro::U { uri } => self.format_u(&uri),
+            Macro::U { uri           } => self.format_u(&uri),
+
+            // Text production macros.
+            Macro::At(at_type)    => self.format_at(at_type),
+            Macro::Bsx(bsx_type) => self.format_bsx(bsx_type),
+            Macro::Bx(bx_type)    => self.format_bx(bx_type),
+            Macro::Dx(dx_type)    => self.format_dx(dx_type),
+
+            // Rest.
             Macro::Ad => self.format_ad(macro_node),
-            // Macro::An { author_name_type } => unimplemented!(),
             Macro::Ap => self.format_ap(),
             Macro::Ar => self.format_ar(macro_node),
-            // TODO: Fix it.
-            // Macro::At()
-            // Macro::Bsx()     
             Macro::Bt => self.format_bt(),
-            // TODO: Fix it.
-            // Macro::Bx()
             Macro::Cd => self.format_cd(macro_node),
             Macro::Cm => self.format_cm(macro_node),
             Macro::Db => self.format_db(),
-            // Macro::Dd { date } => unimplemented!(),
-            Macro::Dt { title, section, arch } => self.format_dt(title, section, arch),
             Macro::Dv => self.format_dv(macro_node),
-            // Macro::Dx() => unimplemented!(),
             Macro::Em => self.format_em(macro_node),
+            // Macro::An { author_name_type } => unimplemented!(),
+            Macro::Dd { date } => self.format_dd(date),
+            Macro::Dt { title, section, arch } => self.format_dt(title, section, arch),
+           
             _ => unreachable!()   
         }
     }
@@ -574,6 +581,10 @@ impl MdocFormatter {
 
 // Formatting block partial-explicit.
 impl MdocFormatter {
+    fn format_rs_block(&self, macro_node: MacroNode) -> String {
+        unimplemented!()
+    }
+
     fn format_a_block(&self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
@@ -613,7 +624,7 @@ impl MdocFormatter {
     fn format_e_block(
         &self, 
         opening_delimiter: Option<char>, 
-        closed_delimiter: Option<char>, 
+        closing_delimiter: Option<char>, 
         macro_node: MacroNode
     ) -> String {
         let formatted_block = macro_node.nodes
@@ -621,7 +632,7 @@ impl MdocFormatter {
             .map(|node| self.format_node(node))
             .collect::<String>();
 
-        match (opening_delimiter, closed_delimiter) {
+        match (opening_delimiter, closing_delimiter) {
             (Some(open), Some(close)) => {
                 format!("{}{}{}", open, formatted_block, close)
             },
@@ -714,6 +725,125 @@ impl MdocFormatter {
                 _ => unreachable!(".%P macro can not contain macro node or EOI!")
             }
         }).collect::<String>()
+    }
+}
+
+impl MdocFormatter {
+    fn format_aq(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("⟨{}⟩", formatted_block)
+    }
+
+    fn format_bq(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("[{}]", formatted_block)
+    }
+
+    fn format_brq(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("{{{}}}", formatted_block)
+    }
+
+    fn format_d1(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+        
+        let spaces = " ".repeat(self.formatting_settings.indent);
+
+        format!("{}{}", spaces, formatted_block)
+    }
+
+    fn format_dl(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        let spaces = " ".repeat(self.formatting_settings.indent);
+
+        format!("{}{}", spaces, formatted_block)
+    }
+
+    fn format_dq(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("“{}”", formatted_block)
+    }
+
+    fn format_en(&self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>()
+    }
+
+    fn format_op(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("[{}]", formatted_block)
+    }
+
+    fn format_pq(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("({})", formatted_block)
+    }
+
+    fn format_ql(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("‘{}’", formatted_block)
+    }
+
+    fn format_qq(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("\"{}\"", formatted_block)
+    }
+
+    fn format_sq(&self, macro_node: MacroNode) -> String {
+        let formatted_block = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>();
+
+        format!("'{}'", formatted_block)
+    }
+
+    fn format_vt(&self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<String>()
     }
 }
 
@@ -862,6 +992,29 @@ impl MdocFormatter {
         }
 
         line
+    }
+
+    fn format_dx(&self, dx_type: DxType) -> String {
+        format!("{}", dx_type)
+    }
+
+    fn format_dd(&self, date: DdDate) -> String {
+        match date {
+            DdDate::MDYFormat(dd_date) => format!("{}, {}", dd_date.month_day, dd_date.year),
+            DdDate::StrFormat(string) => string
+        }
+    }
+
+    fn format_bx(&self, bx_type: BxType) -> String {
+        format!("{}", bx_type)
+    }
+
+    fn format_bsx(&self, bsx_type: BsxType) -> String {
+        format!("{}", bsx_type)
+    }
+
+    fn format_at(self, at_type: AtType) -> String {
+        format!("{}", at_type)
     }
 
 }
@@ -1166,8 +1319,23 @@ mod tests {
 
         #[test]
         fn test_a_block() {
-            let input = r".Ao funcname Ad addr Ad addr Ad addr Ac";
-            let output = "⟨funcname addr addr addr⟩";
+            let input = r".Ao
+.Ad addr 
+.Ad addr 
+.Ad addr 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+Text loooooooong line 
+.Ac";
+            let output = "⟨addr addr addr⟩";
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
