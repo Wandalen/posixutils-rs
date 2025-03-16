@@ -337,38 +337,38 @@ fo_block = ${ fo_head ~ fo_body* ~ "."? ~ fc }
 
 // --- Oo & Oc
 oc       = ${ "Oc" ~ !text_arg ~ ws* ~ NEWLINE? }
-oo_head  = ${ "Oo" ~ !text_arg ~ (ws+ ~ !oc ~ arg)* ~ ws* ~ NEWLINE? }
-oo_body  = ${ !("."? ~ oc) ~ arg ~ ws* ~ NEWLINE? }
+oo_head  = ${ "Oo" ~ !text_arg ~ (ws+ ~ !oc ~ text_arg)* ~ ws* ~ NEWLINE? }
+oo_body  = ${ !("."? ~ oc) ~ element }
 oo_block = ${ oo_head ~ oo_body* ~ "."? ~ oc }
 
 // --- Po & Pc
 pc       = ${ "Pc" ~ !text_arg ~ ws* ~ NEWLINE? }
-po_head  = ${ "Po" ~ !text_arg ~ (ws+ ~ !pc ~ arg)* ~ ws* ~ NEWLINE? }
-po_body  = ${ !("."? ~ pc) ~ arg ~ ws* ~ NEWLINE? }
+po_head  = ${ "Po" ~ !text_arg ~ (ws+ ~ !pc ~ text_arg)* ~ ws* ~ NEWLINE? }
+po_body  = ${ !("."? ~ pc) ~ element }
 po_block = ${ po_head ~ po_body* ~ "."? ~ pc }
 
 // --- Qo & Qc
 qc       = ${ "Qc" ~ !text_arg ~ ws* ~ NEWLINE? }
-qo_head  = ${ "Qo" ~ !text_arg ~ (ws+ ~ !qc ~ arg)* ~ ws* ~ NEWLINE? }
-qo_body  = ${ !("."? ~ qc) ~ arg ~ ws* ~ NEWLINE? }
+qo_head  = ${ "Qo" ~ !text_arg ~ (ws+ ~ !qc ~ text_arg)* ~ ws* ~ NEWLINE? }
+qo_body  = ${ !("."? ~ qc) ~ element }
 qo_block = ${ qo_head ~ qo_body* ~ "."? ~ qc }
 
 // --- Rs & Re
 re       = ${ "Re" ~ !text_arg ~ ws* ~ NEWLINE? }
-rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ !re ~ rs_submacro)* ~ ws* ~ NEWLINE? }
-rs_body  = ${ !("."? ~ re) ~ rs_submacro ~ ws* ~ NEWLINE? }
+rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ rs_submacro)* ~ ws* ~ NEWLINE? }
+rs_body  = ${ "."? ~ rs_submacro ~ ws* ~ NEWLINE? }
 rs_block = ${ rs_head ~ rs_body* ~ "."? ~ re }
 
 // --- So & Sc
 sc       = ${ "Sc" ~ !text_arg ~ ws* ~ NEWLINE? }
-so_head  = ${ "So" ~ !text_arg ~ (ws+ ~ !sc ~ arg)* ~ ws* ~ NEWLINE? }
-so_body  = ${ !("."? ~ sc) ~ arg ~ ws* ~ NEWLINE? }
+so_head  = ${ "So" ~ !text_arg ~ (ws+ ~ !sc ~ text_arg)* ~ ws* ~ NEWLINE? }
+so_body  = ${ !("."? ~ sc) ~ element }
 so_block = ${ so_head ~ so_body* ~ "."? ~ sc }
 
 // --- Xo & Xc
 xc       = ${ "Xc" ~ !text_arg ~ ws* ~ NEWLINE? }
-xo_head  = ${ "Xo" ~ !text_arg ~ (ws+ ~ !xc ~ arg)* ~ ws* ~ NEWLINE? }
-xo_body  = ${ !("."? ~ xc) ~ arg ~ ws* ~ NEWLINE? }
+xo_head  = ${ "Xo" ~ !text_arg ~ (ws+ ~ !xc ~ text_arg)* ~ ws* ~ NEWLINE? }
+xo_body  = ${ !("."? ~ xc) ~ element }
 xo_block = ${ xo_head ~ xo_body* ~ "."? ~ xc }
 
 // ----- Block partial-implicit
