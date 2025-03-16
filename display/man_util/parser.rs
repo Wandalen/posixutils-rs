@@ -35,7 +35,7 @@ static RS_SUBMACRO: LazyLock<Vec<Macro>> = LazyLock::new(|| {
         Macro::P, 
         Macro::Q{ institution_author: strf() }, 
         Macro::C{ publication_location: strf() }, 
-        Macro::D{ month_day: strf(), year: strf() }, 
+        Macro::D{ month_day: Some((strf(), 0)), year: 0 }, 
         Macro::O{ information: strf() }
     ]
 });
@@ -543,7 +543,7 @@ fn is_elements_eq(a: &Element, b: &Element) -> bool{
     }
 }
 
-fn join_text_sequences(mut elements: &mut Vec<Element>){
+fn join_text_sequences(elements: &mut Vec<Element>){
     *elements = elements.chunk_by(is_elements_eq)
     .map(|chunk|{
         if let Element::Text(_) = chunk[0] {
@@ -757,7 +757,7 @@ impl MdocParser {
 // Block partial-explicit parsing
 impl MdocParser {
     fn parse_ao_block(pair: Pair<Rule>) -> Element {
-        let mut nodes = pair
+        let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::ac)
             .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
@@ -997,22 +997,30 @@ impl MdocParser {
 
     // Parses rs_block
     fn parse_rs_block(pair: Pair<Rule>) -> Element {
-        fn rs_submacro_cmp(a: &Macro, b: &Macro) -> std::cmp::Ordering{           
+        fn rs_submacro_cmp(a: &Element, b: &Element) -> std::cmp::Ordering{           
             let get_macro_order_position = |n|{
                 RS_SUBMACRO.iter()
                 .position(|m| {
-                    matches!(discriminant(m), discriminant(n))
+                    discriminant(m) == discriminant(n)
                 })
                 .unwrap_or(RS_SUBMACRO.len())
             };
-            
-            let a_pos = get_macro_order_position(a); 
-            let b_pos = get_macro_order_position(b); 
+
+            let Element::Macro(MacroNode { mdoc_macro: macro_a, .. }) = a else{
+                return std::cmp::Ordering::Greater;
+            };
+
+            let Element::Macro(MacroNode { mdoc_macro: macro_b, .. }) = b else{
+                return std::cmp::Ordering::Greater;
+            };
+
+            let a_pos = get_macro_order_position(macro_a); 
+            let b_pos = get_macro_order_position(macro_b); 
         
             a_pos.cmp(&b_pos)
         }
 
-        let mut nodes = pair
+        let mut nodes: Vec<_> = pair
             .into_inner()
             .skip_while(|p| p.as_rule() == Rule::rs_head)
             .take_while(|p| p.as_rule() != Rule::re)
@@ -6173,15 +6181,15 @@ Line
                             nodes: vec![]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::D{
-                                month_day: Some(("January".to_string(), 1)),
-                                year: 1970,
+                            mdoc_macro: Macro::U{
+                                uri: "protocol://path".to_string(),
                             },
                             nodes: vec![]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::U{
-                                uri: "protocol://path".to_string(),
+                            mdoc_macro: Macro::D{
+                                month_day: Some(("January".to_string(), 1)),
+                                year: 1970,
                             },
                             nodes: vec![]
                         }),
@@ -6201,15 +6209,15 @@ Line
                             nodes: vec![]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::D{
-                                month_day: Some(("January".to_string(), 1)),
-                                year: 1970,
+                            mdoc_macro: Macro::U{
+                                uri: "protocol://path".to_string(),
                             },
                             nodes: vec![]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::U{
-                                uri: "protocol://path".to_string(),
+                            mdoc_macro: Macro::D{
+                                month_day: Some(("January".to_string(), 1)),
+                                year: 1970,
                             },
                             nodes: vec![]
                         }),
@@ -6297,6 +6305,123 @@ Rs
 
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elements);  
+        }
+
+        #[test]
+        fn rs_submacro_sorting(){
+            let input = r#".Rs
+.%O Optional information
+.%D January 1, 1970
+.%C Location line
+.%Q John Doe
+.%P pp. 1-100
+.%U protocol://path
+.%V Volume No. 1
+.%N Issue No. 1
+.%R Technical report No. 1
+.%J Journal Name Line
+.%I John Doe
+.%B Title Line
+.%T Article title line
+.%A John Doe
+.Re"#;
+            
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Rs,
+                    nodes: vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::A {
+                                author_name: "John Doe".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::T {
+                                article_title: "Article title line".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::B{
+                                book_title: "Title Line".to_string(),
+                            },
+                            nodes: vec![]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::I {
+                                issuer_name: "John Doe".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::J {
+                                journal_name: "Journal Name Line".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::R {
+                                report_name: "Technical report No. 1".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::N {
+                                issue_number: "Issue No. 1".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::V {
+                                volume_number: "Volume No. 1".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::U{
+                                uri: "protocol://path".to_string(),
+                            },
+                            nodes: vec![]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::P,
+                            nodes: vec![
+                                Element::Text("pp.".to_string()),
+                                Element::Text("1-100".to_string())
+                            ],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Q {
+                                institution_author: "John Doe".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::C { 
+                                publication_location: "Location line".to_string() 
+                            },
+                            nodes: vec![]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::D{
+                                month_day: Some(("January".to_string(), 1)),
+                                year: 1970,
+                            },
+                            nodes: vec![]
+                        }),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::O {
+                                information: "Optional information".to_string(),
+                            },
+                            nodes: vec![],
+                        }),
+                    ]
+                })
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements); 
         }
 
         // .So -----------------------------------------------------------
