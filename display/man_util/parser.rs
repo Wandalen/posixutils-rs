@@ -17,6 +17,29 @@ use types::{BdType, BfType, OffsetType, SmMode};
 use super::mdoc_macro::types::*;
 use super::mdoc_macro::*;
 
+use std::sync::LazyLock;
+use std::mem::discriminant;
+
+static RS_SUBMACRO: LazyLock<Vec<Macro>> = LazyLock::new(|| {       
+    let strf = || String::new();
+    vec![
+        Macro::A{ author_name: strf() }, 
+        Macro::T{ article_title: strf() }, 
+        Macro::B{ book_title: strf() }, 
+        Macro::I{ issuer_name: strf() }, 
+        Macro::J{ journal_name: strf() }, 
+        Macro::R{ report_name: strf() }, 
+        Macro::N{ issue_number: strf() }, 
+        Macro::V{ volume_number: strf() }, 
+        Macro::U{ uri: strf() }, 
+        Macro::P, 
+        Macro::Q{ institution_author: strf() }, 
+        Macro::C{ publication_location: strf() }, 
+        Macro::D{ month_day: strf(), year: strf() }, 
+        Macro::O{ information: strf() }
+    ]
+});
+
 #[derive(Parser)]
 #[grammar = "./man_util/mdoc.pest"]
 pub struct MdocParser;
@@ -974,12 +997,29 @@ impl MdocParser {
 
     // Parses rs_block
     fn parse_rs_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
+        fn rs_submacro_cmp(a: &Macro, b: &Macro) -> std::cmp::Ordering{           
+            let get_macro_order_position = |n|{
+                RS_SUBMACRO.iter()
+                .position(|m| {
+                    matches!(discriminant(m), discriminant(n))
+                })
+                .unwrap_or(RS_SUBMACRO.len())
+            };
+            
+            let a_pos = get_macro_order_position(a); 
+            let b_pos = get_macro_order_position(b); 
+        
+            a_pos.cmp(&b_pos)
+        }
+
+        let mut nodes = pair
             .into_inner()
             .skip_while(|p| p.as_rule() == Rule::rs_head)
             .take_while(|p| p.as_rule() != Rule::re)
             .filter_map(|p| p.into_inner().next().map(Self::parse_rs_submacro))
             .collect();
+
+        nodes.sort_by(rs_submacro_cmp);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Rs,
