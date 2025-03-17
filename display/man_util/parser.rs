@@ -35,7 +35,7 @@ static RS_SUBMACRO: LazyLock<Vec<Macro>> = LazyLock::new(|| {
         Macro::P, 
         Macro::Q{ institution_author: strf() }, 
         Macro::C{ publication_location: strf() }, 
-        Macro::D{ month_day: Some((strf(), 0)), year: 0 }, 
+        Macro::D{ date: strf() }, 
         Macro::O{ information: strf() }
     ]
 });
@@ -53,6 +53,7 @@ pub struct MacroNode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     Text(String),
+    //Delimiter(char),
     Macro(MacroNode),
     Eoi, // "End of input" marker
 }
@@ -61,6 +62,7 @@ impl Into<String> for Element{
     fn into(self) -> String {
         match self{
             Element::Text(text) => text,
+            //Element::Delimiter(ch) => ch.to_string(),
             Element::Macro(macro_node) => format!("{:?}", macro_node),
             Element::Eoi => "EOI".to_string(),
         }
@@ -1191,28 +1193,20 @@ impl MdocParser {
         // Parses (`%D`)[https://man.openbsd.org/mdoc#_D]:
         // `%D [month day,] year`
         fn parse_d(pair: Pair<'_, Rule>) -> Element {
-            let mut inner = pair.into_inner();
-
-            let mut month_day = None;
-
-            let inner_pair = inner.next().unwrap();
-            let year = match inner_pair.as_rule() {
-                Rule::line => {
-                    // let mut md = inner_pair.into_inner();
-                    // let month = md.next().unwrap().as_str().to_string();
-                    // let day = md.next().unwrap().as_str().parse().unwrap();
-                    // month_day = Some((month, day));
-
-                    month_day = Some( inner_pair.as_str().to_string() );
-
-                    inner.next().unwrap().as_str().parse::<i32>().unwrap()
-                }
-                Rule::year => inner_pair.as_str().parse::<i32>().unwrap(),
-                _ => unreachable!(),
-            };
+            let date = pair
+                .into_inner()
+                .next()
+                .unwrap()
+                .into_inner()
+                .next()
+                .unwrap()
+                .as_str()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::D { month_day, year },
+                mdoc_macro: Macro::D { date },
                 nodes: vec![],
             })
         }
@@ -2711,7 +2705,7 @@ mod test {
         #[test]
         fn bk_not_parsed() {
             // Ignore callable macro as argument
-            let content = ".Bk -words Ad addr1\n.Ek";
+            let content = ".Bk -words Ad\n.Ek";
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bk,
                 nodes: vec![],
@@ -2938,13 +2932,13 @@ mod test {
         #[test]
         fn bl_not_parsed() {
             // Callable macro as opaque text
-            let content = ".Bl -bullet Ad addr1\n.El";
+            let content = ".Bl -bullet Ad\n.El";
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
                     offset: None,
                     compact: false,
-                    columns: vec!["Ad".to_string(), "addr1".to_string()],
+                    columns: vec!["Ad".to_string()],
                 },
                 nodes: vec![],
             })];
@@ -6188,8 +6182,7 @@ Line
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some("January 1".to_string()),
-                                year: 1970,
+                                date: "January 1, 1970".to_string()
                             },
                             nodes: vec![]
                         }),
@@ -6216,8 +6209,7 @@ Line
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some("January 1".to_string()),
-                                year: 1970,
+                                date: "January 1, 1970".to_string(),
                             },
                             nodes: vec![]
                         }),
@@ -6405,8 +6397,7 @@ Rs
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some("January 1".to_string()),
-                                year: 1970,
+                                date: "January 1, 1970".to_string(),
                             },
                             nodes: vec![]
                         }),
@@ -6971,8 +6962,7 @@ Line
                 let content = ".%D January 1, 1970";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::D {
-                        month_day: Some(("January".to_string(), 1)),
-                        year: 1970,
+                        date: "January 1, 1970".to_string(),
                     },
                     nodes: vec![],
                 })];
@@ -6986,8 +6976,7 @@ Line
                 let content = ".%D January  \t  1,  \t  1970\n";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::D {
-                        month_day: Some(("January".to_string(), 1)),
-                        year: 1970,
+                        date: "January 1, 1970".to_string(),
                     },
                     nodes: vec![],
                 })];
@@ -7001,8 +6990,7 @@ Line
                 let content = ".%D 1970";
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::D {
-                        month_day: None,
-                        year: 1970,
+                        date: "1970".to_string(),
                     },
                     nodes: vec![],
                 })];
@@ -7023,8 +7011,7 @@ Line
                 let elements = vec![
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::D { 
-                            month_day: Some(("Ad".to_string(), 1)), 
-                            year: 1970 
+                            date: "Ad 1, 1970".to_string(),
                         },
                         nodes: vec![]
                     })
