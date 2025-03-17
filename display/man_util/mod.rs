@@ -9,3 +9,4 @@
 
 pub mod mdoc_macro;
 pub mod parser;
+pub mod formatter;

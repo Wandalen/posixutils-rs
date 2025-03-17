@@ -279,10 +279,6 @@ nd_block         =  { nd_open ~ (NEWLINE ~ nd_block_element*)? }
 // -- Nm
 
 nm_block = ${ "Nm" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
-//nm_open          = ${ "Nm" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }
-//nm_block_element =  { !("." ~ (nm_block | sh_block | ss_block)) ~ element }
-//nm_block         =  { nm_open ~ (NEWLINE ~ nm_block_element*)? }
-//nm_block         =  { nm_open ~ NEWLINE? }
 
 // -- Sh
 
@@ -402,7 +398,7 @@ uri       = @{ (!"://" ~ ANY)+ ~ "://" ~ word* }
 a = ${ "%A" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 b = ${ "%B" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 c = ${ "%C" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
-d = ${ "%D" ~ !text_arg ~ (ws+ ~ month_day)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
+d = ${ "%D" ~ !text_arg ~ (ws+ ~ line)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
 i = ${ "%I" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 j = ${ "%J" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 n = ${ "%N" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }

@@ -46,8 +46,8 @@ pub struct MdocParser;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MacroNode {
-    mdoc_macro: Macro,
-    nodes: Vec<Element>,
+    pub mdoc_macro: Macro,
+    pub nodes: Vec<Element>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1197,13 +1197,13 @@ impl MdocParser {
 
             let inner_pair = inner.next().unwrap();
             let year = match inner_pair.as_rule() {
-                Rule::month_day => {
-                    let mut md = inner_pair.into_inner();
+                Rule::line => {
+                    // let mut md = inner_pair.into_inner();
+                    // let month = md.next().unwrap().as_str().to_string();
+                    // let day = md.next().unwrap().as_str().parse().unwrap();
+                    // month_day = Some((month, day));
 
-                    let month = md.next().unwrap().as_str().to_string();
-                    let day = md.next().unwrap().as_str().parse().unwrap();
-
-                    month_day = Some((month, day));
+                    month_day = Some( inner_pair.as_str().to_string() );
 
                     inner.next().unwrap().as_str().parse::<i32>().unwrap()
                 }
@@ -6188,7 +6188,7 @@ Line
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some(("January".to_string(), 1)),
+                                month_day: Some("January 1".to_string()),
                                 year: 1970,
                             },
                             nodes: vec![]
@@ -6216,7 +6216,7 @@ Line
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some(("January".to_string(), 1)),
+                                month_day: Some("January 1".to_string()),
                                 year: 1970,
                             },
                             nodes: vec![]
@@ -6405,7 +6405,7 @@ Rs
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::D{
-                                month_day: Some(("January".to_string(), 1)),
+                                month_day: Some("January 1".to_string()),
                                 year: 1970,
                             },
                             nodes: vec![]
