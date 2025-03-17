@@ -3,7 +3,7 @@ use aho_corasick::AhoCorasick;
 use terminfo::Database;
 use crate::FormattingSettings;
 
-use super::{mdoc_macro::{text_production::{AtType, BsxType, BxType, DxType}, types::{AnType, DdDate}, Macro}, parser::{Element, MacroNode, MdocDocument}};
+use super::{mdoc_macro::{text_production::{AtType, BsxType, BxType, DxType}, types::DdDate, Macro}, parser::{Element, MacroNode, MdocDocument}};
 
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(r"(?x)
@@ -581,7 +581,7 @@ impl MdocFormatter {
 
 // Formatting block partial-explicit.
 impl MdocFormatter {
-    fn format_rs_block(&self, macro_node: MacroNode) -> String {
+    fn format_rs_block(&self, _macro_node: MacroNode) -> String {
         unimplemented!()
     }
 
@@ -707,10 +707,6 @@ impl MdocFormatter {
 //  - Before the last '%A' macro has to be 'and' word. 
 //  - These macros have order!
 impl MdocFormatter {
-    fn format_rs_block(&self, macro_node: MacroNode) -> String {
-        unimplemented!()
-    }
-
     fn format_d(&self, month_day: Option<String>, year: i32) -> String {
         match month_day {
             Some(md) => format!("{md} {year}"),
@@ -1000,7 +996,12 @@ impl MdocFormatter {
 
     fn format_dd(&self, date: DdDate) -> String {
         match date {
-            DdDate::MDYFormat(dd_date) => format!("{}, {}", dd_date.month_day, dd_date.year),
+            DdDate::MDYFormat(dd_date) => format!(
+                "{} {}, {}", 
+                dd_date.month_day.0, 
+                dd_date.month_day.1, 
+                dd_date.year
+            ),
             DdDate::StrFormat(string) => string
         }
     }
@@ -1013,7 +1014,7 @@ impl MdocFormatter {
         format!("{}", bsx_type)
     }
 
-    fn format_at(self, at_type: AtType) -> String {
+    fn format_at(&self, at_type: AtType) -> String {
         format!("{}", at_type)
     }
 
