@@ -393,12 +393,13 @@ month     =  { (!("." | NEWLINE | ws) ~ ANY)* }
 day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
 month_day =  { month ~ ws+ ~ day ~ ws* ~ "," }
 year      =  { ASCII_DIGIT+ }
+//mdy_date  =  { (ws+ ~ month_day)? ~ (ws+ ~ ("."|","))? ~ ws+ ~ year } 
 uri       = @{ (!"://" ~ ANY)+ ~ "://" ~ word* }
 
 a = ${ "%A" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 b = ${ "%B" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 c = ${ "%C" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
-d = ${ "%D" ~ !text_arg ~ (ws+ ~ line)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
+d = ${ "%D" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 i = ${ "%I" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 j = ${ "%J" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 n = ${ "%N" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
@@ -594,6 +595,8 @@ lk = ${ "Lk" ~ !text_arg ~ ws+ ~ uri ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 lp = ${ "Lp" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 
 // -- Delimeters
+separated_delimiter = { ws+ ~ delimiter ~ ws+ }
+delimiter = { opening_delimiter | closing_delimiter }
 opening_delimiter = { "(" | "[" }
 closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
 
