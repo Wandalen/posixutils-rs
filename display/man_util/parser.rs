@@ -1720,30 +1720,6 @@ impl MdocParser {
     // `Dd [date]`
     fn parse_dd(pair: Pair<Rule>) -> Element {
         use chrono;
-        use chrono::Datelike;
-
-        fn parse_date(date: chrono::NaiveDate) -> DdDate {
-            let month = match date.month() {
-                1  => "January",
-                2  => "February",
-                3  => "March",
-                4  => "April",
-                5  => "May",
-                6  => "June",
-                7  => "July",
-                8  => "August",
-                9  => "September",
-                10 => "October",
-                11 => "November",
-                12 => "December",
-                _  => unreachable!() 
-            };
-
-            DdDate::MDYFormat(Date {
-                month_day: (month.to_string(), date.day() as u8),
-                year: date.year() as u16
-            })
-        }
 
         fn parse_block(pair: Pair<Rule>) -> DdDate {
             match pair.as_rule() {
@@ -1786,7 +1762,7 @@ impl MdocParser {
                         Ok(date) => date,
                         Err(_) => return DdDate::StrFormat(date_str.to_string())
                     };
-                    parse_date(date)
+                    date.into()
                 },
                 Rule::wrong_date => {
                     DdDate::StrFormat(pair.as_str().to_string())                    
@@ -1809,7 +1785,7 @@ impl MdocParser {
                 })
             },
             None => {
-                let date = parse_date(chrono::offset::Utc::now().date_naive());
+                let date = chrono::offset::Utc::now().date_naive().into();
 
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Dd { 
@@ -1902,8 +1878,6 @@ impl MdocParser {
             },
             nodes: vec![]
         })
-
-
     }
 
     // Parses (`Ev`)[https://man.openbsd.org/mdoc#Ev]
@@ -11842,5 +11816,29 @@ Line
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elements);
         }
+
+//         #[text]
+//         fn delimiters() {
+//             let input = ".%D January 1, 1970. , . : ; ! ? April 2, 1971
+// .Ms alpha beta gamma , . : delta
+// .Pa name1 , . name2
+// .Ap Text Line . , Text Line
+// .Cm mod1 mod2 mod3 , . mod4
+// ";
+//             let elements = vec![
+//                 Element::Macro(MacroNode {
+//                     mdoc_macro: Macro::D{
+//                         date: 
+//                     },
+//                     nodes:vec![
+//                         Element::Text("addr".to_string()),
+//                     ]
+//                 }),
+//                 Element::Text("".to_string())
+//             ];
+
+//             let mdoc = MdocParser::parse_mdoc(input).unwrap();
+//             assert_eq!(mdoc.elements, elements);
+//         }
     }
 }
