@@ -1485,87 +1485,68 @@ impl MdocFormatter {
 
 #[cfg(test)]
 mod tests {
-    mod special_chars {
-        use crate::{man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}}, FormattingSettings};
 
-        fn get_ast(input: &str) -> MdocDocument {
-            MdocParser::parse_mdoc(input).unwrap()
-        }
+    const FORMATTING_SETTINGS: FormattingSettings = FormattingSettings { width: 78, indent: 5 };
+
+    fn get_ast(input: &str) -> MdocDocument {
+        MdocParser::parse_mdoc(input).unwrap()
+    }
+
+    fn test_formatting(input: &str, output: &str) {
+        let ast = get_ast(input);
+
+        let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
+        let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
+        assert_eq!(output, result)
+    }
+
+    mod special_chars {
+        use crate::man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}};
 
         #[test]
-        fn test_spaces() {
+        fn spaces() {
             let input = r"\ \~\0\|\^\&\)\%\:";
             let output = r"     ".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_lines() {
+        fn lines() {
             let input = r"\(ba \(br \(ul \(ru \(rn \(bb \(sl \(rs";
             let output = r"| │ _ _ ‾ ¦ / \".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_text_markers() {
+        fn text_markers() {
             let input = r"\(ci \(bu \(dd \(dg \(lz \(sq \(ps \(sc \(lh \(rh \(at \(sh \(CR \(OK \(CL \(SP \(HE \(DI";
             let output = r"○ • ‡ † ◊ □ ¶ § ☜ ☞ @ # ↵ ✓ ♣ ♠ ♥ ♦".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_legal_symbols() {
+        fn legal_symbols() {
             let input = r"\(co \(rg \(tm";
             let output = r"© ® ™".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_punctuation() {
+        fn punctuation() {
             let input = r"\(em \(en \(hy \e \(r! \(r?";
             let output = r"— – ‐ \\ ¡ ¿".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_quotes() {
+        fn quotes() {
             let input = r"\(Bq \(bq \(lq \(rq \(oq \(cq \(aq \(dq \(Fo \(Fc \(fo \(fc";
             let output = "„ ‚ “ ” ‘ ’ ' \" « » ‹ ›".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_brackets() {
+        fn brackets() {
             let input = r"\(lB \(rB \(lC \(rC \(la \(ra \(bv \[braceex] \[bracketlefttp] \[bracketleftbt] 
 \[bracketleftex] \[bracketrighttp] \[bracketrightbt] \[bracketrightex] 
 \(lt \[bracelefttp] \(lk \[braceleftmid] \(lb \[braceleftbt] \[braceleftex] 
@@ -1573,40 +1554,25 @@ mod tests {
 \[parenlefttp] \[parenleftbt] \[parenleftex] \[parenrighttp] \[parenrightbt] \[parenrightex]
 ";
             let output = r"[ ] { } ⟨ ⟩ ⎪ ⎪ ⎡ ⎣ ⎢ ⎤ ⎦ ⎥ ⎧ ⎧ ⎨ ⎨ ⎩ ⎩ ⎪ ⎫ ⎫ ⎬ ⎬ ⎭ ⎭ ⎪ ⎛ ⎝ ⎜ ⎞ ⎠ ⎟".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_arrows() {
+        fn arrows() {
             let input = r"\(<- \(-> \(<> \(da \(ua \(va \(lA \(rA \(hA \(uA \(dA \(vA \(an";
             let output = r"← → ↔ ↓ ↑ ↕ ⇐ ⇒ ⇔ ⇑ ⇓ ⇕ ⎯".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_logical() {
+        fn logical() {
             let input = r"\(AN \(OR \[tno] \(no \(te \(fa \(st \(tf \(3d \(or";
             let output = r"∧ ∨ ¬ ¬ ∃ ∀ ∋ ∴ ∴ |".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_mathematical() {
+        fn mathematical() {
             let input = r"\- \(mi \+ \(pl \(-+ \[t+-] \(+- \(pc \[tmu] 
 \(mu \(c* \(c+ \[tdi] \(di \(f/ \(** \(<= \(>= \(<< \(>> \(eq \(!= \(== 
 \(ne \(ap \(|= \(=~ \(~~ \(~= \(pt \(es \(mo \(nm \(sb \(nb \(sp 
@@ -1615,40 +1581,25 @@ mod tests {
 \(wp \(pd \(-h \[hbar] \(12 \(14 \(34 \(18 \(38 \(58 \(78 \(S1 \(S2 \(S3
 ";
             let output = r"- − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆ ⊇ ∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_ligatures() {
+        fn ligatures() {
             let input = r"\(ff \(fi \(fl \(Fi \(Fl \(AE \(ae \(OE \(oe \(ss \(IJ \(ij";
             let output = r"ﬀ ﬁ ﬂ ﬃ ﬄ Æ æ Œ œ ß Ĳ ĳ".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_accents() {
+        fn accents() {
             let input = "\\(a\" \\(a- \\(a. \\(a^ \\(aa \\\' \\(ga \\` \\(ab \\(ac \\(ad \\(ah \\(ao \\(a~ \\(ho \\(ha \\(ti";
             let output = r"˝ ¯ ˙ ^ ´ ´ ` ` ˘ ¸ ¨ ˇ ˚ ~ ˛ ^ ~".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_accented_letters() {
+        fn accented_letters() {
             let input = r"\('A \('E \('I \('O \('U \('Y \('a \('e 
 \('i \('o \('u \('y \(`A \(`E \(`I \(`O \(`U \(`a \(`e \(`i \(`o \(`u 
 \(~A \(~N \(~O \(~a \(~n \(~o \(:A \(:E \(:I \(:O \(:U \(:a \(:e \(:i 
@@ -1656,52 +1607,32 @@ mod tests {
 \(,c \(/L \(/l \(/O \(/o \(oA \(oa
 ";
             let output = r"Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü ÿ Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
         
         #[test]
-        fn test_special_letters() {
+        fn special_letters() {
             let input = r"\(-D \(Sd \(TP \(Tp \(.i \(.j";
             let output = r"Ð ð Þ þ ı ȷ".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_currency() {
+        fn currency() {
             let input = r"\(Do \(ct \(Eu \(eu \(Ye \(Po \(Cs \(Fn";
             let output = r"$ ¢ € € ¥ £ ¤ ƒ".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_units() {
+        fn units() {
             let input = r"\(de \(%0 \(fm \(sd \(mc \(Of \(Om";
             let output = r"° ‰ ′ ″ µ ª º".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_greek_leters() {
+        fn greek_leters() {
             let input = r"\(*A \(*B \(*G \(*D \(*E \(*Z 
 \(*Y \(*H \(*I \(*K \(*L \(*M \(*N \(*C \(*O \(*P \(*R \(*S 
 \(*T \(*U \(*F \(*X \(*Q \(*W \(*a \(*b \(*g \(*d \(*e \(*z 
@@ -1709,77 +1640,331 @@ mod tests {
 \(*t \(*u \(*f \(*x \(*q \(*w \(+h \(+f \(+p \(+e \(ts
 ";
             let output = r"Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_predefined_strings() {
+        fn predefined_strings() {
             let input = r"\*(Ba \*(Ne \*(Ge \*(Le \*(Gt \*(Lt \*(Pm \*(If \*(Pi \*(Na \*(Am \*R \*(Tm \*q \*(Rq \*(Lq \*(lp \*(rp \*(lq \*(rq \*(ua \*(va \*(<= \*(>= \*(aa \*(ga \*(Px \*(Ai";
             let output = "| ≠ ≥ ≤ > < ± infinity pi NaN & ® (Tm) \" ” “ ( ) “ ” ↑ ↕ ≤ ≥ ´ ` POSIX ANSI".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_unicode() {
+        fn unicode() {
             let input = r"\[u0100] \C'u01230' \[u025600]";
             let output = "Ā ሰ 𥘀".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_numbered() {
+        fn numbered() {
             let input = r"\N'34' \[char43]";
             let output = "\" +".to_string();
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
     }
 
     mod inline {
-        use crate::{man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}}, FormattingSettings};
+        use crate::man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}};
 
-        fn get_ast(input: &str) -> MdocDocument {
-            MdocParser::parse_mdoc(input).unwrap()
+        #[test]
+        fn dt() {
+            let input = ".Dt TITLE 7 arch";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)";
+            test_formatting(input, output);
         }
 
         #[test]
-        fn test_dt() {
-            let input = ".Dt TITLE 7 arch";
-            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)";
-            let ast = get_ast(input);
+        fn er() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn es() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ev() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ex() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn fa() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn fd() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn fl() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn Fn() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn fr() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ft() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn fx() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn hf() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ic() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn In() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn lb() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn li() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn lk() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn lp() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ms() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn mt() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn nm() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn no() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ns() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn nx() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn os() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ot() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ox() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn pa() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn pf() {        
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn pp() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn rv() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
 
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+        #[test]
+        fn sm() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn st() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn sx() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn sy() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn tg() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn tn() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn ud() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn ux() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn va() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    
+        #[test]
+        fn xr() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
         }
     }
 
     mod partial_explicit {
-        use crate::{man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}}, FormattingSettings};
-        
-        fn get_ast(input: &str) -> MdocDocument {
-            MdocParser::parse_mdoc(input).unwrap()
-        }
+        use crate::man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}};
 
         #[test]
         fn test_a_block() {
@@ -1800,12 +1985,7 @@ Text loooooooong line
 Text loooooooong line 
 .Ac";
             let output = "⟨addr addr addr⟩";
-            let ast = get_ast(input);
-
-            let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let mut formatter = MdocFormatter::new(formatting_settings);
-            let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-            assert_eq!(output, result)
+            test_formatting(input, output);
         }
     }
 }
