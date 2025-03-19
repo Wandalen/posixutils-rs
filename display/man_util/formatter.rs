@@ -687,6 +687,53 @@ impl MdocFormatter {
 
         self.replace_unicode_escapes(&result) 
     }
+
+    /// Special block macro ta formatting
+    fn format_ta(&mut self, macro_node: MacroNode) -> String {
+
+    }
+}
+
+// Formatting block full-explicit.
+impl MdocFormatter {
+    fn format_bd_block(&mut self, macro_node: MacroNode) -> String {
+
+    }
+
+    fn format_bf_block(&mut self, macro_node: MacroNode) -> String {
+
+    }
+
+    fn format_bk_block(&mut self, macro_node: MacroNode) -> String {
+
+    }
+
+    fn format_bl_block(&mut self, macro_node: MacroNode) -> String {
+
+    }
+}
+
+// Formatting block full-implicit.
+impl MdocFormatter {
+    fn format_it_block(&mut self, macro_node: MacroNode) -> String {
+
+    }
+
+    fn format_nd(&mut self, macro_node: MacroNode) -> String {
+
+    }
+
+    fn format_nm(&mut self, macro_node: MacroNode) -> String {
+
+    }
+
+    fn format_sh_block(&mut self, macro_node: MacroNode) -> String {
+
+    }
+
+    fn format_ss_block(&mut self, macro_node: MacroNode) -> String {
+
+    }
 }
 
 // Formatting block partial-explicit.
@@ -1501,7 +1548,7 @@ mod tests {
     }
 
     mod special_chars {
-        use crate::man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}};
+        use crate::man_util::formatter::test_formatting;
 
         #[test]
         fn spaces() {
@@ -1665,8 +1712,86 @@ mod tests {
         }
     }
 
+    mod full_explicit {
+        use crate::man_util::formatter::test_formatting;
+
+        #[test]
+        fn bd() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bf() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bk() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bl() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    }
+
+    mod full_implicit {
+        use crate::man_util::formatter::test_formatting;
+
+        #[test]
+        fn it() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn nd() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn nm() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn sh() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn ss() {
+            let input = "";
+            let output = "";
+            test_formatting(input, output);
+        }
+    }
+
+    #[test]
+    fn ta() {
+        let input = "";
+        let output = "";
+        test_formatting(input, output);
+    }
+
     mod inline {
-        use crate::man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}};
+        use crate::man_util::formatter::test_formatting;
 
         #[test]
         fn dt() {
@@ -1964,7 +2089,7 @@ mod tests {
     }
 
     mod partial_explicit {
-        use crate::man_util::{formatter::MdocFormatter, parser::{MdocDocument, MdocParser}};
+        use crate::man_util::formatter::test_formatting;
 
         #[test]
         fn test_a_block() {
