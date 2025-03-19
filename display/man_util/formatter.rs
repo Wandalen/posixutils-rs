@@ -3,7 +3,7 @@ use aho_corasick::AhoCorasick;
 use terminfo::Database;
 use crate::FormattingSettings;
 
-use super::{mdoc_macro::{text_production::{AtType, BsxType, BxType, DxType}, types::{AnType, DdDate}, Macro}, parser::{Element, MacroNode, MdocDocument}};
+use super::{mdoc_macro::{text_production::{AtType, BsxType, BxType, DxType}, types::DdDate, Macro}, parser::{Element, MacroNode, MdocDocument}};
 
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(r"(?x)
@@ -689,7 +689,7 @@ impl MdocFormatter {
     fn format_rs_block(&self, macro_node: MacroNode) -> String {
         unimplemented!()
     }
-
+    
     fn format_d(&self, month_day: Option<String>, year: i32) -> String {
         match month_day {
             Some(md) => format!("{md} {year}"),
@@ -937,7 +937,12 @@ impl MdocFormatter {
 
     fn format_dd(&self, date: DdDate) -> String {
         match date {
-            DdDate::MDYFormat(dd_date) => format!("{} {}, {}", dd_date.month_day.1, dd_date.month_day.0, dd_date.year),
+            DdDate::MDYFormat(dd_date) => format!(
+                "{} {}, {}", 
+                dd_date.month_day.0, 
+                dd_date.month_day.1, 
+                dd_date.year
+            ),
             DdDate::StrFormat(string) => string
         }
     }

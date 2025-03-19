@@ -1,0 +1,140 @@
+   Compiling posixutils-display v0.2.2 (/mnt/c/projects/git/posixutils-rs/display)
+warning: unused import: `ops::Index`
+ --> display/man_util/formatter.rs:1:33
+  |
+1 | use std::{collections::HashMap, ops::Index};
+  |                                 ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused variable: `macro_node`
+   --> display/man_util/formatter.rs:689:31
+    |
+689 |     fn format_rs_block(&self, macro_node: MacroNode) -> String {
+    |                               ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_macro_node`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `book_title`
+   --> display/man_util/formatter.rs:819:24
+    |
+819 |     fn format_b(&self, book_title: &str) -> String {
+    |                        ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_book_title`
+
+warning: unused variable: `article_title`
+   --> display/man_util/formatter.rs:824:24
+    |
+824 |     fn format_t(&self, article_title: &str) -> String {
+    |                        ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_article_title`
+
+warning: unused variable: `uri`
+   --> display/man_util/formatter.rs:829:24
+    |
+829 |     fn format_u(&self, uri: &str) -> String {
+    |                        ^^^ help: if this is intentional, prefix it with an underscore: `_uri`
+
+warning: unused variable: `dx_type`
+   --> display/man_util/formatter.rs:933:25
+    |
+933 |     fn format_dx(&self, dx_type: DxType) -> String {
+    |                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_dx_type`
+
+warning: unused variable: `bx_type`
+   --> display/man_util/formatter.rs:950:25
+    |
+950 |     fn format_bx(&self, bx_type: BxType) -> String {
+    |                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_bx_type`
+
+warning: unused variable: `bsx_type`
+   --> display/man_util/formatter.rs:955:26
+    |
+955 |     fn format_bsx(&self, bsx_type: BsxType) -> String {
+    |                          ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_bsx_type`
+
+warning: unused variable: `at_type`
+   --> display/man_util/formatter.rs:960:25
+    |
+960 |     fn format_at(&self, at_type: AtType) -> String {
+    |                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_at_type`
+
+warning: multiple variants are never constructed
+   --> display/man_util/mdoc_macro/mod.rs:73:5
+    |
+17  | pub enum Macro {
+    |          ----- variants in this enum
+...
+73  |     Ed, // End a display context started by Bd
+    |     ^^
+74  |     Bf(BfType),
+75  |     Ef, // End a display context started by Bf
+    |     ^^
+76  |     Bk,
+77  |     Ek, // End a keep context started by Bk
+    |     ^^
+...
+84  |     El, // End a list context started by Bl
+    |     ^^
+...
+169 |     Ot,
+    |     ^^
+...
+191 |     Sc, // Close single-quoted context opened by So
+    |     ^^
+...
+209 |     Xc, // Close a scope opened by Xo
+    |     ^^
+    |
+    = note: `Macro` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` on by default
+
+warning: variants `WithArgs` and `None` are never constructed
+   --> display/man_util/mdoc_macro/types.rs:110:5
+    |
+107 | pub enum ItType {
+    |          ------ variants in this enum
+...
+110 |     WithArgs,
+    |     ^^^^^^^^
+111 |     None,
+    |     ^^^^
+    |
+    = note: `ItType` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Parsing` and `Formatting` are never constructed
+  --> display/man_util/parser.rs:88:5
+   |
+84 | pub enum MdocError {
+   |          --------- variants in this enum
+...
+88 |     Parsing(String),
+   |     ^^^^^^^
+...
+92 |     Formatting(String),
+   |     ^^^^^^^^^^
+   |
+   = note: `MdocError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: methods `format_d` and `format_p` are never used
+   --> display/man_util/formatter.rs:693:8
+    |
+688 | impl MdocFormatter {
+    | ------------------ methods in this implementation
+...
+693 |     fn format_d(&self, month_day: Option<String>, year: i32) -> String {
+    |        ^^^^^^^^
+...
+700 |     fn format_p(&self, macro_node: MacroNode) -> String {
+    |        ^^^^^^^^
+
+warning: `posixutils-display` (bin "man" test) generated 13 warnings (13 duplicates)
+warning: `posixutils-display` (bin "man") generated 13 warnings (run `cargo fix --bin "man"` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.45s
+     Running unittests echo.rs (/mnt/c/projects/git/posixutils-rs/target/debug/deps/echo-50ff435056e2c451)
+     Running unittests man.rs (/mnt/c/projects/git/posixutils-rs/target/debug/deps/man-04c0c426a9f928c1)
+
+thread 'man_util::parser::test::block_partial_implicit::aq_parsed' has overflowed its stack
+fatal runtime error: stack overflow
+error: test failed, to rerun pass `--bin man`
+
+Caused by:
+  process didn't exit successfully: `/mnt/c/projects/git/posixutils-rs/target/debug/deps/man-04c0c426a9f928c1 'man_util::parser::test::block_partial_implicit::aq_parsed'` (signal: 6, SIGABRT: process abort signal)

@@ -11,7 +11,7 @@ use pest::iterators::Pair;
 
 use crate::man_util::parser::Rule;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BdType {
     Centered,
     Filled,
@@ -33,7 +33,7 @@ impl From<Pair<'_, Rule>> for BdType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OffsetType {
     Indent,
     IndentTwo,
@@ -53,7 +53,7 @@ impl From<Pair<'_, Rule>> for OffsetType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BfType {
     Emphasis,
     Literal,
@@ -71,7 +71,7 @@ impl From<Pair<'_, Rule>> for BfType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BlType {
     Bullet,
     Column,
@@ -102,8 +102,8 @@ impl From<Pair<'_, Rule>> for BlType {
         }
     }
 }
-
-#[derive(Debug, PartialEq)]
+ 
+#[derive(Debug, Clone, PartialEq)]
 pub enum ItType {
     // MandatoryArgs,
     // OptionalArgs,
@@ -112,26 +112,26 @@ pub enum ItType {
     // Column,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AnType {
     Split,
     NoSplit,
     Name,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SmMode {
     On,
     Off,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Date {
     pub month_day: (String, u8),
     pub year: u16
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DdDate {
     MDYFormat(Date),
     StrFormat(String)

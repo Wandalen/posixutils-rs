@@ -48,7 +48,7 @@ text_non_comment = @{ (!comment_start ~ !NEWLINE ~ ANY)+ }
 text_line = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE | EOI) }
 line      = { !"." ~ (comment_macro | text_non_comment)+ }
 
-arg = { macro_arg | text_arg }
+arg = ${ macro_arg | text_arg }
 
 // ----- Macro types
 
@@ -278,10 +278,7 @@ nd_block         =  { nd_open ~ (NEWLINE ~ nd_block_element*)? }
 
 // -- Nm
 
-nm_block           = ${ "Nm" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
-//nm_open          = ${ "Nm" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* }
-//nm_block_element =  { !("." ~ (nm_block | sh_block | ss_block)) ~ element }
-//nm_block         =  { nm_open ~ (NEWLINE ~ nm_block_element*)? }
+nm_block = ${ "Nm" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 
 // -- Sh
 
@@ -336,59 +333,64 @@ fo_block = ${ fo_head ~ fo_body* ~ "."? ~ fc }
 
 // --- Oo & Oc
 oc       = ${ "Oc" ~ !text_arg ~ ws* ~ NEWLINE? }
-oo_head  = ${ "Oo" ~ !text_arg ~ (ws+ ~ !oc ~ arg)* ~ ws* ~ NEWLINE? }
-oo_body  = ${ !("."? ~ oc) ~ arg ~ ws* ~ NEWLINE? }
+oo_head  = ${ "Oo" ~ !text_arg ~ (ws+ ~ !oc ~ text_arg)* ~ ws* ~ NEWLINE? }
+oo_body  = ${ !("."? ~ oc) ~ element }
 oo_block = ${ oo_head ~ oo_body* ~ "."? ~ oc }
 
 // --- Po & Pc
 pc       = ${ "Pc" ~ !text_arg ~ ws* ~ NEWLINE? }
-po_head  = ${ "Po" ~ !text_arg ~ (ws+ ~ !pc ~ arg)* ~ ws* ~ NEWLINE? }
-po_body  = ${ !("."? ~ pc) ~ arg ~ ws* ~ NEWLINE? }
+po_head  = ${ "Po" ~ !text_arg ~ (ws+ ~ !pc ~ text_arg)* ~ ws* ~ NEWLINE? }
+po_body  = ${ !("."? ~ pc) ~ element }
 po_block = ${ po_head ~ po_body* ~ "."? ~ pc }
 
 // --- Qo & Qc
 qc       = ${ "Qc" ~ !text_arg ~ ws* ~ NEWLINE? }
-qo_head  = ${ "Qo" ~ !text_arg ~ (ws+ ~ !qc ~ arg)* ~ ws* ~ NEWLINE? }
-qo_body  = ${ !("."? ~ qc) ~ arg ~ ws* ~ NEWLINE? }
+qo_head  = ${ "Qo" ~ !text_arg ~ (ws+ ~ !qc ~ text_arg)* ~ ws* ~ NEWLINE? }
+qo_body  = ${ !("."? ~ qc) ~ element }
 qo_block = ${ qo_head ~ qo_body* ~ "."? ~ qc }
 
 // --- Rs & Re
 re       = ${ "Re" ~ !text_arg ~ ws* ~ NEWLINE? }
-rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ !re ~ rs_submacro)* ~ ws* ~ NEWLINE? }
-rs_body  = ${ !("."? ~ re) ~ rs_submacro ~ ws* ~ NEWLINE? }
+rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ rs_submacro)* ~ ws* ~ NEWLINE? }
+rs_body  = ${ "."? ~ rs_submacro ~ ws* ~ NEWLINE? }
 rs_block = ${ rs_head ~ rs_body* ~ "."? ~ re }
 
 // --- So & Sc
 sc       = ${ "Sc" ~ !text_arg ~ ws* ~ NEWLINE? }
-so_head  = ${ "So" ~ !text_arg ~ (ws+ ~ !sc ~ arg)* ~ ws* ~ NEWLINE? }
-so_body  = ${ !("."? ~ sc) ~ arg ~ ws* ~ NEWLINE? }
+so_head  = ${ "So" ~ !text_arg ~ (ws+ ~ !sc ~ text_arg)* ~ ws* ~ NEWLINE? }
+so_body  = ${ !("."? ~ sc) ~ element }
 so_block = ${ so_head ~ so_body* ~ "."? ~ sc }
 
 // --- Xo & Xc
 xc       = ${ "Xc" ~ !text_arg ~ ws* ~ NEWLINE? }
-xo_head  = ${ "Xo" ~ !text_arg ~ (ws+ ~ !xc ~ arg)* ~ ws* ~ NEWLINE? }
-xo_body  = ${ !("."? ~ xc) ~ arg ~ ws* ~ NEWLINE? }
+xo_head  = ${ "Xo" ~ !text_arg ~ (ws+ ~ !xc ~ text_arg)* ~ ws* ~ NEWLINE? }
+xo_body  = ${ !("."? ~ xc) ~ element }
 xo_block = ${ xo_head ~ xo_body* ~ "."? ~ xc }
 
 // ----- Block partial-implicit
 
-aq_block  = ${ "Aq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-bq_block  = ${ "Bq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-brq_block = ${ "Brq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-d1_block  = ${ "D1" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-dl_block  = ${ "Dl" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-dq_block  = ${ "Dq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-en_block  = ${ "En" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
-op_block  = ${ "Op" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-pq_block  = ${ "Pq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-ql_block  = ${ "Ql" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-qq_block  = ${ "Qq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-sq_block  = ${ "Sq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-vt_block  = ${ "Vt" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+partial_implicit_element = {
+  (( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  text_arg
+}
+
+aq_block  = ${ "Aq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+bq_block  = ${ "Bq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+brq_block = ${ "Brq" ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+d1_block  = ${ "D1"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+dl_block  = ${ "Dl"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+dq_block  = ${ "Dq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+en_block  = ${ "En"  ~ !text_arg ~ (ws* ~ partial_implicit_element)+ ~ ws* ~ NEWLINE? }
+op_block  = ${ "Op"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+pq_block  = ${ "Pq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+ql_block  = ${ "Ql"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+qq_block  = ${ "Qq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+sq_block  = ${ "Sq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+vt_block  = ${ "Vt"  ~ !text_arg ~ (ws* ~ partial_implicit_element)+ ~ ws* ~ NEWLINE? }
 
 // ----- In-line
 
-// -- Rs submacros
+// -- Rs submacros.
 
 // -- Additional rules
 
@@ -396,13 +398,13 @@ month     =  { (!("." | NEWLINE | ws) ~ ANY)* }
 day       = @{ (!(WHITESPACE | NEWLINE) ~ ASCII_DIGIT)+ }
 month_day =  { month ~ ws+ ~ day ~ ws* ~ "," }
 year      =  { ASCII_DIGIT+ }
+//mdy_date  =  { (ws+ ~ month_day)? ~ (ws+ ~ ("."|","))? ~ ws+ ~ year } 
 uri       = @{ (!"://" ~ ANY)+ ~ "://" ~ word* }
 
 a = ${ "%A" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 b = ${ "%B" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 c = ${ "%C" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
-// d = ${ "%D" ~ !text_arg ~ (ws+ ~ month_day)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
-d = ${ "%D" ~ !text_arg ~ (ws+ ~ line)? ~ ws+ ~ year ~ ws* ~ NEWLINE? }
+d = ${ "%D" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 i = ${ "%I" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 j = ${ "%J" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 n = ${ "%N" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
@@ -598,6 +600,8 @@ lk = ${ "Lk" ~ !text_arg ~ ws+ ~ uri ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 lp = ${ "Lp" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 
 // -- Delimeters
+separated_delimiter = { ws+ ~ delimiter ~ ws+ }
+delimiter = { opening_delimiter | closing_delimiter }
 opening_delimiter = { "(" | "[" }
 closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
 

@@ -13,7 +13,7 @@ use pest::iterators::Pair;
 
 use crate::man_util::parser::Rule;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AtType {
     General,
     Version(String),
@@ -52,7 +52,7 @@ impl Display for AtType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BsxType {
     pub version: Option<String>,
 }
@@ -69,7 +69,7 @@ impl Display for BsxType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BxType {
     pub version: Option<String>,
     pub variant: Option<String>,
@@ -91,7 +91,7 @@ impl Display for BxType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DxType {
     pub version: Option<String>,
 }
@@ -108,7 +108,7 @@ impl Display for DxType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FxType {
     pub version: Option<String>,
 }
@@ -125,7 +125,7 @@ impl Display for FxType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NxType {
     pub version: Vec<String>,
 }
@@ -142,7 +142,7 @@ impl Display for NxType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OxType {
     pub version: Vec<String>,
 }
@@ -159,7 +159,7 @@ impl Display for OxType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StType {
     // C Language Standards
     AnsiC,

@@ -13,7 +13,7 @@ use types::*;
 pub mod text_production;
 pub mod types;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Macro {
     A {
         author_name: String,
@@ -25,8 +25,7 @@ pub enum Macro {
         publication_location: String,
     },
     D {
-        month_day: Option<String>,
-        year: i32,
+        date: String
     },
     I {
         issuer_name: String,
@@ -159,9 +158,7 @@ pub enum Macro {
     Nd {
         line: String,
     },
-    Nm {
-        name: Option<Vec<String>>,
-    },
+    Nm,
     No,
     Ns,
     Nx(NxType),

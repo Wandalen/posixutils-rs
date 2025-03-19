@@ -10,7 +10,7 @@
 use clap::Parser;
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use man_util::formatter::MdocFormatter;
-use man_util::parser::{MdocDocument, MdocParser};
+use man_util::parser::MdocParser;
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
