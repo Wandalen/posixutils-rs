@@ -230,7 +230,7 @@ fn parse_mdoc(
     let content = String::from_utf8(man_page.to_vec()).unwrap();
     let document = MdocParser::parse_mdoc(content)?;
     
-    let formatter = MdocFormatter::new(formatting_settings);
+    let mut formatter = MdocFormatter::new(formatting_settings);
     let formatted_document = formatter.format_mdoc(document);
 
     Ok(formatted_document)

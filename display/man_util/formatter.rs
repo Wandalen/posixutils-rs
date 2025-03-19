@@ -3,7 +3,7 @@ use aho_corasick::AhoCorasick;
 use terminfo::Database;
 use crate::FormattingSettings;
 
-use super::{mdoc_macro::{text_production::{AtType, BsxType, BxType, DxType}, types::DdDate, Macro}, parser::{Element, MacroNode, MdocDocument}};
+use super::{mdoc_macro::{text_production::*, types::*, Macro}, parser::{Element, MacroNode, MdocDocument}};
 
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(r"(?x)
@@ -17,15 +17,36 @@ static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Laz
 });
 
 #[derive(Debug)]
+pub struct FormattingState {
+    first_name: Option<String>,
+    suppress_space: bool,
+    footer_text: Option<String>,
+    spacing: String
+}
+
+impl Default for FormattingState{
+    fn default() -> Self {
+        Self { 
+            first_name: None, 
+            suppress_space: false, 
+            footer_text: None, 
+            spacing: " ".to_string() 
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct MdocFormatter {
-    formatting_settings: FormattingSettings
+    formatting_settings: FormattingSettings,
+    formatting_state: FormattingState
 }
 
 // Helper funcitons.
 impl MdocFormatter {
     pub fn new(settings: FormattingSettings) -> Self {
         Self {
-            formatting_settings: settings
+            formatting_settings: settings,
+            formatting_state: FormattingState::default()
         }
     }
 
@@ -72,15 +93,62 @@ impl MdocFormatter {
 
 // Base formatting functions.
 impl MdocFormatter {
-    pub fn format_mdoc(&self, ast: MdocDocument) -> Vec<u8> {
+    pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
+        let footer_iter = vec![self.format_footer()].into_iter();
+        
         ast.elements
             .into_iter()
             .map(|node| self.format_node(node))
-            .collect::<String>()
+            .chain(footer_iter)
+            .collect::<Vec<String>>()
+            .join("")
             .into_bytes()
     }
 
-    fn format_node(&self, node: Element) -> String {
+    fn get_default_footer_text() -> String{
+        String::new()
+    }
+
+    fn format_footer(&self) -> String{
+        let footer_text = self.formatting_state
+            .footer_text.clone()
+            .unwrap_or(Self::get_default_footer_text());
+
+        let date = self.format_dd(chrono::Local::now().date_naive().into());
+
+        let mut space_size = self.formatting_settings
+            .width.saturating_sub(2 * footer_text.len() + date.len()) / 2;
+
+        let mut left_footer_text = footer_text.clone();
+        let mut right_footer_text = footer_text.clone();
+
+        if space_size <= 1{
+            space_size = self.formatting_settings
+                .width.saturating_sub(date.len()) / 2;
+
+            let space = vec![" ";self.formatting_settings.width.saturating_sub(footer_text.len())]
+                .into_iter()
+                .collect::<String>();
+
+            left_footer_text = footer_text.clone() + &space.clone() + "\n";
+            right_footer_text = "\n".to_string() + &space.clone() + &footer_text.clone();
+        }
+
+        let space = vec![" ";space_size]
+            .into_iter()
+            .collect::<String>();
+
+        format!(
+            "\n{}{}{}{}{}", 
+            left_footer_text,
+            space.clone(),
+            date,
+            space,
+            right_footer_text
+        )
+    }
+
+    fn format_node(&mut self, node: Element) -> String {
         match node {
             Element::Macro(macro_node) => self.format_macro_node(macro_node),
             Element::Text(text) => self.format_text_node(text.as_str()),
@@ -88,8 +156,8 @@ impl MdocFormatter {
         }
     }
 
-    fn format_macro_node(&self, macro_node: MacroNode) -> String {
-        match macro_node.mdoc_macro {
+    fn format_macro_node(&mut self, macro_node: MacroNode) -> String {
+        match macro_node.clone().mdoc_macro {
             // Block partial-explicit.
             Macro::Ao  => self.format_a_block(macro_node),
             Macro::Bo  => self.format_b_block(macro_node),
@@ -146,8 +214,50 @@ impl MdocFormatter {
             Macro::Em => self.format_em(macro_node),
             // Macro::An { author_name_type } => unimplemented!(),
             Macro::Dd { date } => self.format_dd(date),
-            Macro::Dt { title, section, arch } => self.format_dt(title, section, arch),
+            Macro::Dt { title, section, arch } => self.format_dt(title.clone(), section.as_str(), arch.clone()),
            
+            Macro::Er => self.format_er(macro_node),
+            Macro::Es{ opening_delimiter, closing_delimiter } => self.format_es(opening_delimiter, closing_delimiter),
+            Macro::Ev => self.format_ev(macro_node),
+            Macro::Ex => self.format_ex(macro_node),
+            Macro::Fa => self.format_fa(macro_node),
+            Macro::Fd{ directive, arguments } => self.format_fd(directive.as_str(), &arguments),
+            Macro::Fl => self.format_fl(macro_node),
+            Macro::Fn{ funcname  } => self.format_fn(funcname.as_str(), macro_node),
+            Macro::Fr => self.format_fr(macro_node),
+            Macro::Ft => self.format_ft(macro_node),
+            Macro::Fx(fx_type) => self.format_fx(fx_type),
+            Macro::Hf => self.format_hf(macro_node),
+            Macro::Ic => self.format_ic(macro_node),
+            Macro::In{ filename  } => self.format_in(filename.as_str()),
+            Macro::Lb{ lib_name  } => self.format_lb(lib_name.as_str()),
+            Macro::Li => self.format_li(macro_node),
+            Macro::Lk{ ref uri  } => self.format_lk(uri.as_str(), macro_node),
+            Macro::Lp => self.format_lp(),
+            Macro::Ms => self.format_ms(macro_node),
+            Macro::Mt => self.format_mt(macro_node),
+            Macro::Nm => self.format_nm(macro_node),
+            Macro::No => self.format_no(macro_node),
+            Macro::Ns => self.format_ns(),
+            Macro::Nx(nx_type) => self.format_nx(nx_type),
+            Macro::Os => self.format_os(macro_node),
+            Macro::Ot => self.format_ot(macro_node),
+            Macro::Ox(ox_type) => self.format_ox(ox_type),
+            Macro::Pa => self.format_pa(macro_node),
+            Macro::Pf{ prefix } => self.format_pf(prefix.as_str()),
+            Macro::Pp => self.format_pp(macro_node),
+            Macro::Rv => self.format_rv(macro_node),
+            Macro::Sm(sm_mode) => self.format_sm(sm_mode),
+            Macro::St(st_type) => self.format_st(st_type),
+            Macro::Sx => self.format_sx(macro_node),
+            Macro::Sy => self.format_sy(macro_node),
+            Macro::Tg{ term } => self.format_tg(term),
+            Macro::Tn => self.format_tn(macro_node),
+            Macro::Ud => self.format_ud(),
+            Macro::Ux => self.format_ux(),
+            Macro::Va => self.format_va(macro_node),
+            Macro::Xr{ name, section } => self.format_xr(name.as_str(), section.as_str()),
+
             _ => unreachable!()   
         }
     }
@@ -585,7 +695,7 @@ impl MdocFormatter {
         unimplemented!()
     }
 
-    fn format_a_block(&self, macro_node: MacroNode) -> String {
+    fn format_a_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -594,7 +704,7 @@ impl MdocFormatter {
         format!("⟨{}⟩", formatted_block)
     }
 
-    fn format_b_block(&self, macro_node: MacroNode) -> String {
+    fn format_b_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -603,7 +713,7 @@ impl MdocFormatter {
         format!("[{}]", formatted_block)
     }
 
-    fn format_br_block(&self, macro_node: MacroNode) -> String {
+    fn format_br_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -612,7 +722,7 @@ impl MdocFormatter {
         format!("{{{}}}", formatted_block)
     }
 
-    fn format_d_block(&self, macro_node: MacroNode) -> String {
+    fn format_d_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -622,7 +732,7 @@ impl MdocFormatter {
     }
 
     fn format_e_block(
-        &self, 
+        &mut self, 
         opening_delimiter: Option<char>, 
         closing_delimiter: Option<char>, 
         macro_node: MacroNode
@@ -648,7 +758,7 @@ impl MdocFormatter {
         }
     }
 
-    fn format_f_block(&self, funcname: String, macro_node: MacroNode) -> String {
+    fn format_f_block(&mut self, funcname: String, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -657,7 +767,7 @@ impl MdocFormatter {
         format!("{}({})", funcname, formatted_block)
     }
 
-    fn format_o_block(&self, macro_node: MacroNode) -> String {
+    fn format_o_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -666,7 +776,7 @@ impl MdocFormatter {
         format!("[{}]", formatted_block)
     }
 
-    fn format_p_block(&self, macro_node: MacroNode) -> String {
+    fn format_p_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -675,7 +785,7 @@ impl MdocFormatter {
         format!("({})", formatted_block)
     }
 
-    fn format_q_block(&self, macro_node: MacroNode) -> String {
+    fn format_q_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -684,7 +794,7 @@ impl MdocFormatter {
         format!("\"{}\"", formatted_block)
     }
 
-    fn format_s_block(&self, macro_node: MacroNode) -> String {
+    fn format_s_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -693,7 +803,7 @@ impl MdocFormatter {
         format!("'{}'", formatted_block)
     }
 
-    fn format_x_block(&self, macro_node: MacroNode) -> String {
+    fn format_x_block(&mut self, macro_node: MacroNode) -> String {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -725,7 +835,7 @@ impl MdocFormatter {
 }
 
 impl MdocFormatter {
-    fn format_aq(&self, macro_node: MacroNode) -> String {
+    fn format_aq(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -734,7 +844,7 @@ impl MdocFormatter {
         format!("⟨{}⟩", formatted_block)
     }
 
-    fn format_bq(&self, macro_node: MacroNode) -> String {
+    fn format_bq(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -743,7 +853,7 @@ impl MdocFormatter {
         format!("[{}]", formatted_block)
     }
 
-    fn format_brq(&self, macro_node: MacroNode) -> String {
+    fn format_brq(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -752,7 +862,7 @@ impl MdocFormatter {
         format!("{{{}}}", formatted_block)
     }
 
-    fn format_d1(&self, macro_node: MacroNode) -> String {
+    fn format_d1(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -763,7 +873,7 @@ impl MdocFormatter {
         format!("{}{}", spaces, formatted_block)
     }
 
-    fn format_dl(&self, macro_node: MacroNode) -> String {
+    fn format_dl(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -774,7 +884,7 @@ impl MdocFormatter {
         format!("{}{}", spaces, formatted_block)
     }
 
-    fn format_dq(&self, macro_node: MacroNode) -> String {
+    fn format_dq(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -783,14 +893,14 @@ impl MdocFormatter {
         format!("“{}”", formatted_block)
     }
 
-    fn format_en(&self, macro_node: MacroNode) -> String {
+    fn format_en(&mut self, macro_node: MacroNode) -> String {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
             .collect::<String>()
     }
 
-    fn format_op(&self, macro_node: MacroNode) -> String {
+    fn format_op(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -799,7 +909,7 @@ impl MdocFormatter {
         format!("[{}]", formatted_block)
     }
 
-    fn format_pq(&self, macro_node: MacroNode) -> String {
+    fn format_pq(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -808,7 +918,7 @@ impl MdocFormatter {
         format!("({})", formatted_block)
     }
 
-    fn format_ql(&self, macro_node: MacroNode) -> String {
+    fn format_ql(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -817,7 +927,7 @@ impl MdocFormatter {
         format!("‘{}’", formatted_block)
     }
 
-    fn format_qq(&self, macro_node: MacroNode) -> String {
+    fn format_qq(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -826,7 +936,7 @@ impl MdocFormatter {
         format!("\"{}\"", formatted_block)
     }
 
-    fn format_sq(&self, macro_node: MacroNode) -> String {
+    fn format_sq(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -835,7 +945,7 @@ impl MdocFormatter {
         format!("'{}'", formatted_block)
     }
 
-    fn format_vt(&self, macro_node: MacroNode) -> String {
+    fn format_vt(&mut self, macro_node: MacroNode) -> String {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -935,13 +1045,13 @@ impl MdocFormatter {
         }
     }
 
-    fn format_dt(&self, title: Option<String>, section: String, arch: Option<String>) -> String {
+    fn format_dt(&self, title: Option<String>, section: &str, arch: Option<String>) -> String {
         let title = match title {
             Some(name) => format!("{name}({section})"),
             None => format!("UNTITLED({section})")
         };
 
-        let section = match section.as_str() {
+        let section = match section {
             "1" => "General Commands Manual",
             "2" => "System Calls Manual",
             "3" => "Library Functions Manual",
@@ -1018,6 +1128,359 @@ impl MdocFormatter {
         format!("{}", at_type)
     }
 
+    fn format_er(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_es(&self, opening_delimiter: char, closing_delimiter: char) -> String {
+        format!("{}{}", opening_delimiter, closing_delimiter)
+    }
+
+    fn format_ev(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_ex(&mut self, macro_node: MacroNode) -> String {
+        let mut content = macro_node.nodes.clone()
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        if macro_node.nodes.is_empty(){
+            content = self.formatting_state.first_name.clone().unwrap_or_default();
+        }
+
+        if let Some(pos) = content.rfind(","){
+            content.replace_range(pos..(pos + 1), " and");
+        }
+
+        let ending = if macro_node.nodes.len() <= 1 {
+            "y"
+        }else{
+            "ies"
+        };
+
+        if !content.is_empty(){
+            format!("The {content} utilit{ending} exits 0 on success, and >0 if an error occurs.")
+        }else{
+            String::new()
+        }
+    }
+
+    fn format_fa(&mut self, macro_node: MacroNode) -> String {
+        let content = macro_node.nodes.iter()
+        .filter_map(|el|{
+            let Element::Text(text) = el else{
+                let string = self.format_node(el.clone());
+                if string.is_empty(){
+                    return None;
+                }else{
+                    return Some(string);
+                }
+            };
+            let mut text = text.clone();
+            for ch in &["'", "\"", "`"]{
+                if let Some(t) = text.strip_prefix(ch){
+                    text = t.to_string()
+                }
+                if let Some(t) = text.strip_suffix(ch){
+                    text = t.to_string()
+                }
+            }
+            Some(text)
+        })
+        .collect::<Vec<String>>()
+        .join(&self.formatting_state.spacing);
+
+        content
+    }
+
+    fn format_fd(&self, directive: &str, arguments: &Vec<String>) -> String {
+        format!("{directive} {}", arguments.join(&self.formatting_state.spacing))
+    }
+
+    fn format_fl(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_fn(&mut self, funcname: &str, macro_node: MacroNode) -> String {
+        let content = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(", ");
+        
+        format!("{funcname}({content})")
+    }
+
+    fn format_fr(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_ft(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_fx(&self, fx_type: FxType) -> String {
+        fx_type.to_string()
+    }
+
+    fn format_hf(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_ic(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_in(&self, filename: &str) -> String {
+        format!("<{filename}>")
+    }
+
+    fn format_lb(&self, lib_name: &str) -> String {
+        format!("Mandoc Macro Compiler Library ({lib_name}, -lmandoc)")
+    }
+
+    fn format_li(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_lk(&mut self, uri: &str, macro_node: MacroNode) -> String {
+        let content = macro_node.nodes.clone()
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing);
+        
+        format!("{content}: {uri}")
+    }
+
+    fn format_lp(&self) -> String {
+        format!("\n\n")
+    }
+
+    fn format_ms(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_mt(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_nm(&mut self, macro_node: MacroNode) -> String {
+        let content = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing);
+        
+        if !content.is_empty(){ 
+            self.formatting_state.first_name = Some(content.clone());
+        }
+
+        content
+    }
+
+    fn format_no(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_ns(&mut self) -> String {
+        self.formatting_state.suppress_space = true;
+        String::new()
+    }
+
+    fn format_nx(&self, nx_type: NxType) -> String {
+        nx_type.to_string()
+    }
+
+    fn format_os(&mut self, macro_node: MacroNode) -> String {
+        let content = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing);
+
+        if !content.is_empty(){
+            self.formatting_state.footer_text = Some(content);
+        }
+        String::new()
+    }
+
+    fn format_ot(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_ox(&self, ox_type: OxType) -> String {
+        ox_type.to_string()
+    }
+
+    fn format_pa(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_pf(&mut self, prefix: &str) -> String {        
+        self.formatting_state.suppress_space = true;
+        prefix.to_string()
+    }
+
+    fn format_pp(&self, _macro_node: MacroNode) -> String {
+        format!("\n\n")
+    }
+
+    fn format_rv(&mut self, macro_node: MacroNode) -> String {
+        let mut content = macro_node.nodes.clone()
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join("(), ");
+
+        if macro_node.nodes.is_empty(){
+            content = self.formatting_state.first_name.clone().unwrap_or_default();
+        }
+
+        content.push_str("()");
+
+        if let Some(pos) = content.rfind(","){
+            content.replace_range(pos..(pos + 1), " and");
+        }
+
+        let ending_1 = if macro_node.nodes.len() <= 1 {
+            ""
+        }else{
+            "s"
+        };
+
+        let ending_2 = if macro_node.nodes.len() <= 1 {
+            "s"
+        }else{
+            ""
+        };
+
+        if !content.is_empty(){
+            format!("The {content} function{ending_1} return{ending_2} the value 0 if successful; otherwise the value -1 is returned and the global variable errno is set to indicate the error.")
+        }else{
+            String::new()
+        }
+    }
+
+    fn format_sm(&mut self, sm_mode: Option<SmMode>) -> String {
+        self.formatting_state.spacing = match sm_mode{
+            Some(SmMode::On) => " ".to_string(),
+            Some(SmMode::Off) => "".to_string(),
+            None => match self.formatting_state.spacing.as_str(){
+                "" => " ".to_string(),
+                " " => "".to_string(),
+                _ => " ".to_string()
+            },
+        };
+        String::new()
+    }
+
+    fn format_st(&self, st_type: StType) -> String {
+        st_type.to_string()
+    }
+
+    fn format_sx(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_sy(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_tg(&self, _term: Option<String>) -> String {
+        String::new()
+    }
+
+    fn format_tn(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_ud(&self) -> String {
+        "currently under development.".to_string()
+    }
+
+    fn format_ux(&self) -> String {
+        "UNIX".to_string()
+    }
+
+    fn format_va(&mut self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing)
+    }
+
+    fn format_xr(&self, name: &str, section: &str) -> String {
+        format!("{name}({section})")
+    }
 }
 
 #[cfg(test)]
@@ -1036,7 +1499,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1048,7 +1511,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1060,7 +1523,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1072,7 +1535,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1084,7 +1547,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1096,7 +1559,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1113,7 +1576,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1125,7 +1588,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1137,7 +1600,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1155,7 +1618,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1167,7 +1630,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1179,7 +1642,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1196,7 +1659,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1208,7 +1671,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1220,7 +1683,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1232,7 +1695,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1249,7 +1712,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1261,7 +1724,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1273,7 +1736,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1285,7 +1748,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1305,7 +1768,7 @@ mod tests {
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
@@ -1340,7 +1803,7 @@ Text loooooooong line
             let ast = get_ast(input);
 
             let formatting_settings = FormattingSettings { width: 78, indent: 5 };
-            let formatter = MdocFormatter::new(formatting_settings);
+            let mut formatter = MdocFormatter::new(formatting_settings);
             let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
             assert_eq!(output, result)
         }
