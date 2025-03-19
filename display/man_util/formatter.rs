@@ -1802,288 +1802,591 @@ mod tests {
 
         #[test]
         fn er() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Er ERROR ERROR2
+.Er";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+ERROR ERROR2
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn es() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Es ( )";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+()
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ev() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ev DISPLAY";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+DISPLAY
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ex() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ex -std grep";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+The grep utility exits 0 on success, and >0 if an error occurs.
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn fa() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Fa funcname Ft const char *";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+funcname const char *
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn fd() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Fd #define sa_handler __sigaction_u.__sa_handler";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+#define sa_handler __sigaction_u.__sa_handler
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn fl() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Fl H | L | P inet";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+-H | -L | -P -inet
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn Fn() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Fn funcname arg arg2 arg3";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+funcname(arg, arg2, arg3)
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn fr() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Fr 32";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+32
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ft() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ft int32 void";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+int32 void
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn fx() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Fx 1.0";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+FreeBSD 1.0
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn hf() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Hf file/path file2/path";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+file/path file2/path
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ic() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ic :wq";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+:wq
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn In() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.In stdatomic.h";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+<stdatomic.h>
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn lb() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Lb libname";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+library “libname”
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn li() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Li Book Antiqua";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Book Antiqua
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn lk() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Lk https://bsd.lv The BSD.lv Project";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+The BSD.lv Project: https://bsd.lv
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn lp() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Hf file/path file2/path
+.Lp
+.Lk https://bsd.lv The BSD.lv Project";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+file/path file2/path
+
+The BSD.lv Project: https://bsd.lv
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ms() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ms alpha beta";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+alpha beta
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn mt() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Mt abc@gmail.com abc@gmail.com";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+abc@gmail.com abc@gmail.com
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn nm() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Nm command_name";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+command_name
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn no() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.No a b c";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+a b c
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ns() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.No a b c
+.Ns
+.No a b c";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+a b c a b c
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn nx() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Nx Version 1.0";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+NetBSD Version 1.0
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn os() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ot() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ot functype";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+functype
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ox() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ox Version 1.0";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+OpenBSD Version 1.0
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn pa() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Pa name1 name2";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+name1 name2
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn pf() {        
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ar value Pf $ Ar variable_name";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+value $variable_name
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn pp() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Pa name1 name2
+.Pp
+.Pa name1 name2";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+name1 name2
+
+name1 name2
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn rv() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rv -std f1 f2 Ar value";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+The f1(), f2(), Ar(), and value() functions return the value 0 if successful;
+otherwise the value -1 is returned and the global variable errno is set to
+indicate the error.
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn sm() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Sm on
+A B C
+.Sm off
+F G H
+.Sm
+R T Y";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+A B C F G H R T Y
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn st() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.St -ansiC word
+.St -iso9945-1-96";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+ANSI X3.159-1989 (“ANSI C89”) word ISO/IEC 9945-1:1996 (“POSIX.1”)
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn sx() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Sx MANUAL STRUCTURE";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+MANUAL STRUCTURE
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn sy() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Sy word1 word2";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+word1 word2
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn tg() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Tg term";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn tn() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Tn word1 word2";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+word1 word2
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn ud() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ud";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+currently under development.
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn ux() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ux";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+UNIX
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn va() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Va const char *bar";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+const char *bar
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
         #[test]
         fn xr() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Xr mandoc 1";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+mandoc(1)
+
+Debian                          January 1, 1970
+Debian";
             test_formatting(input, output);
         }
     }
