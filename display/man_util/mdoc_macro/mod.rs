@@ -15,46 +15,20 @@ pub mod types;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Macro {
-    A {
-        author_name: String,
-    },
-    B {
-        book_title: String,
-    },
-    C {
-        publication_location: String,
-    },
-    D {
-        date: String
-    },
-    I {
-        issuer_name: String,
-    },
-    J {
-        journal_name: String,
-    },
-    N {
-        issue_number: String,
-    },
-    O {
-        information: String,
-    },
+    A,
+    B,
+    C,
+    D,
+    I,
+    J,
+    N,
+    O,
     P,
-    Q {
-        institution_author: String,
-    },
-    R {
-        report_name: String,
-    },
-    T {
-        article_title: String,
-    },
-    U {
-        uri: String,
-    },
-    V {
-        volume_number: String,
-    },
+    Q,
+    R,
+    T,
+    U,
+    V,
     Ad,
     An {
         author_name_type: AnType,

@@ -19,8 +19,15 @@ NEWLINE    = _{ "\r"? ~ "\n" }
 
 // -- Macro name separator to not allow merging macro name with arguments
 
+comment_start = _{ "\\" ~ "\"" }
+comment_macro = _{ comment_start ~ (!(NEWLINE | EOI) ~ ANY)* }
+
+text_non_comment = ${ (!comment_start ~ word ~ ws*)+ }
+text_line = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE | EOI) }
+line      = { !"." ~ (comment_macro | text_non_comment)+ }
+
 expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
-word     = @{ (!(ws | NEWLINE) ~ ANY)+ }
+word     = @{ (!(NEWLINE | ws) ~ ANY)+ }
 text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ }
 
 // -- List of Callable macros
@@ -40,13 +47,6 @@ macro_arg = {
     inline | ta 
   ) 
 }
-
-comment_start = _{ "\\" ~ "\"" }
-comment_macro = _{ comment_start ~ (!(NEWLINE | EOI) ~ ANY)* }
-
-text_non_comment = @{ (!comment_start ~ !NEWLINE ~ ANY)+ }
-text_line = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE | EOI) }
-line      = { !"." ~ (comment_macro | text_non_comment)+ }
 
 arg = ${ macro_arg | text_arg }
 
@@ -401,6 +401,20 @@ year      =  { ASCII_DIGIT+ }
 //mdy_date  =  { (ws+ ~ month_day)? ~ (ws+ ~ ("."|","))? ~ ws+ ~ year } 
 uri       = @{ (!"://" ~ ANY)+ ~ "://" ~ word* }
 
+// a = ${ "%A" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// b = ${ "%B" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// c = ${ "%C" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// d = ${ "%D" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// i = ${ "%I" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// j = ${ "%J" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// n = ${ "%N" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// o = ${ "%O" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// p = ${ "%P" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// q = ${ "%Q" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// r = ${ "%R" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// t = ${ "%T" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// u = ${ "%U" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
+// v = ${ "%V" ~ !text_arg ~ (ws+ ~ !"\\\"" ~ word)* ~ ws* ~ NEWLINE? }
 a = ${ "%A" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 b = ${ "%B" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 c = ${ "%C" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
@@ -409,11 +423,11 @@ i = ${ "%I" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 j = ${ "%J" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 n = ${ "%N" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 o = ${ "%O" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
-p = ${ "%P" ~ !text_arg ~ (ws+ ~ word)+ ~ ws* ~ NEWLINE? }
+p = ${ "%P" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 q = ${ "%Q" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 r = ${ "%R" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 t = ${ "%T" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
-u = ${ "%U" ~ !text_arg ~ ws+ ~ uri ~ ws* ~ NEWLINE? }
+u = ${ "%U" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 v = ${ "%V" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 
 // -- Text production

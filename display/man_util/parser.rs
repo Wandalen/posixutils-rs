@@ -21,22 +21,21 @@ use std::sync::LazyLock;
 use std::mem::discriminant;
 
 static RS_SUBMACRO: LazyLock<Vec<Macro>> = LazyLock::new(|| {       
-    let strf = || String::new();
     vec![
-        Macro::A{ author_name: strf() }, 
-        Macro::T{ article_title: strf() }, 
-        Macro::B{ book_title: strf() }, 
-        Macro::I{ issuer_name: strf() }, 
-        Macro::J{ journal_name: strf() }, 
-        Macro::R{ report_name: strf() }, 
-        Macro::N{ issue_number: strf() }, 
-        Macro::V{ volume_number: strf() }, 
-        Macro::U{ uri: strf() }, 
+        Macro::A, 
+        Macro::T, 
+        Macro::B, 
+        Macro::I, 
+        Macro::J, 
+        Macro::R, 
+        Macro::N, 
+        Macro::V, 
+        Macro::U, 
         Macro::P, 
-        Macro::Q{ institution_author: strf() }, 
-        Macro::C{ publication_location: strf() }, 
-        Macro::D{ date: strf() }, 
-        Macro::O{ information: strf() }
+        Macro::Q, 
+        Macro::C, 
+        Macro::D, 
+        Macro::O
     ]
 });
 
@@ -1074,179 +1073,176 @@ impl MdocParser {
         // Parses (`%A`)[https://man.openbsd.org/mdoc#_A]:
         // `%A first_name ... last_name`
         fn parse_a(pair: Pair<Rule>) -> Element {
-            let author_name = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::A {
-                    author_name: author_name,
-                },
-                nodes: vec![],
+                mdoc_macro: Macro::A,
+                nodes
             })
         }
 
         // Parses (`%B`)[https://man.openbsd.org/mdoc#_B]:
         // `%B title`
         fn parse_b(pair: Pair<Rule>) -> Element {
-            let book_title = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::B { book_title },
-                nodes: vec![],
+                mdoc_macro: Macro::B,
+                nodes,
             })
         }
 
         // Parses (`%C`)[https://man.openbsd.org/mdoc#_C]:
         // `%C location`
         fn parse_c(pair: Pair<'_, Rule>) -> Element {
-            let publication_location = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::C {
-                    publication_location,
-                },
-                nodes: vec![],
+                mdoc_macro: Macro::C,
+                nodes,
             })
         }
 
         // Parses (`%D`)[https://man.openbsd.org/mdoc#_D]:
         // `%D [month day,] year`
         fn parse_d(pair: Pair<'_, Rule>) -> Element {
-            let date = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::D { date },
-                nodes: vec![],
+                mdoc_macro: Macro::D,
+                nodes,
             })
         }
 
         // Parses (`%I`)[https://man.openbsd.org/mdoc#_I]:
         // `%I name`
         fn parse_i(pair: Pair<'_, Rule>) -> Element {
-            let issuer_name = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::I { issuer_name },
-                nodes: vec![],
+                mdoc_macro: Macro::I,
+                nodes,
             })
         }
 
         // Parses (`%J`)[https://man.openbsd.org/mdoc#_J]:
         // `%J name`
         fn parse_j(pair: Pair<'_, Rule>) -> Element {
-            let journal_name = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::J { journal_name },
-                nodes: vec![],
+                mdoc_macro: Macro::J,
+                nodes,
             })
         }
 
         // Parses (`%N`)[https://man.openbsd.org/mdoc#_N]:
         // `%N number`
         fn parse_n(pair: Pair<'_, Rule>) -> Element {
-            let issue_number = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::N { issue_number },
-                nodes: vec![],
+                mdoc_macro: Macro::N,
+                nodes,
             })
         }
 
         // Parses (`%O`)[https://man.openbsd.org/mdoc#_O]:
         // `%O line`
         fn parse_o(pair: Pair<'_, Rule>) -> Element {
-            let information = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::O { information },
-                nodes: vec![],
+                mdoc_macro: Macro::O,
+                nodes,
             })
         }
 
         // Parses (`%P`)[https://man.openbsd.org/mdoc#_P]:
         // `%P number`
         fn parse_p(pair: Pair<'_, Rule>) -> Element {
-            let nodes = pair.into_inner().map(MdocParser::parse_element).collect();
+            let nodes = pair
+                .into_inner()
+                .next()
+                .unwrap()
+                .into_inner()
+                .next()
+                .unwrap()
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
                 mdoc_macro: Macro::P,
@@ -1257,100 +1253,100 @@ impl MdocParser {
         // Parses (`%Q`)[https://man.openbsd.org/mdoc#_Q]:
         // `%Q name`
         fn parse_q(pair: Pair<'_, Rule>) -> Element {
-            let institution_author = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::Q { institution_author },
-                nodes: vec![],
+                mdoc_macro: Macro::Q,
+                nodes,
             })
         }
 
         // Parses (`%R`)[https://man.openbsd.org/mdoc#_R]:
         // `%R name`
         fn parse_r(pair: Pair<'_, Rule>) -> Element {
-            let report_name = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::R { report_name },
-                nodes: vec![],
+                mdoc_macro: Macro::R,
+                nodes,
             })
         }
 
         // Parses (`%T`)[https://man.openbsd.org/mdoc#_T]:
         // `%T title`
         fn parse_t(pair: Pair<'_, Rule>) -> Element {
-            let article_title = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::T { article_title },
-                nodes: vec![],
+                mdoc_macro: Macro::T,
+                nodes,
             })
         }
 
         // Parses (`%U`)[https://man.openbsd.org/mdoc#_U]:
         // `%U protocol://path`
         fn parse_u(pair: Pair<'_, Rule>) -> Element {
-            let uri = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .to_string();
+                .into_inner()
+                .next()
+                .unwrap()
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::U { uri },
-                nodes: vec![],
+                mdoc_macro: Macro::U,
+                nodes,
             })
         }
 
         // Parses (`%V`)[https://man.openbsd.org/mdoc#_V]:
         // `%V number`
         fn parse_v(pair: Pair<'_, Rule>) -> Element {
-            let volume_number = pair
+            let nodes = pair
                 .into_inner()
                 .next()
                 .unwrap()
                 .into_inner()
                 .next()
                 .unwrap()
-                .as_str()
-                .split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+                .into_inner()
+                .map(MdocParser::parse_element)
+                .collect();
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::V { volume_number },
-                nodes: vec![],
+                mdoc_macro: Macro::V,
+                nodes,
             })
         }
 
@@ -6131,28 +6127,34 @@ Line
                     mdoc_macro: Macro::Rs,
                     nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::A{
-                                author_name: "John Doe".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::A,
+                            nodes: vec![
+                                Element::Text("John".to_string()),
+                                Element::Text("Doe".to_string())
+                            ]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::B{
-                                book_title: "Title Line Ad addr1".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::B,
+                            nodes: vec![
+                                Element::Text("Title".to_string()),
+                                Element::Text("Line".to_string()),
+                                Element::Text("Ad".to_string()),
+                                Element::Text("addr1".to_string())
+                            ]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::U{
-                                uri: "protocol://path".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::U,
+                            nodes: vec![
+                                Element::Text("protocol://path".to_string())
+                            ]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::D{
-                                date: "January 1, 1970".to_string()
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::D,
+                            nodes: vec![
+                                Element::Text("January".to_string()),
+                                Element::Text("1,".to_string()),
+                                Element::Text("1970".to_string()),
+                            ]
                         }),
                     ]
                 }),
@@ -6164,22 +6166,27 @@ Line
                     mdoc_macro: Macro::Rs,
                     nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::B{
-                                book_title: "Title Line Ad addr1".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::B,
+                            nodes: vec![
+                                Element::Text("Title".to_string()),
+                                Element::Text("Line".to_string()),
+                                Element::Text("Ad".to_string()),
+                                Element::Text("addr1".to_string()),
+                            ]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::U{
-                                uri: "protocol://path".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::U,
+                            nodes: vec![
+                                Element::Text("protocol://path".to_string())
+                            ]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::D{
-                                date: "January 1, 1970".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::D,
+                            nodes: vec![
+                                Element::Text("January".to_string()),
+                                Element::Text("1,".to_string()),
+                                Element::Text("1970".to_string()),
+                            ]
                         }),
                     ]
                 })
@@ -6252,10 +6259,11 @@ Rs
                             mdoc_macro: Macro::Rs,
                             nodes: vec![
                                 Element::Macro(MacroNode {
-                                    mdoc_macro: Macro::A{ 
-                                        author_name: "John Doe".to_string() 
-                                    },
-                                    nodes: vec![]
+                                    mdoc_macro: Macro::A, 
+                                    nodes: vec![
+                                        Element::Text("John".to_string()),
+                                        Element::Text("Doe".to_string())
+                                    ]
                                 })
                             ]
                         })
@@ -6291,58 +6299,72 @@ Rs
                     mdoc_macro: Macro::Rs,
                     nodes: vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::A {
-                                author_name: "John Doe".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::A,
+                            nodes: vec![
+                                Element::Text("John".to_string()),
+                                Element::Text("Doe".to_string()),
+                            ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::T {
-                                article_title: "Article title line".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::T,
+                            nodes: vec![
+                                Element::Text("Article".to_string()),
+                                Element::Text("title".to_string()),
+                                Element::Text("line".to_string()),
+                            ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::B{
-                                book_title: "Title Line".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::B,
+                            nodes: vec![
+                                Element::Text("Title".to_string()),
+                                Element::Text("Line".to_string()),
+                            ]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::I {
-                                issuer_name: "John Doe".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::I,
+                            nodes: vec![
+                                Element::Text("John".to_string()),
+                                Element::Text("Doe".to_string()),
+                            ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::J {
-                                journal_name: "Journal Name Line".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::J,
+                            nodes: vec![
+                                Element::Text("Journal".to_string()),
+                                Element::Text("Name".to_string()),
+                                Element::Text("Line".to_string()),
+                            ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::R {
-                                report_name: "Technical report No. 1".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::R,
+                            nodes: vec![
+                                Element::Text("Technical".to_string()),
+                                Element::Text("report".to_string()),
+                                Element::Text("No.".to_string()),
+                                Element::Text("1".to_string()),
+                            ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::N {
-                                issue_number: "Issue No. 1".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::N,
+                            nodes: vec![
+                                Element::Text("Issue".to_string()),
+                                Element::Text("No.".to_string()),
+                                Element::Text("1".to_string()),
+                            ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::V {
-                                volume_number: "Volume No. 1".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::V,
+                            nodes: vec![
+                                Element::Text("Volume".to_string()),
+                                Element::Text("No.".to_string()),
+                                Element::Text("1".to_string()),
+                            ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::U{
-                                uri: "protocol://path".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::U,
+                            nodes: vec![
+                                Element::Text("protocol://path".to_string())
+                            ]
                         }),
                         Element::Macro(MacroNode {
                             mdoc_macro: Macro::P,
@@ -6352,28 +6374,33 @@ Rs
                             ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Q {
-                                institution_author: "John Doe".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::Q,
+                            nodes: vec![
+                                Element::Text("John".to_string()),
+                                Element::Text("Doe".to_string()),
+                            ],
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::C { 
-                                publication_location: "Location line".to_string() 
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::C, 
+                            nodes: vec![
+                                Element::Text("Location".to_string()),
+                                Element::Text("line".to_string()),
+                            ]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::D{
-                                date: "January 1, 1970".to_string(),
-                            },
-                            nodes: vec![]
+                            mdoc_macro: Macro::D,
+                            nodes: vec![
+                                Element::Text("1970".to_string()),
+                                Element::Text("1,".to_string()),
+                                Element::Text("1970".to_string()),
+                            ]
                         }),
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::O {
-                                information: "Optional information".to_string(),
-                            },
-                            nodes: vec![],
+                            mdoc_macro: Macro::O,
+                            nodes: vec![
+                                Element::Text("Optional".to_string()),
+                                Element::Text("information".to_string()),
+                            ],
                         }),
                     ]
                 })
@@ -6734,10 +6761,11 @@ Line
             fn a() {
                 let content = ".%A John Doe";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::A {
-                        author_name: "John Doe".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::A,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6748,10 +6776,11 @@ Line
             fn a_with_whitespaces() {
                 let content = ".%A John  \t  Doe";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::A {
-                        author_name: "John Doe".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::A,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6768,10 +6797,13 @@ Line
             fn a_not_parsed() {
                 let content = ".%A John Doe Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::A {
-                        author_name: "John Doe Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::A,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6799,10 +6831,11 @@ Line
             fn b() {
                 let content = ".%B Title Line";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::B {
-                        book_title: "Title Line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::B,
+                    nodes: vec![
+                        Element::Text("Title".to_string()),
+                        Element::Text("Line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6813,10 +6846,11 @@ Line
             fn b_with_whitespaces() {
                 let content = ".%B Title  \t  Line\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::B {
-                        book_title: "Title Line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::B,
+                    nodes: vec![
+                        Element::Text("Title".to_string()),
+                        Element::Text("Line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6833,10 +6867,13 @@ Line
             fn b_not_parsed() {
                 let content = ".%B Title Line Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::B {
-                        book_title: "Title Line Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::B,
+                    nodes: vec![
+                        Element::Text("Title".to_string()),
+                        Element::Text("Line".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6864,10 +6901,11 @@ Line
             fn c() {
                 let content = ".%C Location line";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::C {
-                        publication_location: "Location line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::C,
+                    nodes: vec![
+                        Element::Text("Location".to_string()),
+                        Element::Text("line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6878,10 +6916,11 @@ Line
             fn c_with_whitespaces() {
                 let content = ".%C Location  \t  Line\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::C {
-                        publication_location: "Location Line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::C,
+                    nodes: vec![
+                        Element::Text("Location".to_string()),
+                        Element::Text("Line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6898,10 +6937,13 @@ Line
             fn c_not_parsed() {
                 let content = ".%C Location Line Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::C {
-                        publication_location: "Location Line Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::C,
+                    nodes: vec![
+                        Element::Text("Location".to_string()),
+                        Element::Text("Line".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6929,10 +6971,12 @@ Line
             fn d() {
                 let content = ".%D January 1, 1970";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::D {
-                        date: "January 1, 1970".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::D,
+                    nodes: vec![
+                        Element::Text("January".to_string()),
+                        Element::Text("1,".to_string()),
+                        Element::Text("1970".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6943,10 +6987,12 @@ Line
             fn d_with_whitespaces() {
                 let content = ".%D January  \t  1,  \t  1970\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::D {
-                        date: "January 1, 1970".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::D,
+                    nodes: vec![
+                        Element::Text("January".to_string()),
+                        Element::Text("1,".to_string()),
+                        Element::Text("1970".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6957,10 +7003,10 @@ Line
             fn d_no_month_day() {
                 let content = ".%D 1970";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::D {
-                        date: "1970".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::D,
+                    nodes: vec![
+                        Element::Text("1970".to_string())
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -6978,10 +7024,12 @@ Line
                 let input = ".%D Ad 1, 1970";
                 let elements = vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::D { 
-                            date: "Ad 1, 1970".to_string(),
-                        },
-                        nodes: vec![]
+                        mdoc_macro: Macro::D, 
+                        nodes: vec![
+                            Element::Text("Ad".to_string()),
+                            Element::Text("1,".to_string()),
+                            Element::Text("1970".to_string()),
+                        ]
                     })
                 ];
 
@@ -7011,10 +7059,11 @@ Line
             fn i() {
                 let content = ".%I John Doe";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::I {
-                        issuer_name: "John Doe".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::I,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7025,10 +7074,11 @@ Line
             fn i_with_whitespaces() {
                 let content = ".%I John  \t  Doe\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::I {
-                        issuer_name: "John Doe".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::I,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7045,10 +7095,13 @@ Line
             fn i_not_parsed() {
                 let content = ".%I John Doe Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::I {
-                        issuer_name: "John Doe Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::I,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7076,10 +7129,12 @@ Line
             fn j() {
                 let content = ".%J Journal Name Line";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::J {
-                        journal_name: "Journal Name Line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::J,
+                    nodes: vec![
+                        Element::Text("Journal".to_string()),
+                        Element::Text("Name".to_string()),
+                        Element::Text("Line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7090,10 +7145,12 @@ Line
             fn j_with_whitespaces() {
                 let content = ".%J Journal  \t  Name  \t  Line\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::J {
-                        journal_name: "Journal Name Line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::J,
+                    nodes: vec![
+                        Element::Text("Journal".to_string()),
+                        Element::Text("Name".to_string()),
+                        Element::Text("Line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7110,10 +7167,13 @@ Line
             fn j_not_parsed() {
                 let content = ".%J Journal Name Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::J {
-                        journal_name: "Journal Name Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::J,
+                    nodes: vec![
+                        Element::Text("Journal".to_string()),
+                        Element::Text("Name".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7141,10 +7201,12 @@ Line
             fn n() {
                 let content = ".%N Issue No. 1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::N {
-                        issue_number: "Issue No. 1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::N,
+                    nodes: vec![
+                        Element::Text("Issue".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7155,10 +7217,12 @@ Line
             fn n_with_whitespaces() {
                 let content = ".%N Issue  \t  No.  \t  1\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::N {
-                        issue_number: "Issue No. 1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::N,
+                    nodes: vec![
+                        Element::Text("Issue".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7175,10 +7239,14 @@ Line
             fn n_not_parsed() {
                 let content = ".%N Issue No. 1 Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::N {
-                        issue_number: "Issue No. 1 Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::N,
+                    nodes: vec![
+                        Element::Text("Issue".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7207,10 +7275,12 @@ Line
             fn o() {
                 let content = ".%O Optional information line";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::O {
-                        information: "Optional information line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::O,
+                    nodes: vec![
+                        Element::Text("Optional".to_string()),
+                        Element::Text("information".to_string()),
+                        Element::Text("line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7221,10 +7291,12 @@ Line
             fn o_with_whitespaces() {
                 let content = ".%O Optional  \t  information  \t  line\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::O {
-                        information: "Optional information line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::O,
+                    nodes: vec![
+                        Element::Text("Optional".to_string()),
+                        Element::Text("information".to_string()),
+                        Element::Text("line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7241,10 +7313,13 @@ Line
             fn o_not_parsed() {
                 let content = ".%O Optional information Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::O {
-                        information: "Optional information Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::O,
+                    nodes: vec![
+                        Element::Text("Optional".to_string()),
+                        Element::Text("information".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7342,10 +7417,11 @@ Line
             fn q() {
                 let content = ".%Q John Doe";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Q {
-                        institution_author: "John Doe".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::Q,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7356,10 +7432,11 @@ Line
             fn q_with_whitespaces() {
                 let content = ".%Q John  \t  Doe\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Q {
-                        institution_author: "John Doe".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::Q,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7376,10 +7453,13 @@ Line
             fn q_not_parsed() {
                 let content = ".%Q John Doe Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Q {
-                        institution_author: "John Doe Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::Q,
+                    nodes: vec![
+                        Element::Text("John".to_string()),
+                        Element::Text("Doe".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7407,10 +7487,13 @@ Line
             fn r() {
                 let content = ".%R Technical report No. 1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::R {
-                        report_name: "Technical report No. 1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::R,
+                    nodes: vec![
+                        Element::Text("Technical".to_string()),
+                        Element::Text("report".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7421,10 +7504,13 @@ Line
             fn r_with_whitespaces() {
                 let content = ".%R Technical  \t  report  \t  No.  \t  1\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::R {
-                        report_name: "Technical report No. 1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::R,
+                    nodes: vec![
+                        Element::Text("Technical".to_string()),
+                        Element::Text("report".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7441,10 +7527,13 @@ Line
             fn r_not_parsed() {
                 let content = ".%R Technical report Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::R {
-                        report_name: "Technical report Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::R,
+                    nodes: vec![
+                        Element::Text("Technical".to_string()),
+                        Element::Text("report".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7472,10 +7561,12 @@ Line
             fn t() {
                 let content = ".%T Article title line";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::T {
-                        article_title: "Article title line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::T,
+                    nodes: vec![
+                        Element::Text("Article".to_string()),
+                        Element::Text("title".to_string()),
+                        Element::Text("line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7486,10 +7577,12 @@ Line
             fn t_with_whitespaces() {
                 let content = ".%T Article  \t  title  \t  line\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::T {
-                        article_title: "Article title line".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::T,
+                    nodes: vec![
+                        Element::Text("Article".to_string()),
+                        Element::Text("title".to_string()),
+                        Element::Text("line".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7506,10 +7599,13 @@ Line
             fn t_not_parsed() {
                 let content = ".%T Article title Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::T {
-                        article_title: "Article title Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::T,
+                    nodes: vec![
+                        Element::Text("Article".to_string()),
+                        Element::Text("title".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7537,20 +7633,14 @@ Line
             fn u() {
                 let content = ".%U protocol://path";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::U {
-                        uri: "protocol://path".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::U,
+                    nodes: vec![
+                        Element::Text("protocol://path".to_string())
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements);
-            }
-
-            #[test]
-            fn u_invalid_uri() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%U some_non_uri_text").is_err());
             }
 
             #[test]
@@ -7561,7 +7651,17 @@ Line
 
             #[test]
             fn u_not_parsed() {
-                assert!(MdocParser::parse_mdoc(".%U Ad addr1").is_err());
+                let content = ".%U Ad addr1";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::U,
+                    nodes: vec![
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7584,10 +7684,12 @@ Line
             fn v() {
                 let content = ".%V Volume No. 1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::V {
-                        volume_number: "Volume No. 1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::V,
+                    nodes: vec![
+                        Element::Text("Volume".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7598,10 +7700,12 @@ Line
             fn v_with_whitespaces() {
                 let content = ".%V Volume  \t  No.  \t  1\n";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::V {
-                        volume_number: "Volume No. 1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::V,
+                    nodes: vec![
+                        Element::Text("Volume".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7618,10 +7722,14 @@ Line
             fn v_not_parsed() {
                 let content = ".%V Volume No. 1 Ad addr1";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::V {
-                        volume_number: "Volume No. 1 Ad addr1".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::V,
+                    nodes: vec![
+                        Element::Text("Volume".to_string()),
+                        Element::Text("No.".to_string()),
+                        Element::Text("1".to_string()),
+                        Element::Text("Ad".to_string()),
+                        Element::Text("addr1".to_string()),
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -11739,8 +11847,10 @@ Line
 
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::A { author_name: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::A,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Fo { funcname: "funcname".to_string() },
@@ -11749,44 +11859,64 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::B { book_title: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::B,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::C { publication_location: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::C,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::I { issuer_name: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::I,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::J { journal_name: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::J,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::N { issue_number: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::N,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::O { information: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::O,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Q { institution_author: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::Q,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::R { report_name: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::R,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::T { article_title: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::T,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::V { volume_number: "John".to_string() },
-                    nodes: vec![]
+                    mdoc_macro: Macro::V,
+                    nodes: vec![
+                        Element::Text("John".to_string())
+                    ]
                 }),
             ];
 

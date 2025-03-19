@@ -141,9 +141,9 @@ impl MdocFormatter {
 
             // In-line.
             // Rs block macros which can appears outside Rs-Re block.
-            Macro::B { book_title    } => self.format_b(&book_title),
-            Macro::T { article_title } => self.format_t(&article_title),
-            Macro::U { uri           } => self.format_u(&uri),
+            Macro::B => self.format_b(macro_node),
+            Macro::T => self.format_t(macro_node),
+            Macro::U => self.format_u(macro_node),
 
             // Text production macros.
             Macro::At(at_type)    => self.format_at(at_type),
@@ -689,7 +689,7 @@ impl MdocFormatter {
     fn format_rs_block(&self, macro_node: MacroNode) -> String {
         unimplemented!()
     }
-    
+
     fn format_d(&self, month_day: Option<String>, year: i32) -> String {
         match month_day {
             Some(md) => format!("{md} {year}"),
@@ -816,17 +816,17 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_b(&self, book_title: &str) -> String {
+    fn format_b(&self, macro_node: MacroNode) -> String {
         // self.format_inline_macro(book_title)
         todo!()
     }
 
-    fn format_t(&self, article_title: &str) -> String {
+    fn format_t(&self, macro_node: MacroNode) -> String {
         // self.format_inline_macro(article_title)
         todo!()
     }
 
-    fn format_u(&self, uri: &str) -> String {
+    fn format_u(&self, macro_node: MacroNode) -> String {
         // self.format_inline_macro(uri)
         todo!()
     }
