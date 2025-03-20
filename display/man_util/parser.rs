@@ -53,7 +53,6 @@ pub struct MacroNode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     Text(String),
-    //Delimiter(char),
     Macro(MacroNode),
     Eoi, // "End of input" marker
 }
@@ -62,7 +61,6 @@ impl Into<String> for Element{
     fn into(self) -> String {
         match self{
             Element::Text(text) => text,
-            //Element::Delimiter(ch) => ch.to_string(),
             Element::Macro(macro_node) => format!("{:?}", macro_node),
             Element::Eoi => "EOI".to_string(),
         }

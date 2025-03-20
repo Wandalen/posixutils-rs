@@ -23,6 +23,11 @@ expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
 word     = @{ (!(ws | NEWLINE) ~ ANY)+ }
 text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ }
 
+// word             = @{ (!(separated_delimiter | ws | NEWLINE) ~ ANY)+ | delimiter }
+// text_arg         = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(separated_delimiter | ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ | delimiter }
+// text_non_comment = @{ (!(separated_delimiter | comment_start | NEWLINE) ~ ANY)+ }
+// line             = { (!"." ~ (comment_macro | text_non_comment)+) | delimiter }
+
 // -- List of Callable macros
 macro_arg = { 
   !(
@@ -44,9 +49,9 @@ macro_arg = {
 comment_start = _{ "\\" ~ "\"" }
 comment_macro = _{ comment_start ~ (!(NEWLINE | EOI) ~ ANY)* }
 
-text_non_comment = @{ (!comment_start ~ !NEWLINE ~ ANY)+ }
-text_line = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE | EOI) }
+text_non_comment = @{ (!(comment_start | NEWLINE) ~ ANY)+ }
 line      = { !"." ~ (comment_macro | text_non_comment)+ }
+text_line = { line ~ (NEWLINE | EOI) }
 
 arg = { macro_arg | text_arg }
 
@@ -595,7 +600,7 @@ lk = ${ "Lk" ~ !text_arg ~ ws+ ~ uri ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 lp = ${ "Lp" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 
 // -- Delimeters
-separated_delimiter = { ws+ ~ delimiter ~ ws+ }
+separated_delimiter = { ws+ ~ delimiter ~ ws* }
 delimiter = { opening_delimiter | closing_delimiter }
 opening_delimiter = { "(" | "[" }
 closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
