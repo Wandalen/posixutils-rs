@@ -1391,25 +1391,48 @@ impl MdocParser {
         // Parses (`At`)[https://man.openbsd.org/mdoc#At]:
         // `At [version]`
         fn parse_at(pair: Pair<Rule>) -> Element {
-            let mut inner = pair.into_inner();
+            let inner: Vec<_> = pair.into_inner().collect();
 
-            let mut at_type = AtType::General;
-            let mut nodes = Vec::with_capacity(1);
+            if inner.len() == 0 {
+                return Element::Macro(MacroNode {
+                    mdoc_macro: Macro::At,
+                    nodes: vec![Element::Text(AtType::default().to_string())]
+                });
+            }
 
-            if let Some(arg) = inner.next() {
-                match arg.as_rule() {
-                    Rule::at_type => {
-                        at_type = AtType::from(arg);
-                    }
+            let mut i = 0;
+            let mut nodes = Vec::new();
+        
+            while i < inner.len() && inner[i].as_rule() == Rule::opening_delimiter {
+                nodes.push(MdocParser::parse_element(inner[i].clone()));
+                i += 1;
+            }
+        
+            if i < inner.len() {
+                match inner[i].as_rule() {
                     Rule::text_arg => {
-                        nodes.push(MdocParser::parse_element(arg));
-                    }
+                        nodes.push(Element::Text(AtType::default().to_string()));
+                        nodes.push(MdocParser::parse_element(inner[i].clone()));
+                        i += 1;
+                    },
+                    Rule::at_type => {
+                        nodes.push(Element::Text(AtType::from(inner[i].clone()).to_string()));
+                        i += 1;
+                    },
+                    Rule::closing_delimiter => {
+                        nodes.push(Element::Text(AtType::default().to_string()));
+                    },
                     _ => unreachable!(),
                 }
             }
-
+        
+            while i < inner.len() && inner[i].as_rule() == Rule::closing_delimiter {
+                nodes.push(MdocParser::parse_element(inner[i].clone()));
+                i += 1;
+            }
+        
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::At(at_type),
+                mdoc_macro: Macro::At,
                 nodes,
             })
         }
@@ -7759,8 +7782,10 @@ Line
                 for (str_type, enum_type) in at_types {
                     let content = format!(".At {str_type}");
                     let elements = vec![Element::Macro(MacroNode {
-                        mdoc_macro: Macro::At(enum_type),
-                        nodes: vec![],
+                        mdoc_macro: Macro::At,
+                        nodes: vec![
+                            Element::Text(enum_type.to_string())
+                        ],
                     })];
 
                     let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7782,8 +7807,9 @@ Line
                     let content = format!(".At {arg} word\n");
                     let elements = vec![
                         Element::Macro(MacroNode {
-                            mdoc_macro: Macro::At(AtType::General),
+                            mdoc_macro: Macro::At,
                             nodes: vec![
+                                Element::Text(AtType::General.to_string()),
                                 Element::Text(arg.clone()),
                             ]
                         }),
@@ -7800,8 +7826,10 @@ Line
                 let content = ".At v1 Ad addr1";
                 let elements = vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::At(AtType::Version("1".to_string())),
-                        nodes: vec![]
+                        mdoc_macro: Macro::At,
+                        nodes: vec![
+                            Element::Text(AtType::Version("1".to_string()).to_string())
+                        ]
                     }),
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
@@ -7826,13 +7854,59 @@ Line
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::At(AtType::Version(1.to_string())),
-                        nodes: vec![]
+                        mdoc_macro: Macro::At,
+                        nodes: vec![
+                            Element::Text(AtType::Version(1.to_string()).to_string())
+                        ]
                     }),
                     Element::Text("word".to_string())
                 ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+            
+            #[test]
+            fn at_with_delimiters() {
+                let input = r#".At ( v1 )
+.At ( v2
+.At v3 )
+.At , v1
+"#;
+                let elements = vec![
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::At, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(AtType::Version("1".to_string()).to_string()),
+                            Element::Text(")".to_string())
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::At, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(AtType::Version("2".to_string()).to_string()),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::At, 
+                        nodes: vec![
+                            Element::Text(AtType::Version("3".to_string()).to_string()),
+                            Element::Text(")".to_string()),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::At, 
+                        nodes: vec![
+                            Element::Text(AtType::default().to_string()),
+                            Element::Text(",".to_string()),
+                        ]
+                    }),
+                    Element::Text("v1".to_string())
+                ];
+
+                let mdoc = MdocParser::parse_mdoc(input).unwrap();
                 assert_eq!(mdoc.elements, elements);
             }
 
@@ -9398,8 +9472,9 @@ Line
                     nodes: vec![]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::At(AtType::General),
+                    mdoc_macro: Macro::At,
                     nodes: vec![
+                        Element::Text(AtType::General.to_string()),
                         Element::Text("2.32".to_string())
                     ]
                 }),

@@ -31,7 +31,8 @@ impl From<Pair<'_, Rule>> for AtType {
             Rule::at_3 => Self::SystemIII,
             Rule::at_system_v => {
                 Self::SystemV(at_type.as_str().chars().nth(2).map(|c| c.to_string()))
-            }
+            },
+            Rule::text_arg => Self::General,
             _ => unreachable!(),
         }
     }
@@ -49,6 +50,12 @@ impl Display for AtType {
         };
 
         write!(f, "{at_n_t_unix}")
+    }
+}
+
+impl Default for AtType {
+    fn default() -> Self {
+        Self::General
     }
 }
 

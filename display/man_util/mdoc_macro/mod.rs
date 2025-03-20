@@ -38,7 +38,7 @@ pub enum Macro {
     Ap,
     Aq,
     Ar,
-    At(AtType),
+    At,
     Bd {
         block_type: BdType,
         offset: Option<OffsetType>,

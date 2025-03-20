@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Index};
+use std::collections::HashMap;
 use aho_corasick::AhoCorasick;
 use terminfo::Database;
 use crate::FormattingSettings;
@@ -212,7 +212,7 @@ impl MdocFormatter {
             Macro::U => self.format_u(macro_node),
 
             // Text production macros.
-            Macro::At(at_type)    => self.format_at(at_type),
+            Macro::At => self.format_at(macro_node),
             Macro::Bsx(bsx_type) => self.format_bsx(bsx_type),
             Macro::Bx(bx_type)    => self.format_bx(bx_type),
             Macro::Dx(dx_type)    => self.format_dx(dx_type),
@@ -705,14 +705,14 @@ impl MdocFormatter {
 
     /// Special block macro ta formatting
     fn format_ta(&mut self, macro_node: MacroNode) -> String {
-
+        unimplemented!()
     }
 }
 
 // Formatting block full-explicit.
 impl MdocFormatter {
     fn format_bd_block(&mut self, macro_node: MacroNode) -> String {
-        
+        unimplemented!()
     }
 
     fn format_bf_block(&mut self, macro_node: MacroNode) -> String {
@@ -738,14 +738,14 @@ impl MdocFormatter {
     }
 
     fn format_bl_block(&mut self, macro_node: MacroNode) -> String {
-
+        unimplemented!()
     }
 }
 
 // Formatting block full-implicit.
 impl MdocFormatter {
     fn format_it_block(&mut self, macro_node: MacroNode) -> String {
-
+        unimplemented!()
     }
 
     fn format_nd(&mut self, macro_node: MacroNode) -> String {
@@ -773,17 +773,17 @@ impl MdocFormatter {
     }
 
     fn format_sh_block(&mut self, macro_node: MacroNode) -> String {
-
+        unimplemented!()
     }
 
     fn format_ss_block(&mut self, macro_node: MacroNode) -> String {
-
+        unimplemented!()
     }
 }
 
 // Formatting block partial-explicit.
 impl MdocFormatter {
-    fn format_partial_explicit_block(&self, macro_node: MacroNode) -> String {
+    fn format_partial_explicit_block(&mut self, macro_node: MacroNode) -> String {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -898,7 +898,7 @@ impl MdocFormatter {
 
 // Formatting block partial-implicit.
 impl MdocFormatter {
-    fn format_partial_implicit_block(&self, macro_node: MacroNode) -> String {
+    fn format_partial_implicit_block(&mut self, macro_node: MacroNode) -> String {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -1023,18 +1023,19 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_b(&self, book_title: &str) -> String {
+    fn format_b(&self, macro_node: MacroNode) -> String {
         // self.format_inline_macro(book_title)
         todo!()
     }
 
-    fn format_t(&self, article_title: &str) -> String {
+    fn format_t(&self, macro_node: MacroNode) -> String {
         // self.format_inline_macro(uri)
         todo!()
     }
 
-    fn format_u(&self, uri: &str) -> String {
-        self.format_text_node(uri)
+    fn format_u(&self, macro_node: MacroNode) -> String {
+        // self.format_text_node(uri)
+        todo!()
     }
 
     fn format_ap(&self) -> String {
@@ -1163,7 +1164,7 @@ impl MdocFormatter {
         todo!()
     }
 
-    fn format_at(&self, at_type: AtType) -> String {
+    fn format_at(&self, macro_node: MacroNode) -> String {
         // format!("{}", at_type)
         todo!()
     }
@@ -1983,6 +1984,7 @@ footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     
+        #[allow(non_snake_case)]
         #[test]
         fn Fn() {
             let input = ".Dd January 1, 1970
@@ -2066,7 +2068,8 @@ footer text                     January 1, 1970                    footer text";
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
-    
+        
+        #[allow(non_snake_case)]
         #[test]
         fn In() {
             let input = ".Dd January 1, 1970

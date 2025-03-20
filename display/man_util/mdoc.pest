@@ -433,8 +433,24 @@ at_type     =  {
   | at_3
   | at_system_v
 }
-at          = ${ "At"  ~ !text_arg ~ (ws+ ~ (at_type | text_arg))? ~ ws* ~ NEWLINE? }
-bsx         = ${ "Bsx" ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
+at = ${ 
+  "At" 
+  ~ !text_arg
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ (at_type | text_arg))? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+bsx = ${ 
+  "Bsx" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ text_arg)? 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
 bx          = ${ "Bx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
 dx          = ${ "Dx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
 fx          = ${ "Fx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
