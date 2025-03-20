@@ -1034,7 +1034,8 @@ impl MdocFormatter {
     }
 
     fn format_u(&self, uri: &str) -> String {
-        self.format_text_node(uri)
+        // self.format_inline_macro(uri)
+        todo!()
     }
 
     fn format_ap(&self) -> String {
@@ -1169,11 +1170,7 @@ impl MdocFormatter {
     }
 
     fn format_er(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_es(&self, opening_delimiter: char, closing_delimiter: char) -> String {
@@ -1181,11 +1178,7 @@ impl MdocFormatter {
     }
 
     fn format_ev(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ex(&mut self, macro_node: MacroNode) -> String {
@@ -1249,11 +1242,7 @@ impl MdocFormatter {
     }
 
     fn format_fl(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_fn(&mut self, funcname: &str, macro_node: MacroNode) -> String {
@@ -1267,19 +1256,11 @@ impl MdocFormatter {
     }
 
     fn format_fr(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ft(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_fx(&self, fx_type: FxType) -> String {
@@ -1287,19 +1268,11 @@ impl MdocFormatter {
     }
 
     fn format_hf(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ic(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_in(&self, filename: &str) -> String {
@@ -1311,19 +1284,11 @@ impl MdocFormatter {
     }
 
     fn format_li(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_lk(&mut self, uri: &str, macro_node: MacroNode) -> String {
-        let content = macro_node.nodes.clone()
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing);
+        let content = self.format_inline_macro(macro_node);
         
         format!("{content}: {uri}")
     }
@@ -1333,27 +1298,15 @@ impl MdocFormatter {
     }
 
     fn format_ms(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_mt(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_no(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ns(&mut self) -> String {
@@ -1366,11 +1319,7 @@ impl MdocFormatter {
     }
 
     fn format_os(&mut self, macro_node: MacroNode) -> String {
-        let content = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing);
+        let content = self.format_inline_macro(macro_node);
 
         if !content.is_empty(){
             self.formatting_state.footer_text = Some(content);
@@ -1379,11 +1328,7 @@ impl MdocFormatter {
     }
 
     fn format_ot(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ox(&self, ox_type: OxType) -> String {
@@ -1391,11 +1336,7 @@ impl MdocFormatter {
     }
 
     fn format_pa(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_pf(&mut self, prefix: &str) -> String {        
@@ -1461,19 +1402,11 @@ impl MdocFormatter {
     }
 
     fn format_sx(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_sy(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_tg(&self, _term: Option<String>) -> String {
@@ -1481,11 +1414,7 @@ impl MdocFormatter {
     }
 
     fn format_tn(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ud(&self) -> String {
@@ -1497,11 +1426,7 @@ impl MdocFormatter {
     }
 
     fn format_va(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_xr(&self, name: &str, section: &str) -> String {
