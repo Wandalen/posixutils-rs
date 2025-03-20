@@ -59,110 +59,78 @@ impl Default for AtType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct BsxType {
-    pub version: Option<String>,
-}
+pub struct BsxType;
 
-impl Display for BsxType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = if self.version.is_none() {
-            "".to_string()
-        } else {
-            format!(" {}", self.version.clone().unwrap())
-        };
+impl BsxType {
+    pub fn format(version: &str) -> String {
+        format!("BSD/OS {}", version)
+    }
 
-        write!(f, "BSD/OS{version}")
+    pub fn format_default() -> String {
+        "BSD/OS".to_string()
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct BxType {
-    pub version: Option<String>,
-    pub variant: Option<String>,
-}
+pub struct BxType;
 
-impl Display for BxType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = self
-            .version
-            .as_ref()
-            .map_or_else(|| "".to_string(), |v| v.to_string());
-        let variant = if self.variant.is_none() {
-            "".to_string()
-        } else {
-            format!(" {}", self.variant.clone().unwrap())
-        };
+impl BxType {
+    pub fn format(version: &str, variant: Option<&str>) -> String {
+        match variant {
+            Some(var) => format!("{}BSD-{}", version, var),
+            None => format!("{}BSD", version)
+        }
+    }
 
-        write!(f, "{version}BSD{variant}")
+    pub fn format_default() -> String {
+        "BSD".to_string()
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct DxType {
-    pub version: Option<String>,
-}
+pub struct DxType;
 
-impl Display for DxType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = if self.version.is_none() {
-            "".to_string()
-        } else {
-            format!(" {}", self.version.clone().unwrap())
-        };
+impl DxType {
+    pub fn format(version: &str) -> String {
+        format!("DragonFly {}", version)
+    }
 
-        write!(f, "DragonFly{version}")
+    pub fn format_default() -> String {
+        "DragonFly".to_string()
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct FxType {
-    pub version: Option<String>,
-}
+pub struct FxType;
 
-impl Display for FxType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = if self.version.is_none() {
-            "".to_string()
-        } else {
-            format!(" {}", self.version.clone().unwrap())
-        };
+impl FxType {
+    pub fn format(version: &str) -> String {
+        format!("FreeBSD {}", version)
+    }
 
-        write!(f, "FreeBSD{version}")
+    pub fn format_default() -> String {
+        "FreeBSD".to_string()
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct NxType {
-    pub version: Vec<String>,
-}
+pub struct NxType;
 
-impl Display for NxType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = if self.version.is_empty() {
-            "".to_string()
-        } else {
-            format!(" {}", self.version.join(" "))
-        };
+impl NxType {
+    pub fn format(version: &str) -> String {
+        format!("NetBSD {}", version)
+    }
 
-        write!(f, "NetBSD{version}")
+    pub fn format_default() -> String {
+        "NetBSD".to_string()
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct OxType {
-    pub version: Vec<String>,
-}
+pub struct OxType;
 
-impl Display for OxType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let version = if self.version.is_empty() {
-            "".to_string()
-        } else {
-            format!(" {}", self.version.join(" "))
-        };
+impl OxType {
+    pub fn format(version: &str) -> String {
+        format!("OpenBSD {}", version)
+    }
 
-        write!(f, "OpenBSD{version}")
+    pub fn format_default() -> String {
+        "OpenBSD".to_string()
     }
 }
 

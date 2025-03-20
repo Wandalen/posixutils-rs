@@ -10,9 +10,11 @@
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use std::collections::HashSet;
-use text_production::{AtType, BsxType, BxType, DxType, FxType, NxType, OxType, StType};
+use text_production::{AtType, BsxType};
 use thiserror::Error;
 use types::{BdType, BfType, OffsetType, SmMode};
+
+use crate::man_util::mdoc_macro::text_production::{BxType, DxType, FxType, NxType, OxType, StType};
 
 use super::mdoc_macro::types::*;
 use super::mdoc_macro::*;
@@ -1368,24 +1370,66 @@ impl MdocParser {
     }
 
     fn parse_text_production(pair: Pair<Rule>) -> Element {
-        fn parse_x_args(pair: Pair<Rule>) -> (Vec<String>, Vec<Element>) {
-            let args = pair.into_inner().flat_map(|p| p.into_inner());
+        fn process_delimiters(inner: &[Pair<Rule>], mut i: usize, rule: Rule) -> (Vec<Element>, usize) {
+            let mut nodes = Vec::new();
+            while i < inner.len() && inner[i].as_rule() == rule {
+                nodes.push(MdocParser::parse_element(inner[i].clone()));
+                i += 1;
+            }
+            (nodes, i)
+        }
 
-            let is_version = |item: &Pair<Rule>| matches!(item.as_rule(), Rule::text_arg);
+        fn parse_x_args<F, D>(
+            pair: Pair<Rule>,
+            macro_value: Macro,
+            format: F,
+            format_default: D,
+        ) -> Element
+        where
+            F: Fn(&str) -> String,
+            D: Fn() -> String,
+        {
+            let inner: Vec<_> = pair.into_inner().collect();
 
-            // While macro contains `text_arg` consider it as version
-            let version: Vec<String> = args
-                .clone()
-                .take_while(is_version)
-                .map(|p| p.as_str().to_string())
-                .collect();
-            // Other arguments are not version
-            let nodes: Vec<Element> = args
-                .skip_while(is_version)
-                .map(MdocParser::parse_arg)
-                .collect();
+            if inner.is_empty() {
+                return Element::Macro(MacroNode {
+                    mdoc_macro: macro_value,
+                    nodes: vec![Element::Text(format_default())],
+                });
+            }
 
-            (version, nodes)
+            let mut nodes = Vec::new();
+            let mut i = 0;
+
+            // Process opening delimiters.
+            let (open_nodes, new_i) = process_delimiters(&inner, i, Rule::opening_delimiter);
+            nodes.extend(open_nodes);
+            i = new_i;
+
+            // Process the middle argument if it exists.
+            if i < inner.len() {
+                match inner[i].as_rule() {
+                    Rule::text_arg => {
+                        nodes.push(Element::Text(format(inner[i].as_str())));
+                        i += 1;
+                    }
+                    Rule::closing_delimiter => {
+                        nodes.push(Element::Text(format_default()));
+                        nodes.push(Element::Text(inner[i].as_str().to_string()));
+                        i += 1;
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            // Process closing delimiters.
+            let (close_nodes, _) = process_delimiters(&inner, i, Rule::closing_delimiter);
+            nodes.extend(close_nodes);
+
+            Element::Macro(MacroNode {
+                mdoc_macro: macro_value,
+                nodes,
+            })
         }
 
         // Parses (`At`)[https://man.openbsd.org/mdoc#At]:
@@ -1393,7 +1437,7 @@ impl MdocParser {
         fn parse_at(pair: Pair<Rule>) -> Element {
             let inner: Vec<_> = pair.into_inner().collect();
 
-            if inner.len() == 0 {
+            if inner.is_empty() {
                 return Element::Macro(MacroNode {
                     mdoc_macro: Macro::At,
                     nodes: vec![Element::Text(AtType::default().to_string())]
@@ -1403,10 +1447,9 @@ impl MdocParser {
             let mut i = 0;
             let mut nodes = Vec::new();
         
-            while i < inner.len() && inner[i].as_rule() == Rule::opening_delimiter {
-                nodes.push(MdocParser::parse_element(inner[i].clone()));
-                i += 1;
-            }
+            let (open_nodes, new_i) = process_delimiters(&inner, i, Rule::opening_delimiter);
+            nodes.extend(open_nodes);
+            i = new_i;
         
             if i < inner.len() {
                 match inner[i].as_rule() {
@@ -1426,10 +1469,8 @@ impl MdocParser {
                 }
             }
         
-            while i < inner.len() && inner[i].as_rule() == Rule::closing_delimiter {
-                nodes.push(MdocParser::parse_element(inner[i].clone()));
-                i += 1;
-            }
+            let (close_nodes, _) = process_delimiters(&inner, i, Rule::closing_delimiter);
+            nodes.extend(close_nodes);
         
             Element::Macro(MacroNode {
                 mdoc_macro: Macro::At,
@@ -1440,75 +1481,89 @@ impl MdocParser {
         // Parses (`Bsx`)[https://man.openbsd.org/mdoc#Bsx]:
         // `Bsx [version]`
         fn parse_bsx(pair: Pair<Rule>) -> Element {
-            let version = if let Some(arg) = pair.into_inner().next() {
-                Some(arg.as_str().to_string())
-            } else {
-                None
-            };
-
-            Element::Macro(MacroNode {
-                mdoc_macro: Macro::Bsx(BsxType { version }),
-                nodes: vec![]
-            })
+            parse_x_args(
+                pair,
+                Macro::Bsx,
+                |v| BsxType::format(v),
+                || BsxType::format_default(),
+            )
         }
 
         // Parses (`Bx`)[https://man.openbsd.org/mdoc#Bx]:
         // `Bx [version [variant]]`
         fn parse_bx(pair: Pair<Rule>) -> Element {
-            let mut inner_pairs = pair.into_inner();
+            let mut inner: Vec<_> = pair.into_inner().collect();
 
-            let mut version = None;
-            let mut variant = None;
+            if inner.is_empty() {
+                return Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bx,
+                    nodes: vec![Element::Text(BxType::format_default())]
+                });
+            }
 
-            if let Some(first_arg) = inner_pairs.next() {
-                version = Some(first_arg.as_str().to_string());
+            let mut nodes = Vec::new();
+            let mut i = 0;
 
-                if let Some(second_arg) = inner_pairs.next() {
-                    variant = Some(second_arg.as_str().to_string())
+            let (open_nodes, new_i) = process_delimiters(&inner, i, Rule::opening_delimiter);
+            nodes.extend(open_nodes);
+            i = new_i;
+
+            if i < inner.len() {
+                match inner[i].as_rule() {
+                    Rule::text_arg => {
+                        let version = inner[i].as_str();
+                        
+                        i += 1;
+
+                        let variant = match i < inner.len() && inner[i].as_rule() == Rule::text_arg {
+                            true  => {
+                                let res = Some(inner[i].as_str());
+                                i += 1;
+                                res
+                            },
+                            false => None
+                        };
+
+                        nodes.push(Element::Text(BxType::format(version, variant)));
+
+                    },
+                    Rule::closing_delimiter => {
+                        nodes.push(Element::Text(BxType::format_default()))
+                    },
+                    _ => unreachable!()
                 }
-            };
+            }
+
+            let (close_nodes, new_i) = process_delimiters(&inner, i, Rule::closing_delimiter);
+            nodes.extend(close_nodes);
+            i = new_i;
 
             Element::Macro(MacroNode {
-                mdoc_macro: Macro::Bx(BxType { 
-                    version,
-                    variant 
-                }),
-                nodes: vec![]
+                mdoc_macro: Macro::Bx,
+                nodes
             })
         }
 
         // Parses (`Dx`)[https://man.openbsd.org/mdoc#Dx]:
         // `Dx [version]`
         fn parse_dx(pair: Pair<Rule>) -> Element {
-            let version = if let Some(arg) = pair.into_inner().next() {
-                Some(arg.as_str().to_string())
-            } else {
-                None
-            };
-
-            Element::Macro(MacroNode {
-                mdoc_macro: Macro::Dx(DxType { 
-                    version 
-                }),
-                nodes: vec![]
-            })
+            parse_x_args(
+                pair,
+                Macro::Dx,
+                |v| DxType::format(v),
+                || DxType::format_default(),
+            )
         }
 
         // Parses (`Fx`)[https://man.openbsd.org/mdoc#Fx]:
         // `Fx [version]`
         fn parse_fx(pair: Pair<Rule>) -> Element {
-            let version = if let Some(arg) = pair.into_inner().next() {
-                Some(arg.as_str().to_string())
-            } else {
-                None
-            };
-
-            Element::Macro(MacroNode {
-                mdoc_macro: Macro::Fx(FxType { 
-                    version 
-                }),
-                nodes: vec![]
-            })
+            parse_x_args(
+                pair,
+                Macro::Fx,
+                |v| FxType::format(v),
+                || FxType::format_default(),
+            )
         }
 
         
@@ -1526,23 +1581,23 @@ impl MdocParser {
         // Parses (`Nx`)[http://man.openbsd.org/mdoc#Nx]:
         // `Nx [version]`
         fn parse_nx(pair: Pair<Rule>) -> Element {
-            let (version, nodes) = parse_x_args(pair);
-
-            Element::Macro(MacroNode {
-                mdoc_macro: Macro::Nx(NxType { version }),
-                nodes,
-            })
+            parse_x_args(
+                pair,
+                Macro::Nx,
+                |v| NxType::format(v),
+                || NxType::format_default(),
+            )
         }
 
         // Parses (`Ox`)[https://man.openbsd.org/mdoc#Ox]:
         // `Ox [version]`
         fn parse_ox(pair: Pair<Rule>) -> Element {
-            let (version, nodes) = parse_x_args(pair);
-
-            Element::Macro(MacroNode {
-                mdoc_macro: Macro::Ox(OxType { version }),
-                nodes,
-            })
+            parse_x_args(
+                pair,
+                Macro::Ox,
+                |v| OxType::format(v),
+                || OxType::format_default(),
+            )
         }
 
         // Parses (`St`)[https://man.openbsd.org/mdoc#St]:
@@ -1575,14 +1630,14 @@ impl MdocParser {
         match pair.as_rule() {
             Rule::at  => parse_at(pair),
             Rule::bsx => parse_bsx(pair),
-            Rule::bx => parse_bx(pair),
-            Rule::dx => parse_dx(pair),
-            Rule::fx => parse_fx(pair),
-            Rule::ex => parse_ex(pair),
-            Rule::nx => parse_nx(pair),
-            Rule::ox => parse_ox(pair),
-            Rule::st => parse_st(pair),
-            Rule::rv => parse_rv(pair),
+            Rule::bx  => parse_bx(pair),
+            Rule::dx  => parse_dx(pair),
+            Rule::fx  => parse_fx(pair),
+            Rule::ex  => parse_ex(pair),
+            Rule::nx  => parse_nx(pair),
+            Rule::ox  => parse_ox(pair),
+            Rule::st  => parse_st(pair),
+            Rule::rv  => parse_rv(pair),
             _ => unreachable!(),
         }
     }
@@ -7915,10 +7970,10 @@ Line
                 let content = ".Bsx 1.0";
                 let elements = vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Bsx(BsxType {
-                            version: Some("1.0".to_string()),
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Bsx,
+                        nodes: vec![
+                            Element::Text(BsxType::format("1.0"))
+                        ],
                     }),
                 ];
 
@@ -7931,10 +7986,10 @@ Line
                 let content = ".Bsx";
                 let elements = vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Bsx(BsxType { 
-                            version: None 
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Bsx,
+                        nodes: vec![
+                            Element::Text(BsxType::format_default())
+                        ],
                     }),
                 ];
 
@@ -7947,10 +8002,10 @@ Line
                 let content = ".Bsx 1.0 Ad addr1";
                 let elements = vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Bsx(BsxType {
-                            version: Some("1.0".to_string()),
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Bsx,
+                        nodes: vec![
+                            Element::Text(BsxType::format("1.0"))
+                        ],
                     }),
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
@@ -7976,10 +8031,10 @@ Line
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Bsx(BsxType {
-                            version: Some("1.0".to_string()),
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Bsx,
+                        nodes: vec![
+                            Element::Text(BsxType::format("1.0"))
+                        ],
                     }),
                 ];
 
@@ -7988,17 +8043,63 @@ Line
             }
 
             #[test]
+            fn bsx_with_delimiters() {
+                let input = r#".Bsx ( v1 )
+.Bsx ( v2
+.Bsx v3 )
+.Bsx , v1
+"#;
+                let elements = vec![
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Bsx, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(BsxType::format("v1")),
+                            Element::Text(")".to_string())
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Bsx, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(BsxType::format("v2")),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Bsx, 
+                        nodes: vec![
+                            Element::Text(BsxType::format("v3")),
+                            Element::Text(")".to_string()),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Bsx, 
+                        nodes: vec![
+                            Element::Text(BsxType::format_default()),
+                            Element::Text(",".to_string()),
+                        ]
+                    }),
+                    Element::Text("v1".to_string())
+                ];
+
+                let mdoc = MdocParser::parse_mdoc(input).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
             fn bx() {
-                let mut bx_args: HashMap<&str, (Option<String>, Option<String>)> = Default::default();
-                bx_args.insert("", (None, None));
-                bx_args.insert("4.3", (Some("4.3".to_string()), None));
-                bx_args.insert("4.3 Tahoe", (Some("4.3".to_string()), Some("Tahoe".to_string())));
+                let mut bx_args: HashMap<&str, (&str, Option<&str>)> = Default::default();
+                bx_args.insert("", ("", None));
+                bx_args.insert("4.3", ("4.3", None));
+                bx_args.insert("4.3 Tahoe", ("4.3", Some("Tahoe")));
 
                 for (args, (version, variant)) in bx_args {
                     let content = format!(".Bx {args}");
                     let elements = vec![Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Bx(BxType { version, variant }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Bx,
+                        nodes: vec![
+                            Element::Text(BxType::format(version, variant))
+                        ],
                     })];
 
                     let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8011,11 +8112,10 @@ Line
                 let content = ".Bx 4.3 Tahoe Ad addr1";
                 let elements = vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Bx(BxType {
-                            version: Some("4.3".to_string()),
-                            variant: Some("Tahoe".to_string())
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Bx,
+                        nodes: vec![
+                            Element::Text(BxType::format("4.3", Some("Tahoe")))
+                        ],
                     }),
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
@@ -8040,11 +8140,10 @@ Line
                         ]
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Bx(BxType {
-                            version: Some("4.3".to_string()),
-                            variant: Some("Tahoe".to_string())
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Bx,
+                        nodes: vec![
+                            Element::Text(BxType::format("4.3", Some("Tahoe")))
+                        ],
                     }),
                     Element::Text("Example".to_string())
                 ];
@@ -8064,11 +8163,10 @@ Line
                         ]
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Bx(BxType {
-                            version: None,
-                            variant: None,
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Bx,
+                        nodes: vec![
+                            Element::Text(BxType::format_default())
+                        ],
                     }),
                 ];
 
@@ -8077,13 +8175,57 @@ Line
             }
 
             #[test]
+            fn bx_with_delimiters() {
+                let input = r#".Bx ( v1 )
+.Bx ( v2
+.Bx v3 )
+.Bx , v1
+"#;
+                let elements = vec![
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Bx, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(BxType::format("v1", None)),
+                            Element::Text(")".to_string())
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Bx, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(BxType::format("v2", None)),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Bx, 
+                        nodes: vec![
+                            Element::Text(BxType::format("v3", None)),
+                            Element::Text(")".to_string()),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Bx,
+                        nodes: vec![
+                            Element::Text(BxType::format_default()),
+                            Element::Text(",".to_string()),
+                        ]
+                    }),
+                    Element::Text("v1".to_string())
+                ];
+
+                let mdoc = MdocParser::parse_mdoc(input).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
             fn dx() {
                 let content = ".Dx 1.0";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Dx(DxType {
-                        version: Some("1.0".to_string()),
-                    }),
-                    nodes: vec![],
+                    mdoc_macro: Macro::Dx,
+                    nodes: vec![
+                        Element::Text(DxType::format("1.0"))
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8094,8 +8236,10 @@ Line
             fn dx_no_args() {
                 let content = ".Dx";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Dx(DxType { version: None }),
-                    nodes: vec![],
+                    mdoc_macro: Macro::Dx,
+                    nodes: vec![
+                        Element::Text(DxType::format_default())
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8107,10 +8251,10 @@ Line
                 let content = ".Dx 1.0 Ad addr1";
                 let elements = vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Dx(DxType {
-                            version: Some("1.0".to_string()),
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Dx,
+                        nodes: vec![
+                            Element::Text(DxType::format("1.0"))
+                        ],
                     }),
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
@@ -8134,10 +8278,10 @@ Line
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Dx(DxType {
-                            version: Some("1.0".to_string()),
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Dx,
+                        nodes: vec![
+                            Element::Text(DxType::format("1.0"))
+                        ],
                     }),
                     Element::Text("text".to_string())
                 ];
@@ -8157,9 +8301,11 @@ Line
                         ]
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Dx(DxType { version: None }),
-                        nodes: vec![],
-                    }),
+                        mdoc_macro: Macro::Dx,
+                        nodes: vec![
+                            Element::Text(DxType::format_default())
+                        ],
+                    })
                 ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8167,13 +8313,57 @@ Line
             }
 
             #[test]
-            fn nx() {
-                let content = ".Nx Version 1.0";
-                let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Nx(NxType {
-                        version: vec!["Version".to_string(), "1.0".to_string()],
+            fn dx_with_delimiters() {
+                let input = r#".Dx ( v1 )
+.Dx ( v2
+.Dx v3 )
+.Dx , v1
+"#;
+                let elements = vec![
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Dx, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(DxType::format("v1")),
+                            Element::Text(")".to_string())
+                        ]
                     }),
-                    nodes: vec![],
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Dx, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(DxType::format("v2")),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Dx, 
+                        nodes: vec![
+                            Element::Text(DxType::format("v3")),
+                            Element::Text(")".to_string()),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Dx, 
+                        nodes: vec![
+                            Element::Text(DxType::format_default()),
+                            Element::Text(",".to_string()),
+                        ]
+                    }),
+                    Element::Text("v1".to_string())
+                ];
+
+                let mdoc = MdocParser::parse_mdoc(input).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn nx() {
+                let content = ".Nx 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Nx,
+                    nodes: vec![
+                        Element::Text(NxType::format("1.0"))
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8184,8 +8374,10 @@ Line
             fn nx_no_args() {
                 let content = ".Nx";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Nx(NxType { version: vec![] }),
-                    nodes: vec![],
+                    mdoc_macro: Macro::Nx,
+                    nodes: vec![
+                        Element::Text(NxType::format_default())
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8194,16 +8386,19 @@ Line
 
             #[test]
             fn nx_parsed() {
-                let content = ".Nx Version 1.0 Ad addr1";
-                let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Nx(NxType {
-                        version: vec!["Version".to_string(), "1.0".to_string()],
+                let content = ".Nx 1.0 Ad addr1";
+                let elements = vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Nx,
+                        nodes: vec![
+                            Element::Text(NxType::format("1.0"))      
+                        ],
                     }),
-                    nodes: vec![Element::Macro(MacroNode {
+                    Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
                         nodes: vec![Element::Text("addr1".to_string())],
-                    })],
-                })];
+                    })
+                ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements);
@@ -8211,7 +8406,7 @@ Line
 
             #[test]
             fn nx_callable_with_arg() {
-                let content = ".Ad addr1 Nx Version 1.0";
+                let content = ".Ad addr1 Nx 1.0";
                 let elements = vec![
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
@@ -8220,10 +8415,10 @@ Line
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Nx(NxType {
-                            version: vec!["Version".to_string(), "1.0".to_string()],
-                        }),
-                        nodes: vec![],
+                        mdoc_macro: Macro::Nx,
+                        nodes: vec![
+                            Element::Text(NxType::format("1.0"))
+                        ],
                     }),
                 ];
 
@@ -8242,9 +8437,11 @@ Line
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Nx(NxType { version: vec![] }),
-                        nodes: vec![],
-                    })
+                        mdoc_macro: Macro::Nx,
+                        nodes: vec![
+                            Element::Text(NxType::format_default())
+                        ],
+                    }),
                 ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8252,13 +8449,57 @@ Line
             }
 
             #[test]
-            fn ox() {
-                let content = ".Ox Version 1.0";
-                let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ox(OxType {
-                        version: vec!["Version".to_string(), "1.0".to_string()],
+            fn nx_with_delimiters() {
+                let input = r#".Nx ( v1 )
+.Nx ( v2
+.Nx v3 )
+.Nx , v1
+"#;
+                let elements = vec![
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Nx, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(NxType::format("v1")),
+                            Element::Text(")".to_string())
+                        ]
                     }),
-                    nodes: vec![],
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Nx, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(NxType::format("v2")),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Nx, 
+                        nodes: vec![
+                            Element::Text(NxType::format("v3")),
+                            Element::Text(")".to_string()),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Nx, 
+                        nodes: vec![
+                            Element::Text(NxType::format_default()),
+                            Element::Text(",".to_string()),
+                        ]
+                    }),
+                    Element::Text("v1".to_string())
+                ];
+
+                let mdoc = MdocParser::parse_mdoc(input).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn ox() {
+                let content = ".Ox 1.0";
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ox,
+                    nodes: vec![
+                        Element::Text(OxType::format("1.0"))
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8269,8 +8510,10 @@ Line
             fn ox_no_args() {
                 let content = ".Ox";
                 let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ox(OxType { version: vec![] }),
-                    nodes: vec![],
+                    mdoc_macro: Macro::Ox,
+                    nodes: vec![
+                        Element::Text(OxType::format_default())
+                    ],
                 })];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8279,16 +8522,19 @@ Line
 
             #[test]
             fn ox_parsed() {
-                let content = ".Ox Version 1.0 Ad addr1";
-                let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Ox(OxType {
-                        version: vec!["Version".to_string(), "1.0".to_string()],
+                let content = ".Ox 1.0 Ad addr1";
+                let elements = vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ox,
+                        nodes: vec![
+                            Element::Text(OxType::format("1.0"))
+                        ],
                     }),
-                    nodes: vec![Element::Macro(MacroNode {
+                    Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
                         nodes: vec![Element::Text("addr1".to_string())],
-                    })],
-                })];
+                    })
+                ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements);
@@ -8296,7 +8542,7 @@ Line
 
             #[test]
             fn ox_callable_with_arg() {
-                let content = ".Ad addr1 Ox Version 1.0";
+                let content = ".Ad addr1 Ox 1.0";
                 let elements = vec![
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::Ad,
@@ -8305,11 +8551,11 @@ Line
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Ox(OxType {
-                            version: vec!["Version".to_string(), "1.0".to_string()],
-                        }),
-                        nodes: vec![],
-                    })
+                        mdoc_macro: Macro::Ox,
+                        nodes: vec![
+                            Element::Text(OxType::format("1.0"))
+                        ],
+                    }),
                 ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -8327,12 +8573,58 @@ Line
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Ox(OxType { version: vec![] }),
-                        nodes: vec![],
-                    })
+                        mdoc_macro: Macro::Ox,
+                        nodes: vec![
+                            Element::Text(OxType::format_default())
+                        ],
+                    }),
                 ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
+            }
+
+            #[test]
+            fn ox_with_delimiters() {
+                let input = r#".Ox ( v1 )
+.Ox ( v2
+.Ox v3 )
+.Ox , v1
+"#;
+                let elements = vec![
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Ox, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(OxType::format("v1")),
+                            Element::Text(")".to_string())
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Ox, 
+                        nodes: vec![
+                            Element::Text("(".to_string()),
+                            Element::Text(OxType::format("v2")),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Ox, 
+                        nodes: vec![
+                            Element::Text(OxType::format("v3")),
+                            Element::Text(")".to_string()),
+                        ]
+                    }),
+                    Element::Macro(MacroNode { 
+                        mdoc_macro: Macro::Ox, 
+                        nodes: vec![
+                            Element::Text(OxType::format_default()),
+                            Element::Text(",".to_string()),
+                        ]
+                    }),
+                    Element::Text("v1".to_string())
+                ];
+
+                let mdoc = MdocParser::parse_mdoc(input).unwrap();
                 assert_eq!(mdoc.elements, elements);
             }
 
@@ -10082,10 +10374,10 @@ Line
             let input = ".Fx 1.0 arg\n";
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Fx (FxType {
-                        version: Some("1.0".to_string())
-                    }),
-                    nodes: vec![]
+                    mdoc_macro: Macro::Fx,
+                    nodes: vec![
+                        Element::Text(FxType::format("1.0"))
+                    ]
                 }),
                 Element::Text("arg".to_string())
             ];
@@ -10099,10 +10391,10 @@ Line
             let input = ".Fx";
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Fx (FxType {
-                        version: None
-                    }),
-                    nodes: vec![]
+                    mdoc_macro: Macro::Fx,
+                    nodes: vec![
+                        Element::Text(FxType::format_default())
+                    ]
                 })
             ];
 
@@ -10115,10 +10407,10 @@ Line
             let input = ".Fx 1.0 Ad addr";
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Fx (FxType {
-                        version: Some("1.0".to_string())
-                    }),
-                    nodes: vec![]
+                    mdoc_macro: Macro::Fx,
+                    nodes: vec![
+                        Element::Text(FxType::format("1.0"))
+                    ]
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ad,
@@ -10143,10 +10435,10 @@ Line
                     ]
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Fx (FxType {
-                        version: Some("1.0".to_string())
-                    }),
-                    nodes: vec![]
+                    mdoc_macro: Macro::Fx,
+                    nodes: vec![
+                        Element::Text(FxType::format("1.0"))
+                    ]
                 })
             ];
 

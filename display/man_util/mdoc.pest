@@ -446,18 +446,58 @@ bsx = ${
   "Bsx" 
   ~ !text_arg 
   ~ (ws+ ~ opening_delimiter)* 
-  ~ (ws+ ~ text_arg)? 
-  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
+  ~ (ws+ ~ closing_delimiter)* 
   ~ ws* ~ NEWLINE? 
 }
 
-bx          = ${ "Bx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
-dx          = ${ "Dx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
-fx          = ${ "Fx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
-nx          = ${ "Nx"  ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-ox          = ${ "Ox"  ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+bx = ${ 
+  "Bx" 
+  ~ !text_arg
+  ~ (ws+ ~ opening_delimiter)*
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)?
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
 
-rv          = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
+dx = ${ 
+  "Dx" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+fx = ${ 
+  "Fx" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+nx = ${ 
+  "Nx" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)?
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+ox = ${ 
+  "Ox" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)?
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+rv = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 
 // C Language Standards
 st_ansiC      = { "-ansiC" }

@@ -212,10 +212,10 @@ impl MdocFormatter {
             Macro::U => self.format_u(macro_node),
 
             // Text production macros.
-            Macro::At => self.format_at(macro_node),
-            Macro::Bsx(bsx_type) => self.format_bsx(bsx_type),
-            Macro::Bx(bx_type)    => self.format_bx(bx_type),
-            Macro::Dx(dx_type)    => self.format_dx(dx_type),
+            Macro::At  => self.format_at(macro_node),
+            Macro::Bsx => self.format_bsx(macro_node),
+            Macro::Bx  => self.format_bx(macro_node),
+            Macro::Dx  => self.format_dx(macro_node),
 
             // Rest.
             Macro::Ad => self.format_ad(macro_node),
@@ -241,7 +241,7 @@ impl MdocFormatter {
             Macro::Fn{ funcname  } => self.format_fn(funcname.as_str(), macro_node),
             Macro::Fr => self.format_fr(macro_node),
             Macro::Ft => self.format_ft(macro_node),
-            Macro::Fx(fx_type) => self.format_fx(fx_type),
+            Macro::Fx => self.format_fx(macro_node),
             Macro::Hf => self.format_hf(macro_node),
             Macro::Ic => self.format_ic(macro_node),
             Macro::In{ filename  } => self.format_in(filename.as_str()),
@@ -254,10 +254,10 @@ impl MdocFormatter {
             Macro::Nm => self.format_nm(macro_node),
             Macro::No => self.format_no(macro_node),
             Macro::Ns => self.format_ns(),
-            Macro::Nx(nx_type) => self.format_nx(nx_type),
+            Macro::Nx => self.format_nx(macro_node),
             Macro::Os => self.format_os(macro_node),
             Macro::Ot => self.format_ot(macro_node),
-            Macro::Ox(ox_type) => self.format_ox(ox_type),
+            Macro::Ox => self.format_ox(macro_node),
             Macro::Pa => self.format_pa(macro_node),
             Macro::Pf{ prefix } => self.format_pf(prefix.as_str()),
             Macro::Pp => self.format_pp(macro_node),
@@ -1137,7 +1137,7 @@ impl MdocFormatter {
         line
     }
 
-    fn format_dx(&self, dx_type: DxType) -> String {
+    fn format_dx(&self, macro_node: MacroNode) -> String {
         // format!("{}", dx_type)
         todo!()
     }
@@ -1154,12 +1154,12 @@ impl MdocFormatter {
         }
     }
 
-    fn format_bx(&self, bx_type: BxType) -> String {
+    fn format_bx(&self, macro_node: MacroNode) -> String {
         // format!("{}", bx_type)
         todo!()
     }
 
-    fn format_bsx(&self, bsx_type: BsxType) -> String {
+    fn format_bsx(&self, macro_node: MacroNode) -> String {
         // format!("{}", bsx_type)
         todo!()
     }
@@ -1283,8 +1283,9 @@ impl MdocFormatter {
             .join(&self.formatting_state.spacing)
     }
 
-    fn format_fx(&self, fx_type: FxType) -> String {
-        fx_type.to_string()
+    fn format_fx(&self, macro_node: MacroNode) -> String {
+        // fx_type.to_string()
+        todo!()
     }
 
     fn format_hf(&mut self, macro_node: MacroNode) -> String {
@@ -1362,8 +1363,9 @@ impl MdocFormatter {
         String::new()
     }
 
-    fn format_nx(&self, nx_type: NxType) -> String {
-        nx_type.to_string()
+    fn format_nx(&self, macro_node: MacroNode) -> String {
+        // nx_type.to_string()
+        todo!()
     }
 
     fn format_os(&mut self, macro_node: MacroNode) -> String {
@@ -1387,8 +1389,9 @@ impl MdocFormatter {
             .join(&self.formatting_state.spacing)
     }
 
-    fn format_ox(&self, ox_type: OxType) -> String {
-        ox_type.to_string()
+    fn format_ox(&self, macro_node: MacroNode) -> String {
+        // ox_type.to_string()
+        todo!()
     }
 
     fn format_pa(&mut self, macro_node: MacroNode) -> String {
