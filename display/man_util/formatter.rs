@@ -697,15 +697,29 @@ impl MdocFormatter {
 // Formatting block full-explicit.
 impl MdocFormatter {
     fn format_bd_block(&mut self, macro_node: MacroNode) -> String {
-
+        
     }
 
     fn format_bf_block(&mut self, macro_node: MacroNode) -> String {
+        let content = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing);
 
+        content
     }
 
     fn format_bk_block(&mut self, macro_node: MacroNode) -> String {
+        let mut content = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing);
 
+        content
+            .replace("\n", " ")
+            .replace("\r", "")
     }
 
     fn format_bl_block(&mut self, macro_node: MacroNode) -> String {
@@ -720,11 +734,27 @@ impl MdocFormatter {
     }
 
     fn format_nd(&mut self, macro_node: MacroNode) -> String {
+        let content = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing);
 
+        content
     }
 
     fn format_nm(&mut self, macro_node: MacroNode) -> String {
+        let content = macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<String>>()
+            .join(&self.formatting_state.spacing);
+        
+        if !content.is_empty(){ 
+            self.formatting_state.first_name = Some(content.clone());
+        }
 
+        content
     }
 
     fn format_sh_block(&mut self, macro_node: MacroNode) -> String {
@@ -1355,20 +1385,6 @@ impl MdocFormatter {
             .join(&self.formatting_state.spacing)
     }
 
-    fn format_nm(&mut self, macro_node: MacroNode) -> String {
-        let content = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing);
-        
-        if !content.is_empty(){ 
-            self.formatting_state.first_name = Some(content.clone());
-        }
-
-        content
-    }
-
     fn format_no(&mut self, macro_node: MacroNode) -> String {
         macro_node.nodes
             .into_iter()
@@ -1532,6 +1548,7 @@ impl MdocFormatter {
 
 #[cfg(test)]
 mod tests {
+    use crate::{MdocParser, MdocFormatter, man_util::formatter::MdocDocument, FormattingSettings};
 
     const FORMATTING_SETTINGS: FormattingSettings = FormattingSettings { width: 78, indent: 5 };
 
@@ -1548,47 +1565,47 @@ mod tests {
     }
 
     mod special_chars {
-        use crate::man_util::formatter::test_formatting;
+        use crate::man_util::formatter::tests::test_formatting;
 
         #[test]
         fn spaces() {
             let input = r"\ \~\0\|\^\&\)\%\:";
-            let output = r"     ".to_string();
+            let output = r"     ";
             test_formatting(input, output);
         }
 
         #[test]
         fn lines() {
             let input = r"\(ba \(br \(ul \(ru \(rn \(bb \(sl \(rs";
-            let output = r"| │ _ _ ‾ ¦ / \".to_string();
+            let output = r"| │ _ _ ‾ ¦ / \";
             test_formatting(input, output);
         }
 
         #[test]
         fn text_markers() {
             let input = r"\(ci \(bu \(dd \(dg \(lz \(sq \(ps \(sc \(lh \(rh \(at \(sh \(CR \(OK \(CL \(SP \(HE \(DI";
-            let output = r"○ • ‡ † ◊ □ ¶ § ☜ ☞ @ # ↵ ✓ ♣ ♠ ♥ ♦".to_string();
+            let output = r"○ • ‡ † ◊ □ ¶ § ☜ ☞ @ # ↵ ✓ ♣ ♠ ♥ ♦";
             test_formatting(input, output);
         }
 
         #[test]
         fn legal_symbols() {
             let input = r"\(co \(rg \(tm";
-            let output = r"© ® ™".to_string();
+            let output = r"© ® ™";
             test_formatting(input, output);
         }
 
         #[test]
         fn punctuation() {
             let input = r"\(em \(en \(hy \e \(r! \(r?";
-            let output = r"— – ‐ \\ ¡ ¿".to_string();
+            let output = r"— – ‐ \\ ¡ ¿";
             test_formatting(input, output);
         }
 
         #[test]
         fn quotes() {
             let input = r"\(Bq \(bq \(lq \(rq \(oq \(cq \(aq \(dq \(Fo \(Fc \(fo \(fc";
-            let output = "„ ‚ “ ” ‘ ’ ' \" « » ‹ ›".to_string();
+            let output = "„ ‚ “ ” ‘ ’ ' \" « » ‹ ›";
             test_formatting(input, output);
         }
 
@@ -1600,21 +1617,21 @@ mod tests {
 \(rt \[bracerighttp] \(rk \[bracerightmid] \(rb \[bracerightbt] \[bracerightex] 
 \[parenlefttp] \[parenleftbt] \[parenleftex] \[parenrighttp] \[parenrightbt] \[parenrightex]
 ";
-            let output = r"[ ] { } ⟨ ⟩ ⎪ ⎪ ⎡ ⎣ ⎢ ⎤ ⎦ ⎥ ⎧ ⎧ ⎨ ⎨ ⎩ ⎩ ⎪ ⎫ ⎫ ⎬ ⎬ ⎭ ⎭ ⎪ ⎛ ⎝ ⎜ ⎞ ⎠ ⎟".to_string();
+            let output = r"[ ] { } ⟨ ⟩ ⎪ ⎪ ⎡ ⎣ ⎢ ⎤ ⎦ ⎥ ⎧ ⎧ ⎨ ⎨ ⎩ ⎩ ⎪ ⎫ ⎫ ⎬ ⎬ ⎭ ⎭ ⎪ ⎛ ⎝ ⎜ ⎞ ⎠ ⎟";
             test_formatting(input, output);
         }
 
         #[test]
         fn arrows() {
             let input = r"\(<- \(-> \(<> \(da \(ua \(va \(lA \(rA \(hA \(uA \(dA \(vA \(an";
-            let output = r"← → ↔ ↓ ↑ ↕ ⇐ ⇒ ⇔ ⇑ ⇓ ⇕ ⎯".to_string();
+            let output = r"← → ↔ ↓ ↑ ↕ ⇐ ⇒ ⇔ ⇑ ⇓ ⇕ ⎯";
             test_formatting(input, output);
         }
 
         #[test]
         fn logical() {
             let input = r"\(AN \(OR \[tno] \(no \(te \(fa \(st \(tf \(3d \(or";
-            let output = r"∧ ∨ ¬ ¬ ∃ ∀ ∋ ∴ ∴ |".to_string();
+            let output = r"∧ ∨ ¬ ¬ ∃ ∀ ∋ ∴ ∴ |";
             test_formatting(input, output);
         }
 
@@ -1627,21 +1644,21 @@ mod tests {
 \[coproduct] \(gr \(sr \[sqrt] \(lc \(rc \(lf \(rf \(if \(Ah \(Im \(Re 
 \(wp \(pd \(-h \[hbar] \(12 \(14 \(34 \(18 \(38 \(58 \(78 \(S1 \(S2 \(S3
 ";
-            let output = r"- − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆ ⊇ ∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³".to_string();
+            let output = r"- − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆ ⊇ ∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³";
             test_formatting(input, output);
         }
 
         #[test]
         fn ligatures() {
             let input = r"\(ff \(fi \(fl \(Fi \(Fl \(AE \(ae \(OE \(oe \(ss \(IJ \(ij";
-            let output = r"ﬀ ﬁ ﬂ ﬃ ﬄ Æ æ Œ œ ß Ĳ ĳ".to_string();
+            let output = r"ﬀ ﬁ ﬂ ﬃ ﬄ Æ æ Œ œ ß Ĳ ĳ";
             test_formatting(input, output);
         }
 
         #[test]
         fn accents() {
             let input = "\\(a\" \\(a- \\(a. \\(a^ \\(aa \\\' \\(ga \\` \\(ab \\(ac \\(ad \\(ah \\(ao \\(a~ \\(ho \\(ha \\(ti";
-            let output = r"˝ ¯ ˙ ^ ´ ´ ` ` ˘ ¸ ¨ ˇ ˚ ~ ˛ ^ ~".to_string();
+            let output = r"˝ ¯ ˙ ^ ´ ´ ` ` ˘ ¸ ¨ ˇ ˚ ~ ˛ ^ ~";
             test_formatting(input, output);
         }
 
@@ -1653,28 +1670,28 @@ mod tests {
 \(:o \(:u \(:y \(^A \(^E \(^I \(^O \(^U \(^a \(^e \(^i \(^o \(^u \(,C 
 \(,c \(/L \(/l \(/O \(/o \(oA \(oa
 ";
-            let output = r"Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü ÿ Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å".to_string();
+            let output = r"Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü ÿ Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å";
             test_formatting(input, output);
         }
         
         #[test]
         fn special_letters() {
             let input = r"\(-D \(Sd \(TP \(Tp \(.i \(.j";
-            let output = r"Ð ð Þ þ ı ȷ".to_string();
+            let output = r"Ð ð Þ þ ı ȷ";
             test_formatting(input, output);
         }
 
         #[test]
         fn currency() {
             let input = r"\(Do \(ct \(Eu \(eu \(Ye \(Po \(Cs \(Fn";
-            let output = r"$ ¢ € € ¥ £ ¤ ƒ".to_string();
+            let output = r"$ ¢ € € ¥ £ ¤ ƒ";
             test_formatting(input, output);
         }
 
         #[test]
         fn units() {
             let input = r"\(de \(%0 \(fm \(sd \(mc \(Of \(Om";
-            let output = r"° ‰ ′ ″ µ ª º".to_string();
+            let output = r"° ‰ ′ ″ µ ª º";
             test_formatting(input, output);
         }
 
@@ -1686,112 +1703,216 @@ mod tests {
 \(*y \(*h \(*i \(*k \(*l \(*m \(*n \(*c \(*o \(*p \(*r \(*s 
 \(*t \(*u \(*f \(*x \(*q \(*w \(+h \(+f \(+p \(+e \(ts
 ";
-            let output = r"Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς".to_string();
+            let output = r"Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς";
             test_formatting(input, output);
         }
 
         #[test]
         fn predefined_strings() {
             let input = r"\*(Ba \*(Ne \*(Ge \*(Le \*(Gt \*(Lt \*(Pm \*(If \*(Pi \*(Na \*(Am \*R \*(Tm \*q \*(Rq \*(Lq \*(lp \*(rp \*(lq \*(rq \*(ua \*(va \*(<= \*(>= \*(aa \*(ga \*(Px \*(Ai";
-            let output = "| ≠ ≥ ≤ > < ± infinity pi NaN & ® (Tm) \" ” “ ( ) “ ” ↑ ↕ ≤ ≥ ´ ` POSIX ANSI".to_string();
+            let output = "| ≠ ≥ ≤ > < ± infinity pi NaN & ® (Tm) \" ” “ ( ) “ ” ↑ ↕ ≤ ≥ ´ ` POSIX ANSI";
             test_formatting(input, output);
         }
 
         #[test]
         fn unicode() {
             let input = r"\[u0100] \C'u01230' \[u025600]";
-            let output = "Ā ሰ 𥘀".to_string();
+            let output = "Ā ሰ 𥘀";
             test_formatting(input, output);
         }
 
         #[test]
         fn numbered() {
             let input = r"\N'34' \[char43]";
-            let output = "\" +".to_string();
+            let output = "\" +";
             test_formatting(input, output);
         }
     }
 
     mod full_explicit {
-        use crate::man_util::formatter::test_formatting;
+        use crate::man_util::formatter::tests::test_formatting;
 
         #[test]
         fn bd() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bd -literal indent -compact
+Line 1
+Line 2
+.Ed";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+      Line 1
+      Line 2
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn bf() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bf -emphasis
+Line 1
+Line 2
+.Ed";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Line 1 Line 2
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn bk() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bk -words
+Line 1
+Line 2
+.Ek";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Line 1 Line 2
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn bl() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bl -bullet -width indent-two -compact col1 col2 col3
+.It Line 1
+.It Line 2
+.El";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+•
+•
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     }
 
     mod full_implicit {
-        use crate::man_util::formatter::test_formatting;
+        use crate::man_util::formatter::tests::test_formatting;
 
         #[test]
         fn it() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.It Line 1
+.It Line 2";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn nd() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Nd short description of the manual";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+– short description of the manual
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn nm() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Nm command_name";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+command_name
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn sh() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Sh SECTION
+Line 1
+Line 2
+Line 3";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+SECTION
+     Line 1 Line 2 Line 3
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn ss() {
-            let input = "";
-            let output = "";
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ss Options
+These are the available options.";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+   Options
+     These are the available options.
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     }
 
     #[test]
     fn ta() {
-        let input = "";
-        let output = "";
+        let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bl -bullet -width indent-two -compact col1 col2 col3
+.It Line 1
+.It Line 2
+.It Line 3
+.Ta
+.It Line 4
+.It Line 5
+.It Line 6
+.Ta
+.El";
+        let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+•
+•
+•
+•
+•
+•
+
+footer text                     January 1, 1970                    footer text";
         test_formatting(input, output);
     }
 
     mod inline {
-        use crate::man_util::formatter::test_formatting;
+        use crate::man_util::formatter::tests::test_formatting;
 
         #[test]
         fn dt() {
@@ -2392,7 +2513,7 @@ Debian";
     }
 
     mod partial_explicit {
-        use crate::man_util::formatter::test_formatting;
+        use crate::man_util::formatter::tests::test_formatting;
 
         #[test]
         fn test_a_block() {
