@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Index};
 use aho_corasick::AhoCorasick;
 use terminfo::Database;
 use crate::FormattingSettings;
@@ -94,15 +94,30 @@ impl MdocFormatter {
 // Base formatting functions.
 impl MdocFormatter {
     pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
-        let footer_iter = vec![self.format_footer()].into_iter();
+        let max_width = self.formatting_settings.width;
+        let mut lines = Vec::new();
+        let mut current_line = String::new();
         
-        ast.elements
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .chain(footer_iter)
-            .collect::<Vec<String>>()
-            .join("")
-            .into_bytes()
+        for node in ast.elements {
+            let formatted_node = self.format_node(node);
+            for word in formatted_node.split_whitespace() {
+                if current_line.chars().count() + word.chars().count() >= max_width {
+                    lines.push(current_line.trim_end().to_string());
+                    current_line.clear();
+                }
+
+                current_line.push_str(word);
+                current_line.push(' ');
+            }
+        }
+
+        if !current_line.is_empty() {
+            lines.push(current_line.trim_end().to_string());
+        }
+
+        lines.push(self.format_footer());
+
+        lines.join("\n").into_bytes()
     }
 
     fn get_default_footer_text() -> String{
@@ -192,9 +207,9 @@ impl MdocFormatter {
 
             // In-line.
             // Rs block macros which can appears outside Rs-Re block.
-            Macro::B { book_title    } => self.format_b(&book_title),
-            Macro::T { article_title } => self.format_t(&article_title),
-            Macro::U { uri           } => self.format_u(&uri),
+            Macro::B => self.format_b(macro_node),
+            Macro::T => self.format_t(macro_node),
+            Macro::U => self.format_u(macro_node),
 
             // Text production macros.
             Macro::At(at_type)    => self.format_at(at_type),
@@ -768,42 +783,34 @@ impl MdocFormatter {
 
 // Formatting block partial-explicit.
 impl MdocFormatter {
-    fn format_rs_block(&self, _macro_node: MacroNode) -> String {
-        unimplemented!()
+    fn format_partial_explicit_block(&self, macro_node: MacroNode) -> String {
+        macro_node.nodes
+            .into_iter()
+            .map(|node| self.format_node(node))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     fn format_a_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
-        format!("⟨{}⟩", formatted_block)
+        format!("⟨{}⟩", formatted_block.trim())
     }
 
     fn format_b_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         format!("[{}]", formatted_block)
     }
 
     fn format_br_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         format!("{{{}}}", formatted_block)
     }
 
     fn format_d_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         format!("“{}”", formatted_block)
     }
@@ -814,10 +821,7 @@ impl MdocFormatter {
         closing_delimiter: Option<char>, 
         macro_node: MacroNode
     ) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         match (opening_delimiter, closing_delimiter) {
             (Some(open), Some(close)) => {
@@ -836,55 +840,37 @@ impl MdocFormatter {
     }
 
     fn format_f_block(&mut self, funcname: String, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         format!("{}({})", funcname, formatted_block)
     }
 
     fn format_o_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         format!("[{}]", formatted_block)
     }
 
     fn format_p_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         format!("({})", formatted_block)
     }
 
     fn format_q_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         format!("\"{}\"", formatted_block)
     }
 
     fn format_s_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_explicit_block(macro_node);
 
         format!("'{}'", formatted_block)
     }
 
     fn format_x_block(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>()
+        self.format_partial_explicit_block(macro_node)
     }
 }
 
@@ -894,6 +880,10 @@ impl MdocFormatter {
 //  - Before the last '%A' macro has to be 'and' word. 
 //  - These macros have order!
 impl MdocFormatter {
+    fn format_rs_block(&self, _macro_node: MacroNode) -> String {
+        unimplemented!()
+    }
+    
     fn format_d(&self, month_day: Option<String>, year: i32) -> String {
         match month_day {
             Some(md) => format!("{md} {year}"),
@@ -902,151 +892,145 @@ impl MdocFormatter {
     }
 
     fn format_p(&self, macro_node: MacroNode) -> String {
-        macro_node.nodes.iter().map(|node| {
-            match node {
-                Element::Text(text) => self.format_text_node(text),
-                _ => unreachable!(".%P macro can not contain macro node or EOI!")
-            }
-        }).collect::<String>()
+        self.format_inline_macro(macro_node)
     }
 }
 
+// Formatting block partial-implicit.
 impl MdocFormatter {
-    fn format_aq(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
+    fn format_partial_implicit_block(&self, macro_node: MacroNode) -> String {
+        macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
-            .collect::<String>();
-
-        format!("⟨{}⟩", formatted_block)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    
+    fn format_aq(&mut self, macro_node: MacroNode) -> String {
+        let formatted_block = self.format_partial_implicit_block(macro_node);
+        
+        format!("⟨{}⟩", formatted_block.trim())
     }
 
     fn format_bq(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
-        format!("[{}]", formatted_block)
+        format!("[{}]", formatted_block.trim())
     }
 
     fn format_brq(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
-        format!("{{{}}}", formatted_block)
+        format!("{{{}}}", formatted_block.trim())
     }
 
     fn format_d1(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
-        
+        let formatted_block = self.format_partial_implicit_block(macro_node);
+
         let spaces = " ".repeat(self.formatting_settings.indent);
 
-        format!("{}{}", spaces, formatted_block)
+        format!("{}{}", spaces, formatted_block.trim())
     }
 
     fn format_dl(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
         let spaces = " ".repeat(self.formatting_settings.indent);
 
-        format!("{}{}", spaces, formatted_block)
+        format!("{}{}", spaces, formatted_block.trim())
     }
 
     fn format_dq(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
-        format!("“{}”", formatted_block)
+        format!("“{}”", formatted_block.trim())
     }
 
     fn format_en(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>()
+        self.format_partial_implicit_block(macro_node).trim().to_string()
     }
 
     fn format_op(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
-        format!("[{}]", formatted_block)
+        format!("[{}]", formatted_block.trim())
     }
 
     fn format_pq(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
-        format!("({})", formatted_block)
+        format!("({})", formatted_block.trim())
     }
 
     fn format_ql(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
-        format!("‘{}’", formatted_block)
+        format!("‘{}’", formatted_block.trim())
     }
 
     fn format_qq(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
-        format!("\"{}\"", formatted_block)
+        format!("\"{}\"", formatted_block.trim())
     }
 
     fn format_sq(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>();
+        let formatted_block = self.format_partial_implicit_block(macro_node);
 
-        format!("'{}'", formatted_block)
+        format!("'{}'", formatted_block.trim())
     }
 
     fn format_vt(&mut self, macro_node: MacroNode) -> String {
-        macro_node.nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<String>()
+        self.format_partial_implicit_block(macro_node).trim().to_string()
     }
 }
 
 // Format other in-line macros.
 impl MdocFormatter {
-    fn format_ad(&self, macro_node: MacroNode) -> String {
-        macro_node.nodes.iter().map(|node| {
+    fn format_inline_macro(&self, macro_node: MacroNode) -> String {
+        let mut result = String::new();
+        let mut prev_was_open = false;
+
+        for node in macro_node.nodes {
             match node {
-                Element::Text(text) => self.format_text_node(text),
-                _ => unreachable!(".Ad macro can not contain macro node or EOI!")
+                Element::Text(text) => {
+                    match text.as_str() {
+                        "(" | "[" => {
+                            result.push_str(&text);
+                            prev_was_open = true;
+                        },
+                        ")" | "]" => {
+                            result.push_str(&text);
+                            prev_was_open = false;
+                        },
+                        _ => {
+                            match prev_was_open {
+                                true  => result.push_str(&self.format_text_node(&text)),
+                                false => result.push_str(&format!(" {}", self.format_text_node(&text))),
+                            }
+                            prev_was_open = false;
+                        }
+                    }
+                },
+                _ => unreachable!("macro can't contain macro node or EOI!")
             }
-        }).collect::<String>()
+        }
+
+        result
+    }
+
+    fn format_ad(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
     fn format_b(&self, book_title: &str) -> String {
-        self.format_text_node(book_title)
+        // self.format_inline_macro(book_title)
+        todo!()
     }
 
     fn format_t(&self, article_title: &str) -> String {
-        self.format_text_node(article_title)
+        // self.format_inline_macro(uri)
+        todo!()
     }
 
     fn format_u(&self, uri: &str) -> String {
@@ -1062,12 +1046,7 @@ impl MdocFormatter {
             return "file ...".to_string();
         }
 
-        macro_node.nodes.iter().map(|node| {
-            match node {
-                Element::Text(text) => self.format_text_node(text),
-                _ => unreachable!(".Ar can not contain macro or EOI in subnodes!")
-            }
-        }).collect::<String>()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_bt(&self) -> String {
@@ -1075,21 +1054,11 @@ impl MdocFormatter {
     }
 
     fn format_cd(&self, macro_node: MacroNode) -> String {
-        macro_node.nodes.iter().map(|node| {
-            match node {
-                Element::Text(text) => self.format_text_node(text),
-                _ => unreachable!(".Cd macro can not contain macro node or EOI!")
-            }
-        }).collect::<String>()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_cm(&self, macro_node: MacroNode) -> String {
-        macro_node.nodes.iter().map(|node| {
-            match node {
-                Element::Text(text) => self.format_text_node(text),
-                _ => unreachable!(".Cm macro can not contain macro node or EOI!")
-            }
-        }).collect::<String>()
+        self.format_inline_macro(macro_node)
     }
     
     fn format_db(&self) -> String {
@@ -1097,21 +1066,11 @@ impl MdocFormatter {
     }
 
     fn format_dv(&self, macro_node: MacroNode) -> String {
-        macro_node.nodes.iter().map(|node| {
-            match node {
-                Element::Text(text) => self.format_text_node(text),
-                _ => unreachable!(".Dv macro can not contain macro node or EOI!")
-            }
-        }).collect::<String>()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_em(&self, macro_node: MacroNode) -> String {
-        let line = macro_node.nodes.iter().map(|node| {
-            match node {
-                Element::Text(text) => self.format_text_node(text),
-                _ => unreachable!(".Em macro can not contain macro node or EOI!")
-            }
-        }).collect::<String>();
+        let line = self.format_inline_macro(macro_node);
 
         if self.supports_italic() {
             format!("\x1b[3m{line}\x1b[0m")
@@ -1178,7 +1137,8 @@ impl MdocFormatter {
     }
 
     fn format_dx(&self, dx_type: DxType) -> String {
-        format!("{}", dx_type)
+        // format!("{}", dx_type)
+        todo!()
     }
 
     fn format_dd(&self, date: DdDate) -> String {
@@ -1194,15 +1154,18 @@ impl MdocFormatter {
     }
 
     fn format_bx(&self, bx_type: BxType) -> String {
-        format!("{}", bx_type)
+        // format!("{}", bx_type)
+        todo!()
     }
 
     fn format_bsx(&self, bsx_type: BsxType) -> String {
-        format!("{}", bsx_type)
+        // format!("{}", bsx_type)
+        todo!()
     }
 
     fn format_at(&self, at_type: AtType) -> String {
-        format!("{}", at_type)
+        // format!("{}", at_type)
+        todo!()
     }
 
     fn format_er(&mut self, macro_node: MacroNode) -> String {
@@ -2512,29 +2475,82 @@ Debian";
         }
     }
 
+    mod partial_implicit {
+        use crate::man_util::formatter::tests::test_formatting;
+
+        #[test]
+        fn block_empty() {
+            let input = r#".Aq"#;
+            let output = "⟨⟩";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn block_single_line() {
+            let input = r#".Aq Ad addr addr Ad addr Ad addr"#;
+            let output = "⟨addr addr addr addr⟩";
+            test_formatting(input, output);
+        }
+    }
+
     mod partial_explicit {
         use crate::man_util::formatter::tests::test_formatting;
 
         #[test]
-        fn test_a_block() {
-            let input = r".Ao
+        fn block_empty() {
+            let input = r#".Ao
+.Ac"#;
+            let output = "⟨⟩";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn block_single_line() {
+            let input = r#".Ao
+.Ad addr addr
 .Ad addr 
 .Ad addr 
-.Ad addr 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-Text loooooooong line 
-.Ac";
+.Ac"#;
             let output = "⟨addr addr addr⟩";
             test_formatting(input, output);
         }
+
+        #[test]
+        fn multi_line() {
+            let input = r#".Ao
+.Ad addr 
+.Ad addr 
+.Ad addr 
+Text loooooooong line
+Text loooooooong line
+Text loooooooong line
+Text loooooooong line
+Text loooooooong line
+Text loooooooong line
+.Ac"#;
+            let output = r#"⟨addr addr addr Text loooooooong line Text loooooooong line Text loooooooong
+line Text loooooooong line Text loooooooong line Text loooooooong line⟩"#;
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn block_overlong_line() {
+            let input = r#".Aq Ad addr Ad addr Ad addr Text looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong line"#;
+            let output = r#"⟨addr addr addr Text
+looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong
+line⟩"#;
+            test_formatting(input, output);
+        }
+    }
+
+    #[test]
+    fn test_delimiters() {
+        let input = r#".Ao
+.Ad ( addr ) addr
+.Ad [ addr ] 
+.Ad [ addr Ad addr ] 
+.Ac"#;
+        let output = "⟨(addr) addr [addr] [addr addr]⟩";
+        test_formatting(input, output);
     }
 }

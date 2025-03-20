@@ -19,8 +19,15 @@ NEWLINE    = _{ "\r"? ~ "\n" }
 
 // -- Macro name separator to not allow merging macro name with arguments
 
+comment_start = _{ "\\" ~ "\"" }
+comment_macro = _{ comment_start ~ (!(NEWLINE | EOI) ~ ANY)* }
+
+text_non_comment = ${ (!comment_start ~ word ~ ws*)+ }
+text_line = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE | EOI) }
+line      = { !"." ~ (comment_macro | text_non_comment)+ }
+
 expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
-word     = @{ (!(ws | NEWLINE) ~ ANY)+ }
+word     = @{ (!(NEWLINE | ws) ~ ANY)+ }
 text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ }
 
 // word             = @{ (!(separated_delimiter | ws | NEWLINE) ~ ANY)+ | delimiter }
@@ -45,13 +52,6 @@ macro_arg = {
     inline | ta 
   ) 
 }
-
-comment_start = _{ "\\" ~ "\"" }
-comment_macro = _{ comment_start ~ (!(NEWLINE | EOI) ~ ANY)* }
-
-text_non_comment = @{ (!(comment_start | NEWLINE) ~ ANY)+ }
-line      = { !"." ~ (comment_macro | text_non_comment)+ }
-text_line = { line ~ (NEWLINE | EOI) }
 
 arg = { macro_arg | text_arg }
 
@@ -374,19 +374,24 @@ xo_block = ${ xo_head ~ xo_body* ~ "."? ~ xc }
 
 // ----- Block partial-implicit
 
-aq_block  = ${ "Aq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-bq_block  = ${ "Bq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-brq_block = ${ "Brq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-d1_block  = ${ "D1" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-dl_block  = ${ "Dl" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-dq_block  = ${ "Dq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-en_block  = ${ "En" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
-op_block  = ${ "Op" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-pq_block  = ${ "Pq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-ql_block  = ${ "Ql" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-qq_block  = ${ "Qq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-sq_block  = ${ "Sq" ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-vt_block  = ${ "Vt" ~ !text_arg ~ (ws+ ~ arg)+ ~ ws* ~ NEWLINE? }
+partial_implicit_element = {
+  (( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  text_arg
+}
+
+aq_block  = ${ "Aq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+bq_block  = ${ "Bq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+brq_block = ${ "Brq" ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+d1_block  = ${ "D1"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+dl_block  = ${ "Dl"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+dq_block  = ${ "Dq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+en_block  = ${ "En"  ~ !text_arg ~ (ws* ~ partial_implicit_element)+ ~ ws* ~ NEWLINE? }
+op_block  = ${ "Op"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+pq_block  = ${ "Pq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+ql_block  = ${ "Ql"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+qq_block  = ${ "Qq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+sq_block  = ${ "Sq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+vt_block  = ${ "Vt"  ~ !text_arg ~ (ws* ~ partial_implicit_element)+ ~ ws* ~ NEWLINE? }
 
 // ----- In-line
 
@@ -409,11 +414,11 @@ i = ${ "%I" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 j = ${ "%J" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 n = ${ "%N" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 o = ${ "%O" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
-p = ${ "%P" ~ !text_arg ~ (ws+ ~ word)+ ~ ws* ~ NEWLINE? }
+p = ${ "%P" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 q = ${ "%Q" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 r = ${ "%R" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 t = ${ "%T" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
-u = ${ "%U" ~ !text_arg ~ ws+ ~ uri ~ ws* ~ NEWLINE? }
+u = ${ "%U" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 v = ${ "%V" ~ !text_arg ~ ws+ ~ line ~ ws* ~ NEWLINE? }
 
 // -- Text production
@@ -600,7 +605,7 @@ lk = ${ "Lk" ~ !text_arg ~ ws+ ~ uri ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 lp = ${ "Lp" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 
 // -- Delimeters
-separated_delimiter = { ws+ ~ delimiter ~ ws* }
+separated_delimiter = { ws+ ~ delimiter ~ ws+ }
 delimiter = { opening_delimiter | closing_delimiter }
 opening_delimiter = { "(" | "[" }
 closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
