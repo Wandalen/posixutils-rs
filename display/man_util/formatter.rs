@@ -879,9 +879,6 @@ impl MdocFormatter {
 }
 
 // Formatting Rs-Re bloock. Can contain only %* macros
-// Notes:
-//  - All macros are comma separated.
-//  - Before the last '%A' macro has to be 'and' word. 
 impl MdocFormatter {
     fn format_rs_block(&self, macro_node: MacroNode) -> String {
         let mut iter = macro_node.nodes.into_iter();
@@ -1227,8 +1224,7 @@ impl MdocFormatter {
     }
 
     fn format_dx(&self, macro_node: MacroNode) -> String {
-        // format!("{}", dx_type)
-        todo!()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_dd(&self, date: DdDate) -> String {
@@ -1244,18 +1240,15 @@ impl MdocFormatter {
     }
 
     fn format_bx(&self, macro_node: MacroNode) -> String {
-        // format!("{}", bx_type)
-        todo!()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_bsx(&self, macro_node: MacroNode) -> String {
-        // format!("{}", bsx_type)
-        todo!()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_at(&self, macro_node: MacroNode) -> String {
-        // format!("{}", at_type)
-        todo!()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_er(&mut self, macro_node: MacroNode) -> String {
@@ -1373,8 +1366,7 @@ impl MdocFormatter {
     }
 
     fn format_fx(&self, macro_node: MacroNode) -> String {
-        // fx_type.to_string()
-        todo!()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_hf(&mut self, macro_node: MacroNode) -> String {
@@ -1453,8 +1445,7 @@ impl MdocFormatter {
     }
 
     fn format_nx(&self, macro_node: MacroNode) -> String {
-        // nx_type.to_string()
-        todo!()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_os(&mut self, macro_node: MacroNode) -> String {
@@ -1479,8 +1470,7 @@ impl MdocFormatter {
     }
 
     fn format_ox(&self, macro_node: MacroNode) -> String {
-        // ox_type.to_string()
-        todo!()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_pa(&mut self, macro_node: MacroNode) -> String {
@@ -1971,6 +1961,8 @@ footer text                     January 1, 1970                    footer text";
     }
 
     mod inline {
+        use std::process::Output;
+
         use crate::man_util::formatter::tests::test_formatting;
 
         mod rs_submacro {
@@ -2344,16 +2336,230 @@ footer text                     January 1, 1970                    footer text";
             }
         }
 
-        // mod text_production {
-        //     use super::
-        // }
+        #[test]
+        fn ad() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ad [0,$]
+.Ad 0x00000000
+.Ad [ 0,$ ]";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+[0,$] 0x00000000 [0,$]
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn ap() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ap";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+'
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn ar() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ar
+.Ar arg1 , arg2 .";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+file ... arg1, arg2.
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn at() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.At
+.At III
+.At V.1
+.At ( V.1 )";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+AT&T UNIX AT&T System III UNIX AT&T System V Release 1 UNIX (AT&T System V
+Release 1 UNIX)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bsx() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bsx 1.0
+.Bsx
+.Bsx ( 1.0 )";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+BSD/OS 1.0 BSD/OS (BSD/OS 1.0)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bt() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bt";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+is currently in beta test.
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bx() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bx 4.3 Tahoe
+.Bx 4.4
+.Bx
+.Bx ( 4.3 Tahoe )";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+4.3BSD-Tahoe 4.4BSD BSD (4.3BSD-Tahoe)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn cd() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Cd device le0 at scode?";
+
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+device le0 at scode?
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn cm() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Cm file bind";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+file bind
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn db() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Db";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn dd() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
 
         #[test]
         fn dt() {
-            let input = ".Dt TITLE 7 arch
-.Bq block";
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text";
             let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
-[block]";
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn dv() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+.Dv NULL
+.Dv BUFSIZ
+.Dv STDOUT_FILEnmo";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+NULL BUFSIZ STDOUT_FILEnmo
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn dx() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+.Dx 2.4.1
+.Dx ( 2.4.1 )
+";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+DragonFly 2.4.1 (DragonFly 2.4.1)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn em() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+Selected lines are those
+.Em not
+matching any of the specified patterns.
+Some of the functions use a
+.Em hold space
+to save the pattern space for subsequent retrieval.";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+Selected lines are those not matching any of the specified patterns.  Some of
+the functions use a hold space to save the pattern space for subsequent
+retrieval.
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
