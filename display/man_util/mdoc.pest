@@ -15,7 +15,6 @@ WHITESPACE = _{ " " | "\t" }
 
 ws         = _{ WHITESPACE }
 NEWLINE    = _{ "\r"? ~ "\n" }
-// _COMMENT   = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 // -- Macro name separator to not allow merging macro name with arguments
 
@@ -29,11 +28,6 @@ line      = { !"." ~ (comment_macro | text_non_comment)+ }
 expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
 word     = @{ (!(NEWLINE | ws) ~ ANY)+ }
 text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ }
-
-// word             = @{ (!(separated_delimiter | ws | NEWLINE) ~ ANY)+ | delimiter }
-// text_arg         = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(separated_delimiter | ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ | delimiter }
-// text_non_comment = @{ (!(separated_delimiter | comment_start | NEWLINE) ~ ANY)+ }
-// line             = { (!"." ~ (comment_macro | text_non_comment)+) | delimiter }
 
 // -- List of Callable macros
 macro_arg = { 
@@ -630,7 +624,7 @@ dd               = ${ "Dd" ~ !text_arg ~ (ws+ ~ ("$" ~ "Mdocdate" ~ ":"? ~ ws*)?
 // -- Dt
 
 title   = ${ !ASCII_DIGIT ~ word }
-section = ${ ASCII_DIGIT }
+section = ${ word }
 arch    = ${ text_arg }
 dt      = ${ "Dt" ~ !text_arg ~ (ws+ ~ title)? ~ ws+ ~ section ~ (ws+ ~ arch)? ~ ws* ~ NEWLINE? }
 

@@ -8419,7 +8419,7 @@ Line
                         nodes: vec![
                             Element::Text(NxType::format("1.0"))
                         ],
-                    }),
+                    })
                 ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
