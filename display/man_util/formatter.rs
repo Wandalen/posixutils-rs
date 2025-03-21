@@ -21,7 +21,8 @@ pub struct FormattingState {
     first_name: Option<String>,
     suppress_space: bool,
     footer_text: Option<String>,
-    spacing: String
+    spacing: String,
+    split_mod: bool
 }
 
 impl Default for FormattingState{
@@ -30,7 +31,8 @@ impl Default for FormattingState{
             first_name: None, 
             suppress_space: false, 
             footer_text: None, 
-            spacing: " ".to_string() 
+            spacing: " ".to_string() ,
+            split_mod: false
         }
     }
 }
@@ -231,7 +233,7 @@ impl MdocFormatter {
             Macro::Db => self.format_db(),
             Macro::Dv => self.format_dv(macro_node),
             Macro::Em => self.format_em(macro_node),
-            // Macro::An { author_name_type } => unimplemented!(),
+            Macro::An { author_name_type } => self.format_an(author_name_type, macro_node),
             Macro::Dd { date } => self.format_dd(date),
             Macro::Dt { title, section, arch } => self.format_dt(title.clone(), section.as_str(), arch.clone()),
            
@@ -1126,6 +1128,20 @@ impl MdocFormatter {
 
     fn format_ap(&self) -> String {
         "'".to_string()
+    }
+
+    fn format_an(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
+        match AnType {
+            AnType::NoSplit => self.formatting_state.split_mod = false,
+            AnType::Split   => self.formatting_state.split_mod = true,
+            AnType::Name    => {
+                let content = self.format_inline_macro(macro_node);
+                match self.formatting_state.split_mod {
+                    true  => format!("{}\n", content),
+                    false => content
+                }
+            }
+        }
     }
 
     fn format_ar(&self, macro_node: MacroNode) -> String {
@@ -2353,6 +2369,34 @@ footer text                     January 1, 1970                    footer text";
         }
 
         #[test]
+        fn an() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+.An -split
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An -nosplit
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv> Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv> Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv>
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
         fn ap() {
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
@@ -3220,6 +3264,28 @@ line Text loooooooong line Text loooooooong line Text loooooooong line⟩"#;
             let output = r#"⟨addr addr addr Text
 looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong
 line⟩"#;
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn rs_block() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+.Rs
+.%A J. E. Hopcroft
+.%A J. D. Ullman
+.%B Introduction to Automata Theory, Languages, and Computation
+.%I Addison-Wesley
+.%C Reading, Massachusetts
+.%D 1979
+.Re";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+J. E. Hopcroft and J. D. Ullman, Introduction to Automata Theory, Languages,
+and Computation, Addison-Wesley, Reading, Massachusetts, 1979.
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     }
