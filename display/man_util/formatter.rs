@@ -1,5 +1,6 @@
-use std::{collections::HashMap, ops::Index};
+use std::collections::HashMap;
 use aho_corasick::AhoCorasick;
+use chrono::NaiveDate;
 use terminfo::Database;
 use crate::FormattingSettings;
 
@@ -21,7 +22,8 @@ pub struct FormattingState {
     first_name: Option<String>,
     suppress_space: bool,
     footer_text: Option<String>,
-    spacing: String
+    spacing: String,
+    date: Option<String>
 }
 
 impl Default for FormattingState{
@@ -30,7 +32,8 @@ impl Default for FormattingState{
             first_name: None, 
             suppress_space: false, 
             footer_text: None, 
-            spacing: " ".to_string() 
+            spacing: " ".to_string(),
+            date: None
         }
     }
 }
@@ -124,12 +127,17 @@ impl MdocFormatter {
         String::new()
     }
 
-    fn format_footer(&self) -> String{
+    fn format_footer(&mut self) -> String{
         let footer_text = self.formatting_state
             .footer_text.clone()
             .unwrap_or(Self::get_default_footer_text());
-
-        let date = self.format_dd(chrono::Local::now().date_naive().into());
+        
+        let date = if let Some(date) = self.formatting_state.date.clone(){
+            date
+        }else{
+            self.format_dd(chrono::Local::now().date_naive().into());
+            self.formatting_state.date.clone().unwrap()
+        };
 
         let mut space_size = self.formatting_settings
             .width.saturating_sub(2 * footer_text.len() + date.len()) / 2;
@@ -705,14 +713,74 @@ impl MdocFormatter {
 
     /// Special block macro ta formatting
     fn format_ta(&mut self, macro_node: MacroNode) -> String {
-
+        String::new()
     }
 }
 
 // Formatting block full-explicit.
 impl MdocFormatter {
     fn format_bd_block(&mut self, macro_node: MacroNode) -> String {
-        
+        /*let Macro::Bd { block_type, offset, compact } = macro_node.mdoc_macro else{
+            unreachable!()
+        };
+
+        let (offset, align) = if let Some(offset) = offset{
+            match offset{
+                OffsetType::Indent => (6, OffsetType::Left),
+                OffsetType::IndentTwo => (12, OffsetType::Left),
+                OffsetType::Left => (0, OffsetType::Left),
+                OffsetType::Right => (0, OffsetType::Right),
+                OffsetType::Center => (0, OffsetType::Center)
+            }
+        } else {
+            (self.formatting_settings.indent as isize, OffsetType::Left) 
+        };
+
+        let mut content = String::new();
+        for element in macro_node.nodes{
+            let formatted_element = self.format_node(element);
+            let mut content = match block_type{
+                BdType::Centered => {
+                    if self.formatting_settings.width >= formatted_element.len(){
+                        
+                    }else{
+                        content += &formatted_element;
+                    }
+                },
+                _ if matches!(align, OffsetType::Center) => {
+
+                },
+                BdType::Filled => {
+                    content += match align{
+                        OffsetType::Left => formatted_element,
+                        OffsetType::Right => formatted_element,
+                        _ => unreachable!()
+                    }
+                },
+                BdType::Literal | BdType::Unfilled => {
+                    content += formatted_element.as_str() + " ";
+                    if let Some(c) = content.strip_suffix(" "){
+                        content = c.to_string();
+                    }
+                    match align{
+                        OffsetType::Left => ,
+                        OffsetType::Right => ,
+                        _ => unreachable!()
+                    }
+                },
+                BdType::Ragged => {
+
+                }
+            };
+        }
+
+        if !compact{
+            let vertical_space = "\n\n".to_string();
+            content = vertical_space.clone() + &content + &vertical_space;
+        }
+
+        content*/
+        String::new()
     }
 
     fn format_bf_block(&mut self, macro_node: MacroNode) -> String {
@@ -726,26 +794,24 @@ impl MdocFormatter {
     }
 
     fn format_bk_block(&mut self, macro_node: MacroNode) -> String {
-        let mut content = macro_node.nodes
+        macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
             .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing);
-
-        content
+            .join(&self.formatting_state.spacing)
             .replace("\n", " ")
             .replace("\r", "")
     }
 
     fn format_bl_block(&mut self, macro_node: MacroNode) -> String {
-
+        String::new()
     }
 }
 
 // Formatting block full-implicit.
 impl MdocFormatter {
     fn format_it_block(&mut self, macro_node: MacroNode) -> String {
-
+        String::new()
     }
 
     fn format_nd(&mut self, macro_node: MacroNode) -> String {
@@ -773,17 +839,17 @@ impl MdocFormatter {
     }
 
     fn format_sh_block(&mut self, macro_node: MacroNode) -> String {
-
+        String::new()
     }
 
     fn format_ss_block(&mut self, macro_node: MacroNode) -> String {
-
+        String::new()
     }
 }
 
 // Formatting block partial-explicit.
 impl MdocFormatter {
-    fn format_partial_explicit_block(&self, macro_node: MacroNode) -> String {
+    fn format_partial_explicit_block(&mut self, macro_node: MacroNode) -> String {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -898,7 +964,7 @@ impl MdocFormatter {
 
 // Formatting block partial-implicit.
 impl MdocFormatter {
-    fn format_partial_implicit_block(&self, macro_node: MacroNode) -> String {
+    fn format_partial_implicit_block(&mut self, macro_node: MacroNode) -> String {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -1023,17 +1089,17 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_b(&self, book_title: &str) -> String {
+    fn format_b(&self, macro_node: MacroNode) -> String {
         // self.format_inline_macro(book_title)
         todo!()
     }
 
-    fn format_t(&self, article_title: &str) -> String {
+    fn format_t(&self, macro_node: MacroNode) -> String {
         // self.format_inline_macro(uri)
         todo!()
     }
 
-    fn format_u(&self, uri: &str) -> String {
+    fn format_u(&self, macro_node: MacroNode) -> String {
         // self.format_inline_macro(uri)
         todo!()
     }
@@ -1142,8 +1208,8 @@ impl MdocFormatter {
         todo!()
     }
 
-    fn format_dd(&self, date: DdDate) -> String {
-        match date {
+    fn format_dd(&mut self, date: DdDate) -> String {
+        let date = match date {
             DdDate::MDYFormat(dd_date) => format!(
                 "{} {}, {}", 
                 dd_date.month_day.0, 
@@ -1151,7 +1217,9 @@ impl MdocFormatter {
                 dd_date.year
             ),
             DdDate::StrFormat(string) => string
-        }
+        };
+        self.formatting_state.date = Some(date.clone());
+        String::new()
     }
 
     fn format_bx(&self, bx_type: BxType) -> String {
@@ -1623,13 +1691,13 @@ mod tests {
         #[test]
         fn bd() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Bd -literal indent -compact
 Line 1
 Line 2
 .Ed";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
       Line 1
       Line 2
@@ -1641,13 +1709,13 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn bf() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Bf -emphasis
 Line 1
 Line 2
 .Ed";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 Line 1 Line 2
 
@@ -1658,13 +1726,13 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn bk() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Bk -words
 Line 1
 Line 2
 .Ek";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 Line 1 Line 2
 
@@ -1675,13 +1743,13 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn bl() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Bl -bullet -width indent-two -compact col1 col2 col3
 .It Line 1
 .It Line 2
 .El";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 •
 •
@@ -1697,11 +1765,11 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn it() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .It Line 1
 .It Line 2";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 
 footer text                     January 1, 1970                    footer text";
@@ -1711,10 +1779,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn nd() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Nd short description of the manual";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 – short description of the manual
 
@@ -1725,10 +1793,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn nm() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Nm command_name";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 command_name
 
@@ -1739,13 +1807,13 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn sh() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Sh SECTION
 Line 1
 Line 2
 Line 3";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 SECTION
      Line 1 Line 2 Line 3
@@ -1757,11 +1825,11 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ss() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ss Options
 These are the available options.";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
    Options
      These are the available options.
@@ -1774,7 +1842,7 @@ footer text                     January 1, 1970                    footer text";
     #[test]
     fn ta() {
         let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Bl -bullet -width indent-two -compact col1 col2 col3
 .It Line 1
@@ -1786,7 +1854,7 @@ footer text                     January 1, 1970                    footer text";
 .It Line 6
 .Ta
 .El";
-        let output = "PROGNAME(section)                   section                  PROGNAME(section)
+        let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 •
 •
@@ -1812,11 +1880,11 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn er() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Er ERROR ERROR2
 .Er";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 ERROR ERROR2
 
@@ -1827,10 +1895,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn es() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Es ( )";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 ()
 
@@ -1841,10 +1909,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ev() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ev DISPLAY";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 DISPLAY
 
@@ -1855,10 +1923,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ex() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ex -std grep";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 The grep utility exits 0 on success, and >0 if an error occurs.
 
@@ -1869,10 +1937,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn fa() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Fa funcname Ft const char *";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 funcname const char *
 
@@ -1883,10 +1951,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn fd() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Fd #define sa_handler __sigaction_u.__sa_handler";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 #define sa_handler __sigaction_u.__sa_handler
 
@@ -1897,10 +1965,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn fl() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Fl H | L | P inet";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 -H | -L | -P -inet
 
@@ -1909,12 +1977,12 @@ footer text                     January 1, 1970                    footer text";
         }
     
         #[test]
-        fn Fn() {
+        fn r#fn() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Fn funcname arg arg2 arg3";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 funcname(arg, arg2, arg3)
 
@@ -1925,10 +1993,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn fr() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Fr 32";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 32
 
@@ -1939,10 +2007,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ft() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ft int32 void";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 int32 void
 
@@ -1953,10 +2021,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn fx() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Fx 1.0";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 FreeBSD 1.0
 
@@ -1967,10 +2035,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn hf() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Hf file/path file2/path";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 file/path file2/path
 
@@ -1981,10 +2049,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ic() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ic :wq";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 :wq
 
@@ -1993,12 +2061,12 @@ footer text                     January 1, 1970                    footer text";
         }
     
         #[test]
-        fn In() {
+        fn r#in() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .In stdatomic.h";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 <stdatomic.h>
 
@@ -2009,10 +2077,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn lb() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Lb libname";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 library “libname”
 
@@ -2023,10 +2091,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn li() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Li Book Antiqua";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 Book Antiqua
 
@@ -2037,10 +2105,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn lk() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Lk https://bsd.lv The BSD.lv Project";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 The BSD.lv Project: https://bsd.lv
 
@@ -2051,12 +2119,12 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn lp() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Hf file/path file2/path
 .Lp
 .Lk https://bsd.lv The BSD.lv Project";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 file/path file2/path
 
@@ -2069,10 +2137,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ms() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ms alpha beta";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 alpha beta
 
@@ -2083,10 +2151,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn mt() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Mt abc@gmail.com abc@gmail.com";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 abc@gmail.com abc@gmail.com
 
@@ -2097,10 +2165,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn nm() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Nm command_name";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 command_name
 
@@ -2111,10 +2179,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn no() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .No a b c";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 a b c
 
@@ -2125,12 +2193,12 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ns() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .No a b c
 .Ns
 .No a b c";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 a b c a b c
 
@@ -2141,10 +2209,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn nx() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Nx Version 1.0";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 NetBSD Version 1.0
 
@@ -2155,9 +2223,9 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn os() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -2166,10 +2234,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ot() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ot functype";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 functype
 
@@ -2180,10 +2248,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ox() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ox Version 1.0";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 OpenBSD Version 1.0
 
@@ -2194,10 +2262,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn pa() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Pa name1 name2";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 name1 name2
 
@@ -2208,10 +2276,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn pf() {        
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ar value Pf $ Ar variable_name";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 value $variable_name
 
@@ -2222,12 +2290,12 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn pp() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Pa name1 name2
 .Pp
 .Pa name1 name2";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 name1 name2
 
@@ -2240,10 +2308,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn rv() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Rv -std f1 f2 Ar value";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 The f1(), f2(), Ar(), and value() functions return the value 0 if successful;
 otherwise the value -1 is returned and the global variable errno is set to
@@ -2256,7 +2324,7 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn sm() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Sm on
 A B C
@@ -2264,7 +2332,7 @@ A B C
 F G H
 .Sm
 R T Y";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 A B C F G H R T Y
 
@@ -2275,11 +2343,11 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn st() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .St -ansiC word
 .St -iso9945-1-96";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 ANSI X3.159-1989 (“ANSI C89”) word ISO/IEC 9945-1:1996 (“POSIX.1”)
 
@@ -2290,10 +2358,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn sx() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Sx MANUAL STRUCTURE";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 MANUAL STRUCTURE
 
@@ -2304,10 +2372,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn sy() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Sy word1 word2";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 word1 word2
 
@@ -2318,10 +2386,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn tg() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Tg term";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 
 footer text                     January 1, 1970                    footer text";
@@ -2331,10 +2399,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn tn() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Tn word1 word2";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 word1 word2
 
@@ -2345,10 +2413,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ud() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ud";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 currently under development.
 
@@ -2359,10 +2427,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn ux() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Ux";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 UNIX
 
@@ -2373,10 +2441,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn va() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Va const char *bar";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 const char *bar
 
@@ -2387,10 +2455,10 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn xr() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Xr mandoc 1";
-            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 mandoc(1)
 
