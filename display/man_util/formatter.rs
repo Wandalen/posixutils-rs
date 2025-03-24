@@ -20,6 +20,7 @@ static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Laz
 pub struct FormattingState {
     first_name: Option<String>,
     suppress_space: bool,
+    header_text: Option<String>,
     footer_text: Option<String>,
     spacing: String,
     date: Option<String>,
@@ -31,6 +32,7 @@ impl Default for FormattingState{
         Self { 
             first_name: None, 
             suppress_space: false, 
+            header_text: None,
             footer_text: None, 
             spacing: " ".to_string(),
             date: None,
@@ -68,7 +70,6 @@ impl MdocFormatter {
         false
     }
 
-    
     fn replace_unicode_escapes(&self, text: &str) -> String {
         REGEX_UNICODE.replace_all(text, |caps: &regex::Captures| {
             if let Some(hex) = caps.name("hex1").or_else(|| caps.name("hex2")).map(|m| m.as_str()) {
@@ -113,9 +114,19 @@ impl MdocFormatter {
                     current_line.push_str(word);
                     current_line.push(' ');
                 }
-            } else {
+            } else{
+                let is_all_control = formatted_node.chars().all(|ch|{
+                    ch.is_ascii_control()
+                });
+                if is_all_control{
+                    if let Some(' ') = current_line.chars().last(){
+                        current_line.pop();
+                    }
+                }
                 current_line.push_str(&formatted_node);
-                current_line.push(' ');
+                if !formatted_node.is_empty() && !is_all_control{                    
+                    current_line.push(' ');
+                }
             }
         }
 
@@ -123,9 +134,18 @@ impl MdocFormatter {
             lines.push(current_line.trim_end().to_string());
         }
 
+        lines.insert(
+            0,
+            self.formatting_state.header_text.clone()
+            .unwrap_or(self.format_default_header())
+        );
         lines.push(self.format_footer());
 
         lines.join("\n").into_bytes()
+    }
+
+    fn format_default_header(&mut self) -> String{
+        self.format_dt(None,"",None)
     }
 
     fn get_default_footer_text() -> String{
@@ -166,14 +186,20 @@ impl MdocFormatter {
             .into_iter()
             .collect::<String>();
 
-        format!(
+        let mut content = format!(
             "\n{}{}{}{}{}", 
             left_footer_text,
             space.clone(),
             date,
             space,
             right_footer_text
-        )
+        );
+
+        let missing_space = self.formatting_settings.width.saturating_sub(content.len() - 1);
+
+        content.insert_str(left_footer_text.len() + 1, &vec![" "; missing_space].join(""));
+
+        content
     }
 
     fn format_node(&mut self, node: Element) -> String {
@@ -729,8 +755,8 @@ impl MdocFormatter {
 
         let (offset, align) = if let Some(offset) = offset{
             match offset{
-                OffsetType::Indent => (6, OffsetType::Left),
-                OffsetType::IndentTwo => (12, OffsetType::Left),
+                OffsetType::Indent => (self.formatting_settings.indent, OffsetType::Left),
+                OffsetType::IndentTwo => (self.formatting_settings.indent * 2, OffsetType::Left),
                 OffsetType::Left => (0, OffsetType::Left),
                 OffsetType::Right => (0, OffsetType::Right),
                 OffsetType::Center => (0, OffsetType::Center)
@@ -790,6 +816,7 @@ impl MdocFormatter {
         let content = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
             .join(&self.formatting_state.spacing);
 
@@ -800,6 +827,7 @@ impl MdocFormatter {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
             .join(&self.formatting_state.spacing)
             .replace("\n", " ")
@@ -821,6 +849,7 @@ impl MdocFormatter {
         let content = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
             .join(&self.formatting_state.spacing);
 
@@ -831,6 +860,7 @@ impl MdocFormatter {
         let content = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
             .join(&self.formatting_state.spacing);
         
@@ -856,6 +886,7 @@ impl MdocFormatter {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join(" ")
     }
@@ -973,7 +1004,7 @@ impl MdocFormatter {
             _ => {
                 let last = items.last().unwrap();
                 let all_but_last = &items[..items.len()-1];
-                format!("{} and {}", all_but_last.join(", "), last)
+                format!("{}, and {}", all_but_last.join(", "), last)
             }
         };
 
@@ -1071,6 +1102,7 @@ impl MdocFormatter {
         macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join(" ")
     }
@@ -1159,6 +1191,7 @@ impl MdocFormatter {
     fn format_inline_macro(&self, macro_node: MacroNode) -> String {
         let mut result = String::new();
         let mut prev_was_open = false;
+        let mut is_first_node = true;
 
         for node in macro_node.nodes {
             match node {
@@ -1175,13 +1208,25 @@ impl MdocFormatter {
                         _ => {
                             match prev_was_open {
                                 true  => result.push_str(&self.format_text_node(&text)),
-                                false => result.push_str(&format!(" {}", self.format_text_node(&text))),
+                                false => {
+                                    let offset = if is_first_node{
+                                        ""
+                                    }else{
+                                        " "
+                                    };
+                                    let formatted_node = format!("{}{}", offset, self.format_text_node(&text));
+                                    result.push_str(&formatted_node);
+                                },
                             }
                             prev_was_open = false;
                         }
                     }
                 },
                 _ => unreachable!("macro can't contain macro node or EOI!")
+            }
+
+            if is_first_node{
+                is_first_node = false;
             }
         }
 
@@ -1256,10 +1301,11 @@ impl MdocFormatter {
         }
     }
 
-    fn format_dt(&self, title: Option<String>, section: &str, arch: Option<String>) -> String {
+    fn format_dt(&mut self, title: Option<String>, section: &str, arch: Option<String>) -> String {
         let title = match title {
             Some(name) => format!("{name}({section})"),
-            None => format!("UNTITLED({section})")
+            None if section.is_empty() => format!("UNTITLED"), 
+            _ => format!("UNTITLED({section})")
         };
 
         let section = match section {
@@ -1272,6 +1318,7 @@ impl MdocFormatter {
             "7" => "Miscellaneous Information Manual",
             "8" => "System Manager's Manual",
             "9" => "Kernel Developer's Manual",
+            _ if section.is_empty() => "LOCAL",
             _   => section
         };
 
@@ -1308,7 +1355,8 @@ impl MdocFormatter {
             line.push_str(&" ".repeat(self.formatting_settings.width - final_len));
         }
 
-        line
+        self.formatting_state.header_text = Some(line + "\n");
+        String::new()
     }
 
     fn format_dx(&self, macro_node: MacroNode) -> String {
@@ -1357,6 +1405,7 @@ impl MdocFormatter {
         let mut content = macro_node.nodes.clone()
             .into_iter()
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
             .join(", ");
 
@@ -1421,6 +1470,7 @@ impl MdocFormatter {
         let content = macro_node.nodes
             .into_iter()
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
             .join(", ");
         
@@ -1453,7 +1503,7 @@ impl MdocFormatter {
     }
 
     fn format_lb(&self, lib_name: &str) -> String {
-        format!("Mandoc Macro Compiler Library ({lib_name}, -lmandoc)")
+        format!("library “{lib_name}”")
     }
 
     fn format_li(&mut self, macro_node: MacroNode) -> String {
@@ -1524,18 +1574,21 @@ impl MdocFormatter {
     fn format_rv(&mut self, macro_node: MacroNode) -> String {
         let mut content = macro_node.nodes.clone()
             .into_iter()
+            .take(macro_node.nodes.len().saturating_sub(1))
             .map(|node| self.format_node(node))
+            .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
             .join("(), ");
 
         if macro_node.nodes.is_empty(){
             content = self.formatting_state.first_name.clone().unwrap_or_default();
-        }
-
-        content.push_str("()");
-
-        if let Some(pos) = content.rfind(","){
-            content.replace_range(pos..(pos + 1), " and");
+        }else if let Some(formatted_node) = macro_node.nodes.iter().last(){
+            let formatted_node = self.format_node(formatted_node.clone());
+            if macro_node.nodes.len() == 1{
+                content = format!("{formatted_node}()");
+            }else{
+                content.push_str(&format!("(), and {formatted_node}()"));
+            }
         }
 
         let ending_1 = if macro_node.nodes.len() <= 1 {
@@ -2606,8 +2659,7 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Er ERROR ERROR2
-.Er";
+.Er ERROR ERROR2";
             let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 ERROR ERROR2
@@ -3005,7 +3057,7 @@ footer text                     January 1, 1970                    footer text";
 .Ar value Pf $ Ar variable_name";
             let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-value $variable_name
+value $ variable_name
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -3186,8 +3238,7 @@ footer text                     January 1, 1970                    footer text";
 
 mandoc(1)
 
-Debian                          January 1, 1970
-Debian";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     }
