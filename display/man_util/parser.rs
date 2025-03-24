@@ -1607,11 +1607,9 @@ impl MdocParser {
 
             let st_type = StType::from(inner.next().unwrap());
 
-            let nodes = inner.map(MdocParser::parse_element).collect();
-
             Element::Macro(MacroNode {
                 mdoc_macro: Macro::St(st_type),
-                nodes,
+                nodes: vec![],
             })
         }
 
