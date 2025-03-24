@@ -41,6 +41,7 @@ pub enum OffsetType {
     IndentTwo,
     Left,
     Right,
+    Center
 }
 
 impl From<Pair<'_, Rule>> for OffsetType {
