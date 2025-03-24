@@ -15,7 +15,6 @@ WHITESPACE = _{ " " | "\t" }
 
 ws         = _{ WHITESPACE }
 NEWLINE    = _{ "\r"? ~ "\n" }
-// _COMMENT   = { ".\\\"" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
 
 // -- Macro name separator to not allow merging macro name with arguments
 
@@ -29,11 +28,6 @@ line      = { !"." ~ (comment_macro | text_non_comment)+ }
 expr_arg = @{ (!("\"" | ws | NEWLINE) ~ ANY)+ }
 word     = @{ (!(NEWLINE | ws) ~ ANY)+ }
 text_arg = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ }
-
-// word             = @{ (!(separated_delimiter | ws | NEWLINE) ~ ANY)+ | delimiter }
-// text_arg         = @{ ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") | (!(separated_delimiter | ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ | delimiter }
-// text_non_comment = @{ (!(separated_delimiter | comment_start | NEWLINE) ~ ANY)+ }
-// line             = { (!"." ~ (comment_macro | text_non_comment)+) | delimiter }
 
 // -- List of Callable macros
 macro_arg = { 
@@ -435,15 +429,72 @@ at_type     =  {
   | at_3
   | at_system_v
 }
-at          = ${ "At"  ~ !text_arg ~ (ws+ ~ (at_type | text_arg))? ~ ws* ~ NEWLINE? }
-bsx         = ${ "Bsx" ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
-bx          = ${ "Bx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
-dx          = ${ "Dx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
-fx          = ${ "Fx"  ~ !text_arg ~ (ws+ ~ text_arg)? ~ ws* ~ NEWLINE? }
-nx          = ${ "Nx"  ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
-ox          = ${ "Ox"  ~ !text_arg ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
 
-rv          = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
+at = ${ 
+  "At" 
+  ~ !text_arg
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ (at_type | text_arg))? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+bsx = ${ 
+  "Bsx" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+bx = ${ 
+  "Bx" 
+  ~ !text_arg
+  ~ (ws+ ~ opening_delimiter)*
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)?
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+dx = ${ 
+  "Dx" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+fx = ${ 
+  "Fx" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+nx = ${ 
+  "Nx" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)?
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+ox = ${ 
+  "Ox" 
+  ~ !text_arg 
+  ~ (ws+ ~ opening_delimiter)* 
+  ~ (ws+ ~ !closing_delimiter ~ text_arg)?
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ ws* ~ NEWLINE? 
+}
+
+rv = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 
 // C Language Standards
 st_ansiC      = { "-ansiC" }
@@ -576,7 +627,7 @@ dd               = ${ "Dd" ~ !text_arg ~ (ws+ ~ ("$" ~ "Mdocdate" ~ ":"? ~ ws*)?
 // -- Dt
 
 title   = ${ !ASCII_DIGIT ~ word }
-section = ${ ASCII_DIGIT }
+section = ${ word }
 arch    = ${ text_arg }
 dt      = ${ "Dt" ~ !text_arg ~ (ws+ ~ title)? ~ ws+ ~ section ~ (ws+ ~ arch)? ~ ws* ~ NEWLINE? }
 

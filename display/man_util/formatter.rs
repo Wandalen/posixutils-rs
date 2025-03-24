@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::format};
 use aho_corasick::AhoCorasick;
 use chrono::NaiveDate;
 use terminfo::Database;
 use crate::FormattingSettings;
 
-use super::{mdoc_macro::{text_production::*, types::*, Macro}, parser::{Element, MacroNode, MdocDocument}};
+use super::{mdoc_macro::{text_production::*, types::*, Macro}, parser::{Element, MacroNode, MdocDocument, MdocParser, Rule}};
 
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(r"(?x)
@@ -23,7 +23,8 @@ pub struct FormattingState {
     suppress_space: bool,
     footer_text: Option<String>,
     spacing: String,
-    date: Option<String>
+    date: Option<String>,
+    split_mod: bool
 }
 
 impl Default for FormattingState{
@@ -33,7 +34,8 @@ impl Default for FormattingState{
             suppress_space: false, 
             footer_text: None, 
             spacing: " ".to_string(),
-            date: None
+            date: None,
+            split_mod: false
         }
     }
 }
@@ -103,13 +105,17 @@ impl MdocFormatter {
         
         for node in ast.elements {
             let formatted_node = self.format_node(node);
-            for word in formatted_node.split_whitespace() {
-                if current_line.chars().count() + word.chars().count() >= max_width {
-                    lines.push(current_line.trim_end().to_string());
-                    current_line.clear();
+            if current_line.chars().count() + formatted_node.chars().count() > max_width {
+                for word in formatted_node.split_whitespace() {
+                    if current_line.chars().count() + word.chars().count() >= max_width {
+                        lines.push(current_line.trim_end().to_string());
+                        current_line.clear();
+                    }
+                    current_line.push_str(word);
+                    current_line.push(' ');
                 }
-
-                current_line.push_str(word);
+            } else {
+                current_line.push_str(&formatted_node);
                 current_line.push(' ');
             }
         }
@@ -220,12 +226,10 @@ impl MdocFormatter {
             Macro::U => self.format_u(macro_node),
 
             // Text production macros.
-            Macro::At(at_type)    => self.format_at(at_type),
-            Macro::Bsx(bsx_type) => self.format_bsx(bsx_type),
-            Macro::Bx(bx_type)    => self.format_bx(bx_type),
-            Macro::Dx(dx_type)    => self.format_dx(dx_type),
-
-            // Rest.
+            Macro::At => self.format_at(macro_node),
+            Macro::Bsx => self.format_bsx(macro_node),
+            Macro::Bx => self.format_bx(macro_node),
+            Macro::Dx => self.format_dx(macro_node),
             Macro::Ad => self.format_ad(macro_node),
             Macro::Ap => self.format_ap(),
             Macro::Ar => self.format_ar(macro_node),
@@ -235,7 +239,7 @@ impl MdocFormatter {
             Macro::Db => self.format_db(),
             Macro::Dv => self.format_dv(macro_node),
             Macro::Em => self.format_em(macro_node),
-            // Macro::An { author_name_type } => unimplemented!(),
+            Macro::An { author_name_type } => self.format_an(author_name_type, macro_node),
             Macro::Dd { date } => self.format_dd(date),
             Macro::Dt { title, section, arch } => self.format_dt(title.clone(), section.as_str(), arch.clone()),
            
@@ -249,7 +253,7 @@ impl MdocFormatter {
             Macro::Fn{ funcname  } => self.format_fn(funcname.as_str(), macro_node),
             Macro::Fr => self.format_fr(macro_node),
             Macro::Ft => self.format_ft(macro_node),
-            Macro::Fx(fx_type) => self.format_fx(fx_type),
+            Macro::Fx => self.format_fx(macro_node),
             Macro::Hf => self.format_hf(macro_node),
             Macro::Ic => self.format_ic(macro_node),
             Macro::In{ filename  } => self.format_in(filename.as_str()),
@@ -262,10 +266,10 @@ impl MdocFormatter {
             Macro::Nm => self.format_nm(macro_node),
             Macro::No => self.format_no(macro_node),
             Macro::Ns => self.format_ns(),
-            Macro::Nx(nx_type) => self.format_nx(nx_type),
+            Macro::Nx => self.format_nx(macro_node),
             Macro::Os => self.format_os(macro_node),
             Macro::Ot => self.format_ot(macro_node),
-            Macro::Ox(ox_type) => self.format_ox(ox_type),
+            Macro::Ox => self.format_ox(macro_node),
             Macro::Pa => self.format_pa(macro_node),
             Macro::Pf{ prefix } => self.format_pf(prefix.as_str()),
             Macro::Pp => self.format_pp(macro_node),
@@ -946,18 +950,118 @@ impl MdocFormatter {
 //  - Before the last '%A' macro has to be 'and' word. 
 //  - These macros have order!
 impl MdocFormatter {
-    fn format_rs_block(&self, _macro_node: MacroNode) -> String {
-        unimplemented!()
+    fn format_rs_block(&self, macro_node: MacroNode) -> String {
+        let mut iter = macro_node.nodes.into_iter();
+
+        let is_a = |el: &Element| match el {
+            Element::Macro(node) => node.mdoc_macro == Macro::A,
+            _ => unreachable!("Unexpected rule!"),
+        };
+
+        let items: Vec<String> = iter
+            .by_ref()
+            .take_while(|el| is_a(el))
+            .map(|el| match el {
+                Element::Macro(node) => self.format_a(node),
+                _ => unreachable!("Unexcpected rule!")
+            })
+            .collect();
+
+        let formatted_a = match items.len() {
+            0 => "".to_string(),
+            1 => items[0].clone(),
+            2 => format!("{} and {}", items[0], items[1]),
+            _ => {
+                let last = items.last().unwrap();
+                let all_but_last = &items[..items.len()-1];
+                format!("{} and {}", all_but_last.join(", "), last)
+            }
+        };
+
+        let formatted_all = iter
+            .map(|el| match el {
+                Element::Macro(node) => match node.mdoc_macro {
+                    Macro::B => self.format_b(node),
+                    Macro::C => self.format_c(node),
+                    Macro::D => self.format_d(node),
+                    Macro::I => self.format_i(node),
+                    Macro::J => self.format_j(node),
+                    Macro::N => self.format_n(node),
+                    Macro::O => self.format_o(node),
+                    Macro::P => self.format_p(node),
+                    Macro::Q => self.format_q(node),
+                    Macro::R => self.format_r(node),
+                    Macro::T => self.format_t(node),
+                    Macro::U => self.format_u(node),
+                    Macro::V => self.format_v(node),
+                    _ => unreachable!("Rs can not contain macro: {:?}", node),
+                },
+                _ => unreachable!("Unexpected element type!"),
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        match (formatted_a.is_empty(), formatted_all.is_empty()) {
+            (true, true)   => "".to_string(),
+            (true, false)  => format!("{}.", formatted_all),
+            (false, true)  => format!("{}.", formatted_a),
+            (false, false) => format!("{}, {}.", formatted_a, formatted_all)
+        }
     }
     
-    fn format_d(&self, month_day: Option<String>, year: i32) -> String {
-        match month_day {
-            Some(md) => format!("{md} {year}"),
-            None => format!("{year}")
-        }
+    fn format_a(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_b(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_c(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_d(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_i(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_j(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_n(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_o(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
     fn format_p(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_q(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_r(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_t(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_u(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_v(&self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
     }
 }
@@ -1065,7 +1169,7 @@ impl MdocFormatter {
                             result.push_str(&text);
                             prev_was_open = true;
                         },
-                        ")" | "]" => {
+                        ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
                             result.push_str(&text);
                             prev_was_open = false;
                         },
@@ -1089,23 +1193,22 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_b(&self, macro_node: MacroNode) -> String {
-        // self.format_inline_macro(book_title)
-        todo!()
-    }
-
-    fn format_t(&self, macro_node: MacroNode) -> String {
-        // self.format_inline_macro(uri)
-        todo!()
-    }
-
-    fn format_u(&self, macro_node: MacroNode) -> String {
-        // self.format_inline_macro(uri)
-        todo!()
-    }
-
     fn format_ap(&self) -> String {
         "'".to_string()
+    }
+
+    fn format_an(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
+        match AnType {
+            AnType::NoSplit => self.formatting_state.split_mod = false,
+            AnType::Split   => self.formatting_state.split_mod = true,
+            AnType::Name    => {
+                let content = self.format_inline_macro(macro_node);
+                match self.formatting_state.split_mod {
+                    true  => format!("{}\n", content),
+                    false => content
+                }
+            }
+        }
     }
 
     fn format_ar(&self, macro_node: MacroNode) -> String {
@@ -1164,7 +1267,7 @@ impl MdocFormatter {
             "7" => "Miscellaneous Information Manual",
             "8" => "System Manager's Manual",
             "9" => "Kernel Developer's Manual",
-            _   => ""
+            _   => section
         };
 
         let section = if let Some(val) = arch {
@@ -1203,9 +1306,8 @@ impl MdocFormatter {
         line
     }
 
-    fn format_dx(&self, dx_type: DxType) -> String {
-        // format!("{}", dx_type)
-        todo!()
+    fn format_dx(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
     fn format_dd(&mut self, date: DdDate) -> String {
@@ -1221,20 +1323,17 @@ impl MdocFormatter {
         self.formatting_state.date = Some(date.clone());
         String::new()
     }
-
-    fn format_bx(&self, bx_type: BxType) -> String {
-        // format!("{}", bx_type)
-        todo!()
+    
+    fn format_bx(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
-    fn format_bsx(&self, bsx_type: BsxType) -> String {
-        // format!("{}", bsx_type)
-        todo!()
+    fn format_bsx(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
-    fn format_at(&self, at_type: AtType) -> String {
-        // format!("{}", at_type)
-        todo!()
+    fn format_at(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
     fn format_er(&mut self, macro_node: MacroNode) -> String {
@@ -1331,8 +1430,9 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_fx(&self, fx_type: FxType) -> String {
-        fx_type.to_string()
+
+    fn format_fx(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
     fn format_hf(&mut self, macro_node: MacroNode) -> String {
@@ -1382,8 +1482,8 @@ impl MdocFormatter {
         String::new()
     }
 
-    fn format_nx(&self, nx_type: NxType) -> String {
-        nx_type.to_string()
+    fn format_nx(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
     fn format_os(&mut self, macro_node: MacroNode) -> String {
@@ -1399,8 +1499,8 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_ox(&self, ox_type: OxType) -> String {
-        ox_type.to_string()
+    fn format_ox(&self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
     }
 
     fn format_pa(&mut self, macro_node: MacroNode) -> String {
@@ -1516,6 +1616,7 @@ mod tests {
         let ast = get_ast(input);
 
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
+        println!("{:?}", formatter);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
         assert_eq!(output, result)
     }
@@ -1868,12 +1969,631 @@ footer text                     January 1, 1970                    footer text";
     }
 
     mod inline {
+        use std::process::Output;
         use crate::man_util::formatter::tests::test_formatting;
+
+        mod rs_submacro {
+            use super::*;
+
+            #[test]
+            fn a() {
+                let input = r".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%A author name
+.Re
+.Rs
+.%A author name1
+.%A author name2
+.Re
+.Rs
+.%A author name1
+.%A author name2
+.%A author name3
+.Re
+.Rs
+.%A ( author ) name1
+.%A author , name2
+.%A author name3 !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+author name. author name1 and author name2. author name1, author name2, and
+author name3. (author) name1, author, name2, and author name3!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn b() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%B book title
+.Re
+.Rs
+.%B book title
+.%B book title
+.Re
+.Rs
+.%B ( book ) title
+.%B book , title
+.%B book title !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+book title. book title, book title. (book) title, book, title, book title!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn c() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%C Publication city
+.Re
+.Rs
+.%C Publication city
+.%C Publication city
+.Re
+.Rs
+.%C ( Publication ) city
+.%C Publication , city
+.%C Publication city !
+.Re";
+
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Publication city. Publication city, Publication city. (Publication) city,
+Publication, city, Publication city!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn d() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%D January 1, 1970
+.Re
+.Rs
+.%D January 1 1970
+.%D first january 1970
+.Re
+.Rs
+.%D ( March ) 1189
+.%D 12 , 1900
+.%D 12 of March, 1970 !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+January 1, 1970. January 1 1970, first january 1970. (March) 1189, 12, 1900,
+12 of March, 1970!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn i() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%I issuer name
+.Re
+.Rs
+.%I issuer name
+.%I issuer name
+.Re
+.Rs
+.%I ( issuer ) name
+.%I issuer , name
+.%I issuer name !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+issuer name. issuer name, issuer name. (issuer) name, issuer, name, issuer
+name!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn j() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%J Journal name
+.Re
+.Rs
+.%J Journal name
+.%J Journal name
+.Re
+.Rs
+.%J ( Journal ) name
+.%J Journal , name
+.%J Journal name !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Journal name. Journal name, Journal name. (Journal) name, Journal, name,
+Journal name!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn n() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%N Issue number
+.Re
+.Rs
+.%N Issue number
+.%N Issue number
+.Re
+.Rs
+.%N ( Issue ) number
+.%N Issue , number
+.%N Issue number !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Issue number. Issue number, Issue number. (Issue) number, Issue, number,
+Issue number!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn o() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%O Optional information
+.Re
+.Rs
+.%O Optional information
+.%O Optional information
+.Re
+.Rs
+.%O ( Optional ) information
+.%O Optional , information
+.%O Optional information !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Optional information. Optional information, Optional information. (Optional)
+information, Optional, information, Optional information!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn p() {
+                let input = r".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%P pp. 42\(en47
+.Re
+.Rs
+.%P pp. 42\(en47
+.%P p. 42
+.Re
+.Rs
+.%P ( p. 42 ) p. 43
+.%P pp. 42 , 47
+.%P pp. 42\(en47 !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+pp. 42–47. pp. 42–47, p. 42. (p. 42) p. 43, pp. 42, 47, pp. 42–47!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn q() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%Q Institutional author
+.Re
+.Rs
+.%Q Institutional author
+.%Q Institutional author
+.Re
+.Rs
+.%Q ( Institutional ) author
+.%Q Institutional , author
+.%Q Institutional author !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Institutional author. Institutional author, Institutional author.
+(Institutional) author, Institutional, author, Institutional author!.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn r() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%R Technical report
+.R
+.Rs
+.%R Technical report
+.%R Technical report
+.Re
+.Rs
+.%R ( Technical report ) Technical report
+.%R Technical report , Technical report
+.%R Technical report !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Technical report, Technical report. (Technical report) Technical report,
+Technical report, Technical report, Technical report!. Technical report.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn t() {
+                let input = r".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%T Article title
+.R
+.Rs
+.%T Article title
+.%T Article title
+.Re
+.Rs
+.%T ( Article title ) Article title
+.%T Article title , Article title
+.%T Article title !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Article title, Article title. (Article title) Article title, Article title,
+Article title, Article title!. Article title.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn u() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%U  protocol://path
+.R
+.Rs
+.%U  protocol://path
+.%U  protocol://path
+.Re
+.Rs
+.%U (  protocol://path )  protocol://path
+.%U  protocol://path ,  protocol://path
+.%U  protocol://path !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Article title, Article title. (Article title) Article title, Article title,
+Article title, Article title!. Article title.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn v() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rs
+.%V Volume number
+.R
+.Rs
+.%V Volume number
+.%V Volume number
+.Re
+.Rs
+.%V ( Volume number ) Volume number
+.%V Volume number , Volume number
+.%V Volume number !
+.Re";
+                let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+Volume number, Volume number. (Volume number) Volume number, Volume number,
+Volume number, Volume number!. Volume number.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+        }
+
+        #[test]
+        fn ad() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ad [0,$]
+.Ad 0x00000000
+.Ad [ 0,$ ]";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+[0,$] 0x00000000 [0,$]
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn an() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+.An -split
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An -nosplit
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv> Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv> Kristaps Dzonsons <kristaps@bsd.lv>
+Kristaps Dzonsons <kristaps@bsd.lv>
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn ap() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ap";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+'
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn ar() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ar
+.Ar arg1 , arg2 .";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+file ... arg1, arg2.
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn at() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.At
+.At III
+.At V.1
+.At ( V.1 )";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+AT&T UNIX AT&T System III UNIX AT&T System V Release 1 UNIX (AT&T System V
+Release 1 UNIX)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bsx() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bsx 1.0
+.Bsx
+.Bsx ( 1.0 )";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+BSD/OS 1.0 BSD/OS (BSD/OS 1.0)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bt() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bt";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+is currently in beta test.
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn bx() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bx 4.3 Tahoe
+.Bx 4.4
+.Bx
+.Bx ( 4.3 Tahoe )";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+4.3BSD-Tahoe 4.4BSD BSD (4.3BSD-Tahoe)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn cd() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Cd device le0 at scode?";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+device le0 at scode?
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn cm() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Cm file bind";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+file bind
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn db() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Db";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn dd() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text";
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
 
         #[test]
         fn dt() {
-            let input = ".Dt TITLE 7 arch";
-            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)";
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn dv() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+.Dv NULL
+.Dv BUFSIZ
+.Dv STDOUT_FILEnmo";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+NULL BUFSIZ STDOUT_FILEnmo
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn dx() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+.Dx 2.4.1
+.Dx ( 2.4.1 )
+";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+DragonFly 2.4.1 (DragonFly 2.4.1)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn em() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+Selected lines are those
+.Em not
+matching any of the specified patterns.
+Some of the functions use a
+.Em hold space
+to save the pattern space for subsequent retrieval.";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+Selected lines are those not matching any of the specified patterns.  Some of
+the functions use a hold space to save the pattern space for subsequent
+retrieval.
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
@@ -2532,6 +3252,28 @@ line Text loooooooong line Text loooooooong line Text loooooooong line⟩"#;
             let output = r#"⟨addr addr addr Text
 looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong
 line⟩"#;
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn rs_block() {
+            let input = ".Dd January 1, 1970
+.Dt TITLE 7 arch
+.Os footer text
+.Rs
+.%A J. E. Hopcroft
+.%A J. D. Ullman
+.%B Introduction to Automata Theory, Languages, and Computation
+.%I Addison-Wesley
+.%C Reading, Massachusetts
+.%D 1979
+.Re";
+            let output = "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
+J. E. Hopcroft and J. D. Ullman, Introduction to Automata Theory, Languages,
+and Computation, Addison-Wesley, Reading, Massachusetts, 1979.
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     }

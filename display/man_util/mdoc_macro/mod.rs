@@ -38,7 +38,7 @@ pub enum Macro {
     Ap,
     Aq,
     Ar,
-    At(AtType),
+    At,
     Bd {
         block_type: BdType,
         offset: Option<OffsetType>,
@@ -62,9 +62,9 @@ pub enum Macro {
     Bro,
     Brc, // Close a Bro block
     Brq,
-    Bsx(BsxType),
+    Bsx,
     Bt,
-    Bx(BxType),
+    Bx,
     Cd,
     Cm,
     D1,
@@ -82,7 +82,7 @@ pub enum Macro {
         arch: Option<String>,
     },
     Dv,
-    Dx(DxType),
+    Dx,
     Em,
     En,
     Eo {
@@ -112,7 +112,7 @@ pub enum Macro {
     Fc, // End a function context started by Fo
     Fr, // Obsolete
     Ft,
-    Fx(FxType),
+    Fx,
     Hf,
     Ic,
     In {
@@ -135,13 +135,13 @@ pub enum Macro {
     Nm,
     No,
     Ns,
-    Nx(NxType),
+    Nx,
     Oo,
     Oc, // Close multi-line Oo context
     Op,
     Os,
     Ot,
-    Ox(OxType),
+    Ox,
     Pa,
     Pf{
         prefix: String
