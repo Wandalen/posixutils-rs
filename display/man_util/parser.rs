@@ -9783,7 +9783,7 @@ Line
 
         #[test]
         #[allow(non_snake_case)]
-        fn Fn() {
+        fn r#fn() {
             let input = ".Fn \"int funcname\" \"int arg0\" \"int arg1\"\n.Fn funcname \"int arg0\"\n.Fn funcname arg0";
             let elements = vec![
                 Element::Macro(MacroNode {
@@ -9819,13 +9819,13 @@ Line
 
         #[test]
         #[allow(non_snake_case)]
-        fn Fn_no_args() {
+        fn fn_no_args() {
             assert!(MdocParser::parse_mdoc(".Fn").is_err());
         }
 
         #[test]
         #[allow(non_snake_case)]
-        fn Fn_parsed() {
+        fn fn_parsed() {
             let input = ".Fn funcname arg Ft int";
             let elements = vec![
                 Element::Macro(MacroNode {
@@ -9850,7 +9850,7 @@ Line
 
         #[test]
         #[allow(non_snake_case)]
-        fn Fn_callable() {
+        fn fn_callable() {
             let input = ".Ft functype Fn funcname";
             let elements = vec![
                 Element::Macro(MacroNode {
@@ -10202,7 +10202,7 @@ Line
 
         #[test]
         #[allow(non_snake_case)]
-        fn In() {
+        fn r#in() {
             let input = ".In stdatomic.h";
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::In {
@@ -10217,13 +10217,13 @@ Line
 
         #[test]
         #[allow(non_snake_case)]
-        fn In_no_args() {
+        fn in_no_args() {
             assert!(MdocParser::parse_mdoc(".In").is_err());
         }
 
         #[test]
         #[allow(non_snake_case)]
-        fn In_parsed() {
+        fn in_parsed() {
             let input = ".In stdio.h Ad addr";
             let elements = vec![
                 Element::Macro(MacroNode { 
@@ -10246,7 +10246,7 @@ Line
 
         #[test]
         #[allow(non_snake_case)]
-        fn In_callable() {
+        fn in_callable() {
             let input = ".Ad addr In stdatomic.c";
             let elements = vec![
                 Element::Macro(MacroNode {
