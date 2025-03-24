@@ -179,7 +179,7 @@ fn get_man_page(name: &str) -> Result<Vec<u8>, ManError> {
 fn get_pager_settings() -> Result<FormattingSettings, ManError> {
     let mut ps = FormattingSettings {
         width: 78,
-        indent: 5,
+        indent: 6,
     };
 
     if !std::io::stdout().is_terminal() {
