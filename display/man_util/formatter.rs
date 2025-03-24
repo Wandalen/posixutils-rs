@@ -1,10 +1,9 @@
-use std::{collections::HashMap, fmt::format};
+use std::collections::HashMap;
 use aho_corasick::AhoCorasick;
-use chrono::NaiveDate;
 use terminfo::Database;
 use crate::FormattingSettings;
 
-use super::{mdoc_macro::{text_production::*, types::*, Macro}, parser::{Element, MacroNode, MdocDocument, MdocParser, Rule}};
+use super::{mdoc_macro::{text_production::*, types::*, Macro}, parser::{Element, MacroNode, MdocDocument}};
 
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(r"(?x)
@@ -1198,9 +1197,15 @@ impl MdocFormatter {
     }
 
     fn format_an(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
-        match AnType {
-            AnType::NoSplit => self.formatting_state.split_mod = false,
-            AnType::Split   => self.formatting_state.split_mod = true,
+        match an_type {
+            AnType::NoSplit => {
+                self.formatting_state.split_mod = false;
+                String::new()
+            },
+            AnType::Split   => {
+                self.formatting_state.split_mod = true;
+                String::new()
+            },
             AnType::Name    => {
                 let content = self.format_inline_macro(macro_node);
                 match self.formatting_state.split_mod {
@@ -1969,7 +1974,6 @@ footer text                     January 1, 1970                    footer text";
     }
 
     mod inline {
-        use std::process::Output;
         use crate::man_util::formatter::tests::test_formatting;
 
         mod rs_submacro {
