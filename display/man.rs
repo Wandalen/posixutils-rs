@@ -40,6 +40,9 @@ struct Args {
 
     #[arg(short = "C", long = "config", help = "Use the specified file instead of the default configuration file.")]
     config: Option<PathBuf>,
+
+    #[arg(short, long, default = false, help = "Copy the manual page to the standard output instead of using less(1) to paginate it.")]
+    copy: bool
 }
 
 #[derive(Error, Debug)]
@@ -357,13 +360,15 @@ fn format_man_page(man_page: Vec<u8>) -> Result<Vec<u8>, ManError> {
 /// # Errors
 ///
 /// [ManError] if failed to execute pager or failed write to its STDIN.
-fn display_pager(man_page: Vec<u8>) -> Result<(), ManError> {
-    let pager = std::env::var("PAGER").unwrap_or_else(|_| "more".to_string());
+fn display_pager(man_page: Vec<u8>, c: bool) -> Result<(), ManError> {
+    let pager = match c {
+        true  => String::new(),
+        false => std::env::var("PAGER").unwrap_or_else(|_| "less".to_string())
+    };
 
-    let args = if pager.ends_with("more") {
-        vec!["-s"]
-    } else {
-        vec![]
+    let args = match pager.ends_with("less") {
+        true  => vec!["-s"],
+        false => ve![]
     };
 
     spawn(&pager, args, Some(&man_page), Stdio::inherit())?;
@@ -380,10 +385,11 @@ fn display_pager(man_page: Vec<u8>) -> Result<(), ManError> {
 /// # Errors
 ///
 /// [ManError] if man page not found, or any display error happened.
-fn display_man_page(name: &str) -> Result<(), ManError> {
+fn display_man_page(name: &str, c: bool) -> Result<(), ManError> {
     let cat_output = get_man_page(name)?;
     let formatter_output = format_man_page(cat_output)?;
-    display_pager(formatter_output)?;
+
+    display_pager(formatter_output, c)?;
 
     Ok(())
 }
@@ -397,14 +403,14 @@ fn display_man_page(name: &str) -> Result<(), ManError> {
 /// # Errors
 ///
 /// [ManError] if no pages are found or any display error occurs.
-fn display_all_man_pages(name: &str) -> Result<(), ManError> {
+fn display_all_man_pages(name: &str, c: bool) -> Result<(), ManError> {
     let all_paths = get_all_man_page_paths(name)?;
 
     for path in all_paths {
         let cat_output = get_man_page_from_path(&path)?;
         let formatter_output = format_man_page(cat_output)?;
         
-        display_pager(formatter_output)?;
+        display_pager(formatter_output, c)?;
     }
 
     Ok(())
@@ -432,8 +438,6 @@ fn display_summary_database(keyword: &str) -> Result<bool, ManError> {
         Ok(false)
     }
 }
-
-
 
 /// Main function that handles the program logic. It processes the input
 /// arguments, and either displays man pages or searches the summary database.
@@ -471,9 +475,9 @@ fn man(args: Args) -> Result<bool, ManError> {
     } else {
         for name in &args.names {
             let result = if args.all {
-                display_all_man_pages(name);
+                display_all_man_pages(name, args.copy);
             } else {
-                display_man_page(name);
+                display_man_page(name, args.copy);
             };
 
             if let Err(err) = result {
