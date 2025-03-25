@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use man_util::config::{parse_config_file, ManConfig};
 use man_util::formatter::MdocFormatter;
@@ -28,31 +28,70 @@ const MAN_SECTIONS: [i8; 9] = [1, 8, 2, 3, 4, 5, 6, 7, 9];
 const MAN_CONFS: [&str; 2] = ["/etc/man.conf", "/etc/examples/man.conf"];
 
 #[derive(Parser)]
-#[command(version, about = gettext("man - display system documentation"))]
+#[command(version, disable_help_flag = true, about = gettext("man - display system documentation"))]
 struct Args {
-    #[arg(short = 'k', long, help = gettext("Interpret name operands as keywords for searching the summary database."))]
+    #[arg(
+        short = 'k', 
+        long, 
+        help = gettext("Interpret name operands as keywords for searching the summary database.")
+    )]
     apropos: bool,
 
-    #[arg(short, long, help = gettext("Names of the utilities or keywords to display documentation for."))]
+    #[arg(
+        help = gettext("Names of the utilities or keywords to display documentation for."), 
+        num_args = 1..
+    )]
     names: Vec<String>,
 
-    #[arg(short, long, help = "Display all matching manual pages.")]
+    #[arg(
+        short, 
+        long, 
+        help = "Display all matching manual pages."
+    )]
     all: bool,
 
-    #[arg(short = 'C', long = "config-file", help = "Use the specified file instead of the default configuration file.")]
+    #[arg(
+        short = 'C', 
+        long, 
+        help = "Use the specified file instead of the default configuration file."
+    )]
     config_file: Option<PathBuf>,
 
-    #[arg(short, long, help = "Copy the manual page to the standard output instead of using less(1) to paginate it.")]
+    #[arg(
+        short, 
+        long, 
+        help = "Copy the manual page to the standard output."
+    )]
     copy: bool,
 
-    #[arg(short = 'f', long = "whatis", help = "A synonym for whatis(1).")]
+    #[arg(
+        short = 'f', 
+        long, 
+        help = "A synonym for whatis(1)."
+    )]
     whatis: bool,
 
-    // #[arg(short = 'h', long, help = "Display only the SYNOPSIS lines of the requested manual pages.")]
-    // header: bool,
+    #[arg(
+        short = 'h', 
+        long, 
+        help = "Display only the SYNOPSIS lines of the requested manual pages."
+    )]
+    synopsis: bool,
 
-    #[arg(short = 'l', long = "local-file", help = "interpret PAGE argument(s) as local filename(s)")]
+    #[arg(
+        short = 'l', 
+        long = "local-file", 
+        help = "interpret PAGE argument(s) as local filename(s)", 
+        num_args = 1..
+    )]
     local_file: Option<Vec<PathBuf>>,
+
+    #[arg(
+        long = "help",
+        action = ArgAction::Help,
+        help = "Print help information"
+    )]
+    help: Option<bool>,
 }
 
 /// Common errors that might occur.
@@ -343,7 +382,6 @@ fn display_summary_database(command: &str, keyword: &str) -> Result<bool, ManErr
     Ok(status.success())
 }
 
-
 //
 // ──────────────────────────────────────────────────────────────────────────────
 //  MAIN LOGIC FUNCTION
@@ -356,19 +394,21 @@ fn man(args: Args) -> Result<bool, ManError> {
     let config = parse_config_file(config_path)?;
     let formatting = get_pager_settings(&config)?;
 
+    let mut no_errors = true;
+   
     if let Some(paths) = args.local_file {
         if paths.iter().any(|path| !path.exists()) {
             return Err(ManError::PageNotFound(format!("One of the provided files was not found")))
         }
-
+        
         display_all_man_pages(paths, args.copy, &formatting)?;
+        
+        return Ok(no_errors);
     }
 
     if args.names.is_empty() {
         return Err(ManError::NoNames);
     }
-
-    let mut no_errors = true;
 
     if args.apropos || args.whatis {
         let command = if args.apropos {"apropos"} else {"whatis"};

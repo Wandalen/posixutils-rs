@@ -182,11 +182,13 @@ off_indent_two = { "indent-two" }
 off_indent     = { "indent" }
 off_left       = { "left" }
 off_right      = { "right" }
+off_center     = { "center" }
 offset         = {
     off_indent_two
   | off_indent
   | off_left
   | off_right
+  | off_center
 }
 
 compact = { "-compact" }
@@ -427,6 +429,7 @@ at_type     =  {
   | at_3
   | at_system_v
 }
+
 at = ${ 
   "At" 
   ~ !text_arg
