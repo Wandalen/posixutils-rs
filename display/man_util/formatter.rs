@@ -28,6 +28,7 @@ pub struct FormattingState {
     suppress_space: bool,
     header_text: Option<String>,
     footer_text: Option<String>,
+    date: String,
     spacing: String,
     split_mod: bool,
 }
@@ -39,6 +40,7 @@ impl Default for FormattingState {
             suppress_space: false,
             header_text: None,
             footer_text: None,
+            date: String::default(),
             spacing: " ".to_string(),
             split_mod: false,
         }
@@ -167,26 +169,34 @@ impl MdocFormatter {
         String::new()
     }
 
-    fn format_footer(&self) -> String {
+    fn format_footer(&mut self) -> String {
         let footer_text = self
             .formatting_state
             .footer_text
             .clone()
             .unwrap_or(Self::get_default_footer_text());
 
-        let date = self.format_dd(chrono::Local::now().date_naive().into());
+        if self.formatting_state.date.is_empty() {
+            self.format_dd(chrono::Local::now().date_naive().into());
+        }
+
+        // let date = self
+        //     .formatting_state
+        //     .date
+        //     .clone()
+        //     .unwrap();
 
         let mut space_size = self
             .formatting_settings
             .width
-            .saturating_sub(2 * footer_text.len() + date.len())
+            .saturating_sub(2 * footer_text.len() + self.formatting_state.date.len())
             / 2;
 
         let mut left_footer_text = footer_text.clone();
         let mut right_footer_text = footer_text.clone();
 
         if space_size <= 1 {
-            space_size = self.formatting_settings.width.saturating_sub(date.len()) / 2;
+            space_size = self.formatting_settings.width.saturating_sub(self.formatting_state.date.len()) / 2;
 
             let space = vec![
                 " ";
@@ -207,7 +217,7 @@ impl MdocFormatter {
             "\n{}{}{}{}{}",
             left_footer_text,
             space.clone(),
-            date,
+            self.formatting_state.date,
             space,
             right_footer_text
         );
@@ -226,6 +236,7 @@ impl MdocFormatter {
     }
 
     fn format_node(&mut self, node: Element) -> String {
+        println!("Formatting: {:?}", node);
         match node {
             Element::Macro(macro_node) => self.format_macro_node(macro_node),
             Element::Text(text) => self.format_text_node(text.as_str()),
@@ -1001,21 +1012,29 @@ impl MdocFormatter {
 // Formatting Rs-Re bloock. Can contain only %* macros
 impl MdocFormatter {
     fn format_rs_block(&self, macro_node: MacroNode) -> String {
-        let mut iter = macro_node.nodes.into_iter();
+        let mut iter = macro_node.nodes.into_iter().peekable();
 
         let is_a = |el: &Element| match el {
             Element::Macro(node) => node.mdoc_macro == Macro::A,
             _ => unreachable!("Unexpected rule!"),
         };
 
-        let items: Vec<String> = iter
-            .by_ref()
-            .take_while(|el| is_a(el))
-            .map(|el| match el {
-                Element::Macro(node) => self.format_a(node),
-                _ => unreachable!("Unexcpected rule!"),
-            })
-            .collect();
+        let mut items = Vec::new();
+        while let Some(el) = iter.peek() {
+            if let Element::Macro(node) = el {
+                if node.mdoc_macro == Macro::A {
+                    let el = iter.next().unwrap();
+                    if let Element::Macro(node) = el {
+                        items.push(self.format_a(node));
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                unreachable!("Unexpected rule!");
+            }
+        }
+         
 
         let formatted_a = match items.len() {
             0 => "".to_string(),
@@ -1383,14 +1402,16 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_dd(&self, date: DdDate) -> String {
-        match date {
+    fn format_dd(&mut self, date: DdDate) -> String {
+        self.formatting_state.date = match date {
             DdDate::MDYFormat(dd_date) => format!(
                 "{} {}, {}",
                 dd_date.month_day.0, dd_date.month_day.1, dd_date.year
             ),
             DdDate::StrFormat(string) => string,
-        }
+        };
+
+        String::new()
     }
 
     fn format_bx(&self, macro_node: MacroNode) -> String {
@@ -3533,7 +3554,10 @@ footer text                     January 1, 1970                    footer text";
         fn block_empty() {
             let input = r#".Ao
 .Ac"#;
-            let output = "⟨⟩";
+            let output = "
+⟨⟩
+
+                                March 25, 2025                                ";
             test_formatting(input, output);
         }
 
@@ -3544,7 +3568,10 @@ footer text                     January 1, 1970                    footer text";
 .Ad addr 
 .Ad addr 
 .Ac"#;
-            let output = "⟨addr addr addr⟩";
+            let output = "
+⟨addr addr addr addr⟩
+
+                                March 25, 2025                                ";
             test_formatting(input, output);
         }
 
@@ -3561,17 +3588,23 @@ Text loooooooong line
 Text loooooooong line
 Text loooooooong line
 .Ac"#;
-            let output = r#"⟨addr addr addr Text loooooooong line Text loooooooong line Text loooooooong
-line Text loooooooong line Text loooooooong line Text loooooooong line⟩"#;
+            let output = r#"
+⟨addr addr addr Text loooooooong line Text loooooooong line Text loooooooong
+line Text loooooooong line Text loooooooong line Text loooooooong line⟩
+
+                                March 25, 2025                                "#;
             test_formatting(input, output);
         }
 
         #[test]
         fn block_overlong_line() {
             let input = r#".Aq Ad addr Ad addr Ad addr Text looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong line"#;
-            let output = r#"⟨addr addr addr Text
+            let output = r#"
+⟨addr addr addr Text
 looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong
-line⟩"#;
+line⟩
+
+                                March 25, 2025                                "#;
             test_formatting(input, output);
         }
 
