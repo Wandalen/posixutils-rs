@@ -226,16 +226,12 @@ fn get_pager_settings(config: &ManConfig) -> Result<FormattingSettings, ManError
     let mut width: usize = 78;
     let mut indent: usize = 5;
 
-    if let Some(opt_value) = config.output_options.get("indent") {
-        if let Some(val_str) = opt_value {
-            indent = val_str.parse::<usize>()?;
-        }
+    if let Some(Some(val_str)) = config.output_options.get("indent") {
+        indent = val_str.parse::<usize>()?;
     }
 
-    if let Some(opt_value) = config.output_options.get("width") {
-        if let Some(val_str) = opt_value {
-            width = val_str.parse::<usize>()?;
-        }
+    if let Some(Some(val_str)) = config.output_options.get("width") {
+        width = val_str.parse::<usize>()?;
     }
 
     let mut settings = FormattingSettings { width, indent };
@@ -306,7 +302,7 @@ fn get_man_page_from_path(path: &PathBuf) -> Result<Vec<u8>, ManError> {
         _ => "cat",
     };
 
-    let output = spawn(cat_cmd, &[path], None, Stdio::piped())?;
+    let output = spawn(cat_cmd, [path], None, Stdio::piped())?;
     Ok(output.stdout)
 }
 
@@ -315,7 +311,7 @@ fn format_man_page(
     man_bytes: Vec<u8>,
     formatting: &FormattingSettings,
 ) -> Result<Vec<u8>, ManError> {
-    parse_mdoc(&man_bytes, &formatting)
+    parse_mdoc(&man_bytes, formatting)
 }
 
 /// Write formatted output to either a pager or directly to stdout if `copy = true`.
@@ -344,7 +340,7 @@ fn display_man_page(
     formatting: &FormattingSettings,
 ) -> Result<(), ManError> {
     let raw = get_man_page_from_path(path)?;
-    let formatted = format_man_page(raw, &formatting)?;
+    let formatted = format_man_page(raw, formatting)?;
     display_pager(formatted, copy_mode)
 }
 
@@ -387,9 +383,7 @@ fn man(args: Args) -> Result<bool, ManError> {
 
     if let Some(paths) = args.local_file {
         if paths.iter().any(|path| !path.exists()) {
-            return Err(ManError::PageNotFound(format!(
-                "One of the provided files was not found"
-            )));
+            return Err(ManError::PageNotFound("One of the provided files was not found".to_string()));
         }
 
         display_all_man_pages(paths, args.copy, &formatting)?;
