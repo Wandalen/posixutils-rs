@@ -140,7 +140,9 @@ impl MdocFormatter {
                 }
                 current_line.push_str(&formatted_node);
                 if !formatted_node.is_empty() && !is_all_control {
-                    current_line.push(' ');
+                    if current_line.chars().last() != Some('\n') {
+                        current_line.push(' ');
+                    }
                 }
             }
         }
@@ -236,7 +238,6 @@ impl MdocFormatter {
     }
 
     fn format_node(&mut self, node: Element) -> String {
-        println!("Formatting: {:?}", node);
         match node {
             Element::Macro(macro_node) => self.format_macro_node(macro_node),
             Element::Text(text) => self.format_text_node(text.as_str()),
@@ -1284,14 +1285,15 @@ impl MdocFormatter {
         match an_type {
             AnType::NoSplit => {
                 self.formatting_state.split_mod = false;
-                String::new()
+                "".to_string()
             }
             AnType::Split => {
                 self.formatting_state.split_mod = true;
-                String::new()
+                "\n".to_string()
             }
             AnType::Name => {
                 let content = self.format_inline_macro(macro_node);
+                
                 match self.formatting_state.split_mod {
                     true => format!("{}\n", content),
                     false => content,
@@ -2524,7 +2526,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Rs
 .%R Technical report
-.R
+.Re
 .Rs
 .%R Technical report
 .%R Technical report
@@ -2537,8 +2539,8 @@ footer text                     January 1, 1970                    footer text";
                 let output =
                     "PROGNAME(section)                   section                  PROGNAME(section)
 
-Technical report, Technical report. (Technical report) Technical report,
-Technical report, Technical report, Technical report!. Technical report.
+Technical report. Technical report, Technical report. (Technical report)
+Technical report, Technical report, Technical report, Technical report!.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2551,7 +2553,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Rs
 .%T Article title
-.R
+.Re
 .Rs
 .%T Article title
 .%T Article title
@@ -2564,8 +2566,8 @@ footer text                     January 1, 1970                    footer text";
                 let output =
                     "PROGNAME(section)                   section                  PROGNAME(section)
 
-Article title, Article title. (Article title) Article title, Article title,
-Article title, Article title!. Article title.
+Article title. Article title, Article title. (Article title) Article title,
+Article title, Article title, Article title!.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2573,26 +2575,26 @@ footer text                     January 1, 1970                    footer text";
 
             #[test]
             fn u() {
-                let input = ".Dd January 1, 1970
+                let input = r".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
 .Rs
-.%U  protocol://path
-.R
-.Rs
-.%U  protocol://path
-.%U  protocol://path
+.%U Article title
 .Re
 .Rs
-.%U (  protocol://path )  protocol://path
-.%U  protocol://path ,  protocol://path
-.%U  protocol://path !
+.%U Article title
+.%U Article title
+.Re
+.Rs
+.%U ( Article title ) Article title
+.%U Article title , Article title
+.%U Article title !
 .Re";
                 let output =
-                    "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
-Article title, Article title. (Article title) Article title, Article title,
-Article title, Article title!. Article title.
+Article title. Article title, Article title. (Article title) Article title,
+Article title, Article title, Article title!.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2605,7 +2607,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Rs
 .%V Volume number
-.R
+.Re
 .Rs
 .%V Volume number
 .%V Volume number
@@ -2616,10 +2618,10 @@ footer text                     January 1, 1970                    footer text";
 .%V Volume number !
 .Re";
                 let output =
-                    "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
-Volume number, Volume number. (Volume number) Volume number, Volume number,
-Volume number, Volume number!. Volume number.
+Volume number. Volume number, Volume number. (Volume number) Volume number,
+Volume number, Volume number, Volume number!.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2645,30 +2647,23 @@ footer text                     January 1, 1970                    footer text";
 
         #[test]
         fn an() {
-            let input = ".Dd January 1, 1970
-.Dt TITLE 7 arch
-.Os footer text
+            let input = ".An Kristaps
+.An Kristaps
+.An Kristaps
 .An -split
-.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
-.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
-.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
-.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
+.An Kristaps
+.An Kristaps
 .An -nosplit
-.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
-.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
-.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv
-.An Kristaps Dzonsons Aq Mt kristaps@bsd.lv";
+.An Kristaps
+.An Kristaps";
             let output =
-                "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+"
+Kristaps Kristaps Kristaps
+Kristaps
+Kristaps
+Kristaps Kristaps
 
-Kristaps Dzonsons <kristaps@bsd.lv>
-Kristaps Dzonsons <kristaps@bsd.lv>
-Kristaps Dzonsons <kristaps@bsd.lv>
-Kristaps Dzonsons <kristaps@bsd.lv> Kristaps Dzonsons <kristaps@bsd.lv>
-Kristaps Dzonsons <kristaps@bsd.lv> Kristaps Dzonsons <kristaps@bsd.lv>
-Kristaps Dzonsons <kristaps@bsd.lv>
-
-footer text                     January 1, 1970                    footer text";
+                                March 25, 2025                                ";
             test_formatting(input, output);
         }
 
@@ -2808,7 +2803,8 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Db";
+.Db
+";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
@@ -2825,6 +2821,7 @@ footer text                     January 1, 1970                    footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
+
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
@@ -2836,6 +2833,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text";
             let output =
                 "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -2889,9 +2887,9 @@ to save the pattern space for subsequent retrieval.";
             let output =
                 "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
 
-Selected lines are those not matching any of the specified patterns.  Some of
-the functions use a hold space to save the pattern space for subsequent
-retrieval.
+Selected lines are those \u{1b}[3mnot\u{1b}[0m matching any of the specified patterns.
+Some of the functions use a \u{1b}[3mhold space\u{1b}[0m to save the pattern space for
+subsequent retrieval.
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);

@@ -614,7 +614,7 @@ ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-db = ${ "Db" ~ !text_arg ~ ws+ ~ text_arg ~ NEWLINE? }
+db = ${ "Db" ~ !text_arg ~ (ws+ ~ text_arg)? ~ NEWLINE? }
 
 // -- Dd
 
