@@ -1536,7 +1536,6 @@ impl MdocParser {
 
             let (close_nodes, new_i) = process_delimiters(&inner, i, Rule::closing_delimiter);
             nodes.extend(close_nodes);
-            i = new_i;
 
             Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bx,
