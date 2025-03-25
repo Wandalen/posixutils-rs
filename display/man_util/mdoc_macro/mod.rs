@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use text_production::{AtType, BsxType, BxType, DxType, FxType, NxType, OxType, StType};
+use text_production::StType;
 use types::*;
 
 pub mod text_production;

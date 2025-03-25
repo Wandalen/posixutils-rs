@@ -230,7 +230,7 @@ impl MdocParser {
     pub fn parse_mdoc(input: impl AsRef<str>) -> Result<MdocDocument, MdocError> {
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
-        println!("Pairs:\n{pairs:#?}\n\n");
+        // println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -1492,7 +1492,7 @@ impl MdocParser {
         // Parses (`Bx`)[https://man.openbsd.org/mdoc#Bx]:
         // `Bx [version [variant]]`
         fn parse_bx(pair: Pair<Rule>) -> Element {
-            let mut inner: Vec<_> = pair.into_inner().collect();
+            let inner: Vec<_> = pair.into_inner().collect();
 
             if inner.is_empty() {
                 return Element::Macro(MacroNode {
@@ -1536,7 +1536,6 @@ impl MdocParser {
 
             let (close_nodes, new_i) = process_delimiters(&inner, i, Rule::closing_delimiter);
             nodes.extend(close_nodes);
-            i = new_i;
 
             Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bx,

@@ -14,6 +14,7 @@ use man_util::formatter::MdocFormatter;
 use man_util::parser::MdocParser;
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
+use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 use thiserror::Error;
@@ -29,7 +30,7 @@ const MAN_CONFS: [&str; 2] = ["/etc/man.conf", "/etc/examples/man.conf"];
 #[derive(Parser)]
 #[command(version, about = gettext("man - display system documentation"))]
 struct Args {
-    #[arg(short = "k", long, help = gettext("Interpret name operands as keywords for searching the summary database."))]
+    #[arg(short = 'k', long, help = gettext("Interpret name operands as keywords for searching the summary database."))]
     apropos: bool,
 
     #[arg(short, long, help = gettext("Names of the utilities or keywords to display documentation for."))]
@@ -38,19 +39,19 @@ struct Args {
     #[arg(short, long, help = "Display all matching manual pages.")]
     all: bool,
 
-    #[arg(short = "C", long = "config-file", help = "Use the specified file instead of the default configuration file.")]
+    #[arg(short = 'C', long = "config-file", help = "Use the specified file instead of the default configuration file.")]
     config_file: Option<PathBuf>,
 
     #[arg(short, long, help = "Copy the manual page to the standard output instead of using less(1) to paginate it.")]
     copy: bool,
 
-    #[arg(short = "f", long = "whatis", help = "A synonym for whatis(1).")]
+    #[arg(short = 'f', long = "whatis", help = "A synonym for whatis(1).")]
     whatis: bool,
 
-    #[arg(short = "h", long, help = "Display only the SYNOPSIS lines of the requested manual pages.")]
-    header: bool,
+    // #[arg(short = 'h', long, help = "Display only the SYNOPSIS lines of the requested manual pages.")]
+    // header: bool,
 
-    #[arg(short = "l", long = "local-file", help = "interpret PAGE argument(s) as local filename(s)")]
+    #[arg(short = 'l', long = "local-file", help = "interpret PAGE argument(s) as local filename(s)")]
     local_file: Option<Vec<PathBuf>>,
 }
 
@@ -80,10 +81,13 @@ enum ManError {
 
     #[error("parsing error: {0}")]
     Mdoc(#[from] man_util::parser::MdocError),
+
+    #[error("parsing error: {0}")]
+    ParseError(#[from] ParseIntError)
 }
 
 /// Basic formatting settings for manual pages (width, indentation).
-#[derive(Debug)]
+#[derive(Debug, Clone,Copy)]
 pub struct FormattingSettings {
     pub width: usize,
     pub indent: usize,
@@ -254,10 +258,10 @@ fn get_pager_settings(config: &ManConfig) -> Result<FormattingSettings, ManError
 /// [ManError] if file failed to execute `groff(1)` formatter.
 fn parse_mdoc(
     man_page: &[u8],
-    formatting_settings: FormattingSettings,
+    formatting_settings: &FormattingSettings,
 ) -> Result<Vec<u8>, ManError> {
     let content = String::from_utf8(man_page.to_vec()).unwrap();
-    let mut formatter = MdocFormatter::new(formatting_settings);
+    let mut formatter = MdocFormatter::new(*formatting_settings);
 
     let document = MdocParser::parse_mdoc(content)?;    
     let formatted_document = formatter.format_mdoc(document);
@@ -281,9 +285,9 @@ fn get_man_page_from_path(path: &PathBuf) -> Result<Vec<u8>, ManError> {
 /// Format a man page’s raw content into text suitable for display.
 fn format_man_page(
     man_bytes: Vec<u8>,
-    formatting: FormattingSettings,
+    formatting: &FormattingSettings,
 ) -> Result<Vec<u8>, ManError> {
-    parse_mdoc(&man_bytes, formatting)
+    parse_mdoc(&man_bytes, &formatting)
 }
 
 /// Write formatted output to either a pager or directly to stdout if `copy = true`.
@@ -312,7 +316,7 @@ fn display_man_page(
     formatting: &FormattingSettings
 ) -> Result<(), ManError> {
     let raw = get_man_page_from_path(path)?;
-    let formatted = format_man_page(raw, formatting.clone())?;
+    let formatted = format_man_page(raw, &formatting)?;
     display_pager(formatted, copy_mode)
 }
 
@@ -326,27 +330,18 @@ fn display_all_man_pages(
         return Err(ManError::PageNotFound("no matching pages".to_string()));
     }
 
-    paths
-        .iter()
-        .map(|path| display_man_page(&path, copy_mode, formatting));
-
-    // for path in paths {
-    //     display_man_page(&path, copy_mode, formatting)?;
-    // }
+    for path in paths {
+        display_man_page(&path, copy_mode, formatting)?;
+    }
 
     Ok(())
 }
 
 /// Wrapper for `apropos` command, returns `Ok(true)` if it succeeded, `Ok(false)` otherwise.
 fn display_summary_database(command: &str, keyword: &str) -> Result<bool, ManError> {
-    let status = Command::new("apropos").arg(keyword).spawn()?.wait()?;
+    let status = Command::new(command).arg(keyword).spawn()?.wait()?;
     Ok(status.success())
 }
-
-// fn display_whattis(keyword: &str) -> Result<bool, ManError> {
-//     let status = Command::new("whatis").arg(keyword).spawn()?.wait()?;
-//     Ok(status.success())
-// }
 
 
 //
@@ -358,15 +353,15 @@ fn display_summary_database(command: &str, keyword: &str) -> Result<bool, ManErr
 /// Main logic that processes Args and either displays man pages or searches DB.
 fn man(args: Args) -> Result<bool, ManError> {
     let config_path = get_config_file_path(args.config_file)?;
-    let config = parse_config_file(&config_path)?;
+    let config = parse_config_file(config_path)?;
     let formatting = get_pager_settings(&config)?;
 
-    if let Some(files) = args.local_file {
-        if files.iter().any(|path| !path.exists()) {
-            Err(ManError::PageNotFound(format!("No such file: {}", file)))
+    if let Some(paths) = args.local_file {
+        if paths.iter().any(|path| !path.exists()) {
+            return Err(ManError::PageNotFound(format!("One of the provided files was not found")))
         }
 
-        display_all_man_pages(all_paths, args.copy, &formatting);
+        display_all_man_pages(paths, args.copy, &formatting)?;
     }
 
     if args.names.is_empty() {
