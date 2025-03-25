@@ -129,9 +129,7 @@ pub enum Macro {
     Lp,
     Ms, 
     Mt,
-    Nd {
-        line: String,
-    },
+    Nd,
     Nm,
     No,
     Ns,
