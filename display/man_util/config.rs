@@ -1,27 +1,32 @@
-use std::{collections::HashMap, fs::File, io::{BufRead, BufReader}, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+};
 
 use crate::ManError;
 
 /// # ManConfig
-/// 
+///
 /// Parsed configuration file
-/// 
+///
 /// ## Fields:
 /// * `manpaths`
 /// * `output_options`
 #[derive(Debug, Default)]
 pub struct ManConfig {
     pub manpaths: Vec<PathBuf>,
-    pub output_options: HashMap<String, Option<String>>
+    pub output_options: HashMap<String, Option<String>>,
 }
 
 /// # parse_config_file
-/// 
+///
 /// Parses `man`` cofiguration file.
-/// 
-/// # Params: 
+///
+/// # Params:
 /// * path - path to onfiguration file
-/// 
+///
 /// # Errors:
 /// * io
 pub fn parse_config_file(path: PathBuf) -> Result<ManConfig, ManError> {
@@ -41,7 +46,7 @@ pub fn parse_config_file(path: PathBuf) -> Result<ManConfig, ManError> {
         let mut parts = line.split_whitespace();
         let directive = match parts.next() {
             Some(d) => d,
-            None => continue
+            None => continue,
         };
 
         match directive {
@@ -50,13 +55,13 @@ pub fn parse_config_file(path: PathBuf) -> Result<ManConfig, ManError> {
                     conf.manpaths.push(PathBuf::from(path));
                 }
             }
-            "output"  => {
+            "output" => {
                 if let Some(option_name) = parts.next() {
                     let value = parts.next().map(|s| s.to_string());
                     conf.output_options.insert(option_name.to_string(), value);
                 }
             }
-            _ => unreachable!("Unexpected directive: {directive}")
+            _ => unreachable!("Unexpected directive: {directive}"),
         }
     }
 

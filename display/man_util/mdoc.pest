@@ -599,7 +599,7 @@ st_abbreviation =  {
   | st_susv3
   | st_susv2
 }
-st              = ${ "St" ~ !text_arg ~ ws+ ~ st_abbreviation ~ (ws+ ~ arg)* ~ ws* ~ NEWLINE? }
+st              = ${ "St" ~ !text_arg ~ ws+ ~ st_abbreviation ~ ws* ~ NEWLINE? }
 
 // -- Other in-line macros
 ad = ${ "Ad" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }

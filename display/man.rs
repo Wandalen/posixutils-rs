@@ -28,11 +28,15 @@ const MAN_SECTIONS: [i8; 9] = [1, 8, 2, 3, 4, 5, 6, 7, 9];
 const MAN_CONFS: [&str; 2] = ["/etc/man.conf", "/etc/examples/man.conf"];
 
 #[derive(Parser)]
-#[command(version, disable_help_flag = true, about = gettext("man - display system documentation"))]
+#[command(
+    version,
+    disable_help_flag = true,
+    about = gettext("man - display system documentation")
+)]
 struct Args {
     #[arg(
-        short = 'k', 
-        long, 
+        short = 'k',
+        long,
         help = gettext("Interpret name operands as keywords for searching the summary database.")
     )]
     apropos: bool,
@@ -43,43 +47,31 @@ struct Args {
     )]
     names: Vec<String>,
 
-    #[arg(
-        short, 
-        long, 
-        help = "Display all matching manual pages."
-    )]
+    #[arg(short, long, help = "Display all matching manual pages.")]
     all: bool,
 
     #[arg(
-        short = 'C', 
-        long, 
+        short = 'C',
+        long,
         help = "Use the specified file instead of the default configuration file."
     )]
     config_file: Option<PathBuf>,
 
-    #[arg(
-        short, 
-        long, 
-        help = "Copy the manual page to the standard output."
-    )]
+    #[arg(short, long, help = "Copy the manual page to the standard output.")]
     copy: bool,
 
-    #[arg(
-        short = 'f', 
-        long, 
-        help = "A synonym for whatis(1)."
-    )]
+    #[arg(short = 'f', long, help = "A synonym for whatis(1).")]
     whatis: bool,
 
     #[arg(
-        short = 'h', 
-        long, 
+        short = 'h',
+        long,
         help = "Display only the SYNOPSIS lines of the requested manual pages."
     )]
     synopsis: bool,
 
     #[arg(
-        short = 'l', 
+        short = 'l',
         long = "local-file", 
         help = "interpret PAGE argument(s) as local filename(s)", 
         num_args = 1..
@@ -122,11 +114,11 @@ enum ManError {
     Mdoc(#[from] man_util::parser::MdocError),
 
     #[error("parsing error: {0}")]
-    ParseError(#[from] ParseIntError)
+    ParseError(#[from] ParseIntError),
 }
 
 /// Basic formatting settings for manual pages (width, indentation).
-#[derive(Debug, Clone,Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct FormattingSettings {
     pub width: usize,
     pub indent: usize,
@@ -146,7 +138,9 @@ fn get_config_file_path(path: Option<PathBuf>) -> Result<PathBuf, ManError> {
         if user_path.exists() {
             Ok(user_path)
         } else {
-            Err(ManError::ConfifFileNotFound(user_path.display().to_string()))
+            Err(ManError::ConfifFileNotFound(
+                user_path.display().to_string(),
+            ))
         }
     } else {
         // No -C provided, so check defaults:
@@ -177,12 +171,7 @@ fn get_config_file_path(path: Option<PathBuf>) -> Result<PathBuf, ManError> {
 /// # Errors
 ///
 /// [ManError] if process spawn failed or failed to get its output.
-fn spawn<I, S>(
-    name: &str, 
-    args: I, 
-    stdin: Option<&[u8]>, 
-    stdout: Stdio
-) -> Result<Output, ManError>
+fn spawn<I, S>(name: &str, args: I, stdin: Option<&[u8]>, stdout: Stdio) -> Result<Output, ManError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -196,7 +185,7 @@ where
             io::ErrorKind::NotFound => ManError::CommandNotFound(name.to_string()),
             _ => ManError::Io(err),
         })?;
-    
+
     if let Some(stdin) = stdin {
         if let Some(mut process_stdin) = process.stdin.take() {
             process_stdin.write_all(stdin)?;
@@ -226,8 +215,8 @@ where
 ///
 /// # Returns
 ///
-/// [Option<u16>] width value of current terminal. 
-/// [Option::Some] if working on terminal and receiving terminal size was succesfull. 
+/// [Option<u16>] width value of current terminal.
+/// [Option::Some] if working on terminal and receiving terminal size was succesfull.
 /// [Option::None] if working not on terminal.
 ///
 /// # Errors
@@ -302,7 +291,7 @@ fn parse_mdoc(
     let content = String::from_utf8(man_page.to_vec()).unwrap();
     let mut formatter = MdocFormatter::new(*formatting_settings);
 
-    let document = MdocParser::parse_mdoc(content)?;    
+    let document = MdocParser::parse_mdoc(content)?;
     let formatted_document = formatter.format_mdoc(document);
 
     Ok(formatted_document)
@@ -350,9 +339,9 @@ fn display_pager(man_page: Vec<u8>, copy_mode: bool) -> Result<(), ManError> {
 
 /// Display a single man page found at `path`.
 fn display_man_page(
-    path: &PathBuf, 
-    copy_mode: bool, 
-    formatting: &FormattingSettings
+    path: &PathBuf,
+    copy_mode: bool,
+    formatting: &FormattingSettings,
 ) -> Result<(), ManError> {
     let raw = get_man_page_from_path(path)?;
     let formatted = format_man_page(raw, &formatting)?;
@@ -363,7 +352,7 @@ fn display_man_page(
 fn display_all_man_pages(
     paths: Vec<PathBuf>,
     copy_mode: bool,
-    formatting: &FormattingSettings
+    formatting: &FormattingSettings,
 ) -> Result<(), ManError> {
     if paths.is_empty() {
         return Err(ManError::PageNotFound("no matching pages".to_string()));
@@ -395,14 +384,16 @@ fn man(args: Args) -> Result<bool, ManError> {
     let formatting = get_pager_settings(&config)?;
 
     let mut no_errors = true;
-   
+
     if let Some(paths) = args.local_file {
         if paths.iter().any(|path| !path.exists()) {
-            return Err(ManError::PageNotFound(format!("One of the provided files was not found")))
+            return Err(ManError::PageNotFound(format!(
+                "One of the provided files was not found"
+            )));
         }
-        
+
         display_all_man_pages(paths, args.copy, &formatting)?;
-        
+
         return Ok(no_errors);
     }
 
@@ -411,7 +402,7 @@ fn man(args: Args) -> Result<bool, ManError> {
     }
 
     if args.apropos || args.whatis {
-        let command = if args.apropos {"apropos"} else {"whatis"};
+        let command = if args.apropos { "apropos" } else { "whatis" };
 
         for keyword in &args.names {
             let success = display_summary_database(command, keyword)?;
@@ -429,7 +420,8 @@ fn man(args: Args) -> Result<bool, ManError> {
                 .iter()
                 .flat_map(|mpath| {
                     MAN_SECTIONS.iter().flat_map(move |section| {
-                        let base = format!("{}/man{}/{}.{}", mpath.display(), section, name, section);
+                        let base =
+                            format!("{}/man{}/{}.{}", mpath.display(), section, name, section);
                         vec![format!("{}.gz", base), base]
                     })
                 })
@@ -444,7 +436,8 @@ fn man(args: Args) -> Result<bool, ManError> {
                 .iter()
                 .flat_map(|mpath| {
                     MAN_SECTIONS.iter().flat_map(move |section| {
-                        let base = format!("{}/man{}/{}.{}", mpath.display(), section, name, section);
+                        let base =
+                            format!("{}/man{}/{}.{}", mpath.display(), section, name, section);
                         vec![format!("{}.gz", base), base]
                     })
                 })

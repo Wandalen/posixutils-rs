@@ -41,7 +41,7 @@ pub enum OffsetType {
     IndentTwo,
     Left,
     Right,
-    Center
+    Center,
 }
 
 impl From<Pair<'_, Rule>> for OffsetType {
@@ -105,7 +105,7 @@ impl From<Pair<'_, Rule>> for BlType {
         }
     }
 }
- 
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ItType {
     // MandatoryArgs,
@@ -131,36 +131,36 @@ pub enum SmMode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Date {
     pub month_day: (String, u8),
-    pub year: u16
+    pub year: u16,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DdDate {
     MDYFormat(Date),
-    StrFormat(String)
+    StrFormat(String),
 }
 
-impl From<chrono::NaiveDate> for DdDate{
+impl From<chrono::NaiveDate> for DdDate {
     fn from(date: chrono::NaiveDate) -> DdDate {
         let month = match date.month() {
-            1  => "January",
-            2  => "February",
-            3  => "March",
-            4  => "April",
-            5  => "May",
-            6  => "June",
-            7  => "July",
-            8  => "August",
-            9  => "September",
+            1 => "January",
+            2 => "February",
+            3 => "March",
+            4 => "April",
+            5 => "May",
+            6 => "June",
+            7 => "July",
+            8 => "August",
+            9 => "September",
             10 => "October",
             11 => "November",
             12 => "December",
-            _  => unreachable!() 
+            _ => unreachable!(),
         };
-    
+
         DdDate::MDYFormat(Date {
             month_day: (month.to_string(), date.day() as u8),
-            year: date.year() as u16
+            year: date.year() as u16,
         })
     }
 }
