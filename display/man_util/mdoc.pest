@@ -273,9 +273,7 @@ it_block = ${ it_head ~ it_body }
 
 // -- Nd
 
-nd_open          = ${ "Nd" ~ ws+ ~ block_line ~ ws* }
-nd_block_element =  { !("." ~ sh_block) ~ element }
-nd_block         =  { nd_open ~ (NEWLINE ~ nd_block_element*)? }
+nd_block = ${ "Nm" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 
 // -- Nm
 
