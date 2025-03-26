@@ -435,27 +435,10 @@ impl MdocParser {
     // Parses (`Nd`)[https://man.openbsd.org/mdoc#Nd]
     // `Nd line`
     fn parse_nd(pair: Pair<Rule>) -> Element {
-        let mut inner = pair.into_inner();
-
-        let line = inner
-            .next() // `nd_block` -> `nd_open`
-            .unwrap()
-            .into_inner()
-            .next() // `nd_open` -> `nd_line`
-            .expect("Expected title for 'Nd' block")
-            .as_str()
-            .trim_end()
-            .to_string();
-
-        // Parse `nd_block_element`
-        let nodes = inner
-            .filter_map(|p| p.into_inner().next().map(Self::parse_element))
-            .collect();
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::Nd {
-                line: line.to_string(),
-            },
+            mdoc_macro: Macro::Nd,
             nodes,
         })
     }
@@ -3106,12 +3089,13 @@ Line
 
         #[test]
         fn nd() {
-            let content = ".Nd short description of the manual";
+            let content = ".Nd short description";
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Nd {
-                    line: "short description of the manual".to_string(),
-                },
-                nodes: vec![],
+                mdoc_macro: Macro::Nd,
+                nodes: vec![
+                    Element::Text("short".to_string()),
+                    Element::Text("description".to_string())
+                ],
             })];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -3120,12 +3104,13 @@ Line
 
         #[test]
         fn nd_with_line_whitespaces_and_tabs() {
-            let content = ".Nd short description of the manual\t    \t";
+            let content = ".Nd short description\t    \t";
             let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Nd {
-                    line: "short description of the manual".to_string(),
-                },
-                nodes: vec![],
+                mdoc_macro: Macro::Nd,
+                nodes: vec![
+                    Element::Text("short".to_string()),
+                    Element::Text("description".to_string())
+                ],
             })];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -3138,11 +3123,13 @@ Line
             let elements = vec![
                 Element::Text("Line 1".to_string()),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Nd {
-                        line: "short description".to_string(),
-                    },
-                    nodes: vec![Element::Text("Line 2".to_string())],
+                    mdoc_macro: Macro::Nd,
+                    nodes: vec![
+                        Element::Text("short".to_string()),
+                        Element::Text("description".to_string())
+                    ],
                 }),
+                Element::Text("Line 2".to_string())
             ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -3154,14 +3141,14 @@ Line
             let content = ".Nd short description\nLine 1\nLine 2\n.Sh SECTION";
             let elements = vec![
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Nd {
-                        line: "short description".to_string(),
-                    },
+                    mdoc_macro: Macro::Nd,
                     nodes: vec![
-                        Element::Text("Line 1".to_string()),
-                        Element::Text("Line 2".to_string()),
+                        Element::Text("short".to_string()),
+                        Element::Text("description".to_string())
                     ],
                 }),
+                Element::Text("Line 1".to_string()),
+                Element::Text("Line 2".to_string()),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Sh {
                         title: "SECTION".to_string(),
@@ -3177,18 +3164,23 @@ Line
         #[test]
         fn nd_macro_in_body() {
             let content = ".Nd name description\n.Nm name1 name2";
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Nd {
-                    line: "name description".to_string(),
-                },
-                nodes: vec![Element::Macro(MacroNode {
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Nd,
+                    nodes: vec![
+                        Element::Text("name".to_string()),
+                        Element::Text("description".to_string())
+                    ],
+                }),
+                Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
                     nodes: vec![
                         Element::Text("name1".to_string()),
                         Element::Text("name2".to_string())
+
                     ],
-                })],
-            })];
+                })
+            ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
@@ -3197,12 +3189,20 @@ Line
         #[test]
         fn nd_not_parsed() {
             let content = ".Nd name Ad addr1";
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Nd {
-                    line: "name Ad addr1".to_string(),
-                },
-                nodes: vec![],
-            })];
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Nd,
+                    nodes: vec![
+                        Element::Text("name".to_string())
+                    ],
+                }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Ad,
+                    nodes: vec![
+                        Element::Text("addr1".to_string())
+                    ],
+                }),
+            ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
@@ -3394,10 +3394,11 @@ Line
                     ],
                 }),
                 Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Nd {
-                        line: "name description".to_string(),
-                    },
-                    nodes: vec![],
+                    mdoc_macro: Macro::Nd,
+                    nodes: vec![
+                        Element::Text("name".to_string()),
+                        Element::Text("description".to_string())
+                    ],
                 })
             ];
 
@@ -3570,10 +3571,11 @@ Line
                 nodes: vec![
                     Element::Text("Line 1".to_string()),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Nd {
-                            line: "short description".to_string(),
-                        },
-                        nodes: vec![],
+                        mdoc_macro: Macro::Nd,
+                        nodes: vec![
+                            Element::Text("short".to_string()),
+                            Element::Text("description".to_string()),
+                        ],
                     }),
                 ],
             })];
@@ -3598,10 +3600,11 @@ Line
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::Nd {
-                            line: "short description".to_string(),
-                        },
-                        nodes: vec![],
+                        mdoc_macro: Macro::Nd,
+                        nodes: vec![                            
+                            Element::Text("short".to_string()),
+                            Element::Text("description".to_string())
+                        ],
                     })
                 ],
             })];
