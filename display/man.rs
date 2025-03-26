@@ -266,33 +266,6 @@ fn get_pager_settings(config: &ManConfig) -> Result<FormattingSettings, ManError
     Ok(settings)
 }
 
-/// Parses `mdoc(7)`.
-///
-/// # Arguments
-///
-/// `man_page` - [&[u8]] with content that needs to be formatted.
-/// `width` - [Option<u16>] width value of current terminal.
-///
-/// # Returns
-///
-/// [Vec<u8>] of formatted documentation.
-///
-/// # Errors
-///
-/// [ManError] if file failed to execute `groff(1)` formatter.
-fn parse_mdoc(
-    man_page: &[u8],
-    formatting_settings: &FormattingSettings,
-) -> Result<Vec<u8>, ManError> {
-    let content = String::from_utf8(man_page.to_vec()).unwrap();
-    let mut formatter = MdocFormatter::new(*formatting_settings);
-
-    let document = MdocParser::parse_mdoc(content)?;
-    let formatted_document = formatter.format_mdoc(document);
-
-    Ok(formatted_document)
-}
-
 /// Read a local man page file (possibly .gz), uncompress if needed, and return
 /// the raw content.
 fn get_man_page_from_path(path: &PathBuf) -> Result<Vec<u8>, ManError> {
@@ -306,16 +279,29 @@ fn get_man_page_from_path(path: &PathBuf) -> Result<Vec<u8>, ManError> {
     Ok(output.stdout)
 }
 
-/// Format a man page’s raw content into text suitable for display.
+/// Parse and format a man page’s raw content into text suitable for display.
 fn format_man_page(
     man_bytes: Vec<u8>,
     formatting: &FormattingSettings,
+    synopsis: bool
 ) -> Result<Vec<u8>, ManError> {
-    parse_mdoc(&man_bytes, formatting)
+    let content = String::from_utf8(man_bytes).unwrap();
+    let mut formatter = MdocFormatter::new(*formatting);
+
+    let document = MdocParser::parse_mdoc(content)?;
+    let formatted_document = match synopsis {
+        true  => formatter.format_synopsis_section(document),
+        false => formatter.format_mdoc(document),
+    };
+
+    Ok(formatted_document)
 }
 
 /// Write formatted output to either a pager or directly to stdout if `copy = true`.
-fn display_pager(man_page: Vec<u8>, copy_mode: bool) -> Result<(), ManError> {
+fn display_pager(
+    man_page: Vec<u8>, 
+    copy_mode: bool, 
+) -> Result<(), ManError> {
     if copy_mode {
         io::stdout().write_all(&man_page)?;
         io::stdout().flush()?;
@@ -337,10 +323,12 @@ fn display_pager(man_page: Vec<u8>, copy_mode: bool) -> Result<(), ManError> {
 fn display_man_page(
     path: &PathBuf,
     copy_mode: bool,
+    synopsis: bool,
     formatting: &FormattingSettings,
 ) -> Result<(), ManError> {
     let raw = get_man_page_from_path(path)?;
-    let formatted = format_man_page(raw, formatting)?;
+    let formatted = format_man_page(raw, formatting, synopsis)?;
+
     display_pager(formatted, copy_mode)
 }
 
@@ -348,6 +336,7 @@ fn display_man_page(
 fn display_all_man_pages(
     paths: Vec<PathBuf>,
     copy_mode: bool,
+    synopsis: bool,
     formatting: &FormattingSettings,
 ) -> Result<(), ManError> {
     if paths.is_empty() {
@@ -355,7 +344,7 @@ fn display_all_man_pages(
     }
 
     for path in paths {
-        display_man_page(&path, copy_mode, formatting)?;
+        display_man_page(&path, copy_mode, synopsis, formatting)?;
     }
 
     Ok(())
@@ -386,7 +375,7 @@ fn man(args: Args) -> Result<bool, ManError> {
             return Err(ManError::PageNotFound("One of the provided files was not found".to_string()));
         }
 
-        display_all_man_pages(paths, args.copy, &formatting)?;
+        display_all_man_pages(paths, args.copy, args.synopsis, &formatting)?;
 
         return Ok(no_errors);
     }
@@ -423,7 +412,7 @@ fn man(args: Args) -> Result<bool, ManError> {
                 .filter(|p| p.exists())
                 .collect();
 
-            display_all_man_pages(all_paths, args.copy, &formatting)
+            display_all_man_pages(all_paths, args.copy, args.synopsis, &formatting)
         } else {
             let single_path = config
                 .manpaths
@@ -439,7 +428,7 @@ fn man(args: Args) -> Result<bool, ManError> {
                 .find(|p| p.exists())
                 .ok_or_else(|| ManError::PageNotFound(name.to_string()))?;
 
-            display_man_page(&single_path, args.copy, &formatting)
+            display_man_page(&single_path, args.copy, args.synopsis, &formatting)
         };
 
         if let Err(err) = result {

@@ -57,6 +57,7 @@ impl Default for FormattingState {
 pub struct MdocFormatter {
     formatting_settings: FormattingSettings,
     formatting_state: FormattingState,
+
 }
 
 // Helper funcitons.
@@ -119,38 +120,68 @@ impl MdocFormatter {
 
 // Base formatting functions.
 impl MdocFormatter {
-    pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
+    fn append_formatted_text(&self, formatted: &str, current_line: &mut String, lines: &mut Vec<String>) {
         let max_width = self.formatting_settings.width;
+        if current_line.chars().count() + formatted.chars().count() > max_width {
+            for word in formatted.split_whitespace() {
+                if current_line.chars().count() + word.chars().count() >= max_width {
+                    lines.push(current_line.trim_end().to_string());
+                    current_line.clear();
+                }
+                current_line.push_str(word);
+                current_line.push(' ');
+            }
+        } else {
+            let is_all_control = formatted.chars().all(|ch| ch.is_ascii_control());
+            if is_all_control {
+                if let Some(' ') = current_line.chars().last() {
+                    current_line.pop();
+                }
+            }
+            current_line.push_str(formatted);
+            if !formatted.is_empty() && !is_all_control && current_line.chars().last() != Some('\n') {
+                current_line.push(' ');
+            }
+        }
+    }
+
+    pub fn format_synopsis_section(&mut self, ast: MdocDocument) -> Vec<u8> {
+        let mut lines = Vec::new();
+        let mut current_line = String::new();
+
+        for node in ast.elements {
+            let formatted_node = match node {
+                Element::Macro(macro_node) => {
+                    if let Macro::Sh { ref title } = macro_node.mdoc_macro {
+                        if title.to_ascii_uppercase() == "SYNOPSIS" {
+                            self.format_sh_block(title.clone(), macro_node)
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
+                },
+                _ => continue,
+            };
+
+            self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+        }
+
+        if !current_line.is_empty() {
+            lines.push(current_line.trim_end().to_string());
+        }
+
+        lines.join("\n").into_bytes()
+    }
+
+    pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
         let mut lines = Vec::new();
         let mut current_line = String::new();
 
         for node in ast.elements {
             let formatted_node = self.format_node(node);
-
-            if current_line.chars().count() + formatted_node.chars().count() > max_width {
-                for word in formatted_node.split_whitespace() {
-                    if current_line.chars().count() + word.chars().count() >= max_width {
-                        lines.push(current_line.trim_end().to_string());
-                        current_line.clear();
-                    }
-
-                    current_line.push_str(word);
-                    current_line.push(' ');
-                }
-            } else {
-                let is_all_control = formatted_node.chars().all(|ch| ch.is_ascii_control());
-                if is_all_control {
-                    if let Some(' ') = current_line.chars().last() {
-                        current_line.pop();
-                    }
-                }
-                current_line.push_str(&formatted_node);
-                if !formatted_node.is_empty() && !is_all_control {
-                    if current_line.chars().last() != Some('\n') {
-                        current_line.push(' ');
-                    }
-                }
-            }
+            self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
 
         if !current_line.is_empty() {
@@ -162,12 +193,116 @@ impl MdocFormatter {
             self.formatting_state
                 .header_text
                 .clone()
-                .unwrap_or(self.format_default_header()),
+                .unwrap_or_else(|| self.format_default_header()),
         );
         lines.push(self.format_footer());
 
         lines.join("\n").into_bytes()
     }
+
+    // pub fn format_synopsis_setion(&mut self, ast: MdocDocument) -> Vec<u8> {
+    //     let max_width = self.formatting_settings.width;
+    //     let mut lines = Vec::new();
+    //     let mut current_line = String::new();
+
+    //     for node in ast.elements {
+    //         let formatted_node = match node {
+    //             Element::Macro(macro_node) => {
+    //                 match macro_node.mdoc_macro {
+    //                     Macro::Sh { ref title } => {
+    //                         if title.to_ascii_uppercase().ne("SYNOPSIS") {
+    //                             continue;
+    //                         }
+    //                         self.format_sh_block(title.clone(), macro_node)
+    //                     },
+    //                     _ => continue,
+    //                 }
+    //             },
+    //             _ => continue,
+    //         };
+
+    //         if current_line.chars().count() + formatted_node.chars().count() > max_width {
+    //             for word in formatted_node.split_whitespace() {
+    //                 if current_line.chars().count() + word.chars().count() >= max_width {
+    //                     lines.push(current_line.trim_end().to_string());
+    //                     current_line.clear();
+    //                 }
+
+    //                 current_line.push_str(word);
+    //                 current_line.push(' ');
+    //             }
+    //         } else {
+    //             let is_all_control = formatted_node.chars().all(|ch| ch.is_ascii_control());
+    //             if is_all_control {
+    //                 if let Some(' ') = current_line.chars().last() {
+    //                     current_line.pop();
+    //                 }
+    //             }
+    //             current_line.push_str(&formatted_node);
+    //             if !formatted_node.is_empty() && !is_all_control {
+    //                 if current_line.chars().last() != Some('\n') {
+    //                     current_line.push(' ');
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     if !current_line.is_empty() {
+    //         lines.push(current_line.trim_end().to_string());
+    //     }
+
+    //     lines.join("\n").into_bytes()
+    // }
+
+    // pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
+    //     let max_width = self.formatting_settings.width;
+    //     let mut lines = Vec::new();
+    //     let mut current_line = String::new();
+
+    //     for node in ast.elements {
+    //         let formatted_node = self.format_node(node);
+
+    //         if current_line.chars().count() + formatted_node.chars().count() > max_width {
+    //             for word in formatted_node.split_whitespace() {
+    //                 if current_line.chars().count() + word.chars().count() >= max_width {
+    //                     lines.push(current_line.trim_end().to_string());
+    //                     current_line.clear();
+    //                 }
+
+    //                 current_line.push_str(word);
+    //                 current_line.push(' ');
+    //             }
+    //         } else {
+    //             let is_all_control = formatted_node.chars().all(|ch| ch.is_ascii_control());
+    //             if is_all_control {
+    //                 if let Some(' ') = current_line.chars().last() {
+    //                     current_line.pop();
+    //                 }
+    //             }
+    //             current_line.push_str(&formatted_node);
+    //             if !formatted_node.is_empty() && !is_all_control {
+    //                 if current_line.chars().last() != Some('\n') {
+    //                     current_line.push(' ');
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     if !current_line.is_empty() {
+    //         lines.push(current_line.trim_end().to_string());
+    //     }
+
+    //     lines.insert(
+    //         0,
+    //         self.formatting_state
+    //             .header_text
+    //             .clone()
+    //             .unwrap_or(self.format_default_header()),
+    //     );
+    //     lines.push(self.format_footer());
+
+    //     lines.join("\n").into_bytes()
+    // }
 
     fn format_default_header(&mut self) -> String {
         self.format_dt(None, "", None)
@@ -187,7 +322,7 @@ impl MdocFormatter {
         if self.formatting_state.date.is_empty() {
             self.format_dd(chrono::Local::now().date_naive().into());
         }
-        
+
         let mut space_size = self
             .formatting_settings
             .width
@@ -270,7 +405,7 @@ impl MdocFormatter {
 
             // Block full-implicit
             Macro::It => self.format_it_block(macro_node),
-            Macro::Nd => self.format_nd(macro_node),
+            Macro::Nd { line } => self.format_nd(macro_node),
             Macro::Nm => self.format_nm(macro_node),
             Macro::Sh{ title } => self.format_sh_block(title, macro_node),
             Macro::Ss{ title } => self.format_ss_block(title, macro_node),
@@ -829,7 +964,7 @@ fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: OffsetType) -> 
     lines.into_iter()
         .map(|line|{
             let line_indent = width.saturating_sub(line.len());
-            let line = match offset{
+            match offset{
                 OffsetType::Left => line,
                 OffsetType::Right => {
                     let indent = vec![' '; line_indent].iter().collect::<String>();
@@ -840,7 +975,7 @@ fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: OffsetType) -> 
                     indent.clone() + &line + &indent.clone()
                 },
                 _ => unreachable!()
-            };
+            }
         })
         .collect::<Vec<_>>()
 }
@@ -854,63 +989,64 @@ impl MdocFormatter {
         compact: bool, 
         macro_node: MacroNode
     ) -> String {
-        let (indent, offset) = if let Some(offset) = offset{
-            match offset{
-                OffsetType::Indent => (self.formatting_settings.indent, OffsetType::Left),
-                OffsetType::IndentTwo => (self.formatting_settings.indent * 2, OffsetType::Left),
-                OffsetType::Left => (0, OffsetType::Left),
-                OffsetType::Right => (0, OffsetType::Right),
-                OffsetType::Center => (0, OffsetType::Center)
-            }
-        } else {
-            (self.formatting_settings.indent as isize, OffsetType::Left)
-        };
+        String::new()
+        // let (indent, offset) = if let Some(offset) = offset{
+        //     match offset{
+        //         OffsetType::Indent => (self.formatting_settings.indent, OffsetType::Left),
+        //         OffsetType::IndentTwo => (self.formatting_settings.indent * 2, OffsetType::Left),
+        //         OffsetType::Left => (0, OffsetType::Left),
+        //         OffsetType::Right => (0, OffsetType::Right),
+        //         OffsetType::Center => (0, OffsetType::Center)
+        //     }
+        // } else {
+        //     (self.formatting_settings.indent, OffsetType::Left)
+        // };
 
-        self.formatting_state.current_indent += indent;
-        let indent = self.formatting_state.current_indent;
-        let indent = vec![" "; indent].join("");
-        let line_width = self.formatting_settings.width.saturating_sub(indent.len());
+        // self.formatting_state.current_indent += indent;
+        // let indent = self.formatting_state.current_indent;
+        // let indent = vec![" "; indent].join("");
+        // let line_width = self.formatting_settings.width.saturating_sub(indent.len());
 
-        if line_width{
-            return String::new();
-        }
+        // // if line_width {
+        // //     return String::new();
+        // // }
 
-        let formatted_elements = macro_node.nodes
-            .iter()
-            .map(|el| self.format_node(el.clone()))
-            .map(|formatted_element| formatted_element.split(" ").collect::<Vec<_>>());
+        // let formatted_elements = macro_node.nodes
+        //     .iter()
+        //     .map(|el| self.format_node(el.clone()))
+        //     .map(|formatted_element| formatted_element.split(" ").collect::<Vec<_>>());
 
-        let lines = match block_type{
-            BdType::Centered | BdType::Filled | BdType::Ragged => {
-                let words = formatted_elements
-                    .flatten()
-                    .collect::<Vec<_>>();
+        // let lines = match block_type{
+        //     BdType::Centered | BdType::Filled | BdType::Ragged => {
+        //         let words = formatted_elements
+        //             .flatten()
+        //             .collect::<Vec<_>>();
 
-                split_by_width(words, line_width)
-            },
-            BdType::Literal | BdType::Unfilled => {
-                let mut lines = vec![];
-                for formatted_element in formatted_elements{
-                    lines.extend(split_by_width(formatted_element, line_width));
-                }
-                lines
-            }
-        };
+        //         split_by_width(words, line_width)
+        //     },
+        //     BdType::Literal | BdType::Unfilled => {
+        //         let mut lines = vec![];
+        //         for formatted_element in formatted_elements{
+        //             lines.extend(split_by_width(formatted_element, line_width));
+        //         }
+        //         lines
+        //     }
+        // };
 
-        let mut content = add_indent_to_lines(lines, line_width, offset)
-            .iter()
-            .map(|line|{
-                indent + line
-            })
-            .collect::<Vec<_>>()        
-            .join("\n");
+        // let mut content = add_indent_to_lines(lines, line_width, offset)
+        //     .iter()
+        //     .map(|line|{
+        //         indent + line
+        //     })
+        //     .collect::<Vec<_>>()        
+        //     .join("\n");
 
-        if !compact{
-            let vertical_space = "\n\n".to_string();
-            content = vertical_space.clone() + &content; //+ &vertical_space;
-        }
+        // if !compact{
+        //     let vertical_space = "\n\n".to_string();
+        //     content = vertical_space.clone() + &content; //+ &vertical_space;
+        // }
 
-        content
+        // content
     }
 
     fn format_bf_block(&mut self, _bf_type: BfType, macro_node: MacroNode) -> String {

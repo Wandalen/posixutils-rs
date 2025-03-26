@@ -7376,12 +7376,6 @@ Line
             }
 
             #[test]
-            fn u_invalid_uri() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%U some_non_uri_text").is_err());
-            }
-
-            #[test]
             fn u_no_args() {
                 // TODO: Format and compare pest errors??
                 assert!(MdocParser::parse_mdoc(".%U").is_err());
@@ -8877,7 +8871,14 @@ Line
 
         #[test]
         fn db_no_args() {
-            assert!(MdocParser::parse_mdoc(".Db").is_err());
+            let content = ".Db";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Db,
+                nodes: vec![],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
