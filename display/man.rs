@@ -25,7 +25,7 @@ mod man_util;
 const MAN_SECTIONS: [i8; 9] = [1, 8, 2, 3, 4, 5, 6, 7, 9];
 
 /// Possible default config file paths to check if `-C` is not provided.
-const MAN_CONFS: [&str; 2] = ["/etc/man.conf", "/etc/examples/man.conf"];
+const MAN_CONFS: [&str; 3] = ["/etc/man.conf", "/etc/examples/man.conf", "/etc/manpath.config"];
 
 #[derive(Parser)]
 #[command(
