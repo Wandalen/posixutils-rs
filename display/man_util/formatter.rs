@@ -2106,67 +2106,81 @@ mod tests {
 
         #[test]
         fn spaces() {
-            let input = r"\ \~\0\|\^\&\)\%\:";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\ \~\0\|\^\&\)\%\:";
             let output = r"
 
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn lines() {
-            let input = r"\(ba \(br \(ul \(ru \(rn \(bb \(sl \(rs";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(ba \(br \(ul \(ru \(rn \(bb \(sl \(rs";
             let output = r"
 | │ _ _ ‾ ¦ / \
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn text_markers() {
-            let input = r"\(ci \(bu \(dd \(dg \(lz \(sq \(ps \(sc \(lh \(rh \(at \(sh \(CR \(OK \(CL \(SP \(HE \(DI";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(ci \(bu \(dd \(dg \(lz \(sq \(ps \(sc \(lh \(rh \(at \(sh \(CR \(OK \(CL \(SP \(HE \(DI";
             let output = r"
 ○ • ‡ † ◊ □ ¶ § ☜ ☞ @ # ↵ ✓ ♣ ♠ ♥ ♦
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn legal_symbols() {
-            let input = r"\(co \(rg \(tm";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(co \(rg \(tm";
             let output = r"
 © ® ™
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn punctuation() {
-            let input = r"\(em \(en \(hy \e \(r! \(r?";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(em \(en \(hy \e \(r! \(r?";
             let output = r"
 — – ‐ \\ ¡ ¿
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn quotes() {
-            let input = r"\(Bq \(bq \(lq \(rq \(oq \(cq \(aq \(dq \(Fo \(Fc \(fo \(fc";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(Bq \(bq \(lq \(rq \(oq \(cq \(aq \(dq \(Fo \(Fc \(fo \(fc";
             let output = "
 „ ‚ “ ” ‘ ’ ' \" « » ‹ ›
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn brackets() {
-            let input = r"\(lB \(rB \(lC \(rC \(la \(ra \(bv \[braceex] \[bracketlefttp] \[bracketleftbt]
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(lB \(rB \(lC \(rC \(la \(ra \(bv \[braceex] \[bracketlefttp] \[bracketleftbt]
 \[bracketleftex] \[bracketrighttp] \[bracketrightbt] \[bracketrightex]
 \(lt \[bracelefttp] \(lk \[braceleftmid] \(lb \[braceleftbt] \[braceleftex]
 \(rt \[bracerighttp] \(rk \[bracerightmid] \(rb \[bracerightbt] \[bracerightex]
@@ -2175,33 +2189,39 @@ mod tests {
             let output = r"
 [ ] { } ⟨ ⟩ ⎪ ⎪ ⎡ ⎣ ⎢ ⎤ ⎦ ⎥ ⎧ ⎧ ⎨ ⎨ ⎩ ⎩ ⎪ ⎫ ⎫ ⎬ ⎬ ⎭ ⎭ ⎪ ⎛ ⎝ ⎜ ⎞ ⎠ ⎟
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn arrows() {
-            let input = r"\(<- \(-> \(<> \(da \(ua \(va \(lA \(rA \(hA \(uA \(dA \(vA \(an";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(<- \(-> \(<> \(da \(ua \(va \(lA \(rA \(hA \(uA \(dA \(vA \(an";
             let output = r"
 ← → ↔ ↓ ↑ ↕ ⇐ ⇒ ⇔ ⇑ ⇓ ⇕ ⎯
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn logical() {
-            let input = r"\(AN \(OR \[tno] \(no \(te \(fa \(st \(tf \(3d \(or";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(AN \(OR \[tno] \(no \(te \(fa \(st \(tf \(3d \(or";
             let output = r"
 ∧ ∨ ¬ ¬ ∃ ∀ ∋ ∴ ∴ |
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn mathematical() {
-            let input = r"\- \(mi \+ \(pl \(-+ \[t+-] \(+- \(pc \[tmu]
+            let input = r".Dd January 1, 1970
+.Os footer text
+\- \(mi \+ \(pl \(-+ \[t+-] \(+- \(pc \[tmu]
 \(mu \(c* \(c+ \[tdi] \(di \(f/ \(** \(<= \(>= \(<< \(>> \(eq \(!= \(==
 \(ne \(ap \(|= \(=~ \(~~ \(~= \(pt \(es \(mo \(nm \(sb \(nb \(sp
 \(nc \(ib \(ip \(ca \(cu \(/_ \(pp \(is \[integral] \[sum] \[product]
@@ -2212,33 +2232,39 @@ mod tests {
 - − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆ ⊇
 ∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn ligatures() {
-            let input = r"\(ff \(fi \(fl \(Fi \(Fl \(AE \(ae \(OE \(oe \(ss \(IJ \(ij";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(ff \(fi \(fl \(Fi \(Fl \(AE \(ae \(OE \(oe \(ss \(IJ \(ij";
             let output = r"
 ﬀ ﬁ ﬂ ﬃ ﬄ Æ æ Œ œ ß Ĳ ĳ
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn accents() {
-            let input = "\\(a\" \\(a- \\(a. \\(a^ \\(aa \\\' \\(ga \\` \\(ab \\(ac \\(ad \\(ah \\(ao \\(a~ \\(ho \\(ha \\(ti";
+            let input = ".Dd January 1, 1970
+.Os footer text
+\\(a\" \\(a- \\(a. \\(a^ \\(aa \\\' \\(ga \\` \\(ab \\(ac \\(ad \\(ah \\(ao \\(a~ \\(ho \\(ha \\(ti";
             let output = r"
 ˝ ¯ ˙ ^ ´ ´ ` ` ˘ ¸ ¨ ˇ ˚ ~ ˛ ^ ~
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn accented_letters() {
-            let input = r"\('A \('E \('I \('O \('U \('Y \('a \('e
+            let input = r".Dd January 1, 1970
+.Os footer text
+\('A \('E \('I \('O \('U \('Y \('a \('e
 \('i \('o \('u \('y \(`A \(`E \(`I \(`O \(`U \(`a \(`e \(`i \(`o \(`u
 \(~A \(~N \(~O \(~a \(~n \(~o \(:A \(:E \(:I \(:O \(:U \(:a \(:e \(:i
 \(:o \(:u \(:y \(^A \(^E \(^I \(^O \(^U \(^a \(^e \(^i \(^o \(^u \(,C
@@ -2248,43 +2274,51 @@ mod tests {
 Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü ÿ
 Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn special_letters() {
-            let input = r"\(-D \(Sd \(TP \(Tp \(.i \(.j";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(-D \(Sd \(TP \(Tp \(.i \(.j";
             let output = r"
 Ð ð Þ þ ı ȷ
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn currency() {
-            let input = r"\(Do \(ct \(Eu \(eu \(Ye \(Po \(Cs \(Fn";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(Do \(ct \(Eu \(eu \(Ye \(Po \(Cs \(Fn";
             let output = r"
 $ ¢ € € ¥ £ ¤ ƒ
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn units() {
-            let input = r"\(de \(%0 \(fm \(sd \(mc \(Of \(Om";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(de \(%0 \(fm \(sd \(mc \(Of \(Om";
             let output = r"
 ° ‰ ′ ″ µ ª º
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn greek_leters() {
-            let input = r"\(*A \(*B \(*G \(*D \(*E \(*Z
+            let input = r".Dd January 1, 1970
+.Os footer text
+\(*A \(*B \(*G \(*D \(*E \(*Z
 \(*Y \(*H \(*I \(*K \(*L \(*M \(*N \(*C \(*O \(*P \(*R \(*S
 \(*T \(*U \(*F \(*X \(*Q \(*W \(*a \(*b \(*g \(*d \(*e \(*z
 \(*y \(*h \(*i \(*k \(*l \(*m \(*n \(*c \(*o \(*p \(*r \(*s
@@ -2294,37 +2328,43 @@ $ ¢ € € ¥ £ ¤ ƒ
 Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο
 π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn predefined_strings() {
-            let input = r"\*(Ba \*(Ne \*(Ge \*(Le \*(Gt \*(Lt \*(Pm \*(If \*(Pi \*(Na \*(Am \*R \*(Tm \*q \*(Rq \*(Lq \*(lp \*(rp \*(lq \*(rq \*(ua \*(va \*(<= \*(>= \*(aa \*(ga \*(Px \*(Ai";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\*(Ba \*(Ne \*(Ge \*(Le \*(Gt \*(Lt \*(Pm \*(If \*(Pi \*(Na \*(Am \*R \*(Tm \*q \*(Rq \*(Lq \*(lp \*(rp \*(lq \*(rq \*(ua \*(va \*(<= \*(>= \*(aa \*(ga \*(Px \*(Ai";
             let output ="
 | ≠ ≥ ≤ > < ± infinity pi NaN & ® (Tm) \" ” “ ( ) “ ” ↑ ↕ ≤ ≥ ´ ` POSIX ANSI
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn unicode() {
-            let input = r"\[u0100] \C'u01230' \[u025600]";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\[u0100] \C'u01230' \[u025600]";
             let output = "
 Ā ሰ 𥘀
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn numbered() {
-            let input = r"\N'34' \[char43]";
+            let input = r".Dd January 1, 1970
+.Os footer text
+\N'34' \[char43]";
             let output = "
 \" +
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     }
@@ -2928,7 +2968,9 @@ footer text                     January 1, 1970                    footer text";
 
         #[test]
         fn an() {
-            let input = ".An Kristaps
+            let input = ".Dd January 1, 1970
+.Os Debian
+.An Kristaps
 .An Kristaps
 .An Kristaps
 .An -split
@@ -2944,7 +2986,7 @@ Kristaps
 Kristaps
 Kristaps Kristaps
 
-                                March 25, 2025                                ";
+Debian                          January 1, 1970                         Debian";
             test_formatting(input, output);
         }
 
@@ -3813,15 +3855,25 @@ footer text                     January 1, 1970                    footer text";
 
         #[test]
         fn block_empty() {
-            let input = r#".Aq"#;
-            let output = "⟨⟩";
+            let input = r#".Dd January 1, 1970
+.Os footer text
+.Aq"#;
+            let output = "
+⟨⟩
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn block_single_line() {
-            let input = r#".Aq Ad addr addr Ad addr Ad addr"#;
-            let output = "⟨addr addr addr addr⟩";
+            let input = r#".Dd January 1, 1970
+.Os footer text
+.Aq Ad addr addr Ad addr Ad addr"#;
+            let output = "
+⟨addr addr addr addr⟩
+
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     }
@@ -3831,18 +3883,22 @@ footer text                     January 1, 1970                    footer text";
 
         #[test]
         fn block_empty() {
-            let input = r#".Ao
+            let input = r#".Dd January 1, 1970
+.Os footer text
+.Ao
 .Ac"#;
             let output = "
 ⟨⟩
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn block_single_line() {
-            let input = r#".Ao
+            let input = r#".Dd January 1, 1970
+.Os footer text
+.Ao
 .Ad addr addr
 .Ad addr 
 .Ad addr 
@@ -3850,13 +3906,15 @@ footer text                     January 1, 1970                    footer text";
             let output = "
 ⟨addr addr addr addr⟩
 
-                                March 25, 2025                                ";
+footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
         fn multi_line() {
-            let input = r#".Ao
+            let input = r#".Dd January 1, 1970
+.Os footer text
+.Ao
 .Ad addr 
 .Ad addr 
 .Ad addr 
@@ -3871,19 +3929,21 @@ Text loooooooong line
 ⟨addr addr addr Text loooooooong line Text loooooooong line Text loooooooong
 line Text loooooooong line Text loooooooong line Text loooooooong line⟩
 
-                                March 25, 2025                                "#;
+footer text                     January 1, 1970                    footer text"#;
             test_formatting(input, output);
         }
 
         #[test]
         fn block_overlong_line() {
-            let input = r#".Aq Ad addr Ad addr Ad addr Text looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong line"#;
+            let input = r#".Dd January 1, 1970
+.Os Debian
+.Aq Ad addr Ad addr Ad addr Text looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong line"#;
             let output = r#"
 ⟨addr addr addr Text
 looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong
 line⟩
 
-                                March 25, 2025                                "#;
+Debian                          January 1, 1970                         Debian"#;
             test_formatting(input, output);
         }
 
@@ -3913,7 +3973,9 @@ footer text                     January 1, 1970                    footer text";
 
     #[test]
     fn test_delimiters() {
-        let input = r#".Ao
+        let input = r#".Dd January 1, 1970
+.Os Debian
+.Ao
 .Ad ( addr ) addr
 .Ad [ addr ] 
 .Ad [ addr Ad addr ] 
@@ -3921,7 +3983,7 @@ footer text                     January 1, 1970                    footer text";
         let output = r"
 ⟨(addr) addr [addr] [addr addr]⟩
 
-                                March 25, 2025                                ";
+Debian                          January 1, 1970                         Debian";
         test_formatting(input, output);
     }
 }
