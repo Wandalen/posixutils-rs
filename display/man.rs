@@ -25,7 +25,11 @@ mod man_util;
 const MAN_SECTIONS: [i8; 9] = [1, 8, 2, 3, 4, 5, 6, 7, 9];
 
 /// Possible default config file paths to check if `-C` is not provided.
-const MAN_CONFS: [&str; 3] = ["/etc/man.conf", "/etc/examples/man.conf", "/etc/manpath.config"];
+const MAN_CONFS: [&str; 3] = [
+    "/etc/man.conf",
+    "/etc/examples/man.conf",
+    "/etc/manpath.config",
+];
 
 #[derive(Parser)]
 #[command(
@@ -283,14 +287,14 @@ fn get_man_page_from_path(path: &PathBuf) -> Result<Vec<u8>, ManError> {
 fn format_man_page(
     man_bytes: Vec<u8>,
     formatting: &FormattingSettings,
-    synopsis: bool
+    synopsis: bool,
 ) -> Result<Vec<u8>, ManError> {
     let content = String::from_utf8(man_bytes).unwrap();
     let mut formatter = MdocFormatter::new(*formatting);
 
     let document = MdocParser::parse_mdoc(content)?;
     let formatted_document = match synopsis {
-        true  => formatter.format_synopsis_section(document),
+        true => formatter.format_synopsis_section(document),
         false => formatter.format_mdoc(document),
     };
 
@@ -298,10 +302,7 @@ fn format_man_page(
 }
 
 /// Write formatted output to either a pager or directly to stdout if `copy = true`.
-fn display_pager(
-    man_page: Vec<u8>, 
-    copy_mode: bool, 
-) -> Result<(), ManError> {
+fn display_pager(man_page: Vec<u8>, copy_mode: bool) -> Result<(), ManError> {
     if copy_mode {
         io::stdout().write_all(&man_page)?;
         io::stdout().flush()?;
@@ -372,7 +373,9 @@ fn man(args: Args) -> Result<bool, ManError> {
 
     if let Some(paths) = args.local_file {
         if paths.iter().any(|path| !path.exists()) {
-            return Err(ManError::PageNotFound("One of the provided files was not found".to_string()));
+            return Err(ManError::PageNotFound(
+                "One of the provided files was not found".to_string(),
+            ));
         }
 
         display_all_man_pages(paths, args.copy, args.synopsis, &formatting)?;

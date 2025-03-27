@@ -158,7 +158,7 @@ element = {
   text_line
 }
 
-mdoc = { SOI ~ (("." ~ comment_macro ~ NEWLINE)* ~ element)* ~ EOI }
+mdoc = { SOI ~ (("." ~ comment_macro ~ NEWLINE)* ~ element)* ~ EOI? }
 
 // ----- Block full-explicit macros
 
