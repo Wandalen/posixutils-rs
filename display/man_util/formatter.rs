@@ -2394,15 +2394,6 @@ impl MdocFormatter {
         String::new()
     }
 
-    fn format_ot(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
-    }
-
     fn format_ox(&self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
     }
@@ -2548,7 +2539,7 @@ mod tests {
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
         //println!("{:?}", formatter);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-        println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}", 
+        println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
             output, 
             vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
             result
@@ -3115,8 +3106,12 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.It Line 1
-.It Line 2";
+.Bl -bullet
+.It 
+Line 1
+.It 
+Line 2
+.El";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
@@ -3197,8 +3192,13 @@ footer text                     January 1, 1970                    footer text";
         let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Ta";
-        let output = "";
+.Bl -column \"A col\" \"B col\"
+.It item1 Ta item2
+.It item1 Ta item2";
+        let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
+
+footer text                     January 1, 1970                    footer text";
         test_formatting(input, output);
     }
 
