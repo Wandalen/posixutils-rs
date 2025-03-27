@@ -140,15 +140,26 @@ impl MdocFormatter {
             }
         } else {
             let is_all_control = formatted.chars().all(|ch| ch.is_ascii_control());
+
             if is_all_control {
                 if let Some(' ') = current_line.chars().last() {
                     current_line.pop();
                 }
             }
+
             current_line.push_str(formatted);
-            if !formatted.is_empty() && !is_all_control && current_line.chars().last() != Some('\n')
+            
+            if !formatted.is_empty() 
+                && !is_all_control 
+                && current_line.chars().last() != Some('\n') 
+                && current_line.chars().last() != Some(' ') 
             {
-                current_line.push(' ');
+                match self.formatting_state.spacing.as_str() {
+                    " " => current_line.push(' '),
+                    ""  => {},
+                    _   => unreachable!()
+                }
+                
             }
         }
     }
@@ -1471,7 +1482,7 @@ impl MdocFormatter {
             .collect::<Vec<String>>()
             .join("");
 
-        content
+        format!("– {}", content)
     }
 
     fn format_nm(&mut self, macro_node: MacroNode) -> String {
@@ -1497,8 +1508,8 @@ impl MdocFormatter {
     }
 
     fn format_sh_block(&mut self, title: String, macro_node: MacroNode) -> String {
-        self.formatting_state.current_indent = self.formatting_settings.indent;
-        let mut content = macro_node
+        let spacing = vec![" "; self.formatting_settings.indent].join("");
+        let content = macro_node
             .nodes
             .into_iter()
             .map(|node| {
@@ -1511,14 +1522,18 @@ impl MdocFormatter {
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("");
-
-        content = title.to_uppercase() + "\n" + &content + "\n";
-        self.formatting_state.current_indent = 0;
-        content
+                
+        format!(
+            "{}\n{}{}\n", 
+            title.to_uppercase(), 
+            spacing,
+            content
+        )
     }
 
-    fn format_ss_block(&mut self, title: String, macro_node: MacroNode) -> String {
-        let mut content = macro_node
+    fn format_ss_block(&mut self, title: String, macro_node: MacroNode) -> String {        
+        let spacing = vec![" "; self.formatting_settings.indent].join("");
+        let content = macro_node
             .nodes
             .into_iter()
             .map(|node| {
@@ -1536,11 +1551,19 @@ impl MdocFormatter {
         if title_ident == 0 {
             title_ident = 1;
         }
-        let title_line = vec![" "; title_ident].join("") + &title.to_uppercase() + "\n";
+        
+        let title_line = format!(
+            "{}{}\n",
+            vec![" "; title_ident].join(""),
+            title
+        );
 
-        content = title_line + &content;
-
-        content
+        format!(
+            "{}{}{}",
+            title_line,
+            spacing,
+            content
+        )
     }
 }
 
@@ -2366,7 +2389,7 @@ impl MdocFormatter {
                 _ => " ".to_string(),
             },
         };
-        String::new()
+        self.formatting_state.spacing.clone()
     }
 
     fn format_st(&self, st_type: StType) -> String {
@@ -4106,6 +4129,23 @@ footer text                     January 1, 1970                    footer text";
         }
 
         #[test]
+        fn ns_temp() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Ad addr1 Ns Ad addr2
+.Ad addr1 Ns Ad addr2 Ns addr3";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+addr1addr2 addr1addr2addr3
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
         fn ns() {
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
@@ -4147,6 +4187,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
+
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4249,20 +4290,37 @@ footer text                     January 1, 1970                    footer text";
         }
 
         #[test]
-        fn sm() {
-            let input = ".Dd January 1, 1970
+        fn sm_temp() {
+            let input = 
+".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Sm on
-A B C
 .Sm off
-F G H
-.Sm
-R T Y";
-            let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+.Ad addr Ad addr
+.Sm on
+.Ad addr Ad addr
+A B C D";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
 
-A B C F G H R T Y
+addraddr addr addr A B C D
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn sm() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Sm off A B C D
+.Sm on A B C D";
+            let output =
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+ABCD A B C D
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4308,7 +4366,7 @@ footer text                     January 1, 1970                    footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
-word1 word2
+\u{1b}[1mword1 word2\u{1b}[0m
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4538,6 +4596,22 @@ footer text                     January 1, 1970                    footer text";
 ⟨(addr) addr [addr] [addr addr]⟩
 
 Debian                          January 1, 1970                         Debian";
+        test_formatting(input, output);
+    }
+
+    #[test]
+    fn zero_width() {
+        let input = r".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Xr mandoc 1 \&Ns \&( s \&) behaviour
+Text Line \&Ns \&( s \&) behaviour";
+        let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+mandoc(1) Ns ( s ) behaviour Text Line Ns ( s ) behaviour
+
+footer text                     January 1, 1970                    footer text";
         test_formatting(input, output);
     }
 }
