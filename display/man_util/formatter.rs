@@ -31,8 +31,6 @@ pub struct FormattingState {
     spacing: String,
     date: String,
     split_mod: bool,
-    title: Option<String>,
-    section: Option<String>,
     current_indent: usize 
 }
 
@@ -46,8 +44,6 @@ impl Default for FormattingState {
             spacing: " ".to_string(),
             date: String::default(),
             split_mod: false,
-            title: None,
-            section: None,
             current_indent: 0
         }
     }
@@ -410,6 +406,9 @@ impl MdocFormatter {
                 )
             },
 
+            // Special block macro ta formatting
+            Macro::Ta => self.format_ta(),
+
             // Block full-implicit
             Macro::It => self.format_it_block(macro_node),
             Macro::Nd => self.format_nd(macro_node),
@@ -510,7 +509,6 @@ impl MdocFormatter {
             Macro::Ns => self.format_ns(),
             Macro::Nx => self.format_nx(macro_node),
             Macro::Os => self.format_os(macro_node),
-            Macro::Ot => self.format_ot(macro_node),
             Macro::Ox => self.format_ox(macro_node),
             Macro::Pa => self.format_pa(macro_node),
             Macro::Pf { prefix } => self.format_pf(prefix.as_str()),
@@ -527,7 +525,7 @@ impl MdocFormatter {
             Macro::Va => self.format_va(macro_node),
             Macro::Xr { name, section } => self.format_xr(name.as_str(), section.as_str()),
 
-            _ => unreachable!(),
+            _ => String::new(),
         }
     }
 
@@ -943,7 +941,7 @@ impl MdocFormatter {
     }
 
     /// Special block macro ta formatting
-    fn format_ta(&mut self, _macro_node: MacroNode) -> String {
+    fn format_ta(&mut self) -> String {
         String::new()
     }
 }
@@ -1149,7 +1147,7 @@ impl MdocFormatter {
     }
 
     fn format_bk_block(&mut self, macro_node: MacroNode) -> String {
-        let mut content = macro_node
+        let content = macro_node
             .nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -1367,6 +1365,7 @@ impl MdocFormatter {
                     row_str.replace_range(indent..(indent + content.len() - p), "");
                 }
                 content += &row_str;
+                i += 1;
             }
         }
 
@@ -1746,11 +1745,6 @@ impl MdocFormatter {
 impl MdocFormatter {
     fn format_rs_block(&self, macro_node: MacroNode) -> String {
         let mut iter = macro_node.nodes.into_iter().peekable();
-
-        let is_a = |el: &Element| match el {
-            Element::Macro(node) => node.mdoc_macro == Macro::A,
-            _ => unreachable!("Unexpected rule!"),
-        };
 
         let mut items = Vec::new();
         while let Some(el) = iter.peek() {
@@ -2556,7 +2550,7 @@ mod tests {
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
         println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}", 
             output, 
-            vec!["-";formatter.formatting_settings.width].iter().collect::<String>(), 
+            vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
             result
         );
         assert_eq!(output, result)

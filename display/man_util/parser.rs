@@ -86,11 +86,7 @@ pub enum MdocError {
     #[error("mdoc: {0}")]
     Pest(#[from] Box<pest::error::Error<Rule>>),
     #[error("mdoc: {0}")]
-    Parsing(String),
-    #[error("mdoc: {0}")]
     Validation(String),
-    #[error("mdoc: {0}")]
-    Formatting(String),
 }
 
 #[derive(Default)]

@@ -51,6 +51,7 @@ impl From<Pair<'_, Rule>> for OffsetType {
             Rule::off_indent_two => Self::IndentTwo,
             Rule::off_left => Self::Left,
             Rule::off_right => Self::Right,
+            Rule::off_center => Self::Center,
             _ => unreachable!(),
         }
     }
@@ -104,15 +105,6 @@ impl From<Pair<'_, Rule>> for BlType {
             _ => unreachable!(),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ItType {
-    // MandatoryArgs,
-    // OptionalArgs,
-    WithArgs,
-    None,
-    // Column,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -15,6 +15,7 @@ use man_util::parser::MdocParser;
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::num::ParseIntError;
+use std::string::FromUtf8Error;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 use std::str::FromStr;
@@ -177,9 +178,19 @@ enum ManError {
     #[error("parsing error: {0}")]
     Mdoc(#[from] man_util::parser::MdocError),
 
-    /// Parsing int error
+    /// Parsing error
     #[error("parsing error: {0}")]
-    ParseError(#[from] ParseIntError),
+    ParseError(#[from] ParseError),
+}
+
+/// Parsing error types
+#[derive(Error, Debug)]
+enum ParseError {
+    #[error("{0}")]
+    ParseIntError(#[from] ParseIntError),
+
+    #[error("{0}")]
+    FromUtf8Error(#[from] FromUtf8Error)
 }
 
 /// Manual type
@@ -273,10 +284,10 @@ impl Default for FormattingSettings{
 /// Try to locate the configuration file:
 /// - If `path` is Some, check if it exists; error if not.
 /// - If `path` is None, try each of MAN_CONFS; return an error if none exist.
-fn get_config_file_path(path: Option<PathBuf>) -> Result<PathBuf, ManError> {
+fn get_config_file_path(path: &Option<PathBuf>) -> Result<PathBuf, ManError> {
     if let Some(user_path) = path {
         if user_path.exists() {
-            Ok(user_path)
+            Ok(user_path.clone())
         } else {
             Err(ManError::ConfigFileNotFound(
                 user_path.display().to_string(),
@@ -363,17 +374,17 @@ where
 ///
 /// Returns [ManError] if working on terminal and failed to get terminal size.
 fn get_pager_settings(config: &ManConfig) -> Result<FormattingSettings, ManError> {
-    let mut ps = FormattingSettings::default();
+    let mut settings = FormattingSettings::default();
 
     if let Some(Some(val_str)) = config.output_options.get("indent") {
-        indent = val_str.parse::<usize>()?;
+        settings.indent = val_str.parse::<usize>()
+            .map_err(|err| ManError::ParseError(ParseError::ParseIntError(err)))?;
     }
 
     if let Some(Some(val_str)) = config.output_options.get("width") {
-        width = val_str.parse::<usize>()?;
+        settings.width = val_str.parse::<usize>()
+            .map_err(|err| ManError::ParseError(ParseError::ParseIntError(err)))?;
     }
-
-    let mut settings = FormattingSettings { width, indent };
 
     // If stdout is not a terminal, don't try to ioctl for size
     if !io::stdout().is_terminal() {
@@ -418,33 +429,6 @@ fn get_man_page_from_path(path: &PathBuf) -> Result<Vec<u8>, ManError> {
     Ok(output.stdout)
 }
 
-/// Parses `mdoc(7)`.
-///
-/// # Arguments
-///
-/// `man_page` - [&[u8]] with content that needs to be formatted.
-/// `width` - [Option<u16>] width value of current terminal.
-///
-/// # Returns
-///
-/// [Vec<u8>] of formatted documentation.
-///
-/// # Errors
-///
-/// [ManError] if file failed to execute `groff(1)` formatter.
-fn parse_mdoc(
-    man_page: &[u8],
-    formatting_settings: FormattingSettings,
-) -> Result<Vec<u8>, ManError> {
-    let content = String::from_utf8(man_page.to_vec()).unwrap();
-    let document = MdocParser::parse_mdoc(content)?;
-    
-    let mut formatter = MdocFormatter::new(formatting_settings);
-    let formatted_document = formatter.format_mdoc(document);
-
-    Ok(formatted_document)
-}
-
 /// Parse and format a man page’s raw content into text suitable for display.
 ///
 /// # Arguments
@@ -463,7 +447,8 @@ fn format_man_page(
     formatting: &FormattingSettings,
     synopsis: bool
 ) -> Result<Vec<u8>, ManError> {
-    let content = String::from_utf8(man_bytes).unwrap();
+    let content = String::from_utf8(man_bytes)
+        .map_err(|err| ManError::ParseError(ParseError::FromUtf8Error(err)))?;
     let mut formatter = MdocFormatter::new(*formatting);
 
     let document = MdocParser::parse_mdoc(content)?;
@@ -596,7 +581,7 @@ impl Man{
             &self.formatting_settings, 
             self.args.synopsis
         )?;
-        display_pager(formatted, self.args.copy_mode)
+        display_pager(formatted, self.args.copy)
     }
 
     /// Display *all* man pages found for a particular name (when -a is specified).
@@ -641,7 +626,7 @@ impl Man{
             return Err(ManError::NoNames);
         }
 
-        let config_path = get_config_file_path(args.config_file)?;
+        let config_path = get_config_file_path(&args.config_file)?;
         let config = parse_config_file(config_path)?;
 
         let mut man = Self{
@@ -667,7 +652,7 @@ impl Man{
         if !man.args.subsection.is_empty(){
             std::env::set_var(
                 "MACHINE", 
-                OsStr::new(&self.args.subsection.clone())
+                OsStr::new(&man.args.subsection.clone())
             );
         }
 
@@ -684,6 +669,10 @@ impl Man{
             man.config.manpaths.clone(),
             MAN_PATHS.iter().filter_map(|s|PathBuf::from_str(s).ok()).collect::<Vec<_>>()
         ].concat();
+        
+        if man.search_paths.is_empty(){
+            return Err(ManError::ManPaths);
+        }
 
         man.sections = if let Some(section) = man.args.section{
             vec![section]
@@ -717,20 +706,21 @@ impl Man{
     fn man(&mut self) -> Result<bool, ManError> {
         let mut no_errors = true;
 
-        if let Some(paths) = args.local_file {
+        if let Some(paths) = &self.args.local_file {
             if self.args.list_pathnames{
-                let paths = paths.iter()
+                let paths = paths.into_iter()
                     .filter(|path| path.exists())
+                    .cloned()
                     .collect::<Vec<_>>(); 
                 self.display_paths(paths)?;
             }else{
-                self.display_all_man_pages(paths)?;
+                self.display_all_man_pages(paths.clone())?;
             }
             return Ok(no_errors);
         } else if self.args.apropos || self.args.whatis{
-            let command = if args.apropos { "apropos" } else { "whatis" };
+            let command = if self.args.apropos { "apropos" } else { "whatis" };
 
-            for keyword in self.args.names {
+            for keyword in &self.args.names {
                 let success = display_summary_database(command, &keyword)?;
                 if !success {
                     no_errors = false;
@@ -742,10 +732,10 @@ impl Man{
 
         for name in &self.args.names {
             if self.args.list_pathnames{
-                let all_paths: Vec<PathBuf> = self.get_man_page_paths(name, true)?;
+                let paths = self.get_man_page_paths(name, true)?;
                 self.display_paths(paths)?;
             }else{
-                let all_paths: Vec<PathBuf> = self.get_man_page_paths(name, self.args.all)?;
+                let paths = self.get_man_page_paths(name, self.args.all)?;
                 self.display_all_man_pages(paths)?;
             }
         }

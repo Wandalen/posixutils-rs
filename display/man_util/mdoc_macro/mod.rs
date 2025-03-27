@@ -44,18 +44,14 @@ pub enum Macro {
         offset: Option<OffsetType>,
         compact: bool,
     },
-    Ed, // End a display context started by Bd
-    Bf(BfType),
-    Ef, // End a display context started by Bf
     Bk,
-    Ek, // End a keep context started by Bk
+    Bf(BfType),
     Bl {
         list_type: BlType,
         offset: Option<OffsetType>,
         compact: bool,
         columns: Vec<String>,
     },
-    El, // End a list context started by Bl
     Bo,
     Bc, // Close a Bo block
     Bq,
@@ -130,9 +126,7 @@ pub enum Macro {
     Lp,
     Ms,
     Mt,
-    Nd {
-        line: String,
-    },
+    Nd,
     Nm,
     No,
     Ns,
@@ -141,7 +135,6 @@ pub enum Macro {
     Oc, // Close multi-line Oo context
     Op,
     Os,
-    Ot,
     Ox,
     Pa,
     Pf {
@@ -163,7 +156,6 @@ pub enum Macro {
     },
     Sm(Option<SmMode>),
     So,
-    Sc, // Close single-quoted context opened by So
     Sq,
     Ss {
         title: String,
@@ -181,9 +173,15 @@ pub enum Macro {
     Va,
     Vt,
     Xo,
-    Xc, // Close a scope opened by Xo
     Xr {
         name: String,
         section: String,
     },
+    _Ed, // End a display context started by Bd
+    _Ef, // End a display context started by Bf
+    _Ek, // End a keep context started by Bk
+    _El, // End a list context started by Bl
+    _Ot, // Deprecated
+    _Sc, // Close single-quoted context opened by So
+    _Xc, // Close a scope opened by Xo
 }
