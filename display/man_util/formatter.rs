@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use aho_corasick::AhoCorasick;
-use chrono::offset;
 use terminfo::Database;
 use crate::FormattingSettings;
 
@@ -782,27 +781,29 @@ impl MdocFormatter {
     }
 
     /// Special block macro ta formatting
-    fn format_ta(&mut self, macro_node: MacroNode) -> String {
+    fn format_ta(&mut self, _macro_node: MacroNode) -> String {
         String::new()
     }
 }
 
-fn split_by_width(words: Vec<&str>, width: usize) -> Vec<String>{
+fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
     if width == 0{
-        return words;
+        return words.iter()
+            .map(|s|s.to_string())
+            .collect::<Vec<_>>();
     }
     let mut lines = Vec::new();
     let mut line = String::new();
     let mut i = 0; 
-    let words_count = words.len();
     while i < words.len(){
         let l = line.clone();
         if l.is_empty() && words[i].len() > width{
             lines.extend(words[i]
                 .chars()
                 .collect::<Vec<_>>()
-                .chunk(width));
-            if Some(l) = lines.pop(){
+                .chunks(width)
+                .map(|ch| ch.iter().collect::<String>()));
+            if let Some(l) = lines.pop(){
                 line = l;
             }
             continue;
@@ -819,11 +820,11 @@ fn split_by_width(words: Vec<&str>, width: usize) -> Vec<String>{
     lines
 }
 
-fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: OffsetType) -> Vec<String>{
+fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: &OffsetType) -> Vec<String>{
     lines.into_iter()
         .map(|line|{
             let line_indent = width.saturating_sub(line.len());
-            let line = match offset{
+            match offset{
                 OffsetType::Left => line,
                 OffsetType::Right => {
                     let indent = vec![' '; line_indent].iter().collect::<String>();
@@ -834,17 +835,17 @@ fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: OffsetType) -> 
                     indent.clone() + &line + &indent.clone()
                 },
                 _ => unreachable!()
-            };
+            }
         })
         .collect::<Vec<_>>()
 }
 
-fn get_symbol(last_symbol: String, bl_type: BlType) -> String{
-    match bl_type{
+fn get_symbol(last_symbol: &str, list_type: &BlType) -> String{
+    match list_type{
         BlType::Bullet => "•".to_string(),
         BlType::Dash => "-".to_string(),
         BlType::Enum => {
-            let mut symbol = last_symbol;
+            let mut symbol = last_symbol.to_string();
             symbol.pop();
             let Ok(number) = symbol.parse::<usize>() else{
                 return String::new();
@@ -857,7 +858,7 @@ fn get_symbol(last_symbol: String, bl_type: BlType) -> String{
 
 // Formatting block full-explicit.
 impl MdocFormatter {
-    fn get_indent_from_offset_type(&self, offset: Option<OffsetType>) -> usize{
+    fn get_indent_from_offset_type(&self, offset: &Option<OffsetType>) -> usize{
         let Some(offset) = offset else {
             return self.formatting_settings.indent;
         };
@@ -868,13 +869,13 @@ impl MdocFormatter {
         }
     }
 
-    fn get_offset_from_offset_type(&self, offset: Option<OffsetType>) -> OffsetType{
+    fn get_offset_from_offset_type(&self, offset: &Option<OffsetType>) -> OffsetType{
         let Some(offset) = offset else{
             return OffsetType::Left;
         };
-        match offset{
+        match offset.clone(){
             OffsetType::Indent | OffsetType::IndentTwo => OffsetType::Left,
-            OffsetType::Left | OffsetType::Right | OffsetType::Center => offset
+            OffsetType::Left | OffsetType::Right | OffsetType::Center => offset.clone()
         }
     }
 
@@ -885,22 +886,27 @@ impl MdocFormatter {
         compact: bool, 
         macro_node: MacroNode
     ) -> String {
-        let indent = self.get_indent_from_offset_type(offset);
-        let offset = self.get_offset_from_offset_type(offset);
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
 
         self.formatting_state.current_indent += indent;
         let indent = self.formatting_state.current_indent;
         let indent = vec![" "; indent].join("");
         let line_width = self.formatting_settings.width.saturating_sub(indent.len());
 
-        if line_width{
+        if line_width == 0{
             return String::new();
         }
 
         let formatted_elements = macro_node.nodes
-            .iter()
+            .into_iter()
             .map(|el| self.format_node(el.clone()))
-            .map(|formatted_element| formatted_element.split(" ").collect::<Vec<_>>());
+            .map(|formatted_element| {
+                formatted_element
+                    .split(|ch| [' ', '\n'].contains(&ch))
+                    .map(|s|s.to_string())
+                    .collect::<Vec<_>>()
+            });
 
         let lines = match block_type{
             BdType::Centered | BdType::Filled | BdType::Ragged => {
@@ -919,10 +925,10 @@ impl MdocFormatter {
             }
         };
 
-        let mut content = add_indent_to_lines(lines, line_width, offset)
+        let mut content = add_indent_to_lines(lines, line_width, &offset)
             .iter()
             .map(|line|{
-                indent + line
+                indent.clone() + line
             })
             .collect::<Vec<_>>()        
             .join("\n");
@@ -950,7 +956,7 @@ impl MdocFormatter {
                 String::new()
             },
             BfType::Symbolic => {
-                if self.support_bold(){
+                if self.supports_bold(){
                     "\x1b[1m".to_string()
                 }else{
                     String::new()
@@ -994,25 +1000,32 @@ impl MdocFormatter {
     fn format_bl_symbol_block(
         &self, 
         items: Vec<(Vec<String>, String)>,
-        offset: Option<OffsetType>, 
+        offset: Option<OffsetType>,
+        list_type: BlType
     ) -> String{
-        let indent = self.get_indent_from_offset_type(offset);
-        let offset = self.get_offset_from_offset_type(offset);
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
-        let width = self.formatting_state.width;
+        let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
         let indent_str = vec![' '; origin_indent + indent]
             .iter().collect::<String>();
 
-        let mut symbol = get_symbol("0.".to_string(), bl_type);
+        let mut symbol = get_symbol("0.", &list_type);
+        let mut content = String::new();
         for (_, body) in items{
-            let mut body = split_by_width(body.split(" "), line_width);
-            body = add_indent_to_lines(body, line_width, offset);
+            let mut body = split_by_width(
+                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width
+            );
+            body = add_indent_to_lines(body, line_width, &offset);
             for line in body.iter_mut(){
                 *line = indent_str.clone() + &line;
             }
             if let Some(first_line) = body.get_mut(0){
-                let symbol = get_symbol(symbol, bl_type);
+                symbol = get_symbol(symbol.as_str(), &list_type);
                 if indent > 0{
                     first_line.replace_range(origin_indent..(origin_indent + 1), &symbol);
                 }   
@@ -1028,15 +1041,21 @@ impl MdocFormatter {
         items: Vec<(Vec<String>, String)>,
         offset: Option<OffsetType>, 
     ) -> String{
-        let indent = self.get_indent_from_offset_type(offset);
-        let offset = self.get_offset_from_offset_type(offset);
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
-        let width = self.formatting_state.width;
+        let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
 
+        let mut content = String::new();
         for (_, body) in items{
-            let mut body = split_by_width(body.split(" "), line_width + indent);
-            body = add_indent_to_lines(body, line_width + indent, offset);
+            let mut body = split_by_width(
+                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
             content.push_str(&body.join("\n\n"));
         } 
 
@@ -1048,10 +1067,10 @@ impl MdocFormatter {
         items: Vec<(Vec<String>, String)>,
         offset: Option<OffsetType>, 
     ) -> String{
-        let indent = self.get_indent_from_offset_type(offset);
-        let offset = self.get_offset_from_offset_type(offset);
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
-        let width = self.formatting_state.width;
+        let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
         let origin_indent_str = vec![' '; origin_indent]
             .iter().collect::<String>();
@@ -1062,15 +1081,27 @@ impl MdocFormatter {
             })
             .collect::<Vec<_>>();
 
+        let mut content = String::new();
         for (head, body) in items{
-            let mut h = split_by_width(head.split(" "), line_width + indent);
-            let mut body = split_by_width(body.split(" "), line_width + indent);
-            body = h.extend(body);
-            body = add_indent_to_lines(body, line_width + indent, offset);
+            let mut h = split_by_width(
+                head.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            let mut body = split_by_width(
+                body.split(|ch| [' ', '\n'].contains(&ch))
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            h.extend(body);
+            body = h;
+            body = add_indent_to_lines(body, line_width + indent, &offset);
             for line in body.iter_mut(){
-                *line = origin_indent_str + &line;
+                *line = origin_indent_str.clone() + &line;
             }
-            content.push_str(&(&body + "\n\n"));
+            content.push_str(&(body.join("\n") + "\n\n"));
         }
 
         content
@@ -1081,27 +1112,33 @@ impl MdocFormatter {
         items: Vec<(Vec<String>, String)>,
         offset: Option<OffsetType>, 
     ) -> String{
-        let indent = self.get_indent_from_offset_type(offset);
-        let offset = self.get_offset_from_offset_type(offset);
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
-        let width = self.formatting_state.width;
+        let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
         let origin_indent_str = vec![' '; origin_indent]
             .iter().collect::<String>();
 
         let items = items.into_iter()
             .map(|(head, body)|{
-                head.join(" ") + " " + &body    
+                head.join(" ") + " " + &body   
             })
             .collect::<Vec<_>>();
 
+        let mut content = String::new();
         for item in items{
-            let mut body = split_by_width(item, line_width + indent);
-            body = add_indent_to_lines(body, line_width + indent, offset);
+            let mut body = split_by_width(
+                item.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
             for line in body.iter_mut(){
-                *line = origin_indent_str + &line;
+                *line = origin_indent_str.clone() + &line;
             }
-            content.push_str(&(&body + "\n\n"));
+            content.push_str(&(body.join("\n") + "\n\n"));
         }
 
         content
@@ -1109,32 +1146,40 @@ impl MdocFormatter {
 
     fn format_bl_column_block(
         &self, 
-        items: Vec<(Vec<String>, String)>,
+        mut items: Vec<(Vec<String>, String)>,
         offset: Option<OffsetType>, 
         columns: Vec<String>
     ) -> String{
-        let indent = self.get_indent_from_offset_type(offset);
-        let offset = self.get_offset_from_offset_type(offset);
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
-        let width = self.formatting_state.width;
+        let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
 
         let table_width_overflow = columns.join(" ").len() > line_width;
-        items.insert((columns, vec![]), 0);
+        let mut content = String::new();
+        items.insert( 0, (columns.clone(), "".to_string()));
         if table_width_overflow{
             content += &items.iter()
-                .map(|(head, _)| vec![head, vec!["\n"]].concat())
+                .map(|(head, _)| {
+                    vec![head.clone(), vec!["\n".to_string()]].concat()
+                })
                 .flatten()
-                .map(|s| split_by_width(s.split(" "), line_width))
-                .map(|lines| add_indent_to_lines(lines, line_width, offset))
+                .map(|s| split_by_width(
+                    s.split(" ")                    
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(), 
+                    line_width
+                ))
+                .map(|lines| add_indent_to_lines(lines, line_width, &offset))
                 .flatten()
                 .collect::<Vec<_>>()
                 .join("\n");
             return content;
         }
-            
+        
         for (row, _) in items{ 
-            let cell_indent = indent; 
+            let mut cell_indent = indent; 
             let mut i = 0;
             for cell in row{
                 let Some(column_title) = columns.get(i) else {
@@ -1142,11 +1187,16 @@ impl MdocFormatter {
                 };
                 let column_width = column_title.len();
                 cell_indent += column_width + 1;
-                let mut lines = split_by_width(cell.split(" "), width - cell_indent);
-                lines = add_indent_to_lines(lines, width - cell_indent, offset);
+                let mut lines = split_by_width(
+                    cell.split(|ch| [' ', '\n'].contains(&ch))
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(), 
+                    width - cell_indent
+                );
+                lines = add_indent_to_lines(lines, width - cell_indent, &offset);
                 lines = lines.iter()
                     .map(|line| {
-                        &vec![' '; cell_indent].iter().collect::<String>() + line
+                        vec![' '; cell_indent].iter().collect::<String>() + line
                     })
                     .collect::<Vec<_>>();
                 let mut row_str = lines.join("\n");
@@ -1165,10 +1215,10 @@ impl MdocFormatter {
         items: Vec<(Vec<String>, String)>,
         offset: Option<OffsetType>, 
     ) -> String{
-        let indent = self.get_indent_from_offset_type(offset);
-        let offset = self.get_offset_from_offset_type(offset);
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
-        let width = self.formatting_state.width;
+        let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
         let indent_str = vec![' '; origin_indent + indent]
             .iter().collect::<String>();
@@ -1181,21 +1231,30 @@ impl MdocFormatter {
             })
             .collect::<Vec<_>>();
 
+        let mut content = String::new();
         for (head, body) in items{
-            let mut body = split_by_width(body.split(" "), line_width + indent);
-            body = add_indent_to_lines(body, line_width + indent, offset);
+            let mut body = split_by_width(
+                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
             for line in body.iter_mut(){
-                *line = indent_str + &line;
+                *line = indent_str.clone() + &line;
             }
             let space = if head.len() < indent.saturating_sub(2){
                 if let Some(line) = body.first_mut(){
                     line.replace_range(0..indent, "");
                 }
-                vec![' '; indent - head.len()].iter().collect::<Vec<_>>()
+                vec![' '; indent - head.len()].iter().collect::<String>()
             }else{
-                "\n"
+                "\n".to_string()
             };
-            content.push_str(&(&origin_indent_str.clone() + head + &space + &body + "\n\n"));
+            content.push_str(
+                &(origin_indent_str.clone() + &head + &space + 
+                &body.join("\n") + "\n\n")
+            );
         } 
 
         content
@@ -1206,10 +1265,10 @@ impl MdocFormatter {
         items: Vec<(Vec<String>, String)>,
         offset: Option<OffsetType>, 
     ) -> String{
-        let indent = self.get_indent_from_offset_type(offset);
-        let offset = self.get_offset_from_offset_type(offset);
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
-        let width = self.formatting_state.width;
+        let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
         let indent_str = vec![' '; origin_indent + indent]
             .iter().collect::<String>();
@@ -1222,47 +1281,56 @@ impl MdocFormatter {
             })
             .collect::<Vec<_>>();
 
+        let mut content = String::new();
         for (head, body) in items{
-            let body = body.split(" ").collect::<Vec<_>>();
+            let body = body.split(|ch| [' ', '\n'].contains(&ch)).collect::<Vec<_>>();
             let mut i = 0;
             let mut head = head; 
             if head.len() < indent.saturating_sub(1){
                 while head.len() < line_width + indent || i < body.len() {
-                    head.push_str(" " + &body[i]);
+                    head.push_str(&(" ".to_string() + &body[i]));
                     i += 1;
                 }
             }
-            let mut body = split_by_width(body.get(i..), line_width + indent);
-            body = add_indent_to_lines(body, line_width + indent, offset);
+            let mut body = split_by_width(
+                body.get(i..)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
             for line in body.iter_mut(){
-                *line = indent_str + &line;
+                *line = indent_str.clone() + &line;
             }
             if head.len() < indent.saturating_sub(1){
                 if let Some(line) = body.first_mut(){
                     line.replace_range(0..indent, "");
                 }
-                let space = vec![' '; indent - head.len()].iter().collect::<Vec<_>>();
-                content.push_str(&(&origin_indent_str.clone() + head + &space + &body + "\n\n"));
+                let space = vec![' '; indent - head.len()].iter().collect::<String>();
+                content.push_str(&(origin_indent_str.clone() + &head + &space + &body.join("") + "\n\n"));
             }else{
-                content.push_str(&(&origin_indent_str.clone() + head + "\n" + &body + "\n\n"));
+                content.push_str(&(origin_indent_str.clone() + &head + "\n" + &body.join("") + "\n\n"));
             };
         } 
 
         content
     }
 
-    fn get_heads(macro_node: MacroNode) -> Vec<Vec<String>>{
+    fn get_heads(&mut self, macro_node: MacroNode) -> Vec<Vec<String>>{
         macro_node.nodes
-            .iter()
+            .into_iter()
             .filter_map(|el|{
                 let Element::Macro(MacroNode{ mdoc_macro: Macro::It, nodes }) = el else{
-                    None
+                    return None;
                 }; 
 
                 Some(nodes.split(|el| 
-                    matches!(Macro::Ta, Element::Macro(MacroNode{ mdoc_macro: Macro::It, nodes }))
+                    matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::Ta, .. }))
                 ).map(|elements|{
-                    elements.map(|el| self.format_node(el))
+                    elements.iter()
+                        .map(|el| self.format_node(el.clone()))
                         .collect::<Vec<_>>()
                         .join(" ")
                 })
@@ -1271,7 +1339,7 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
     }
 
-    fn get_bodies(macro_node: MacroNode) -> Vec<String>{
+    fn get_bodies(&mut self, macro_node: MacroNode) -> Vec<String>{
         macro_node.nodes
             .split(|el|{
                 matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::It, .. }))
@@ -1279,7 +1347,7 @@ impl MdocFormatter {
             .map(|elements| {
                 let mut content = String::new(); 
                 for el in elements{
-                    content += " " + &self.format_node(el);
+                    content += &(" ".to_string() + &self.format_node(el.clone()));
                 }
                 content
             })
@@ -1294,15 +1362,15 @@ impl MdocFormatter {
         columns: Vec<String>, 
         macro_node: MacroNode
     ) -> String {
-        let heads = Self::get_heads(macro_node);
-        let bodies = Self::get_bodies(macro_node);
+        let heads = self.get_heads(macro_node.clone());
+        let bodies = self.get_bodies(macro_node);
 
-        let mut items = heads.into_iter()
+        let items = heads.into_iter()
             .zip(bodies.into_iter())
             .collect::<Vec<_>>();
 
         let mut content = match list_type{
-            BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, offset),
+            BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, offset, list_type),
             BlType::Item => self.format_bl_item_block(items, offset),
             BlType::Ohang => self.format_bl_ohang_block(items, offset),
             BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, offset),
@@ -1322,7 +1390,7 @@ impl MdocFormatter {
 
 // Formatting block full-implicit.
 impl MdocFormatter {
-    fn format_it_block(&mut self, macro_node: MacroNode) -> String {
+    fn format_it_block(&mut self, _macro_node: MacroNode) -> String {
         String::new()
     }
 
@@ -2176,7 +2244,7 @@ impl MdocFormatter {
     fn format_sy(&mut self, macro_node: MacroNode) -> String {
         let line = self.format_inline_macro(macro_node);
 
-        if self.support_bold() {
+        if self.supports_bold() {
             format!("\x1b[1m{line}\x1b[0m")
         } else {
             line
@@ -2396,6 +2464,8 @@ mod tests {
         use crate::man_util::formatter::tests::test_formatting;
 
         mod bd{
+            use crate::man_util::formatter::tests::test_formatting;
+
             #[test]
             fn bd_filled() {
                 let input = ".Dd January 1, 1970
@@ -2539,6 +2609,8 @@ footer text                     January 1, 1970                    footer text";
         }
 
         mod bl{
+            use crate::man_util::formatter::tests::test_formatting;
+
             #[test]
             fn bl_bullet() {
                 let input = ".Dd January 1, 1970
