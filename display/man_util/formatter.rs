@@ -1,6 +1,5 @@
 use crate::FormattingSettings;
 use aho_corasick::AhoCorasick;
-use core::fmt;
 use std::collections::HashMap;
 use terminfo::Database;
 

@@ -85,6 +85,7 @@ pub struct MdocDocument {
 pub enum MdocError {
     #[error("mdoc: {0}")]
     Pest(#[from] Box<pest::error::Error<Rule>>),
+
     #[error("mdoc: {0}")]
     Validation(String),
 }
@@ -236,7 +237,7 @@ impl MdocParser {
     pub fn parse_mdoc(input: impl AsRef<str>) -> Result<MdocDocument, MdocError> {
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
-        // println!("Pairs:\n{pairs:#?}\n\n");
+        println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -4224,8 +4225,7 @@ Line
 
         #[test]
         fn en_no_words() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".En").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".En").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -4621,8 +4621,7 @@ Line
 
         #[test]
         fn vt_empty() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Vt").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Vt").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -5444,7 +5443,7 @@ arg2 Fc
 
         #[test]
         fn fo_not_args() {
-            assert!(MdocParser::parse_mdoc(".Fo.Fc").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Fo.Fc").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -5982,46 +5981,45 @@ Line
 
         #[test]
         fn rs_wrong_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
 Line1
 Line2
 .Re
 "#
             )
-            .is_err());
-            assert!(MdocParser::parse_mdoc(
+            .unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs El1 El2 El3 
 Re"#
             )
-            .is_err());
-            assert!(MdocParser::parse_mdoc(
+            .unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
 arg Re"#
             )
-            .is_err());
-            assert!(MdocParser::parse_mdoc(
+            .unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
 Line
 .Re
 "#
             )
-            .is_err());
+            .unwrap().elements, vec![]);
         }
 
         #[test]
         fn rs_no_args() {
-            assert!(MdocParser::parse_mdoc(
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
             .Re"#
             )
-            .is_err());
+            .unwrap().elements, vec![]);
         }
 
         #[test]
         fn rs_not_parsed() {
-            assert!(MdocParser::parse_mdoc(
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
 .%A John Doe
 .%B Title Line Ad addr1
@@ -6030,8 +6028,8 @@ Line
 .Ad addr
 .Re"#
             )
-            .is_err());
-            assert!(MdocParser::parse_mdoc(
+            .unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs %A John Doe 
 .%B Title Line Ad addr1
 .%D January 1, 1970
@@ -6039,7 +6037,7 @@ Line
 .Ad addr
 .Re"#
             )
-            .is_err());
+            .unwrap().elements, vec![]);
         }
 
         #[test]
@@ -6085,7 +6083,6 @@ Rs
 .%T Article title line
 .%A John Doe
 .Re"#;
-
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Rs,
                 nodes: vec![
@@ -6179,7 +6176,7 @@ Rs
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::D,
                         nodes: vec![
-                            Element::Text("1970".to_string()),
+                            Element::Text("January".to_string()),
                             Element::Text("1,".to_string()),
                             Element::Text("1970".to_string()),
                         ],
@@ -6525,8 +6522,11 @@ Line
 
             #[test]
             fn a_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%A").is_err());
+                let content = ".%A";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6595,8 +6595,11 @@ Line
 
             #[test]
             fn b_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%B").is_err());
+                let content = ".%B";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6665,8 +6668,11 @@ Line
 
             #[test]
             fn c_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%C").is_err());
+                let content = ".%C";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6749,8 +6755,11 @@ Line
 
             #[test]
             fn d_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%D").is_err());
+                let content = ".%D";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6819,8 +6828,11 @@ Line
 
             #[test]
             fn i_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%I").is_err());
+                let content = ".%I";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6891,8 +6903,11 @@ Line
 
             #[test]
             fn j_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%J").is_err());
+                let content = ".%J";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6963,8 +6978,11 @@ Line
 
             #[test]
             fn n_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%N").is_err());
+                let content = ".%N";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7037,8 +7055,11 @@ Line
 
             #[test]
             fn o_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%O").is_err());
+                let content = ".%O";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7107,8 +7128,11 @@ Line
 
             #[test]
             fn p_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%P").is_err());
+                let content = ".%P";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7177,8 +7201,11 @@ Line
 
             #[test]
             fn q_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%Q").is_err());
+                let content = ".%Q";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7251,8 +7278,11 @@ Line
 
             #[test]
             fn r_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%R").is_err());
+                let content = ".%R";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7323,8 +7353,11 @@ Line
 
             #[test]
             fn t_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%T").is_err());
+                let content = ".%T";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7375,8 +7408,11 @@ Line
 
             #[test]
             fn u_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%U").is_err());
+                let content = ".%U";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7445,8 +7481,11 @@ Line
 
             #[test]
             fn v_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%V").is_err());
+                let content = ".%V";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -8280,10 +8319,13 @@ Line
 
                 for (str_type, enum_type) in st_types {
                     let content = format!(".St {str_type} word");
-                    let elements = vec![Element::Macro(MacroNode {
-                        mdoc_macro: Macro::St(enum_type),
-                        nodes: vec![Element::Text("word".to_string())],
-                    })];
+                    let elements = vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::St(enum_type),
+                            nodes: vec![],
+                        }),
+                        Element::Text("word".to_string())
+                    ];
 
                     let mdoc = MdocParser::parse_mdoc(content).unwrap();
                     assert_eq!(mdoc.elements, elements, "St type: {str_type}");
@@ -8292,23 +8334,22 @@ Line
 
             #[test]
             fn st_no_abbreviation() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".St word").is_err())
+                assert_eq!(MdocParser::parse_mdoc(".St word").unwrap().elements, vec![])
             }
 
             #[test]
             fn st_parsed() {
-                let content = ".St -ansiC word Ad addr1";
-                let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::St(StType::AnsiC),
-                    nodes: vec![
-                        Element::Text("word".to_string()),
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
-                            nodes: vec![Element::Text("addr1".to_string())],
-                        }),
-                    ],
-                })];
+                let content = ".St -ansiC Ad addr1";
+                let elements = vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::St(StType::AnsiC),
+                        nodes: vec![]
+                    }),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![Element::Text("addr1".to_string())],
+                    }),
+                ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements);
@@ -8350,8 +8391,11 @@ Line
 
         #[test]
         fn ad_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ad").is_err());
+            let content = ".Ad";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -8446,7 +8490,11 @@ Line
 
         #[test]
         fn an_no_args() {
-            assert!(MdocParser::parse_mdoc(".An").is_err());
+            let content = ".An";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -8711,8 +8759,12 @@ Line
 
         #[test]
         fn cd_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Cd").is_err());
+            let content = ".Cd";
+
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -8777,8 +8829,11 @@ Line
 
         #[test]
         fn cm_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Cm").is_err());
+            let content = ".Cm";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9095,7 +9150,11 @@ Line
 
         #[test]
         fn dt_no_args() {
-            assert!(MdocParser::parse_mdoc(".Dt").is_err())
+            let content = ".Dt";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9115,7 +9174,11 @@ Line
 
         #[test]
         fn dv_no_args() {
-            assert!(MdocParser::parse_mdoc(".Dv").is_err())
+            let content = ".Dv";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9177,7 +9240,11 @@ Line
 
         #[test]
         fn em_no_args() {
-            assert!(MdocParser::parse_mdoc(".Em").is_err());
+            let input = ".Em";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9236,7 +9303,11 @@ Line
 
         #[test]
         fn er_no_args() {
-            assert!(MdocParser::parse_mdoc(".Er").is_err());
+            let input = ".Er";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9298,9 +9369,9 @@ Line
 
         #[test]
         fn es_bad_args() {
-            assert!(MdocParser::parse_mdoc(".Es").is_err());
-            assert!(MdocParser::parse_mdoc(".Es (").is_err());
-            assert!(MdocParser::parse_mdoc(".Es { }").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Es").unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(".Es (").unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(".Es { }").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -9367,7 +9438,11 @@ Line
 
         #[test]
         fn ev_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ev").is_err());
+            let input = ".Ev";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9422,7 +9497,11 @@ Line
 
         #[test]
         fn ex_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ex").is_err());
+            let input = ".Ex";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9474,7 +9553,11 @@ Line
 
         #[test]
         fn fa_no_args() {
-            assert!(MdocParser::parse_mdoc(".Fa").is_err())
+            let input = ".Fa";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9553,7 +9636,11 @@ Line
 
         #[test]
         fn fd_no_args() {
-            assert!(MdocParser::parse_mdoc(".Fd").is_err());
+            let input = ".Fd";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9697,7 +9784,11 @@ Line
 
         #[test]
         fn fn_no_args() {
-            assert!(MdocParser::parse_mdoc(".Fn").is_err());
+            let input = ".Fn";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9754,7 +9845,11 @@ Line
 
         #[test]
         fn fr_no_args() {
-            assert!(MdocParser::parse_mdoc(".Fr").is_err());
+            let input = ".Fr";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9812,7 +9907,11 @@ Line
 
         #[test]
         fn ft_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ft").is_err());
+            let input = ".Ft";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9989,7 +10088,11 @@ Line
 
         #[test]
         fn ic_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ic").is_err());
+            let input = ".Ic";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10047,7 +10150,11 @@ Line
 
         #[test]
         fn in_no_args() {
-            assert!(MdocParser::parse_mdoc(".In").is_err());
+            let input = ".In";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10106,8 +10213,7 @@ Line
 
         #[test]
         fn lb_wrong_args() {
-            assert!(MdocParser::parse_mdoc(".Lb").is_err());
-            // assert!(MdocParser::parse_mdoc(".Lb libname1 libname2").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Lb").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -10156,7 +10262,11 @@ Line
 
         #[test]
         fn li_no_args() {
-            assert!(MdocParser::parse_mdoc(".Li").is_err());
+            let input = ".Li";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10215,7 +10325,11 @@ Line
 
         #[test]
         fn lk_no_args() {
-            assert!(MdocParser::parse_mdoc(".Lk").is_err());
+            let input = ".Lk";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10317,8 +10431,12 @@ Line
 
         #[test]
         fn ms_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ms").is_err());
+            let content = ".Ms";
+
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10394,8 +10512,11 @@ Line
 
         #[test]
         fn mt_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Mt").is_err());
+            let content = ".Mt";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10452,8 +10573,11 @@ Line
 
         #[test]
         fn no_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".No").is_err());
+            let content = ".No";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements)
         }
 
         #[test]
@@ -10624,8 +10748,11 @@ Line
 
         #[test]
         fn ot_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ot").is_err());
+            let content = ".Ot";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10685,8 +10812,11 @@ Line
 
         #[test]
         fn pa_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Pa").is_err());
+            let content = ".Pa";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10757,8 +10887,11 @@ Line
 
         #[test]
         fn pf_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Pf").is_err());
+            let content = ".Pf";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10854,8 +10987,7 @@ Line
 
         #[test]
         fn rv_no_std() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Rv f1 f2").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Rv f1 f2").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -10873,8 +11005,7 @@ Line
 
         #[test]
         fn rv_no_std_and_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Rv").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Rv").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11005,14 +11136,12 @@ Line
 
         #[test]
         fn sx_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Sx").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Sx").unwrap().elements, vec![]);
         }
 
         #[test]
         fn sx_wrong_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Sx Ar value").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Sx Ar value").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11069,8 +11198,7 @@ Line
 
         #[test]
         fn sy_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Sy").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Sy").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11198,8 +11326,7 @@ Line
 
         #[test]
         fn tn_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Tn").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Tn").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11381,8 +11508,7 @@ Line
 
         #[test]
         fn va_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Va").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Va").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11449,10 +11575,9 @@ Line
 
         #[test]
         fn xr_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Xr mandoc").is_err());
-            assert!(MdocParser::parse_mdoc(".Xr 1").is_err());
-            assert!(MdocParser::parse_mdoc(".Xr").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Xr mandoc").unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(".Xr 1").unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(".Xr").unwrap().elements, vec![]);
         }
 
         #[test]
