@@ -7,7 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use man_util::formatter::MdocFormatter;
 use man_util::parser::MdocParser;
@@ -15,75 +15,189 @@ use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
+use std::str::FromStr;
 use thiserror::Error;
 
 mod man_util;
 
 // `/usr/share/man` - system provided directory with system documentation.
 // `/usr/local/share/man` - user programs provided directory with system documentation.
-const MAN_PATHS: [&str; 2] = ["/usr/share/man", "/usr/local/share/man"];
-// Prioritized order of sections.
-const MAN_SECTIONS: [i8; 9] = [1, 8, 2, 3, 4, 5, 6, 7, 9];
+const MAN_PATHS: [&str; 3] = ["/usr/share/man", "/usr/X11R6/man", "/usr/local/share/man"];
 
-#[derive(Parser)]
+// Prioritized order of sections.
+const MAN_SECTIONS: [Section; 10] = [
+    Section::S1, 
+    Section::S8, 
+    Section::S6, 
+    Section::S2, 
+    Section::S3, 
+    Section::S5, 
+    Section::S7, 
+    Section::S4, 
+    Section::S9, 
+    Section::S3p
+];
+
+#[derive(Parser, Debug, Default)]
 #[command(version, about = gettext("man - display system documentation"))]
 struct Args {
+    /// Displays the header lines of all matching pages. A synonym for apropos(1)
     #[arg(short, help = gettext("Interpret name operands as keywords for searching the summary database."))]
     keyword: bool,
 
+    /// Commands names for which documentation search must be performed
     #[arg(help = gettext("Names of the utilities or keywords to display documentation for."))]
     names: Vec<String>,
+
+    /// Override the list of directories to search for manual pages
+    #[arg(
+        short = 'M', 
+        value_delimiter = ':', 
+        help = gettext("Override the list of directories to search for manual pages.")
+    )]
+    override_pathes: Vec<PathBuf>,
+
+    /// Augment the list of directories to search for manual pages
+    #[arg(
+        short = 'm', 
+        value_delimiter = ':', 
+        help = gettext("Augment the list of directories to search for manual pages.")
+    )]
+    augment_pathes: Vec<PathBuf>,
+
+    /// Only show pages for the specified machine(1) architecture
+    #[arg(
+        short = 'S', 
+        help = gettext("Only show pages for the specified machine(1) architecture.")
+    )]
+    subsection: String,
+
+    /// Only select manuals from the specified section
+    #[arg(
+        short = 's', 
+        value_enum, 
+        help = gettext("Only select manuals from the specified section.")
+    )]
+    section: Option<Section>,
+
+    /// List the pathnames of all matching manual pages instead of displaying any of them
+    #[arg(
+        short = 'w', 
+        help = gettext("List the pathnames of all matching manual pages instead of displaying any of them.")
+    )]
+    list_pathnames: bool,
 }
 
 #[derive(Error, Debug)]
 enum ManError {
+    /// Search path to man pages isn't exists 
     #[error("man paths to man pages doesn't exist")]
     ManPaths,
+    
+    /// Commands for searching documentation isn't exists
     #[error("no names specified")]
     NoNames,
+    
+    /// Man can't find documentation for choosen command
     #[error("system documentation for \"{0}\" not found")]
     PageNotFound(String),
+    
+    /// Can't get terminal size
     #[error("failed to get terminal size")]
     GetTerminalSize,
+    
+    /// Man can't find choosen command
     #[error("{0} command not found")]
     CommandNotFound(String),
+    
+    /// Can't execute command; read/write file
     #[error("failed to execute command: {0}")]
     Io(#[from] io::Error),
+    
+    /// Mdoc error
     #[error("parsing error: {0}")]
     Mdoc(#[from] man_util::parser::MdocError)
 }
 
+/// Manual type
+#[derive(Copy,Clone,PartialEq,Eq,PartialOrd,Ord,Debug,ValueEnum)]
+pub enum Section{
+    /// General commands (tools and utilities)
+    S1,
+    /// System calls and error numbers
+    S2,
+    /// Library functions
+    S3,
+    /// perl(1) programmer's reference guide
+    S3p,
+    /// Device drivers
+    S4,
+    /// File formats
+    S5,
+    /// Games
+    S6,
+    /// Miscellaneous information
+    S7,
+    /// System maintenance and operation commands
+    S8,
+    /// Kernel internals
+    S9
+}
+
+impl FromStr for Section {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "1" => Ok(Section::S1),
+            "2" => Ok(Section::S2),
+            "3" => Ok(Section::S3),
+            "3p" => Ok(Section::S3p),
+            "4" => Ok(Section::S4),
+            "5" => Ok(Section::S5),
+            "6" => Ok(Section::S6),
+            "7" => Ok(Section::S7),
+            "8" => Ok(Section::S8),
+            "9" => Ok(Section::S9),
+            _ => Err(format!("Invalid section: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for Section {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Section::S1 => "1",
+            Section::S2 => "2",
+            Section::S3 => "3",
+            Section::S3p => "3p",
+            Section::S4 => "4",
+            Section::S5 => "5",
+            Section::S6 => "6",
+            Section::S7 => "7",
+            Section::S8 => "8",
+            Section::S9 => "9",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+/// Formatter general settings
 #[derive(Debug)]
 pub struct FormattingSettings {
+    /// Terminal width
     pub width: usize,
+    /// Lines indentation 
     pub indent: usize,
 }
 
-/// Gets system documentation path by passed name.
-///
-/// # Arguments
-///
-/// `name` - [str] name of necessary system documentation.
-///
-/// # Returns
-///
-/// [PathBuf] of found system documentation.
-///
-/// # Errors
-///
-/// [ManError] if file not found.
-fn get_man_page_path(name: &str) -> Result<PathBuf, ManError> {
-    MAN_PATHS
-        .iter()
-        .flat_map(|path| {
-            MAN_SECTIONS.iter().flat_map(move |section| {
-                let base_path = format!("{path}/man{section}/{name}.{section}");
-                vec![format!("{base_path}.gz"), base_path]
-            })
-        })
-        .find(|path| PathBuf::from(path).exists())
-        .map(PathBuf::from)
-        .ok_or_else(|| ManError::PageNotFound(name.to_string()))
+impl Default for FormattingSettings{
+    fn default() -> Self {
+        Self{
+            width: 78,
+            indent: 6,
+        }
+    }
 }
 
 /// Spawns process with arguments and STDIN if present.
@@ -141,32 +255,6 @@ where
     }
 }
 
-/// Gets system documentation content by passed name.
-///
-/// # Arguments
-///
-/// `name` - [str] name of necessary system documentation.
-///
-/// # Returns
-///
-/// [Vec<u8>] output of called `*cat` command.
-///
-/// # Errors
-///
-/// [ManError] if file not found or failed to execute `*cat` command.
-fn get_man_page(name: &str) -> Result<Vec<u8>, ManError> {
-    let man_page_path = get_man_page_path(name)?;
-
-    let cat_process_name = if man_page_path.extension().and_then(|ext| ext.to_str()) == Some("gz") {
-        "zcat"
-    } else {
-        "cat"
-    };
-
-    let output = spawn(cat_process_name, &[man_page_path], None, Stdio::piped())?;
-    Ok(output.stdout)
-}
-
 /// Gets page width.
 ///
 /// # Returns
@@ -177,10 +265,7 @@ fn get_man_page(name: &str) -> Result<Vec<u8>, ManError> {
 ///
 /// Returns [ManError] if working on terminal and failed to get terminal size.
 fn get_pager_settings() -> Result<FormattingSettings, ManError> {
-    let mut ps = FormattingSettings {
-        width: 78,
-        indent: 6,
-    };
+    let mut ps = FormattingSettings::default();
 
     if !std::io::stdout().is_terminal() {
         return Ok(ps);
@@ -278,23 +363,6 @@ fn display_pager(man_page: Vec<u8>) -> Result<(), ManError> {
     Ok(())
 }
 
-/// Displays man page
-///
-/// # Arguments
-///
-/// `name` - [str] name of system documentation.
-///
-/// # Errors
-///
-/// [ManError] if man page not found, or any display error happened.
-fn display_man_page(name: &str) -> Result<(), ManError> {
-    let cat_output = get_man_page(name)?;
-    let formatter_output = format_man_page(cat_output)?;
-    display_pager(formatter_output)?;
-
-    Ok(())
-}
-
 /// Displays man page summaries for the given keyword.
 ///
 /// # Arguments
@@ -318,47 +386,195 @@ fn display_summary_database(keyword: &str) -> Result<bool, ManError> {
     }
 }
 
-/// Main function that handles the program logic. It processes the input
-/// arguments, and either displays man pages or searches the summary database.
-///
-/// # Arguments
-///
-/// `args` - [Args] set of incoming arguments.
-///
-/// # Returns
-///
-/// [true] if no non-critical error happend, otherwise [false].
-///
-/// # Errors
-///
-/// [ManError] if critical error happened.
-fn man(args: Args) -> Result<bool, ManError> {
-    let any_path_exists = MAN_PATHS.iter().any(|path| PathBuf::from(path).exists());
-    if !any_path_exists {
-        return Err(ManError::ManPaths);
+/// 
+#[derive(Default)]
+struct Man{
+    args: Args,
+    search_pathes: Vec<PathBuf>,
+    sections: Vec<Section>
+}
+
+impl Man{
+    /// Gets system documentation path by passed name.
+    ///
+    /// # Arguments
+    ///
+    /// `name` - [str] name of necessary system documentation.
+    ///
+    /// # Returns
+    ///
+    /// [Vec<PathBuf>] of found system documentation.
+    ///
+    /// # Errors
+    ///
+    /// [ManError] if file not found.
+    fn get_man_page_pathes(&self, name: &str) -> Result<Vec<PathBuf>, ManError> {
+        let mut path_iter = self.search_pathes
+            .iter()
+            .flat_map(|path| {
+                self.sections.iter().flat_map(move |section| {
+                    let base_path = format!("{}/man{section}/{name}.{section}", path.display());
+                    vec![format!("{base_path}.gz"), base_path]
+                })
+            });
+
+        if true{
+            let pathes = path_iter
+                .map(PathBuf::from)
+                .collect::<Vec<_>>();
+
+            if pathes.is_empty(){
+                return Err(ManError::PageNotFound(name.to_string()));
+            }
+
+            Ok(pathes)
+        }else{
+            path_iter.find(|path| PathBuf::from(path).exists())
+                .map(|s| vec![PathBuf::from(s)])
+                .ok_or_else(|| ManError::PageNotFound(name.to_string()))
+        }
     }
 
-    if args.names.is_empty() {
-        return Err(ManError::NoNames);
+    /// Gets system documentation content by passed name.
+    ///
+    /// # Arguments
+    ///
+    /// `name` - [str] name of necessary system documentation.
+    ///
+    /// # Returns
+    ///
+    /// [Vec<u8>] output of called `*cat` command.
+    ///
+    /// # Errors
+    ///
+    /// [ManError] if file not found or failed to execute `*cat` command.
+    fn get_man_page(&self, name: &str) -> Result<Vec<u8>, ManError> {
+        let mut content = Vec::<u8>::new();
+        let man_page_pathes = self.get_man_page_pathes(name)?;
+
+        for man_page_path in man_page_pathes{
+            let cat_process_name = if man_page_path.extension().and_then(|ext| ext.to_str()) == Some("gz") {
+                "zcat"
+            } else {
+                "cat"
+            };
+    
+            let output = spawn(cat_process_name, &[man_page_path], None, Stdio::piped())?;
+            content.extend(output.stdout);
+            content.extend("\n\n".to_string().into_bytes());
+        }
+
+        Ok(content)
     }
 
-    let mut no_errors = true;
-    if args.keyword {
-        for name in &args.names {
-            if !display_summary_database(name)? {
-                no_errors = false;
-            }
-        }
-    } else {
-        for name in &args.names {
-            if let Err(err) = display_man_page(name) {
-                no_errors = false;
-                eprintln!("man: {err}");
-            }
-        }
-    };
+    /// Displays man page
+    ///
+    /// # Arguments
+    ///
+    /// `name` - [str] name of system documentation.
+    ///
+    /// # Errors
+    ///
+    /// [ManError] if man page not found, or any display error happened.
+    fn display_man_page(&self, name: &str) -> Result<(), ManError> {
+        let cat_output = self.get_man_page(name)?;
+        let formatter_output = format_man_page(cat_output)?;
+        display_pager(formatter_output)?;
 
-    Ok(no_errors)
+        Ok(())
+    }
+
+    fn process_args(&mut self){
+        if !self.args.override_pathes.is_empty(){
+            let override_pathes = self.args.override_pathes
+                .iter()
+                .filter_map(|p| p.to_str() )
+                .collect::<Vec<_>>()
+                .join(":");
+
+            std::env::set_var(
+                "MANPATH", 
+                OsStr::new(&override_pathes)
+            );
+        }
+
+        if !self.args.subsection.is_empty(){
+            std::env::set_var(
+                "MACHINE", 
+                OsStr::new(&self.args.subsection.clone())
+            );
+        }
+
+        let manpath = std::env::var("MANPATH")
+            .unwrap_or_default()
+            .split(":")
+            .filter_map(|s| PathBuf::from_str(s).ok())
+            .collect::<Vec<_>>();
+
+        self.search_pathes = vec![
+            self.args.augment_pathes.clone(), 
+            manpath,
+            self.search_pathes.clone(),
+            // man.conf
+            MAN_PATHS.iter().filter_map(|s|PathBuf::from_str(s).ok()).collect::<Vec<_>>()
+        ].concat();
+
+        self.sections = if let Some(section) = self.args.section{
+            vec![section]
+        } else {
+            MAN_SECTIONS.to_vec()
+        };
+    }
+
+    /// Main function that handles the program logic. It processes the input
+    /// arguments, and either displays man pages or searches the summary database.
+    ///
+    /// # Arguments
+    ///
+    /// `args` - [Args] set of incoming arguments.
+    ///
+    /// # Returns
+    ///
+    /// [true] if no non-critical error happend, otherwise [false].
+    ///
+    /// # Errors
+    ///
+    /// [ManError] if critical error happened.
+    fn man(args: Args) -> Result<bool, ManError> {
+        let mut man = Self{
+            args,
+            ..Default::default()
+        };
+
+        man.process_args();
+
+        let any_path_exists = man.search_pathes.iter().any(|path| PathBuf::from(path).exists());
+        if !any_path_exists {
+            return Err(ManError::ManPaths);
+        }
+
+        if man.args.names.is_empty() {
+            return Err(ManError::NoNames);
+        }
+
+        let mut no_errors = true;
+        if man.args.keyword {
+            for name in &man.args.names {
+                if !display_summary_database(name)? {
+                    no_errors = false;
+                }
+            }
+        } else {
+            for name in &man.args.names {
+                if let Err(err) = man.display_man_page(name) {
+                    no_errors = false;
+                    eprintln!("man: {err}");
+                }
+            }
+        };
+
+        Ok(no_errors)
+    }
 }
 
 // Exit code:
@@ -372,7 +588,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // parse command line arguments
     let args = Args::parse();
 
-    let exit_code = match man(args) {
+    let exit_code = match Man::man(args) {
         Ok(true) => 0,
         // Some error for specific `name`
         Ok(false) => 1,
