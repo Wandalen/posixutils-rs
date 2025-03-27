@@ -123,16 +123,17 @@ impl MdocValidator {
     }
 
     fn validate_sh(&mut self, sh_node: &MacroNode) -> Result<(), MdocError> {
-        fn is_last_element_nd(element: &Element) -> bool {
+        fn is_last_element_nd(element: &Element) -> bool {            
             match element {
                 Element::Macro(MacroNode { mdoc_macro, nodes }) => {
-                    if let Some(last_node) = nodes.last() {
-                        // Recursively check the last child node
-                        is_last_element_nd(last_node)
-                    } else {
-                        // If the node is empty, check the macro itself
-                        matches!(mdoc_macro, Macro::Nd { .. })
+                    for node in nodes {
+                        match node {
+                            Element::Macro(_) => return is_last_element_nd(node),
+                            _ => continue,
+                        };
                     }
+
+                    return *mdoc_macro == Macro::Nd;
                 }
                 _ => false,
             }
@@ -442,7 +443,21 @@ impl MdocParser {
     // Parses (`Nd`)[https://man.openbsd.org/mdoc#Nd]
     // `Nd line`
     fn parse_nd(pair: Pair<Rule>) -> Element {
-        let nodes = pair.into_inner().map(Self::parse_element).collect();
+        let mut inner_nodes = pair.into_inner();
+
+        let mut nodes: Vec<_> = inner_nodes
+            .next()
+            .unwrap()
+            .into_inner()
+            .map(Self::parse_element)
+            .collect();
+
+        while let Some(body) = inner_nodes.next() {
+            let mut inner = body.into_inner();
+            while let Some(pair) = inner.next() {
+                nodes.push(Self::parse_element(pair));
+            }
+        }
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Nd,
@@ -3107,10 +3122,10 @@ Line
                     mdoc_macro: Macro::Nd,
                     nodes: vec![
                         Element::Text("short".to_string()),
-                        Element::Text("description".to_string())
+                        Element::Text("description".to_string()),
+                        Element::Text("Line 2".to_string())
                     ],
                 }),
-                Element::Text("Line 2".to_string())
             ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -3125,11 +3140,11 @@ Line
                     mdoc_macro: Macro::Nd,
                     nodes: vec![
                         Element::Text("short".to_string()),
-                        Element::Text("description".to_string())
+                        Element::Text("description".to_string()),
+                        Element::Text("Line 1".to_string()),
+                        Element::Text("Line 2".to_string())
                     ],
                 }),
-                Element::Text("Line 1".to_string()),
-                Element::Text("Line 2".to_string()),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Sh {
                         title: "SECTION".to_string(),
@@ -3150,14 +3165,14 @@ Line
                     mdoc_macro: Macro::Nd,
                     nodes: vec![
                         Element::Text("name".to_string()),
-                        Element::Text("description".to_string())
-                    ],
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Nm,
-                    nodes: vec![
-                        Element::Text("name1".to_string()),
-                        Element::Text("name2".to_string())
+                        Element::Text("description".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Nm,
+                            nodes: vec![
+                                Element::Text("name1".to_string()),
+                                Element::Text("name2".to_string())
+                            ],
+                        })
                     ],
                 })
             ];
@@ -3456,11 +3471,7 @@ Line
 
         #[test]
         fn sh_without_title() {
-            let content = ".Sh\nLine 1\n";
-
-            let mdoc = MdocParser::parse_mdoc(content);
-            // TODO: Format and compare pest errors??
-            assert!(mdoc.is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Sh\nLine 1\n").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -3657,11 +3668,7 @@ Line
 
         #[test]
         fn ss_without_title() {
-            let content = ".Ss\nLine 1";
-
-            let mdoc = MdocParser::parse_mdoc(content);
-            // TODO: Format and compare pest errors??
-            assert!(mdoc.is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Ss\nLine 1").unwrap().elements, vec![]);
         }
 
         #[test]
