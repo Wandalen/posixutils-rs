@@ -7,6 +7,7 @@
 // SPDX-License-Identifier: MIT
 //
 
+pub mod config;
+pub mod formatter;
 pub mod mdoc_macro;
 pub mod parser;
-pub mod formatter;

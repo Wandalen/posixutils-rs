@@ -70,7 +70,7 @@ pub enum Macro {
     D1,
     Db, // Obsolete
     Dd {
-        date: DdDate
+        date: DdDate,
     },
     Dl,
     Do,
@@ -91,7 +91,8 @@ pub enum Macro {
     },
     Ec,
     Er,
-    Es { // Obsolete
+    Es {
+        // Obsolete
         opening_delimiter: char,
         closing_delimiter: char,
     },
@@ -104,7 +105,7 @@ pub enum Macro {
     },
     Fl,
     Fn {
-        funcname: String
+        funcname: String,
     },
     Fo {
         funcname: String,
@@ -127,9 +128,11 @@ pub enum Macro {
         uri: String,
     },
     Lp,
-    Ms, 
+    Ms,
     Mt,
-    Nd,
+    Nd {
+        line: String,
+    },
     Nm,
     No,
     Ns,
@@ -141,8 +144,8 @@ pub enum Macro {
     Ot,
     Ox,
     Pa,
-    Pf{
-        prefix: String
+    Pf {
+        prefix: String,
     },
     Po,
     Pc, // Close parenthesised context opened by Po
@@ -169,8 +172,8 @@ pub enum Macro {
     Sx,
     Sy,
     Ta,
-    Tg{
-        term: Option<String>
+    Tg {
+        term: Option<String>,
     },
     Tn,
     Ud,
