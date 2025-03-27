@@ -31,9 +31,7 @@ pub struct FormattingState {
     spacing: String,
     date: String,
     split_mod: bool,
-    title: Option<String>,
-    section: Option<String>,
-    current_indent: usize,
+    current_indent: usize 
 }
 
 impl Default for FormattingState {
@@ -46,9 +44,7 @@ impl Default for FormattingState {
             spacing: " ".to_string(),
             date: String::default(),
             split_mod: false,
-            title: None,
-            section: None,
-            current_indent: 0,
+            current_indent: 0
         }
     }
 }
@@ -71,6 +67,13 @@ impl MdocFormatter {
     fn supports_italic(&self) -> bool {
         if let Ok(info) = Database::from_env() {
             return info.raw("sitm").is_some();
+        }
+        false
+    }
+
+    fn supports_bold(&self) -> bool {
+        if let Ok(info) = Database::from_env() {
+            return info.raw("bold").is_some();
         }
         false
     }
@@ -205,110 +208,6 @@ impl MdocFormatter {
         lines.join("\n").into_bytes()
     }
 
-    // pub fn format_synopsis_setion(&mut self, ast: MdocDocument) -> Vec<u8> {
-    //     let max_width = self.formatting_settings.width;
-    //     let mut lines = Vec::new();
-    //     let mut current_line = String::new();
-
-    //     for node in ast.elements {
-    //         let formatted_node = match node {
-    //             Element::Macro(macro_node) => {
-    //                 match macro_node.mdoc_macro {
-    //                     Macro::Sh { ref title } => {
-    //                         if title.to_ascii_uppercase().ne("SYNOPSIS") {
-    //                             continue;
-    //                         }
-    //                         self.format_sh_block(title.clone(), macro_node)
-    //                     },
-    //                     _ => continue,
-    //                 }
-    //             },
-    //             _ => continue,
-    //         };
-
-    //         if current_line.chars().count() + formatted_node.chars().count() > max_width {
-    //             for word in formatted_node.split_whitespace() {
-    //                 if current_line.chars().count() + word.chars().count() >= max_width {
-    //                     lines.push(current_line.trim_end().to_string());
-    //                     current_line.clear();
-    //                 }
-
-    //                 current_line.push_str(word);
-    //                 current_line.push(' ');
-    //             }
-    //         } else {
-    //             let is_all_control = formatted_node.chars().all(|ch| ch.is_ascii_control());
-    //             if is_all_control {
-    //                 if let Some(' ') = current_line.chars().last() {
-    //                     current_line.pop();
-    //                 }
-    //             }
-    //             current_line.push_str(&formatted_node);
-    //             if !formatted_node.is_empty() && !is_all_control {
-    //                 if current_line.chars().last() != Some('\n') {
-    //                     current_line.push(' ');
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     if !current_line.is_empty() {
-    //         lines.push(current_line.trim_end().to_string());
-    //     }
-
-    //     lines.join("\n").into_bytes()
-    // }
-
-    // pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
-    //     let max_width = self.formatting_settings.width;
-    //     let mut lines = Vec::new();
-    //     let mut current_line = String::new();
-
-    //     for node in ast.elements {
-    //         let formatted_node = self.format_node(node);
-
-    //         if current_line.chars().count() + formatted_node.chars().count() > max_width {
-    //             for word in formatted_node.split_whitespace() {
-    //                 if current_line.chars().count() + word.chars().count() >= max_width {
-    //                     lines.push(current_line.trim_end().to_string());
-    //                     current_line.clear();
-    //                 }
-
-    //                 current_line.push_str(word);
-    //                 current_line.push(' ');
-    //             }
-    //         } else {
-    //             let is_all_control = formatted_node.chars().all(|ch| ch.is_ascii_control());
-    //             if is_all_control {
-    //                 if let Some(' ') = current_line.chars().last() {
-    //                     current_line.pop();
-    //                 }
-    //             }
-    //             current_line.push_str(&formatted_node);
-    //             if !formatted_node.is_empty() && !is_all_control {
-    //                 if current_line.chars().last() != Some('\n') {
-    //                     current_line.push(' ');
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     if !current_line.is_empty() {
-    //         lines.push(current_line.trim_end().to_string());
-    //     }
-
-    //     lines.insert(
-    //         0,
-    //         self.formatting_state
-    //             .header_text
-    //             .clone()
-    //             .unwrap_or(self.format_default_header()),
-    //     );
-    //     lines.push(self.format_footer());
-
-    //     lines.join("\n").into_bytes()
-    // }
-
     fn format_default_header(&mut self) -> String {
         self.format_dt(None, "", None)
     }
@@ -406,9 +305,12 @@ impl MdocFormatter {
                 columns,
             } => self.format_bl_block(list_type, offset, compact, columns, macro_node),
 
+            // Special block macro ta formatting
+            Macro::Ta => self.format_ta(),
+
             // Block full-implicit
             Macro::It => self.format_it_block(macro_node),
-            Macro::Nd { line } => self.format_nd(macro_node),
+            Macro::Nd => self.format_nd(macro_node),
             Macro::Nm => self.format_nm(macro_node),
             Macro::Sh { title } => self.format_sh_block(title, macro_node),
             Macro::Ss { title } => self.format_ss_block(title, macro_node),
@@ -506,7 +408,6 @@ impl MdocFormatter {
             Macro::Ns => self.format_ns(),
             Macro::Nx => self.format_nx(macro_node),
             Macro::Os => self.format_os(macro_node),
-            Macro::Ot => self.format_ot(macro_node),
             Macro::Ox => self.format_ox(macro_node),
             Macro::Pa => self.format_pa(macro_node),
             Macro::Pf { prefix } => self.format_pf(prefix.as_str()),
@@ -523,7 +424,7 @@ impl MdocFormatter {
             Macro::Va => self.format_va(macro_node),
             Macro::Xr { name, section } => self.format_xr(name.as_str(), section.as_str()),
 
-            _ => unreachable!(),
+            _ => String::new(),
         }
     }
 
@@ -939,19 +840,33 @@ impl MdocFormatter {
     }
 
     /// Special block macro ta formatting
-    fn format_ta(&mut self, macro_node: MacroNode) -> String {
-        unimplemented!()
+    fn format_ta(&mut self) -> String {
+        String::new()
     }
 }
 
-fn split_by_width(words: Vec<&str>, width: usize) -> Vec<String> {
+fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
+    if width == 0{
+        return words.iter()
+            .map(|s|s.to_string())
+            .collect::<Vec<_>>();
+    }
     let mut lines = Vec::new();
     let mut line = String::new();
-    let mut i = 0;
-    let words_count = words.len();
-    while i < words.len() {
+    let mut i = 0; 
+    while i < words.len(){
         let l = line.clone();
-        if line.len() + words[i].len() + 1 > width {
+        if l.is_empty() && words[i].len() > width{
+            lines.extend(words[i]
+                .chars()
+                .collect::<Vec<_>>()
+                .chunks(width)
+                .map(|ch| ch.iter().collect::<String>()));
+            if let Some(l) = lines.pop(){
+                line = l;
+            }
+            continue;
+        } else if line.len() + words[i].len() + 1 > width{
             lines.push(l);
             line.clear();
             continue;
@@ -960,13 +875,13 @@ fn split_by_width(words: Vec<&str>, width: usize) -> Vec<String> {
         line.push_str(&words[i]);
         i += 1;
     }
+    lines.push(line);
     lines
 }
 
-fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: OffsetType) -> Vec<String> {
-    lines
-        .into_iter()
-        .map(|line| {
+fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: &OffsetType) -> Vec<String>{
+    lines.into_iter()
+        .map(|line|{
             let line_indent = width.saturating_sub(line.len());
             match offset {
                 OffsetType::Left => line,
@@ -984,8 +899,45 @@ fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: OffsetType) -> 
         .collect::<Vec<_>>()
 }
 
+fn get_symbol(last_symbol: &str, list_type: &BlType) -> String{
+    match list_type{
+        BlType::Bullet => "•".to_string(),
+        BlType::Dash => "-".to_string(),
+        BlType::Enum => {
+            let mut symbol = last_symbol.to_string();
+            symbol.pop();
+            let Ok(number) = symbol.parse::<usize>() else{
+                return String::new();
+            };
+            (number + 1).to_string()
+        },
+        _ => String::new()
+    }
+}
+
 // Formatting block full-explicit.
 impl MdocFormatter {
+    fn get_indent_from_offset_type(&self, offset: &Option<OffsetType>) -> usize{
+        let Some(offset) = offset else {
+            return self.formatting_settings.indent;
+        };
+        match offset{
+            OffsetType::Indent => self.formatting_settings.indent,
+            OffsetType::IndentTwo => self.formatting_settings.indent * 2,
+            _ => 0
+        }
+    }
+
+    fn get_offset_from_offset_type(&self, offset: &Option<OffsetType>) -> OffsetType{
+        let Some(offset) = offset else{
+            return OffsetType::Left;
+        };
+        match offset.clone(){
+            OffsetType::Indent | OffsetType::IndentTwo => OffsetType::Left,
+            OffsetType::Left | OffsetType::Right | OffsetType::Center => offset.clone()
+        }
+    }
+
     fn format_bd_block(
         &mut self,
         block_type: BdType,
@@ -993,70 +945,83 @@ impl MdocFormatter {
         compact: bool,
         macro_node: MacroNode,
     ) -> String {
-        String::new()
-        // let (indent, offset) = if let Some(offset) = offset{
-        //     match offset{
-        //         OffsetType::Indent => (self.formatting_settings.indent, OffsetType::Left),
-        //         OffsetType::IndentTwo => (self.formatting_settings.indent * 2, OffsetType::Left),
-        //         OffsetType::Left => (0, OffsetType::Left),
-        //         OffsetType::Right => (0, OffsetType::Right),
-        //         OffsetType::Center => (0, OffsetType::Center)
-        //     }
-        // } else {
-        //     (self.formatting_settings.indent, OffsetType::Left)
-        // };
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
 
-        // self.formatting_state.current_indent += indent;
-        // let indent = self.formatting_state.current_indent;
-        // let indent = vec![" "; indent].join("");
-        // let line_width = self.formatting_settings.width.saturating_sub(indent.len());
+        self.formatting_state.current_indent += indent;
+        let indent = self.formatting_state.current_indent;
+        let indent = vec![" "; indent].join("");
+        let line_width = self.formatting_settings.width.saturating_sub(indent.len());
 
-        // // if line_width {
-        // //     return String::new();
-        // // }
+        if line_width == 0{
+            return String::new();
+        }
 
-        // let formatted_elements = macro_node.nodes
-        //     .iter()
-        //     .map(|el| self.format_node(el.clone()))
-        //     .map(|formatted_element| formatted_element.split(" ").collect::<Vec<_>>());
+        let formatted_elements = macro_node.nodes
+            .into_iter()
+            .map(|el| self.format_node(el.clone()))
+            .map(|formatted_element| {
+                formatted_element
+                    .split(|ch| [' ', '\n'].contains(&ch))
+                    .map(|s|s.to_string())
+                    .collect::<Vec<_>>()
+            });
 
-        // let lines = match block_type{
-        //     BdType::Centered | BdType::Filled | BdType::Ragged => {
-        //         let words = formatted_elements
-        //             .flatten()
-        //             .collect::<Vec<_>>();
+        let lines = match block_type{
+            BdType::Centered | BdType::Filled | BdType::Ragged => {
+                let words = formatted_elements
+                    .flatten()
+                    .collect::<Vec<_>>();
 
-        //         split_by_width(words, line_width)
-        //     },
-        //     BdType::Literal | BdType::Unfilled => {
-        //         let mut lines = vec![];
-        //         for formatted_element in formatted_elements{
-        //             lines.extend(split_by_width(formatted_element, line_width));
-        //         }
-        //         lines
-        //     }
-        // };
+                split_by_width(words, line_width)
+            },
+            BdType::Literal | BdType::Unfilled => {
+                let mut lines = vec![];
+                for formatted_element in formatted_elements{
+                    lines.extend(split_by_width(formatted_element, line_width));
+                }
+                lines
+            }
+        };
 
-        // let mut content = add_indent_to_lines(lines, line_width, offset)
-        //     .iter()
-        //     .map(|line|{
-        //         indent + line
-        //     })
-        //     .collect::<Vec<_>>()
-        //     .join("\n");
+        let mut content = add_indent_to_lines(lines, line_width, &offset)
+            .iter()
+            .map(|line|{
+                indent.clone() + line
+            })
+            .collect::<Vec<_>>()        
+            .join("\n");
 
-        // if !compact{
-        //     let vertical_space = "\n\n".to_string();
-        //     content = vertical_space.clone() + &content; //+ &vertical_space;
-        // }
+        if !compact{
+            let vertical_space = "\n\n".to_string();
+            content = vertical_space.clone() + &content; //+ &vertical_space;
+        }
 
-        // content
+        content
     }
 
-    fn format_bf_block(&mut self, _bf_type: BfType, macro_node: MacroNode) -> String {
-        // match bf_type{
-
-        // };
+    fn format_bf_block(&mut self, bf_type: BfType, macro_node: MacroNode) -> String {
+        let font_change = match bf_type{
+            BfType::Emphasis => {
+                if self.supports_italic() {
+                    "\x1b[3m".to_string()
+                } else if self.supports_underline() {
+                    "\x1b[4m".to_string()
+                }else{
+                    String::new()
+                }
+            },
+            BfType::Literal => {
+                String::new()
+            },
+            BfType::Symbolic => {
+                if self.supports_bold(){
+                    "\x1b[1m".to_string()
+                }else{
+                    String::new()
+                }
+            }
+        };
 
         let content = macro_node
             .nodes
@@ -1072,11 +1037,17 @@ impl MdocFormatter {
             .collect::<Vec<String>>()
             .join("");
 
-        content
+        let normal_font = if !font_change.is_empty() {
+            "\x1b[0m"
+        }else{
+            ""
+        };
+
+        font_change + &content + normal_font
     }
 
     fn format_bk_block(&mut self, macro_node: MacroNode) -> String {
-        let mut content = macro_node
+        let content = macro_node
             .nodes
             .into_iter()
             .map(|node| self.format_node(node))
@@ -1087,6 +1058,364 @@ impl MdocFormatter {
         content.replace("\n", " ").replace("\r", "")
     }
 
+    fn format_bl_symbol_block(
+        &self, 
+        items: Vec<(Vec<String>, String)>,
+        offset: Option<OffsetType>,
+        list_type: BlType
+    ) -> String{
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
+        let origin_indent = self.formatting_state.current_indent;
+        let width = self.formatting_settings.width;
+        let line_width = width.saturating_sub(origin_indent + indent);
+        let indent_str = vec![' '; origin_indent + indent]
+            .iter().collect::<String>();
+
+        let mut symbol = get_symbol("0.", &list_type);
+        let mut content = String::new();
+        for (_, body) in items{
+            let mut body = split_by_width(
+                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width
+            );
+            body = add_indent_to_lines(body, line_width, &offset);
+            for line in body.iter_mut(){
+                *line = indent_str.clone() + &line;
+            }
+            if let Some(first_line) = body.get_mut(0){
+                symbol = get_symbol(symbol.as_str(), &list_type);
+                if indent > 0{
+                    first_line.replace_range(origin_indent..(origin_indent + 1), &symbol);
+                }   
+            }
+            content.push_str(&body.join("\n\n"));
+        }  
+
+        content
+    }
+
+    fn format_bl_item_block(
+        &self, 
+        items: Vec<(Vec<String>, String)>,
+        offset: Option<OffsetType>, 
+    ) -> String{
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
+        let origin_indent = self.formatting_state.current_indent;
+        let width = self.formatting_settings.width;
+        let line_width = width.saturating_sub(origin_indent + indent);
+
+        let mut content = String::new();
+        for (_, body) in items{
+            let mut body = split_by_width(
+                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
+            content.push_str(&body.join("\n\n"));
+        } 
+
+        content
+    }
+    
+    fn format_bl_ohang_block(
+        &self, 
+        items: Vec<(Vec<String>, String)>,
+        offset: Option<OffsetType>, 
+    ) -> String{
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
+        let origin_indent = self.formatting_state.current_indent;
+        let width = self.formatting_settings.width;
+        let line_width = width.saturating_sub(origin_indent + indent);
+        let origin_indent_str = vec![' '; origin_indent]
+            .iter().collect::<String>();
+
+        let items = items.into_iter()
+            .map(|(head, body)|{
+                (head.join(" "), body)    
+            })
+            .collect::<Vec<_>>();
+
+        let mut content = String::new();
+        for (head, body) in items{
+            let mut h = split_by_width(
+                head.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            let mut body = split_by_width(
+                body.split(|ch| [' ', '\n'].contains(&ch))
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            h.extend(body);
+            body = h;
+            body = add_indent_to_lines(body, line_width + indent, &offset);
+            for line in body.iter_mut(){
+                *line = origin_indent_str.clone() + &line;
+            }
+            content.push_str(&(body.join("\n") + "\n\n"));
+        }
+
+        content
+    }
+
+    fn format_bl_inset_block(
+        &self, 
+        items: Vec<(Vec<String>, String)>,
+        offset: Option<OffsetType>, 
+    ) -> String{
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
+        let origin_indent = self.formatting_state.current_indent;
+        let width = self.formatting_settings.width;
+        let line_width = width.saturating_sub(origin_indent + indent);
+        let origin_indent_str = vec![' '; origin_indent]
+            .iter().collect::<String>();
+
+        let items = items.into_iter()
+            .map(|(head, body)|{
+                head.join(" ") + " " + &body   
+            })
+            .collect::<Vec<_>>();
+
+        let mut content = String::new();
+        for item in items{
+            let mut body = split_by_width(
+                item.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
+            for line in body.iter_mut(){
+                *line = origin_indent_str.clone() + &line;
+            }
+            content.push_str(&(body.join("\n") + "\n\n"));
+        }
+
+        content
+    }
+
+    fn format_bl_column_block(
+        &self, 
+        mut items: Vec<(Vec<String>, String)>,
+        offset: Option<OffsetType>, 
+        columns: Vec<String>
+    ) -> String{
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
+        let origin_indent = self.formatting_state.current_indent;
+        let width = self.formatting_settings.width;
+        let line_width = width.saturating_sub(origin_indent + indent);
+
+        let table_width_overflow = columns.join(" ").len() > line_width;
+        let mut content = String::new();
+        items.insert( 0, (columns.clone(), "".to_string()));
+        if table_width_overflow{
+            content += &items.iter()
+                .map(|(head, _)| {
+                    vec![head.clone(), vec!["\n".to_string()]].concat()
+                })
+                .flatten()
+                .map(|s| split_by_width(
+                    s.split(" ")                    
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(), 
+                    line_width
+                ))
+                .map(|lines| add_indent_to_lines(lines, line_width, &offset))
+                .flatten()
+                .collect::<Vec<_>>()
+                .join("\n");
+            return content;
+        }
+        
+        for (row, _) in items{ 
+            let mut cell_indent = indent; 
+            let mut i = 0;
+            for cell in row{
+                let Some(column_title) = columns.get(i) else {
+                    break;
+                };
+                let column_width = column_title.len();
+                cell_indent += column_width + 1;
+                let mut lines = split_by_width(
+                    cell.split(|ch| [' ', '\n'].contains(&ch))
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(), 
+                    width - cell_indent
+                );
+                lines = add_indent_to_lines(lines, width - cell_indent, &offset);
+                lines = lines.iter()
+                    .map(|line| {
+                        vec![' '; cell_indent].iter().collect::<String>() + line
+                    })
+                    .collect::<Vec<_>>();
+                let mut row_str = lines.join("\n");
+                if let Some(p) = content.rfind('\n'){
+                    row_str.replace_range(indent..(indent + content.len() - p), "");
+                }
+                content += &row_str;
+                i += 1;
+            }
+        }
+
+        content
+    }
+
+    fn format_bl_tag_block(
+        &self, 
+        items: Vec<(Vec<String>, String)>,
+        offset: Option<OffsetType>, 
+    ) -> String{
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
+        let origin_indent = self.formatting_state.current_indent;
+        let width = self.formatting_settings.width;
+        let line_width = width.saturating_sub(origin_indent + indent);
+        let indent_str = vec![' '; origin_indent + indent]
+            .iter().collect::<String>();
+        let origin_indent_str = vec![' '; origin_indent]
+            .iter().collect::<String>();
+
+        let items = items.into_iter()
+            .map(|(head, body)|{
+                (head.join(" "), body)    
+            })
+            .collect::<Vec<_>>();
+
+        let mut content = String::new();
+        for (head, body) in items{
+            let mut body = split_by_width(
+                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
+            for line in body.iter_mut(){
+                *line = indent_str.clone() + &line;
+            }
+            let space = if head.len() < indent.saturating_sub(2){
+                if let Some(line) = body.first_mut(){
+                    line.replace_range(0..indent, "");
+                }
+                vec![' '; indent - head.len()].iter().collect::<String>()
+            }else{
+                "\n".to_string()
+            };
+            content.push_str(
+                &(origin_indent_str.clone() + &head + &space + 
+                &body.join("\n") + "\n\n")
+            );
+        } 
+
+        content
+    }
+
+    fn format_bl_hang_block(
+        &self, 
+        items: Vec<(Vec<String>, String)>,
+        offset: Option<OffsetType>, 
+    ) -> String{
+        let indent = self.get_indent_from_offset_type(&offset);
+        let offset = self.get_offset_from_offset_type(&offset);
+        let origin_indent = self.formatting_state.current_indent;
+        let width = self.formatting_settings.width;
+        let line_width = width.saturating_sub(origin_indent + indent);
+        let indent_str = vec![' '; origin_indent + indent]
+            .iter().collect::<String>();
+        let origin_indent_str = vec![' '; origin_indent]
+            .iter().collect::<String>();
+        
+        let items = items.into_iter()
+            .map(|(head, body)|{
+                (head.join(" "), body)    
+            })
+            .collect::<Vec<_>>();
+
+        let mut content = String::new();
+        for (head, body) in items{
+            let body = body.split(|ch| [' ', '\n'].contains(&ch)).collect::<Vec<_>>();
+            let mut i = 0;
+            let mut head = head; 
+            if head.len() < indent.saturating_sub(1){
+                while head.len() < line_width + indent || i < body.len() {
+                    head.push_str(&(" ".to_string() + &body[i]));
+                    i += 1;
+                }
+            }
+            let mut body = split_by_width(
+                body.get(i..)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(), 
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
+            for line in body.iter_mut(){
+                *line = indent_str.clone() + &line;
+            }
+            if head.len() < indent.saturating_sub(1){
+                if let Some(line) = body.first_mut(){
+                    line.replace_range(0..indent, "");
+                }
+                let space = vec![' '; indent - head.len()].iter().collect::<String>();
+                content.push_str(&(origin_indent_str.clone() + &head + &space + &body.join("") + "\n\n"));
+            }else{
+                content.push_str(&(origin_indent_str.clone() + &head + "\n" + &body.join("") + "\n\n"));
+            };
+        } 
+
+        content
+    }
+
+    fn get_heads(&mut self, macro_node: MacroNode) -> Vec<Vec<String>>{
+        macro_node.nodes
+            .into_iter()
+            .filter_map(|el|{
+                let Element::Macro(MacroNode{ mdoc_macro: Macro::It, nodes }) = el else{
+                    return None;
+                }; 
+
+                Some(nodes.split(|el| 
+                    matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::Ta, .. }))
+                ).map(|elements|{
+                    elements.iter()
+                        .map(|el| self.format_node(el.clone()))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .collect::<Vec<_>>())
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn get_bodies(&mut self, macro_node: MacroNode) -> Vec<String>{
+        macro_node.nodes
+            .split(|el|{
+                matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::It, .. }))
+            })
+            .map(|elements| {
+                let mut content = String::new(); 
+                for el in elements{
+                    content += &(" ".to_string() + &self.format_node(el.clone()));
+                }
+                content
+            })
+            .collect::<Vec<_>>()
+    }
+
     fn format_bl_block(
         &mut self,
         list_type: BlType,
@@ -1095,14 +1424,36 @@ impl MdocFormatter {
         columns: Vec<String>,
         macro_node: MacroNode,
     ) -> String {
-        String::new()
+        let heads = self.get_heads(macro_node.clone());
+        let bodies = self.get_bodies(macro_node);
+
+        let items = heads.into_iter()
+            .zip(bodies.into_iter())
+            .collect::<Vec<_>>();
+
+        let mut content = match list_type{
+            BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, offset, list_type),
+            BlType::Item => self.format_bl_item_block(items, offset),
+            BlType::Ohang => self.format_bl_ohang_block(items, offset),
+            BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, offset),
+            BlType::Column => self.format_bl_column_block(items, offset, columns),
+            BlType::Tag => self.format_bl_tag_block(items, offset),
+            BlType::Hang => self.format_bl_hang_block(items, offset)
+        };
+
+        if !compact{
+            let vertical_space = "\n\n".to_string();
+            content = vertical_space.clone() + &content; //+ &vertical_space;
+        }
+
+        content
     }
 }
 
 // Formatting block full-implicit.
 impl MdocFormatter {
-    fn format_it_block(&mut self, macro_node: MacroNode) -> String {
-        unimplemented!()
+    fn format_it_block(&mut self, _macro_node: MacroNode) -> String {
+        String::new()
     }
 
     fn format_nd(&mut self, macro_node: MacroNode) -> String {
@@ -1296,11 +1647,6 @@ impl MdocFormatter {
 impl MdocFormatter {
     fn format_rs_block(&self, macro_node: MacroNode) -> String {
         let mut iter = macro_node.nodes.into_iter().peekable();
-
-        let is_a = |el: &Element| match el {
-            Element::Macro(node) => node.mdoc_macro == Macro::A,
-            _ => unreachable!("Unexpected rule!"),
-        };
 
         let mut items = Vec::new();
         while let Some(el) = iter.peek() {
@@ -1949,15 +2295,6 @@ impl MdocFormatter {
         String::new()
     }
 
-    fn format_ot(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
-    }
-
     fn format_ox(&self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
     }
@@ -2040,12 +2377,13 @@ impl MdocFormatter {
     }
 
     fn format_sy(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        let line = self.format_inline_macro(macro_node);
+
+        if self.supports_bold() {
+            format!("\x1b[1m{line}\x1b[0m")
+        } else {
+            line
+        }
     }
 
     fn format_tg(&self, _term: Option<String>) -> String {
@@ -2100,10 +2438,13 @@ mod tests {
         let ast = get_ast(input);
 
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
-
-        println!("{:?}", formatter);
-
+        //println!("{:?}", formatter);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
+        println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
+            output, 
+            vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
+            result
+        );
         assert_eq!(output, result)
     }
 
@@ -2378,36 +2719,127 @@ footer text                     January 1, 1970                    footer text";
     mod full_explicit {
         use crate::man_util::formatter::tests::test_formatting;
 
-        #[test]
-        fn bd() {
-            let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+        mod bd{
+            use crate::man_util::formatter::tests::test_formatting;
+
+            #[test]
+            fn bd_filled() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
 .Os footer text
-.Bd -literal indent -compact
+.Bd -filled -offset indent -compact
 Line 1
 Line 2
 .Ed";
-            let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-      Line 1
-      Line 2
+    Line 1
+    Line 2
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+        
+            #[test]
+            fn bd_unfilled() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bd -unfilled -offset indent -compact
+Line 1
+Line 2
+.Ed";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+    Line 1
+    Line 2
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bd_centered() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bd -centered -offset indent -compact
+Line 1
+Line 2
+.Ed";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+    Line 1
+    Line 2
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bd_offset_right() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bd -centered -offset right -compact
+Line 1
+Line 2
+.Ed";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+    Line 1
+    Line 2
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bd_compact() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bd -literal -offset indent -compact
+Line 1
+Line 2
+.Ed";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+    Line 1
+    Line 2
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+        }
+
+        #[test]
+        fn bf() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bf -emphasis
+Line 1
+Line 2
+.Ed";
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Line 1 Line 2
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
         #[test]
-        fn bf() {
+        fn bf_macro() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
-.Bf -emphasis
+.Bf Em
 Line 1
 Line 2
 .Ed";
-            let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 Line 1 Line 2
 
@@ -2418,14 +2850,13 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn bk() {
             let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+.Dt PROGNAME 1
 .Os footer text
 .Bk -words
 Line 1
 Line 2
 .Ek";
-            let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+            let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 Line 1 Line 2
 
@@ -2433,23 +2864,138 @@ footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
 
-        #[test]
-        fn bl() {
-            let input = ".Dd January 1, 1970
-.Dt PROGNAME section
+        mod bl{
+            use crate::man_util::formatter::tests::test_formatting;
+
+            #[test]
+            fn bl_bullet() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
 .Os footer text
-.Bl -bullet -width indent-two -compact col1 col2 col3
+.Bl -bullet -width indent -compact
 .It Line 1
 .It Line 2
 .El";
-            let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+                let output = "";
+                test_formatting(input, output);
+            }
 
-•
-•
+            #[test]
+            fn bl_column() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -column -width indent -compact col1 col2 col3
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
+    
+            #[test]
+            fn bl_dash() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -dash -width indent -compact
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
+    
+            #[test]
+            fn bl_diag() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -diag -width indent -compact
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
 
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
+            #[test]
+            fn bl_enum() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -enum -width indent -compact
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_hang() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -hang -width indent -compact
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_inset() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -inset -width indent -compact
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_item() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -item -width indent -compact
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_ohang() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -ohang -width indent -compact
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_tag() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -tag -width indent -compact
+.It Line 1
+.It Line 2
+.El";
+                let output = "";
+                test_formatting(input, output);
+            }
         }
     }
 
@@ -2461,8 +3007,12 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.It Line 1
-.It Line 2";
+.Bl -bullet
+.It 
+Line 1
+.It 
+Line 2
+.El";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
@@ -2543,25 +3093,11 @@ footer text                     January 1, 1970                    footer text";
         let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Bl -bullet -width indent-two -compact col1 col2 col3
-.It Line 1
-.It Line 2
-.It Line 3
-.Ta
-.It Line 4
-.It Line 5
-.It Line 6
-.Ta
-.El";
-        let output =
-            "PROGNAME(section)                   section                  PROGNAME(section)
+.Bl -column \"A col\" \"B col\"
+.It item1 Ta item2
+.It item1 Ta item2";
+        let output = "PROGNAME(section)                   section                  PROGNAME(section)
 
-•
-•
-•
-•
-•
-•
 
 footer text                     January 1, 1970                    footer text";
         test_formatting(input, output);
