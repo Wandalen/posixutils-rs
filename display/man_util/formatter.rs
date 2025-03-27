@@ -1,5 +1,6 @@
 use crate::FormattingSettings;
 use aho_corasick::AhoCorasick;
+use core::fmt;
 use std::collections::HashMap;
 use terminfo::Database;
 
@@ -2155,7 +2156,13 @@ impl MdocFormatter {
         macro_node
             .nodes
             .into_iter()
-            .map(|node| self.format_node(node))
+            .map(|node| {
+                let fmtd = self.format_node(node);
+                match is_first_char_alnum(&fmtd) {
+                    true  => format!("-{}", fmtd),
+                    false => fmtd
+                }
+            })
             .collect::<Vec<String>>()
             .join(&self.formatting_state.spacing)
     }
@@ -2419,6 +2426,10 @@ impl MdocFormatter {
     fn format_xr(&self, name: &str, section: &str) -> String {
         format!("{name}({section})")
     }
+}
+
+fn is_first_char_alnum(s: &str) -> bool {
+    s.chars().next().map(|c| c.is_ascii_alphanumeric()).unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -3764,10 +3775,10 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Er ERROR ERROR2
-.Er";
+.Er ERROR ERROR2";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
+
 ERROR ERROR2
 
 footer text                     January 1, 1970                    footer text";
@@ -4100,13 +4111,16 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
+.Ar name Ns = Ns Ar value
+.Cm :M Ns Ar pattern
+.Fl o Ns Ar output
 .No a b c
 .Ns
 .No a b c";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
-a b c a b c
+name=value :Mpattern -ooutput a b c a b c
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
