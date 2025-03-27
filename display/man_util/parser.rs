@@ -171,7 +171,7 @@ impl MdocValidator {
     fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
         if let Element::Macro(macro_node) = element {
             match macro_node.mdoc_macro {
-                Macro::Nm { .. } => self.validate_nm(macro_node)?,
+                Macro::Nm => self.validate_nm(macro_node)?,
                 Macro::Sh { .. } => self.validate_sh(macro_node)?,
                 Macro::Ss { .. } => self.validate_ss(macro_node)?,
                 _ => {}
