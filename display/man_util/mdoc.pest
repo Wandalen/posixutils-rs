@@ -43,7 +43,7 @@ macro_arg = {
   (
     block_partial_implicit |
     block_partial_explicit |
-    inline | ta 
+    inline
   ) 
 }
 
@@ -59,7 +59,6 @@ block_full_explicit = {
 }
 
 block_full_implicit = { 
-  it_block | 
   nd_block | 
   nm_block | 
   sh_block | 
@@ -154,7 +153,7 @@ inline = {
 // ----- Mdoc document
 
 element = {
-  ("."? ~ ( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  ("."? ~ ( block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
   text_line
 }
 
@@ -268,7 +267,7 @@ ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 // tab = @{ ta | (ws ~ ws ~ ws ~ ws) | "\t" }
 
 it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
-it_body  = ${ (!(".It") ~ !(".El") ~ element)* }
+it_body  = ${ (!(".It") ~ !(".El") ~ (ta | element))* }
 it_block = ${ it_head ~ it_body }
 
 // -- Nd
@@ -369,7 +368,7 @@ xo_block = ${ xo_head ~ xo_body* ~ "."? ~ xc }
 // ----- Block partial-implicit
 
 partial_implicit_element = {
-  (( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  (( block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
   text_arg
 }
 
