@@ -2290,8 +2290,13 @@ mod tests {
         let ast = get_ast(input);
 
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
-        println!("{:?}", formatter);
+        //println!("{:?}", formatter);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
+        println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}", 
+            output, 
+            vec!["-";formatter.formatting_settings.width].iter().collect::<String>(), 
+            result
+        );
         assert_eq!(output, result)
     }
 
