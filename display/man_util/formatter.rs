@@ -124,27 +124,60 @@ impl MdocFormatter {
 // Base formatting functions.
 impl MdocFormatter {
     fn append_formatted_text(&self, formatted: &str, current_line: &mut String, lines: &mut Vec<String>) {
+        let get_indent = |l: &str| {
+            l.chars()
+                .take_while(|ch|ch.is_whitespace())
+                .collect::<String>()
+        };
         let max_width = self.formatting_settings.width;
-        if current_line.chars().count() + formatted.chars().count() > max_width {
-            for word in formatted.split_whitespace() {
-                if current_line.chars().count() + word.chars().count() >= max_width {
-                    lines.push(current_line.trim_end().to_string());
-                    current_line.clear();
+        for line in formatted.split("\n"){
+            if current_line.chars().count() + line.chars().count() > max_width {
+                let indent = get_indent(&*line);
+                let max_width = max_width - indent.len();
+
+                for word in line.split_whitespace() {
+                    if current_line.chars().count() + word.chars().count() >= max_width {
+                        lines.push(indent.clone() + current_line.trim());
+                        current_line.clear();
+                    }
+                    current_line.push_str(word);
+                    current_line.push(' ');
                 }
-                current_line.push_str(word);
-                current_line.push(' ');
-            }
-        } else {
-            let is_all_control = formatted.chars().all(|ch| ch.is_ascii_control());
-            if is_all_control {
-                if let Some(' ') = current_line.chars().last() {
-                    current_line.pop();
+            } else {
+                let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
+                if is_all_control {
+                    if let Some(' ') = current_line.chars().last() {
+                        current_line.pop();
+                    }
+                }
+                
+                current_line.push_str(line);
+
+                if !line.is_empty() 
+                    && !is_all_control 
+                    && current_line.chars().last() != Some('\n') 
+                    && current_line.chars().last() != Some(' ') 
+                {
+                    match self.formatting_state.spacing.as_str() {
+                        " " => current_line.push(' '),
+                        ""  => {},
+                        _   => unreachable!()
+                    }
+                    
                 }
             }
-            current_line.push_str(formatted);
-            if !formatted.is_empty() && !is_all_control && current_line.chars().last() != Some('\n') {
-                current_line.push(' ');
+
+            if !current_line.is_empty(){
+                let indent = get_indent(&*current_line);
+                lines.push(indent.clone() + current_line.trim());
+                current_line.clear();
             }
+        }
+        let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
+            current_line.is_empty()); 
+        if is_not_empty{
+            let indent = " ".repeat(self.formatting_state.current_indent);
+            *current_line = indent + current_line;
         }
     }
 
@@ -184,6 +217,8 @@ impl MdocFormatter {
 
         for node in ast.elements {
             let formatted_node = self.format_node(node);
+
+            //lines.push(formatted_node);
             self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
 
@@ -351,7 +386,7 @@ impl MdocFormatter {
             right_footer_text = "\n".to_string() + &space.clone() + &footer_text.clone();
         }
 
-        let space = vec![" "; space_size].into_iter().collect::<String>();
+        let space = " ".repeat(space_size);
 
         let mut content = format!(
             "\n{}{}{}{}{}",
@@ -369,18 +404,34 @@ impl MdocFormatter {
 
         content.insert_str(
             left_footer_text.len() + 1,
-            &vec![" "; missing_space].join(""),
+            &" ".repeat(missing_space),
         );
 
         content
     }
 
     fn format_node(&mut self, node: Element) -> String {
-        match node {
+        let content = match node {
             Element::Macro(macro_node) => self.format_macro_node(macro_node),
             Element::Text(text) => self.format_text_node(text.as_str()),
             Element::Eoi => "".to_string(),
-        }
+        };
+
+        content.lines()
+            .map(|line|{
+                let indent_is_small = line.chars()
+                    .take_while(|ch| ch.is_whitespace())
+                    .count() < self.formatting_state.current_indent;
+                let is_not_empty = !(line.chars().all(|ch| ch.is_whitespace()) || line.is_empty()); 
+                let line = if indent_is_small && is_not_empty{
+                    " ".repeat(self.formatting_state.current_indent) + line
+                }else{
+                    line.to_string()
+                };
+                line
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     fn format_macro_node(&mut self, macro_node: MacroNode) -> String {
@@ -410,7 +461,7 @@ impl MdocFormatter {
             Macro::Ta => self.format_ta(),
 
             // Block full-implicit
-            Macro::It => self.format_it_block(macro_node),
+            Macro::It{ head} => self.format_it_block(head, macro_node),
             Macro::Nd => self.format_nd(macro_node),
             Macro::Nm => self.format_nm(macro_node),
             Macro::Sh{ title } => self.format_sh_block(title, macro_node),
@@ -966,13 +1017,20 @@ fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
             if let Some(l) = lines.pop(){
                 line = l;
             }
+            i += 1;
             continue;
         } else if line.len() + words[i].len() + 1 > width{
             lines.push(l);
             line.clear();
             continue;
         }
-        line.push(' ');
+        if !line.is_empty() && line.len() < width{
+            if let Some(ch) = line.chars().last(){
+                if !ch.is_whitespace(){
+                    line.push(' ');
+                }
+            }
+        }
         line.push_str(&words[i]);
         i += 1;
     }
@@ -983,16 +1041,17 @@ fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
 fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: &OffsetType) -> Vec<String>{
     lines.into_iter()
         .map(|line|{
-            let line_indent = width.saturating_sub(line.len());
+            let mut line_indent = width.saturating_sub(line.len());
             match offset{
                 OffsetType::Left => line,
                 OffsetType::Right => {
-                    let indent = vec![' '; line_indent].iter().collect::<String>();
+                    let indent = " ".repeat(line_indent);
                     indent + &line
                 },
                 OffsetType::Center => {
-                    let indent = vec![' '; line_indent / 2].iter().collect::<String>();
-                    indent.clone() + &line + &indent.clone()
+                    line_indent = (line_indent as f32 / 2.0).floor() as usize;
+                    let indent = " ".repeat(line_indent);
+                    indent.clone() + &line
                 },
                 _ => unreachable!()
             }
@@ -1005,12 +1064,15 @@ fn get_symbol(last_symbol: &str, list_type: &BlType) -> String{
         BlType::Bullet => "•".to_string(),
         BlType::Dash => "-".to_string(),
         BlType::Enum => {
+            if last_symbol.is_empty(){
+                return "0.".to_string();
+            }
             let mut symbol = last_symbol.to_string();
             symbol.pop();
             let Ok(number) = symbol.parse::<usize>() else{
                 return String::new();
             };
-            (number + 1).to_string()
+            (number + 1).to_string() + "."
         },
         _ => String::new()
     }
@@ -1023,9 +1085,9 @@ impl MdocFormatter {
             return self.formatting_settings.indent;
         };
         match offset{
-            OffsetType::Indent => self.formatting_settings.indent,
-            OffsetType::IndentTwo => self.formatting_settings.indent * 2,
-            _ => 0
+            OffsetType::Indent => 6,
+            OffsetType::IndentTwo => 6 * 2,
+            _ => self.formatting_settings.indent
         }
     }
 
@@ -1047,26 +1109,33 @@ impl MdocFormatter {
         macro_node: MacroNode
     ) -> String {
         let indent = self.get_indent_from_offset_type(&offset);
-        let offset = self.get_offset_from_offset_type(&offset);
+        let mut offset = self.get_offset_from_offset_type(&offset);
+        if block_type == BdType::Centered{
+            offset = OffsetType::Center;
+        }
 
         self.formatting_state.current_indent += indent;
         let indent = self.formatting_state.current_indent;
-        let indent = vec![" "; indent].join("");
+        let indent = " ".repeat(indent);
         let line_width = self.formatting_settings.width.saturating_sub(indent.len());
-
-        if line_width == 0{
-            return String::new();
-        }
 
         let formatted_elements = macro_node.nodes
             .into_iter()
             .map(|el| self.format_node(el.clone()))
             .map(|formatted_element| {
                 formatted_element
-                    .split(|ch| [' ', '\n'].contains(&ch))
+                    .split_whitespace()
                     .map(|s|s.to_string())
                     .collect::<Vec<_>>()
             });
+
+        if line_width == 0{
+            let content = formatted_elements
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+            return content;
+        }
 
         let lines = match block_type{
             BdType::Centered | BdType::Filled | BdType::Ragged => {
@@ -1084,7 +1153,7 @@ impl MdocFormatter {
                 lines
             }
         };
-
+        
         let mut content = add_indent_to_lines(lines, line_width, &offset)
             .iter()
             .map(|line|{
@@ -1137,6 +1206,10 @@ impl MdocFormatter {
             .collect::<Vec<String>>()
             .join("");
 
+        // if let Some(c) = content.strip_prefix(self.formatting_state.spacing){
+        //     content = c.to_string(); 
+        // }
+
         let normal_font = if !font_change.is_empty() {
             "\x1b[0m"
         }else{
@@ -1160,23 +1233,31 @@ impl MdocFormatter {
 
     fn format_bl_symbol_block(
         &self, 
-        items: Vec<(Vec<String>, String)>,
+        items: Vec<(String, Vec<String>)>,
         offset: Option<OffsetType>,
-        list_type: BlType
+        list_type: BlType,
+        compact: bool
     ) -> String{
         let indent = self.get_indent_from_offset_type(&offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
-        let line_width = width.saturating_sub(origin_indent + indent);
-        let indent_str = vec![' '; origin_indent + indent]
-            .iter().collect::<String>();
+        let (symbol_indent, symbol_range) = if let BlType::Enum = list_type{
+            let i = items.len().to_string().len() + 1;
+            (i, i)
+        }else{
+            (2, 1)
+        };
+        let full_indent = origin_indent + indent + symbol_indent;
+        let line_width = width.saturating_sub(full_indent);
+        let indent_str = " ".repeat(full_indent);
 
-        let mut symbol = get_symbol("0.", &list_type);
+        let mut symbol = get_symbol("", &list_type);
         let mut content = String::new();
         for (_, body) in items{
+            let body = body.join(" ");
             let mut body = split_by_width(
-                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                body.split_whitespace()                    
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(), 
                 line_width
@@ -1186,12 +1267,15 @@ impl MdocFormatter {
                 *line = indent_str.clone() + &line;
             }
             if let Some(first_line) = body.get_mut(0){
-                symbol = get_symbol(symbol.as_str(), &list_type);
-                if indent > 0{
-                    first_line.replace_range(origin_indent..(origin_indent + 1), &symbol);
-                }   
+                if !first_line.chars().all(|ch| ch.is_whitespace()){
+                    symbol = get_symbol(symbol.as_str(), &list_type);
+                }
+                first_line.replace_range(origin_indent..(origin_indent + symbol_range), &symbol);
             }
-            content.push_str(&body.join("\n\n"));
+            content.push_str(&(body.join("\n") + "\n"));
+            if !compact{
+                content.push('\n');
+            }
         }  
 
         content
@@ -1199,8 +1283,9 @@ impl MdocFormatter {
 
     fn format_bl_item_block(
         &self, 
-        items: Vec<(Vec<String>, String)>,
+        items: Vec<(String, Vec<String>)>,
         offset: Option<OffsetType>, 
+        compact: bool
     ) -> String{
         let indent = self.get_indent_from_offset_type(&offset);
         let offset = self.get_offset_from_offset_type(&offset);
@@ -1210,14 +1295,19 @@ impl MdocFormatter {
 
         let mut content = String::new();
         for (_, body) in items{
+            let body = body.join(" ");
             let mut body = split_by_width(
-                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                body.split_whitespace()                    
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(),
                 line_width + indent
             );
             body = add_indent_to_lines(body, line_width + indent, &offset);
-            content.push_str(&body.join("\n\n"));
+            content.push_str(&body.join("\n"));
+            content.push('\n');
+            if !compact{
+                content.push('\n');
+            }
         } 
 
         content
@@ -1225,33 +1315,33 @@ impl MdocFormatter {
     
     fn format_bl_ohang_block(
         &self, 
-        items: Vec<(Vec<String>, String)>,
+        items: Vec<(String, Vec<String>)>,
         offset: Option<OffsetType>, 
+        compact: bool
     ) -> String{
         let indent = self.get_indent_from_offset_type(&offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
-        let origin_indent_str = vec![' '; origin_indent]
-            .iter().collect::<String>();
+        let origin_indent_str = " ".repeat(origin_indent);
 
         let items = items.into_iter()
             .map(|(head, body)|{
-                (head.join(" "), body)    
+                (head, body.join(" "))    
             })
             .collect::<Vec<_>>();
 
         let mut content = String::new();
         for (head, body) in items{
             let mut h = split_by_width(
-                head.split(|ch| [' ', '\n'].contains(&ch))                    
+                head.split_whitespace()                    
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(), 
                 line_width + indent
             );
             let mut body = split_by_width(
-                body.split(|ch| [' ', '\n'].contains(&ch))
+                body.split_whitespace()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(), 
                 line_width + indent
@@ -1262,7 +1352,10 @@ impl MdocFormatter {
             for line in body.iter_mut(){
                 *line = origin_indent_str.clone() + &line;
             }
-            content.push_str(&(body.join("\n") + "\n\n"));
+            content.push_str(&(body.join("\n") + "\n"));
+            if !compact{
+                content.push('\n');
+            }
         }
 
         content
@@ -1270,36 +1363,54 @@ impl MdocFormatter {
 
     fn format_bl_inset_block(
         &self, 
-        items: Vec<(Vec<String>, String)>,
+        items: Vec<(String, Vec<String>)>,
         offset: Option<OffsetType>, 
+        compact: bool,
+        list_type: BlType
     ) -> String{
+        let head_space = match list_type{
+            BlType::Inset => " ", 
+            BlType::Diag => "  ", 
+            _ => " "
+        };
         let indent = self.get_indent_from_offset_type(&offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
-        let origin_indent_str = vec![' '; origin_indent]
-            .iter().collect::<String>();
+        let origin_indent_str = " ".repeat(origin_indent);
 
         let items = items.into_iter()
             .map(|(head, body)|{
-                head.join(" ") + " " + &body   
+                (head, body.join(" "))
             })
             .collect::<Vec<_>>();
 
+        let get_words = |s: &str| s.split_whitespace()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
+
         let mut content = String::new();
-        for item in items{
-            let mut body = split_by_width(
-                item.split(|ch| [' ', '\n'].contains(&ch))                    
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>(), 
+        for (head, body) in items{
+            let mut head = get_words(&head);
+            let mut body = get_words(&body);
+            if let Some(word) = head.last_mut(){
+                *word += head_space;
+            }
+
+            body = split_by_width(
+                vec![head, body].concat(), 
                 line_width + indent
             );
+            
             body = add_indent_to_lines(body, line_width + indent, &offset);
             for line in body.iter_mut(){
                 *line = origin_indent_str.clone() + &line;
             }
-            content.push_str(&(body.join("\n") + "\n\n"));
+            content.push_str(&(body.join("\n") + "\n"));
+            if !compact{
+                content.push('\n');
+            }
         }
 
         content
@@ -1307,101 +1418,110 @@ impl MdocFormatter {
 
     fn format_bl_column_block(
         &self, 
-        mut items: Vec<(Vec<String>, String)>,
-        offset: Option<OffsetType>, 
-        columns: Vec<String>
+        items: Vec<Vec<String>>,
+        columns: Vec<String>,
+        compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&offset);
-        let offset = self.get_offset_from_offset_type(&offset);
+        fn format_table(table: Vec<Vec<String>>, col_count: usize, max_line_width: usize) -> String {
+            if table.is_empty() {
+                return String::new();
+            }
+            
+            let mut col_widths = vec![0; col_count];
+            
+            for row in &table {
+                for (i, cell) in row.iter().enumerate() {
+                    if i >= col_widths.len(){
+                        break;
+                    }
+                    col_widths[i] = col_widths[i].max(cell.len());
+                }
+            }
+            
+            let mut result = String::new();
+            for row in table {
+                let total_width: usize = col_widths.iter().sum::<usize>() + 2 * (col_count - 1);
+                let mut offset = 0;
+                let indent_step = 8;
+                
+                if total_width > max_line_width {
+                    for (i, cell) in row.iter().enumerate() {
+                        result.push_str(&" ".repeat(offset));
+                        result.push_str(&format!("{:<width$}\n", cell, width = col_widths[i]));
+                        offset += indent_step;
+                    }
+                } else {
+                    let mut line_width = 0;
+                    for (i, cell) in row.iter().enumerate() {
+                        let cell_width = col_widths[i] + 1;
+                        if line_width + cell_width > max_line_width {
+                            result.push('\n');
+                            offset += indent_step;
+                            line_width = offset;
+                            result.push_str(&" ".repeat(offset));
+                        }
+                        result.push_str(&format!("{:<width$}  ", cell, width = col_widths[i]));
+                        line_width += cell_width;
+                    }
+                    result.push('\n');
+                }
+            }
+            result
+        }
+
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
-        let line_width = width.saturating_sub(origin_indent + indent);
+        let line_width = width.saturating_sub(origin_indent);
 
-        let table_width_overflow = columns.join(" ").len() > line_width;
-        let mut content = String::new();
-        items.insert( 0, (columns.clone(), "".to_string()));
-        if table_width_overflow{
-            content += &items.iter()
-                .map(|(head, _)| {
-                    vec![head.clone(), vec!["\n".to_string()]].concat()
-                })
-                .flatten()
-                .map(|s| split_by_width(
-                    s.split(" ")                    
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>(), 
-                    line_width
-                ))
-                .map(|lines| add_indent_to_lines(lines, line_width, &offset))
-                .flatten()
-                .collect::<Vec<_>>()
-                .join("\n");
-            return content;
-        }
+        let mut content = format_table(items, columns.len(), line_width);
         
-        for (row, _) in items{ 
-            let mut cell_indent = indent; 
-            let mut i = 0;
-            for cell in row{
-                let Some(column_title) = columns.get(i) else {
-                    break;
-                };
-                let column_width = column_title.len();
-                cell_indent += column_width + 1;
-                let mut lines = split_by_width(
-                    cell.split(|ch| [' ', '\n'].contains(&ch))
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>(), 
-                    width - cell_indent
-                );
-                lines = add_indent_to_lines(lines, width - cell_indent, &offset);
-                lines = lines.iter()
-                    .map(|line| {
-                        vec![' '; cell_indent].iter().collect::<String>() + line
-                    })
-                    .collect::<Vec<_>>();
-                let mut row_str = lines.join("\n");
-                if let Some(p) = content.rfind('\n'){
-                    row_str.replace_range(indent..(indent + content.len() - p), "");
+        content = content.lines()
+            .map(|line|{
+                let mut line = " ".repeat(origin_indent) + line;
+                if !compact{
+                    line += "\n";
                 }
-                content += &row_str;
-                i += 1;
-            }
-        }
+                line
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
 
         content
     }
 
     fn format_bl_tag_block(
         &self, 
-        items: Vec<(Vec<String>, String)>,
+        items: Vec<(String, Vec<String>)>,
         offset: Option<OffsetType>, 
+        compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&offset);
+        let indent = if offset != Some(OffsetType::Indent){
+            self.get_indent_from_offset_type(&offset)
+        }else{
+            8
+        };
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
-        let indent_str = vec![' '; origin_indent + indent]
-            .iter().collect::<String>();
-        let origin_indent_str = vec![' '; origin_indent]
-            .iter().collect::<String>();
+        let indent_str = " ".repeat(origin_indent + indent);
+        let origin_indent_str = " ".repeat(origin_indent);
 
         let items = items.into_iter()
             .map(|(head, body)|{
-                (head.join(" "), body)    
+                (head, body.join(" "))    
             })
             .collect::<Vec<_>>();
 
         let mut content = String::new();
         for (head, body) in items{
             let mut body = split_by_width(
-                body.split(|ch| [' ', '\n'].contains(&ch))                    
+                body.split_whitespace()                    
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>(), 
-                line_width + indent
+                line_width
             );
-            body = add_indent_to_lines(body, line_width + indent, &offset);
+            body = add_indent_to_lines(body, line_width, &offset);
             for line in body.iter_mut(){
                 *line = indent_str.clone() + &line;
             }
@@ -1409,14 +1529,17 @@ impl MdocFormatter {
                 if let Some(line) = body.first_mut(){
                     line.replace_range(0..indent, "");
                 }
-                vec![' '; indent - head.len()].iter().collect::<String>()
+                " ".repeat(indent - head.len())
             }else{
                 "\n".to_string()
             };
             content.push_str(
                 &(origin_indent_str.clone() + &head + &space + 
-                &body.join("\n") + "\n\n")
+                &body.join("\n") + "\n")
             );
+            if !compact{
+                content.push('\n');
+            }
         } 
 
         content
@@ -1424,32 +1547,38 @@ impl MdocFormatter {
 
     fn format_bl_hang_block(
         &self, 
-        items: Vec<(Vec<String>, String)>,
+        items: Vec<(String, Vec<String>)>,
         offset: Option<OffsetType>, 
+        compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&offset);
+        let indent = if offset != Some(OffsetType::Indent){
+            self.get_indent_from_offset_type(&offset)
+        }else{
+            8
+        };
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
-        let indent_str = vec![' '; origin_indent + indent]
-            .iter().collect::<String>();
-        let origin_indent_str = vec![' '; origin_indent]
-            .iter().collect::<String>();
+        let indent_str = " ".repeat(origin_indent + indent);
+        let origin_indent_str = " ".repeat(origin_indent);
         
         let items = items.into_iter()
             .map(|(head, body)|{
-                (head.join(" "), body)    
+                (head, body.join(" "))    
             })
             .collect::<Vec<_>>();
 
         let mut content = String::new();
         for (head, body) in items{
-            let body = body.split(|ch| [' ', '\n'].contains(&ch)).collect::<Vec<_>>();
+            let body = body.split_whitespace().collect::<Vec<_>>();
             let mut i = 0;
             let mut head = head; 
-            if head.len() < indent.saturating_sub(1){
-                while head.len() < line_width + indent || i < body.len() {
+            if head.len() > indent.saturating_sub(1){
+                while head.len() < line_width + indent && i < body.len() {
+                    if head.len() + body[i].len() >= line_width + indent{
+                        break;
+                    }
                     head.push_str(&(" ".to_string() + &body[i]));
                     i += 1;
                 }
@@ -1460,9 +1589,9 @@ impl MdocFormatter {
                     .iter()
                     .map(|s| s.to_string())
                     .collect::<Vec<_>>(), 
-                line_width + indent
+                line_width
             );
-            body = add_indent_to_lines(body, line_width + indent, &offset);
+            body = add_indent_to_lines(body, line_width, &offset);
             for line in body.iter_mut(){
                 *line = indent_str.clone() + &line;
             }
@@ -1470,48 +1599,75 @@ impl MdocFormatter {
                 if let Some(line) = body.first_mut(){
                     line.replace_range(0..indent, "");
                 }
-                let space = vec![' '; indent - head.len()].iter().collect::<String>();
-                content.push_str(&(origin_indent_str.clone() + &head + &space + &body.join("") + "\n\n"));
+                let space = " ".repeat(indent - head.len());
+                content.push_str(&(origin_indent_str.clone() + &head + &space + &body.join("\n") + "\n"));
             }else{
-                content.push_str(&(origin_indent_str.clone() + &head + "\n" + &body.join("") + "\n\n"));
+                content.push_str(&(origin_indent_str.clone() + &head + "\n" + &body.join("\n") + "\n"));
             };
+            if !compact{
+                content.push('\n');
+            }
         } 
 
         content
     }
 
-    fn get_heads(&mut self, macro_node: MacroNode) -> Vec<Vec<String>>{
+    fn get_heads(&mut self, macro_node: MacroNode, list_type: &BlType) -> Vec<String>{
         macro_node.nodes
             .into_iter()
             .filter_map(|el|{
-                let Element::Macro(MacroNode{ mdoc_macro: Macro::It, nodes }) = el else{
+                let Element::Macro(MacroNode{ mdoc_macro: Macro::It{ head }, .. }) = el else{
                     return None;
                 }; 
 
-                Some(nodes.split(|el| 
-                    matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::Ta, .. }))
-                ).map(|elements|{
-                    elements.iter()
-                        .map(|el| self.format_node(el.clone()))
+                if list_type == &BlType::Column{
+                    None
+                }else {
+                    let content = head.iter()
+                        .map(|element| self.format_node(element.clone()))
                         .collect::<Vec<_>>()
-                        .join(" ")
-                })
-                .collect::<Vec<_>>())
+                        .join(&self.formatting_state.spacing);
+
+                    if !content.is_empty(){
+                        Some(content)
+                    }else{
+                        None
+                    }
+                }
             })
             .collect::<Vec<_>>()
     }
 
-    fn get_bodies(&mut self, macro_node: MacroNode) -> Vec<String>{
-        macro_node.nodes
-            .split(|el|{
-                matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::It, .. }))
+    fn prepare_rows(&mut self, elements: Vec<Element>) -> Vec<String>{
+        elements.split(|el| 
+                matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::Ta, .. }))
+            ).map(|elements|{
+                elements.iter()
+                    .map(|el| self.format_node(el.clone()))
+                    .collect::<Vec<_>>()
+                    .join(" ")
             })
-            .map(|elements| {
-                let mut content = String::new(); 
-                for el in elements{
-                    content += &(" ".to_string() + &self.format_node(el.clone()));
+            .collect::<Vec<_>>()
+    }
+
+    fn get_bodies(&mut self, macro_node: MacroNode, list_type: &BlType) -> Vec<Vec<String>>{        
+        macro_node.nodes
+            .into_iter()
+            .filter_map(|el|{
+                let Element::Macro(MacroNode{ mdoc_macro: Macro::It{head}, nodes }) = el else{
+                    return None;
+                }; 
+
+                if list_type == &BlType::Column{
+                    Some(self.prepare_rows(vec![head, nodes].concat()))
+                }else{
+                    Some(nodes.iter()
+                    .filter(|el| 
+                        !matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::Ta, .. }))
+                    )
+                    .map(|element| self.format_node(element.clone()))
+                    .collect::<Vec<_>>())
                 }
-                content
             })
             .collect::<Vec<_>>()
     }
@@ -1524,27 +1680,22 @@ impl MdocFormatter {
         columns: Vec<String>, 
         macro_node: MacroNode
     ) -> String {
-        let heads = self.get_heads(macro_node.clone());
-        let bodies = self.get_bodies(macro_node);
+        let heads = self.get_heads(macro_node.clone(), &list_type);
+        let bodies = self.get_bodies(macro_node, &list_type);
 
         let items = heads.into_iter()
-            .zip(bodies.into_iter())
+            .zip(bodies.clone().into_iter())
             .collect::<Vec<_>>();
 
-        let mut content = match list_type{
-            BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, offset, list_type),
-            BlType::Item => self.format_bl_item_block(items, offset),
-            BlType::Ohang => self.format_bl_ohang_block(items, offset),
-            BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, offset),
-            BlType::Column => self.format_bl_column_block(items, offset, columns),
-            BlType::Tag => self.format_bl_tag_block(items, offset),
-            BlType::Hang => self.format_bl_hang_block(items, offset)
+        let content = match list_type{
+            BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, offset, list_type, compact),
+            BlType::Item => self.format_bl_item_block(items, offset, compact),
+            BlType::Ohang => self.format_bl_ohang_block(items, offset, compact),
+            BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, offset, compact, list_type),
+            BlType::Column => self.format_bl_column_block(bodies, columns, compact),
+            BlType::Tag => self.format_bl_tag_block(items, offset, compact),
+            BlType::Hang => self.format_bl_hang_block(items, offset, compact)
         };
-
-        if !compact{
-            let vertical_space = "\n\n".to_string();
-            content = vertical_space.clone() + &content; //+ &vertical_space;
-        }
 
         content
     }
@@ -1552,7 +1703,7 @@ impl MdocFormatter {
 
 // Formatting block full-implicit.
 impl MdocFormatter {
-    fn format_it_block(&mut self, _macro_node: MacroNode) -> String {
+    fn format_it_block(&mut self, _head: Vec<Element>, _macro_node: MacroNode) -> String {
         String::new()
     }
 
@@ -1634,7 +1785,7 @@ impl MdocFormatter {
         if title_ident == 0{
             title_ident = 1;
         }
-        let title_line = vec![" "; title_ident].join("") + &title.to_uppercase() + "\n";
+        let title_line = " ".repeat(title_ident) + &title.to_uppercase() + "\n";
 
         content = title_line + &content;
         
@@ -2826,14 +2977,16 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bd -filled -offset indent -compact
-Line 1
-Line 2
+.Bd -filled -offset indent
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-    Line 1
-    Line 2
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+      tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+      veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+      commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2844,14 +2997,16 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bd -unfilled -offset indent -compact
-Line 1
-Line 2
+.Bd -unfilled -offset indent
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-    Line 1
-    Line 2
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+      tempor incididunt ut labore et dolore magna aliqua.
+      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+      ut aliquip ex ea commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2862,14 +3017,16 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bd -centered -offset indent -compact
-Line 1
-Line 2
+.Bd -centered -offset indent
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-    Line 1
-    Line 2
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+      veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+                                 commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2880,14 +3037,16 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bd -centered -offset right -compact
-Line 1
-Line 2
+.Bd -filled -offset right
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-    Line 1
-    Line 2
+       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+          tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+                                                            commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2899,13 +3058,15 @@ footer text                     January 1, 1970                    footer text";
 .Dt PROGNAME 1
 .Os footer text
 .Bd -literal -offset indent -compact
-Line 1
-Line 2
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-    Line 1
-    Line 2
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+      tempor incididunt ut labore et dolore magna aliqua.
+      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+      ut aliquip ex ea commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -2920,10 +3081,10 @@ footer text                     January 1, 1970                    footer text";
 .Bf -emphasis
 Line 1
 Line 2
-.Ed";
+.Ef";
             let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-Line 1 Line 2
+\u{1b}[3mLine 1 Line 2 \u{1b}[0m
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -2937,10 +3098,10 @@ footer text                     January 1, 1970                    footer text";
 .Bf Em
 Line 1
 Line 2
-.Ed";
+.Ef";
             let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-Line 1 Line 2
+\u{1b}[3mLine 1 Line 2 \u{1b}[0m
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -2972,23 +3133,75 @@ footer text                     January 1, 1970                    footer text";
 .Dt PROGNAME 1
 .Os footer text
 .Bl -bullet -width indent -compact
-.It Line 1
-.It Line 2
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El";
-                let output = "";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+•       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+•       Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+•       Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
             }
 
             #[test]
             fn bl_column() {
                 let input = ".Dd January 1, 1970
+.Dt PROGNAME 1  
+.Os footer text
+.Bl -column -width indent -compact col1 col2 col3
+.It Cell 1 Ta Cell 2 Ta Cell 3
+Line 1
+.It Cell 4 Ta Cell 5 Ta Cell 6
+Line 2
+.It Cell 7 Ta Cell 8 Ta Cell 9
+Line 3
+.El";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Cell 1  Cell 2  Cell 3 Line 1
+Cell 4  Cell 5  Cell 6 Line 2
+Cell 7  Cell 8  Cell 9 Line 3
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_column_long_content() {
+                let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
 .Bl -column -width indent -compact col1 col2 col3
-.It Line 1
-.It Line 2
+.It AAAAAA AAAAAAAAAAAA AAAAA Ta BBBBBB BBBBBBBBB BBBBBB Ta CCCCCC CCCCCCCCCC CCCCCCC
+Line 1
+.It DDDDDD DDDDDDDDDDDD DDDDD Ta EEEEEE EEEEEEEEE EEEEEE Ta FFFFFF FFFFFFFFFF FFFFFFF
+Line 2
+.It RRRRRR RRRRRRRRRRRR RRRRR Ta VVVVVV VVVVVVVVV VVVVVV Ta WWWWWW WWWWWWWWWW WWWWWWW
+Line 3
 .El";
-                let output = "";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+AAAAAA AAAAAAAAAAAA AAAAA
+        BBBBBB BBBBBBBBB BBBBBB
+                CCCCCC CCCCCCCCCC CCCCCCC Line 1
+DDDDDD DDDDDDDDDDDD DDDDD
+        EEEEEE EEEEEEEEE EEEEEE
+                FFFFFF FFFFFFFFFF FFFFFFF Line 2
+RRRRRR RRRRRRRRRRRR RRRRR
+        VVVVVV VVVVVVVVV VVVVVV
+                WWWWWW WWWWWWWWWW WWWWWWW Line 3
+
+footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
             }
     
@@ -2998,10 +3211,23 @@ footer text                     January 1, 1970                    footer text";
 .Dt PROGNAME 1
 .Os footer text
 .Bl -dash -width indent -compact
-.It Line 1
-.It Line 2
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El";
-                let output = "";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+-       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+-       Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+-       Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
             }
     
@@ -3011,10 +3237,23 @@ footer text                     January 1, 1970                    footer text";
 .Dt PROGNAME 1
 .Os footer text
 .Bl -diag -width indent -compact
-.It Line 1
-.It Line 2
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El";
-                let output = "";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+head1  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+eiusmod tempor incididunt ut labore et dolore magna aliqua.
+head2  Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+nisi ut aliquip ex ea commodo consequat.
+head3  Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
             }
 
@@ -3024,36 +3263,23 @@ footer text                     January 1, 1970                    footer text";
 .Dt PROGNAME 1
 .Os footer text
 .Bl -enum -width indent -compact
-.It Line 1
-.It Line 2
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El";
-                let output = "";
-                test_formatting(input, output);
-            }
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-            #[test]
-            fn bl_hang() {
-                let input = ".Dd January 1, 1970
-.Dt PROGNAME 1
-.Os footer text
-.Bl -hang -width indent -compact
-.It Line 1
-.It Line 2
-.El";
-                let output = "";
-                test_formatting(input, output);
-            }
+1.      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+2.      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+3.      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
 
-            #[test]
-            fn bl_inset() {
-                let input = ".Dd January 1, 1970
-.Dt PROGNAME 1
-.Os footer text
-.Bl -inset -width indent -compact
-.It Line 1
-.It Line 2
-.El";
-                let output = "";
+footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
             }
 
@@ -3063,36 +3289,240 @@ footer text                     January 1, 1970                    footer text";
 .Dt PROGNAME 1
 .Os footer text
 .Bl -item -width indent -compact
-.It Line 1
-.It Line 2
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El";
-                let output = "";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+incididunt ut labore et dolore magna aliqua.
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+aliquip ex ea commodo consequat.
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore
+eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
             }
 
+            #[test]
+            fn bl_hang() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -hang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+head2   Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+head3   Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+    
+            #[test]
+            fn bl_inset() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -inset -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+tempor incididunt ut labore et dolore magna aliqua.
+head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+ut aliquip ex ea commodo consequat.
+head3 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+    
             #[test]
             fn bl_ohang() {
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
 .Bl -ohang -width indent -compact
-.It Line 1
-.It Line 2
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El";
-                let output = "";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+incididunt ut labore et dolore magna aliqua.
+head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+aliquip ex ea commodo consequat.
+head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore
+eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
             }
-
+    
             #[test]
             fn bl_tag() {
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -tag -width indent -compact
-.It Line 1
-.It Line 2
+.Bl -tag -width indent-two -compact
+.It head1 
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El";
-                let output = "";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+head1       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+            eiusmod tempor incididunt ut labore et dolore magna aliqua.
+head2       Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+            nisi ut aliquip ex ea commodo consequat.
+head3       Duis aute irure dolor in reprehenderit in voluptate velit esse
+            cillum dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_hang_long_head() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -hang -width indent -compact
+.It Item head title1 
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It Item head title2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It Item head title3 
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Item head title1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
+        do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+Item head title2 Ut enim ad minim veniam, quis nostrud exercitation ullamco
+        laboris nisi ut aliquip ex ea commodo consequat.
+Item head title3 Duis aute irure dolor in reprehenderit in voluptate velit
+        esse cillum dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_inset_long_head() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -inset -width indent -compact
+.It Item head title1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It Item head title2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It Item head title3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Item head title1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
+do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+Item head title2 Ut enim ad minim veniam, quis nostrud exercitation ullamco
+laboris nisi ut aliquip ex ea commodo consequat.
+Item head title3 Duis aute irure dolor in reprehenderit in voluptate velit
+esse cillum dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_ohang_long_head() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -ohang -width indent -compact
+.It Item head title1 
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It Item head title2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It Item head title3 
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Item head title1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+incididunt ut labore et dolore magna aliqua.
+Item head title2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+aliquip ex ea commodo consequat.
+Item head title3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore
+eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_tag_long_head() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+.Bl -tag -width indent -compact
+.It Item head title1 
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It Item head title2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It Item head title3 
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Item head title1
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+Item head title2
+        Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+Item head title3
+        Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
             }
         }
