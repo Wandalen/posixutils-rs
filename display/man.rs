@@ -61,11 +61,15 @@ const MAN_CONFS: [&str; 3] = ["/etc/man.conf", "/etc/examples/man.conf", "/etc/m
     /// Commands names for which documentation search must be performed
     #[arg(
         help = gettext("Names of the utilities or keywords to display documentation for."), 
-        num_args = 1..
+        num_args = 0..
     )]    
     names: Vec<String>,
 
-    #[arg(short, long, help = "Display all matching manual pages.")]
+    #[arg(
+        short, 
+        long, 
+        help = "Display all matching manual pages."
+    )]
     all: bool,
 
     #[arg(
@@ -76,7 +80,11 @@ const MAN_CONFS: [&str; 3] = ["/etc/man.conf", "/etc/examples/man.conf", "/etc/m
     config_file: Option<PathBuf>,
 
     
-    #[arg(short, long, help = "Copy the manual page to the standard output.")]
+    #[arg(
+        short, 
+        long, 
+        help = "Copy the manual page to the standard output."
+    )]
     copy: bool,
 
     #[arg(short = 'f', long, help = "A synonym for whatis(1).")]
@@ -125,7 +133,7 @@ const MAN_CONFS: [&str; 3] = ["/etc/man.conf", "/etc/examples/man.conf", "/etc/m
         short = 'S', 
         help = gettext("Only show pages for the specified machine(1) architecture.")
     )]
-    subsection: String,
+    subsection: Option<String>,
 
     /// Only select manuals from the specified section
     #[arg(
@@ -181,6 +189,10 @@ enum ManError {
     /// Parsing error
     #[error("parsing error: {0}")]
     ParseError(#[from] ParseError),
+
+    /// Not found error
+    #[error("file: {0} was not found")]
+    NotFound(PathBuf)
 }
 
 /// Parsing error types
@@ -223,16 +235,16 @@ impl FromStr for Section {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "1" => Ok(Section::S1),
-            "2" => Ok(Section::S2),
-            "3" => Ok(Section::S3),
+            "1"  => Ok(Section::S1),
+            "2"  => Ok(Section::S2),
+            "3"  => Ok(Section::S3),
             "3p" => Ok(Section::S3p),
-            "4" => Ok(Section::S4),
-            "5" => Ok(Section::S5),
-            "6" => Ok(Section::S6),
-            "7" => Ok(Section::S7),
-            "8" => Ok(Section::S8),
-            "9" => Ok(Section::S9),
+            "4"  => Ok(Section::S4),
+            "5"  => Ok(Section::S5),
+            "6"  => Ok(Section::S6),
+            "7"  => Ok(Section::S7),
+            "8"  => Ok(Section::S8),
+            "9"  => Ok(Section::S9),
             _ => Err(format!("Invalid section: {}", s)),
         }
     }
@@ -241,16 +253,16 @@ impl FromStr for Section {
 impl std::fmt::Display for Section {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Section::S1 => "1",
-            Section::S2 => "2",
-            Section::S3 => "3",
+            Section::S1  => "1",
+            Section::S2  => "2",
+            Section::S3  => "3",
             Section::S3p => "3p",
-            Section::S4 => "4",
-            Section::S5 => "5",
-            Section::S6 => "6",
-            Section::S7 => "7",
-            Section::S8 => "8",
-            Section::S9 => "9",
+            Section::S4  => "4",
+            Section::S5  => "5",
+            Section::S6  => "6",
+            Section::S7  => "7",
+            Section::S8  => "8",
+            Section::S9  => "9",
         };
         write!(f, "{}", s)
     }
@@ -623,7 +635,16 @@ impl Man{
 
     fn new(args: Args) -> Result<Self, ManError>{
         if args.names.is_empty() {
-            return Err(ManError::NoNames);
+            if args.local_file.is_none() {
+                return Err(ManError::NoNames);
+            }
+
+            for path in args.local_file.clone().unwrap() {
+                if !path.exists() {
+                    return Err(ManError::NotFound(path))
+                }
+            }
+                
         }
 
         let config_path = get_config_file_path(&args.config_file)?;
@@ -649,10 +670,10 @@ impl Man{
             );
         }
 
-        if !man.args.subsection.is_empty(){
+        if man.args.subsection.is_some(){
             std::env::set_var(
                 "MACHINE", 
-                OsStr::new(&man.args.subsection.clone())
+                OsStr::new(&man.args.subsection.clone().unwrap())
             );
         }
 
@@ -713,7 +734,7 @@ impl Man{
                     .cloned()
                     .collect::<Vec<_>>(); 
                 self.display_paths(paths)?;
-            }else{
+            } else {
                 self.display_all_man_pages(paths.clone())?;
             }
             return Ok(no_errors);
