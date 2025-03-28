@@ -208,7 +208,7 @@ impl MdocParser {
             Rule::inline => Self::parse_inline(pair),
             Rule::arg => Self::parse_arg(pair.into_inner().next().unwrap()),
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
-            Rule::ta => Self::parse_ta(pair),
+            Rule::ta_head | Rule::ta_body => Self::parse_ta(pair),
             Rule::text_line => {
                 Element::Text(pair.into_inner().next().unwrap().as_str().to_string())
             }
@@ -417,23 +417,24 @@ impl MdocParser {
     fn parse_it_block(pair: Pair<Rule>) -> Element {
         let mut inner_pairs = pair.into_inner();
 
-        let mut nodes: Vec<_> = inner_pairs
+        let head: Vec<_> = inner_pairs
             .next()
             .unwrap()
             .into_inner()
             .map(Self::parse_element)
             .collect();
 
-        let iter = inner_pairs
+        let nodes = inner_pairs
             .next()
             .unwrap()
             .into_inner()
-            .map(Self::parse_element);
-
-        nodes.extend(iter);
+            .map(Self::parse_element)
+            .collect::<Vec<_>>();
 
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::It,
+            mdoc_macro: Macro::It{
+                head
+            },
             nodes,
         })
     }
@@ -2404,7 +2405,7 @@ impl MdocParser {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::man_util::parser::*;
 
     #[test]
@@ -2713,18 +2714,22 @@ mod test {
                 },
                 nodes: vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It,
-                        nodes: vec![
-                            Element::Text("Line".to_string()),
-                            Element::Text("1".to_string()),
-                        ],
+                        mdoc_macro: Macro::It{ 
+                            head: vec![
+                                Element::Text("Line".to_string()),
+                                Element::Text("1".to_string()),
+                            ]
+                        },
+                        nodes: vec![],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It,
-                        nodes: vec![
-                            Element::Text("Line".to_string()),
-                            Element::Text("2".to_string()),
-                        ],
+                        mdoc_macro: Macro::It{
+                            head: vec![
+                                Element::Text("Line".to_string()),
+                                Element::Text("2".to_string()),
+                            ]
+                        },
+                        nodes: vec![],
                     }),
                 ],
             })];
@@ -2953,21 +2958,27 @@ Some text
                 },
                 nodes: vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It,
+                        mdoc_macro: Macro::It{
+                            head: vec![
+                                Element::Text("arg".to_string()),
+                                Element::Macro(MacroNode {
+                                    mdoc_macro: Macro::Ad,
+                                    nodes: vec![Element::Text("addr1".to_string())],
+                                }),
+                            ]
+                        },
                         nodes: vec![
-                            Element::Text("arg".to_string()),
-                            Element::Macro(MacroNode {
-                                mdoc_macro: Macro::Ad,
-                                nodes: vec![Element::Text("addr1".to_string())],
-                            }),
                             Element::Text("Some text".to_string()),
                         ],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It,
+                        mdoc_macro: Macro::It{
+                            head: vec![
+                                Element::Text("arg1".to_string()),
+                                Element::Text("arg2".to_string()),
+                            ]
+                        },
                         nodes: vec![
-                            Element::Text("arg1".to_string()),
-                            Element::Text("arg2".to_string()),
                             Element::Macro(MacroNode {
                                 mdoc_macro: Macro::Ad,
                                 nodes: vec![Element::Text("addr".to_string())],
@@ -3000,11 +3011,15 @@ Line
                 },
                 nodes: vec![
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It,
+                        mdoc_macro: Macro::It{
+                            head: vec![]
+                        },
                         nodes: vec![Element::Text("Line".to_string())],
                     }),
                     Element::Macro(MacroNode {
-                        mdoc_macro: Macro::It,
+                        mdoc_macro: Macro::It{
+                            head: vec![]
+                        },
                         nodes: vec![
                             Element::Macro(MacroNode {
                                 mdoc_macro: Macro::Ad,
@@ -3037,28 +3052,32 @@ Line
                     columns: vec![],
                 },
                 nodes: vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::It,
+                    mdoc_macro: Macro::It{
+                        head: vec![
+                            Element::Macro(MacroNode {
+                                mdoc_macro: Macro::Em,
+                                nodes: vec![Element::Text("Command".to_string())],
+                            }),
+                            Element::Macro(MacroNode {
+                                mdoc_macro: Macro::Ta,
+                                nodes: vec![],
+                            }),
+                            Element::Macro(MacroNode {
+                                mdoc_macro: Macro::Em,
+                                nodes: vec![Element::Text("External".to_string())],
+                            }),
+                            Element::Macro(MacroNode {
+                                mdoc_macro: Macro::Ta,
+                                nodes: vec![],
+                            }),
+                            Element::Macro(MacroNode {
+                                mdoc_macro: Macro::Ad,
+                                nodes: vec![Element::Text("addr".to_string())],
+                            }),
+                        ]
+                    },
                     nodes: vec![
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Em,
-                            nodes: vec![Element::Text("Command".to_string())],
-                        }),
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ta,
-                            nodes: vec![],
-                        }),
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Em,
-                            nodes: vec![Element::Text("External".to_string())],
-                        }),
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ta,
-                            nodes: vec![],
-                        }),
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
-                            nodes: vec![Element::Text("addr".to_string())],
-                        }),
+
                     ],
                 })],
             })];
