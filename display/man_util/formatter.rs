@@ -408,8 +408,8 @@ impl MdocFormatter {
             Macro::Fx => self.format_fx(macro_node),
             Macro::Hf => self.format_hf(macro_node),
             Macro::Ic => self.format_ic(macro_node),
-            Macro::In { filename } => self.format_in(filename.as_str()),
-            Macro::Lb { lib_name } => self.format_lb(lib_name.as_str()),
+            Macro::In { filename } => self.format_in(filename.as_str(), macro_node),
+            Macro::Lb { lib_name } => self.format_lb(lib_name.as_str(), macro_node),
             Macro::Li => self.format_li(macro_node),
             Macro::Lk { ref uri } => self.format_lk(uri.as_str(), macro_node),
             Macro::Lp => self.format_lp(),
@@ -1499,7 +1499,7 @@ impl MdocFormatter {
             .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
             .join("");
-
+        
         if !content.is_empty() {
             self.formatting_state.first_name = Some(content.clone());
         }
@@ -1789,19 +1789,51 @@ impl MdocFormatter {
 // Formatting block partial-implicit.
 impl MdocFormatter {
     fn format_partial_implicit_block(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| {
-                let mut content = self.format_node(node);
-                if content.chars().last() != Some('\n') && !content.is_empty() {
-                    content.push_str(&self.formatting_state.spacing);
+        let mut result = String::new();
+        let mut prev_was_open = false;
+        let mut is_first_node = true;
+    
+        for node in macro_node.nodes {
+            let content = match node {
+                Element::Text(text) => {
+                    match text.as_str() {
+                        "(" | "[" => {
+                            prev_was_open = true;
+                            text.clone()
+                        }
+                        ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
+                            prev_was_open = false;
+                            text.clone()
+                        }
+                        _ => {
+                            let formatted_text = self.format_text_node(&text);
+                            let offset = if is_first_node || prev_was_open {
+                                ""
+                            } else {
+                                self.formatting_state.spacing.as_str()
+                            };
+                            prev_was_open = false;
+                            format!("{}{}", offset, formatted_text)
+                        }
+                    }
                 }
-                content
-            })
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join("")
+                other => {
+                    let mut s = self.format_node(other);
+                    if !s.is_empty() && s.chars().last() != Some('\n') {
+                        s.push_str(&self.formatting_state.spacing);
+                    }
+                    s
+                }
+            };
+    
+            if !content.is_empty() {
+                result.push_str(&content);
+            }
+            if is_first_node {
+                is_first_node = false;
+            }
+        }
+        result
     }
 
     fn format_aq(&mut self, macro_node: MacroNode) -> String {
@@ -1909,7 +1941,7 @@ impl MdocFormatter {
                         match prev_was_open {
                             true => result.push_str(&self.format_text_node(&text)),
                             false => {
-                                let offset = if is_first_node { "" } else { " " };
+                                let offset = if is_first_node { "" } else { self.formatting_state.spacing.as_str() };
                                 let formatted_node =
                                     format!("{}{}", offset, self.format_text_node(&text));
                                 result.push_str(&formatted_node);
@@ -2085,12 +2117,7 @@ impl MdocFormatter {
     }
 
     fn format_er(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_es(&self, opening_delimiter: char, closing_delimiter: char) -> String {
@@ -2098,12 +2125,7 @@ impl MdocFormatter {
     }
 
     fn format_ev(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ex(&mut self, macro_node: MacroNode) -> String {
@@ -2138,33 +2160,7 @@ impl MdocFormatter {
     }
 
     fn format_fa(&mut self, macro_node: MacroNode) -> String {
-        let content = macro_node
-            .nodes
-            .iter()
-            .filter_map(|el| {
-                let Element::Text(text) = el else {
-                    let string = self.format_node(el.clone());
-                    if string.is_empty() {
-                        return None;
-                    } else {
-                        return Some(string);
-                    }
-                };
-                let mut text = text.clone();
-                for ch in &["'", "\"", "`"] {
-                    if let Some(t) = text.strip_prefix(ch) {
-                        text = t.to_string()
-                    }
-                    if let Some(t) = text.strip_suffix(ch) {
-                        text = t.to_string()
-                    }
-                }
-                Some(text)
-            })
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing);
-
-        content
+        self.format_inline_macro(macro_node)
     }
 
     fn format_fd(&self, directive: &str, arguments: &Vec<String>) -> String {
@@ -2175,48 +2171,96 @@ impl MdocFormatter {
     }
 
     fn format_fl(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| {
-                let fmtd = self.format_node(node);
-                match is_first_char_alnum(&fmtd) {
-                    true  => format!("-{}", fmtd),
-                    false => fmtd
-                }
-            })
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        let mut result = String::new();
+        let mut prev_was_open = false;
+        let mut is_first_node = true;
+
+        for node in macro_node.nodes {
+            match node {
+                Element::Text(text) => match text.as_str() {
+                    "(" | "[" => {
+                        result.push_str(&text);
+                        prev_was_open = true;
+                    }
+                    ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
+                        result.push_str(&text);
+                        prev_was_open = false;
+                    }
+                    _ => {
+                        let fmtd = self.format_text_node(&text);
+                        let fmtd = match is_first_char_alnum(&fmtd) {
+                            true  => format!("-{}", fmtd),
+                            false => fmtd
+                        };
+
+                        match prev_was_open {
+                            true => result.push_str(&fmtd),
+                            false => {
+                                let offset = if is_first_node { "" } else { self.formatting_state.spacing.as_str() };
+                                result.push_str(&format!("{}{}", offset, fmtd));
+                            }
+                        }
+                        prev_was_open = false;
+                    }
+                },
+                _ => unreachable!("macro can't contain macro node or EOI!"),
+            }
+
+            if is_first_node {
+                is_first_node = false;
+            }
+        }
+
+        result
     }
 
     fn format_fn(&mut self, funcname: &str, macro_node: MacroNode) -> String {
-        let content = macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<String>>()
-            .join(", ");
+        let mut result = format!("{funcname}()");
+        let mut prev_was_open = false;
+        let mut is_first_node = true;
 
-        format!("{funcname}({content})")
+        for node in macro_node.nodes {
+            match node {
+                Element::Text(text) => match text.as_str() {
+                    "(" | "[" => {
+                        result.push_str(&text);
+                        prev_was_open = true;
+                    }
+                    ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
+                        result.push_str(&text);
+                        prev_was_open = false;
+                    }
+                    _ => {
+                        match prev_was_open {
+                            true => result.push_str(&self.format_text_node(&text)),
+                            false => {
+                                let offset = if is_first_node { "" } else { self.formatting_state.spacing.as_str() };
+                                let formatted_node = format!(",{}{}", offset, self.format_text_node(&text));
+                                result.push_str(&formatted_node);
+                            }
+                        }
+                        prev_was_open = false;
+                    }
+                },
+                _ => unreachable!("macro can't contain macro node or EOI!"),
+            }
+
+            if is_first_node {
+                is_first_node = false;
+            }
+        }
+
+        result
     }
 
     fn format_fr(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
+
     }
 
     fn format_ft(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
+
     }
 
     fn format_fx(&self, macro_node: MacroNode) -> String {
@@ -2224,38 +2268,64 @@ impl MdocFormatter {
     }
 
     fn format_hf(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
+
     }
 
     fn format_ic(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
+
     }
 
-    fn format_in(&self, filename: &str) -> String {
-        format!("<{filename}>")
+    fn format_in(&self, filename: &str, macro_node: MacroNode) -> String {
+        let mut result = String::new();
+        let mut iter = macro_node.nodes.into_iter();
+        
+        if let Some(node) = iter.next() {
+            match node {
+                Element::Text(open_del) => result.push_str(open_del.as_str()),
+                _=> unreachable!()
+            }
+        }
+
+        result.push_str(&format!("<{filename}>"));
+
+        if let Some(node) = iter.next() {
+            match node {
+                Element::Text(close_del) => result.push_str(close_del.as_str()),
+                _ => unreachable!()
+            }
+        }
+
+        result
     }
 
-    fn format_lb(&self, lib_name: &str) -> String {
-        format!("library “{lib_name}”")
+    fn format_lb(&self, lib_name: &str, macro_node: MacroNode) -> String {
+        let mut result = String::new();
+        let mut iter = macro_node.nodes.into_iter();
+        
+        if let Some(node) = iter.next() {
+            match node {
+                Element::Text(open_del) => result.push_str(open_del.as_str()),
+                _=> unreachable!()
+            }
+        }
+
+        result.push_str(&format!("library “{lib_name}”"));
+
+        if let Some(node) = iter.next() {
+            match node {
+                Element::Text(close_del) => result.push_str(close_del.as_str()),
+                _ => unreachable!()
+            }
+        }
+
+        result
     }
 
     fn format_li(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
+
     }
 
     fn format_lk(&mut self, uri: &str, macro_node: MacroNode) -> String {
@@ -2275,30 +2345,15 @@ impl MdocFormatter {
     }
 
     fn format_ms(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_mt(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_no(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ns(&mut self) -> String {
@@ -2329,12 +2384,7 @@ impl MdocFormatter {
     }
 
     fn format_pa(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_pf(&mut self, prefix: &str) -> String {
@@ -2397,12 +2447,7 @@ impl MdocFormatter {
     }
 
     fn format_sx(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_sy(&mut self, macro_node: MacroNode) -> String {
@@ -2420,12 +2465,7 @@ impl MdocFormatter {
     }
 
     fn format_tn(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_ud(&self) -> String {
@@ -2437,12 +2477,7 @@ impl MdocFormatter {
     }
 
     fn format_va(&mut self, macro_node: MacroNode) -> String {
-        macro_node
-            .nodes
-            .into_iter()
-            .map(|node| self.format_node(node))
-            .collect::<Vec<String>>()
-            .join(&self.formatting_state.spacing)
+        self.format_inline_macro(macro_node)
     }
 
     fn format_xr(&self, name: &str, section: &str) -> String {
@@ -3889,7 +3924,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Fl H | L | P inet";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
 -H | -L | -P -inet
 
@@ -4584,22 +4619,6 @@ footer text                     January 1, 1970                    footer text";
     }
 
     #[test]
-    fn test_delimiters() {
-        let input = r#".Dd January 1, 1970
-.Os Debian
-.Ao
-.Ad ( addr ) addr
-.Ad [ addr ] 
-.Ad [ addr Ad addr ] 
-.Ac"#;
-        let output = r"
-⟨(addr) addr [addr] [addr addr]⟩
-
-Debian                          January 1, 1970                         Debian";
-        test_formatting(input, output);
-    }
-
-    #[test]
     fn zero_width() {
         let input = r".Dd January 1, 1970
 .Dt PROGNAME section
@@ -4613,5 +4632,263 @@ mandoc(1) Ns ( s ) behaviour Text Line Ns ( s ) behaviour
 
 footer text                     January 1, 1970                    footer text";
         test_formatting(input, output);
+    }
+
+    mod delimiters {
+        use super::*;
+
+        #[test]
+        fn delimiters_rs_submacros() {
+            fn test(macro_str: &str) {
+                let input = vec![
+                    format!(".Dd January 1, 1970\n.Dt PROGNAME section\n.Os footer text"),
+                    format!(".Rs\n{} {} text {}\n.Re", macro_str, "(", ")"),
+                    format!(".Rs\n{} {} text {}\n.Re", macro_str, "[", "]"),
+                    format!(".Rs\n{} text {}\n.Re",    macro_str, "."),
+                    format!(".Rs\n{} text {}\n.Re",    macro_str, ","),
+                    format!(".Rs\n{} text {}\n.Re",    macro_str, "?"),
+                    format!(".Rs\n{} text {}\n.Re",    macro_str, "!"),
+                    format!(".Rs\n{} text {}\n.Re",    macro_str, ":"),
+                    format!(".Rs\n{} text {}\n.Re",    macro_str, ";")
+                ].join("\n");
+    
+                let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+(text). [text]. text.. text,. text?. text!. text:. text;.
+
+footer text                     January 1, 1970                    footer text";
+        
+                test_formatting(&input, &output);
+            }
+            
+            let macros = vec![
+                "%A", "%B", "%C", "%D", "%I", "%J", "%N",
+                "%O", "%P", "%Q", "%R", "%T", "%U", "%V",
+            ];
+    
+            for macro_str in macros {
+                test(macro_str);
+            }
+        }
+
+        #[test]
+        fn delimiters_inline_common() {
+            fn test(macro_str: &str) {
+                let input = vec![
+                    format!(".Dd January 1, 1970\n.Dt PROGNAME section\n.Os footer text"),
+                    format!(".{} {} text {}", macro_str, "(", ")"),
+                    format!(".{} {} text {}", macro_str, "[", "]"),
+                    format!(".{} text {}",    macro_str, "."),
+                    format!(".{} text {}",    macro_str, ","),
+                    format!(".{} text {}",    macro_str, "?"),
+                    format!(".{} text {}",    macro_str, "!"),
+                    format!(".{} text {}",    macro_str, ":"),
+                    format!(".{} text {}",    macro_str, ";")
+                ].join("\n");
+    
+                let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+(text) [text] text. text, text? text! text: text;
+
+footer text                     January 1, 1970                    footer text";
+        
+                test_formatting(&input, &output);
+            }
+
+            let inline_macros = vec![
+                "Ad", "An", "Ar",
+                "Cd", "Cm",
+                "Dv",
+                "Er", "Ev",
+                "Fa", "Fr", "Ft",
+                "Hf",
+                "Ic",
+                "Li",
+                "Ms", "Mt",
+                "No",
+                "Ot",
+                "Pa",
+                "Sx",
+                "Tn",
+                "Va"
+            ];
+    
+            for macro_str in inline_macros {
+                println!("Macro: {macro_str}");
+
+                test(macro_str);
+            }
+        }
+
+        #[test]
+        fn delimiters_text_production() {
+            fn test(macro_str: &str) {
+                let placeholder = match macro_str {
+                    "At"  => "AT&T UNIX",
+                    "Bsx" => "BSD/OS",
+                    "Dx"  => "DragonFly",
+                    "Fx"  => "FreeBSD",
+                    "Nx"  => "NetBSD",
+                    "Ox"  => "OpenBSD",
+                    _ => unreachable!()
+                };
+
+                let input = vec![
+                    format!(".Dd January 1, 1970\n.Dt PROGNAME section\n.Os footer text"),
+                    format!(".{} {} text {}", macro_str, "(", ")"),
+                    format!(".{} {} text {}", macro_str, "[", "]"),
+                    format!(".{} text {}",    macro_str, ".")
+                ].join("\n");
+
+                let output = format!(
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+({placeholder} text) [{placeholder} text] {placeholder} text.
+
+footer text                     January 1, 1970                    footer text",
+);
+                test_formatting(&input, &output);
+            }
+
+            let macros = vec!["At", "Bsx", "Ox", "Dx", "Fx", "Nx"];
+
+            for macro_str in macros {
+                println!("Macro: {}", macro_str);
+
+                test(macro_str)
+            }
+
+        }
+
+        #[test]
+        fn delimiters_bx() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Bx ( random )
+.Bx random !";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+(randomBSD) randomBSD!
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn delimiters_em() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Em ( random ) text !";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+\u{1b}[3m(random) text!\u{1b}[0m
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn delimiters_fn() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Fn ( random ) text !";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+(random()), text!
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn delimiters_sy() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Sy ( random ) text !";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+\u{1b}[1m( random ) text !\u{1b}[0m
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn delimiters_fl() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Fl ( random ) text !";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+(-random) -text!
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn delimiters_in() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.In ( random )";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+(<random>)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn delimiters_lb() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Lb ( random )";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+(library “random”)
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn delimiters_vt() {
+            let input = 
+".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Vt ( random ) text !";
+            let output = 
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+(random) text!
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
     }
 }
