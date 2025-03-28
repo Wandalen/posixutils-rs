@@ -43,7 +43,7 @@ macro_arg = {
   (
     block_partial_implicit |
     block_partial_explicit |
-    inline
+    inline | ta 
   ) 
 }
 
@@ -59,6 +59,7 @@ block_full_explicit = {
 }
 
 block_full_implicit = { 
+  it_block | 
   nd_block | 
   nm_block | 
   sh_block | 
@@ -153,11 +154,11 @@ inline = {
 // ----- Mdoc document
 
 element = {
-  ("."? ~ ( block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  ("."? ~ ( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
   text_line
 }
 
-mdoc = { SOI ~ (("." ~ comment_macro ~ NEWLINE)* ~ element)* ~ EOI }
+mdoc = { SOI ~ (("." ~ comment_macro ~ NEWLINE)* ~ element)* ~ EOI? }
 
 // ----- Block full-explicit macros
 
@@ -273,7 +274,9 @@ it_block = ${ it_head ~ it_body }
 
 // -- Nd
 
-nd_block = ${ "Nm" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+nd_open          = ${ "Nd" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }
+nd_block_element =  { !("." ~ sh_block) ~ element }
+nd_block         =  { nd_open ~ (NEWLINE ~ nd_block_element*)? }
 
 // -- Nm
 
@@ -369,7 +372,7 @@ xo_block = ${ xo_head ~ xo_body* ~ "."? ~ xc }
 // ----- Block partial-implicit
 
 partial_implicit_element = {
-  (( block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  (( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
   text_arg
 }
 
@@ -612,7 +615,7 @@ ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-db = ${ "Db" ~ !text_arg ~ ws+ ~ text_arg ~ NEWLINE? }
+db = ${ "Db" ~ !text_arg ~ (ws+ ~ text_arg)? ~ NEWLINE? }
 
 // -- Dd
 
@@ -644,13 +647,13 @@ ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 ex = ${ "Ex" ~ !text_arg ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ NEWLINE? }
 fa = ${ "Fa" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 fl = ${ "Fl" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
-Fn = ${ "Fn" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+Fn = ${ "Fn" ~ !text_arg ~ (ws+ ~ opening_delimiter)? ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 fr = ${ "Fr" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 ft = ${ "Ft" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 hf = ${ "Hf" ~ !text_arg ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 ic = ${ "Ic" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-In = ${ "In" ~ !text_arg ~ ws+ ~ word ~ ws* ~ NEWLINE? }
-lb = ${ "Lb" ~ !text_arg ~ ws+ ~ word ~ ws* ~ NEWLINE? }
+In = ${ "In" ~ !text_arg ~ (ws+ ~ opening_delimiter)? ~ ws+ ~ word ~ (ws+ ~ closing_delimiter)? ~ ws* ~ NEWLINE? }
+lb = ${ "Lb" ~ !text_arg ~ (ws+ ~ opening_delimiter)? ~ ws+ ~ word ~ (ws+ ~ closing_delimiter)? ~ ws* ~ NEWLINE? }
 li = ${ "Li" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 lk = ${ "Lk" ~ !text_arg ~ ws+ ~ uri ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 lp = ${ "Lp" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
@@ -687,9 +690,7 @@ ot = ${ "Ot" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 va = ${ "Va" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Various semantic markup
-mailpart = ${ (!(ws | NEWLINE | "@") ~ ANY)+ }
-mail_to = @{ mailpart ~ "@" ~ mailpart }
-mt = ${ "Mt" ~ (ws+ ~ mail_to)+ ~ ws* ~ NEWLINE? }
+mt = ${ "Mt" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 ms = ${ "Ms" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
 
 // -- Physical markup

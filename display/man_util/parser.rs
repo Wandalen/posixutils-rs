@@ -85,6 +85,7 @@ pub struct MdocDocument {
 pub enum MdocError {
     #[error("mdoc: {0}")]
     Pest(#[from] Box<pest::error::Error<Rule>>),
+
     #[error("mdoc: {0}")]
     Validation(String),
 }
@@ -125,14 +126,16 @@ impl MdocValidator {
         fn is_last_element_nd(element: &Element) -> bool {
             match element {
                 Element::Macro(MacroNode { mdoc_macro, nodes }) => {
-                    if let Some(last_node) = nodes.last() {
-                        // Recursively check the last child node
-                        is_last_element_nd(last_node)
-                    } else {
-                        // If the node is empty, check the macro itself
-                        matches!(mdoc_macro, Macro::Nd { .. })
+                    for node in nodes {
+                        match node {
+                            Element::Macro(_) => return is_last_element_nd(node),
+                            _ => continue,
+                        };
+
                     }
-                }
+
+                    return *mdoc_macro == Macro::Nd;
+                },
                 _ => false,
             }
         }
@@ -169,7 +172,7 @@ impl MdocValidator {
     fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
         if let Element::Macro(macro_node) = element {
             match macro_node.mdoc_macro {
-                Macro::Nm { .. } => self.validate_nm(macro_node)?,
+                Macro::Nm => self.validate_nm(macro_node)?,
                 Macro::Sh { .. } => self.validate_sh(macro_node)?,
                 Macro::Ss { .. } => self.validate_ss(macro_node)?,
                 _ => {}
@@ -441,8 +444,23 @@ impl MdocParser {
 
     // Parses (`Nd`)[https://man.openbsd.org/mdoc#Nd]
     // `Nd line`
+
     fn parse_nd(pair: Pair<Rule>) -> Element {
-        let nodes = pair.into_inner().map(Self::parse_element).collect();
+        let mut inner_nodes = pair.into_inner();
+
+        let mut nodes: Vec<_> = inner_nodes
+            .next()
+            .unwrap()
+            .into_inner()
+            .map(Self::parse_element)
+            .collect();
+
+        while let Some(body) = inner_nodes.next() {
+            let mut inner = body.into_inner();
+            while let Some(pair) = inner.next() {
+                nodes.push(Self::parse_element(pair));
+            }
+        }
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Nd,
@@ -1364,6 +1382,19 @@ impl MdocParser {
         }
     }
 
+    fn process_delimiters(
+        inner: &[Pair<Rule>],
+        mut i: usize,
+        rule: Rule,
+    ) -> (Vec<Element>, usize) {
+        let mut nodes = Vec::new();
+        while i < inner.len() && inner[i].as_rule() == rule {
+            nodes.push(MdocParser::parse_element(inner[i].clone()));
+            i += 1;
+        }
+        (nodes, i)
+    }
+
     fn parse_text_production(pair: Pair<Rule>) -> Element {
         fn process_delimiters(
             inner: &[Pair<Rule>],
@@ -1401,7 +1432,7 @@ impl MdocParser {
             let mut i = 0;
 
             // Process opening delimiters.
-            let (open_nodes, new_i) = process_delimiters(&inner, i, Rule::opening_delimiter);
+            let (open_nodes, new_i) = MdocParser::MdocParser::process_delimiters(&inner, i, Rule::opening_delimiter);
             nodes.extend(open_nodes);
             i = new_i;
 
@@ -1422,7 +1453,7 @@ impl MdocParser {
             }
 
             // Process closing delimiters.
-            let (close_nodes, _) = process_delimiters(&inner, i, Rule::closing_delimiter);
+            let (close_nodes, _) = MdocParser::MdocParser::process_delimiters(&inner, i, Rule::closing_delimiter);
             nodes.extend(close_nodes);
 
             Element::Macro(MacroNode {
@@ -1446,7 +1477,7 @@ impl MdocParser {
             let mut i = 0;
             let mut nodes = Vec::new();
 
-            let (open_nodes, new_i) = process_delimiters(&inner, i, Rule::opening_delimiter);
+            let (open_nodes, new_i) = MdocParser::process_delimiters(&inner, i, Rule::opening_delimiter);
             nodes.extend(open_nodes);
             i = new_i;
 
@@ -1468,7 +1499,7 @@ impl MdocParser {
                 }
             }
 
-            let (close_nodes, _) = process_delimiters(&inner, i, Rule::closing_delimiter);
+            let (close_nodes, _) = MdocParser::process_delimiters(&inner, i, Rule::closing_delimiter);
             nodes.extend(close_nodes);
 
             Element::Macro(MacroNode {
@@ -1503,7 +1534,7 @@ impl MdocParser {
             let mut nodes = Vec::new();
             let mut i = 0;
 
-            let (open_nodes, new_i) = process_delimiters(&inner, i, Rule::opening_delimiter);
+            let (open_nodes, new_i) = MdocParser::process_delimiters(&inner, i, Rule::opening_delimiter);
             nodes.extend(open_nodes);
             i = new_i;
 
@@ -1531,7 +1562,7 @@ impl MdocParser {
                 }
             }
 
-            let (close_nodes, _) = process_delimiters(&inner, i, Rule::closing_delimiter);
+            let (close_nodes, _) = MdocParser::process_delimiters(&inner, i, Rule::closing_delimiter);
             nodes.extend(close_nodes);
 
             Element::Macro(MacroNode {
@@ -1951,11 +1982,23 @@ impl MdocParser {
     }
 
     // Parses (`Fn`)[https://man.openbsd.org/mdoc#Fn]
-    fn parse_fn(pair: Pair<Rule>) -> Element {
-        let mut inner_pairs = pair.into_inner();
 
-        let funcname = inner_pairs.next().unwrap().as_str().to_string();
-        let nodes = inner_pairs.map(MdocParser::parse_element).collect();
+    fn parse_fn(pair: Pair<Rule>) -> Element {
+        let mut inner_nodes = pair.into_inner();
+        let mut funcname = String::new();
+        let arg = inner_nodes.next().unwrap();
+
+        match arg.as_rule() {
+            Rule::opening_delimiter => {
+                funcname.push_str(arg.as_str());
+                let name = inner_nodes.next().unwrap();
+                funcname.push_str(name.as_str());
+            }
+            Rule::text_arg => funcname.push_str(arg.as_str()),
+            _ => unreachable!()
+        };
+
+        let nodes = inner_nodes.map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Fn { funcname: funcname },
@@ -2010,22 +2053,56 @@ impl MdocParser {
     // Parses (`In`)[https://man.openbsd.org/mdoc#In]
     // .In filename
     fn parse_in(pair: Pair<Rule>) -> Element {
-        let filename = pair.into_inner().next().unwrap().as_str().to_string();
+        let mut inner_pairs = pair.into_inner();
+        let mut filename =  String::new();
+        let mut nodes = Vec::new();
+        let arg = inner_pairs.next().unwrap();
+
+        match arg.as_rule() {
+            Rule::opening_delimiter => {
+                nodes.push(Element::Text(arg.as_str().to_string()));
+                let name = inner_pairs.next().unwrap().as_str();
+                filename.push_str(name);
+            },
+            Rule::word => filename.push_str(arg.as_str()),
+            _ => unreachable!()
+        }
+
+        if let Some(del) = inner_pairs.next() {
+            nodes.push(Element::Text(del.as_str().to_string()));
+        }
 
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::In { filename: filename },
-            nodes: vec![],
+            mdoc_macro: Macro::In { filename },
+            nodes
         })
     }
 
     // Parses (`Lb`)[https://man.openbsd.org/mdoc#Lb]
     // .Lb libname
     fn parse_lb(pair: Pair<Rule>) -> Element {
-        let lib_name = pair.into_inner().next().unwrap().as_str().to_string();
+        let mut inner_pairs = pair.into_inner();
+        let mut lib_name =  String::new();
+        let mut nodes = Vec::new();
+        let arg = inner_pairs.next().unwrap();
+
+        match arg.as_rule() {
+            Rule::opening_delimiter => {
+                nodes.push(Element::Text(arg.as_str().to_string()));
+                let name = inner_pairs.next().unwrap().as_str();
+                lib_name.push_str(name);
+            },
+            Rule::word => lib_name.push_str(arg.as_str()),
+            _ => unreachable!()
+        }
+
+        if let Some(del) = inner_pairs.next() {
+            nodes.push(Element::Text(del.as_str().to_string()));
+        }
 
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::Lb { lib_name: lib_name },
-            nodes: vec![],
+            mdoc_macro: Macro::Lb { lib_name},
+            nodes,
         })
     }
 
@@ -2083,16 +2160,7 @@ impl MdocParser {
     // Parses (`Mt`)[https://man.openbsd.org/mdoc#Mt]:
     // `Mt localpart@domain`
     fn parse_mt(pair: Pair<Rule>) -> Element {
-        let mut inner = pair.into_inner();
-
-        let mut nodes = vec![];
-        while let Some(mail) = inner.next() {
-            nodes.push(match mail.as_rule() {
-                Rule::mail_to => Element::Text(mail.as_str().to_string()),
-                Rule::ws => continue,
-                _ => break,
-            });
-        }
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Mt,
@@ -2102,17 +2170,20 @@ impl MdocParser {
 
     // Parses (`No`)[https://man.openbsd.org/mdoc#No]:
     // `No word ...`
+
     fn parse_no(pair: Pair<Rule>) -> Element {
-        let words = pair
-            .into_inner()
-            .take_while(|p| p.as_rule() == Rule::text_arg)
-            .map(|p| p.as_str().to_string())
-            .collect::<Vec<_>>()
-            .join(" ");
+        // let words = pair
+        //     .into_inner()
+        //     .take_while(|p| p.as_rule() == Rule::text_arg)
+        //     .map(|p| p.as_str().to_string())
+        //     .collect::<Vec<_>>()
+        //     .join(" ");
+
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::No,
-            nodes: vec![Element::Text(words)],
+            nodes
         })
     }
 
@@ -2225,16 +2296,18 @@ impl MdocParser {
     // Parses (`Sx`)[https://man.openbsd.org/mdoc#Sx]:
     // `Sx Title line`
     fn parse_sx(pair: Pair<Rule>) -> Element {
-        let words = pair
-            .into_inner()
-            .take_while(|p| p.as_rule() == Rule::text_arg)
-            .map(|p| p.as_str().to_string())
-            .collect::<Vec<_>>()
-            .join(" ");
+        // let words = pair
+        //     .into_inner()
+        //     .take_while(|p| p.as_rule() == Rule::text_arg)
+        //     .map(|p| p.as_str().to_string())
+        //     .collect::<Vec<_>>()
+        //     .join(" ");
+
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Sx,
-            nodes: vec![Element::Text(words)],
+            nodes
         })
     }
 
@@ -2279,16 +2352,13 @@ impl MdocParser {
 
     // Parses (`Tn`)[https://man.openbsd.org/mdoc#Tn]:
     // `Tn word ...`
+
     fn parse_tn(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
-            .take_while(|p| p.as_rule() == Rule::text_arg)
-            .map(Self::parse_element)
-            .collect();
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Tn,
-            nodes,
+            nodes
         })
     }
 
@@ -2312,12 +2382,14 @@ impl MdocParser {
 
     // Parses (`Va`)[https://man.openbsd.org/mdoc#Va]:
     // `Va [type] identifier ...`
+
     fn parse_va(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
-            .take_while(|p| p.as_rule() == Rule::text_arg)
-            .map(Self::parse_element)
-            .collect();
+        // let nodes = pair
+        //     .into_inner()
+        //     .take_while(|p| p.as_rule() == Rule::text_arg)
+        //     .map(Self::parse_element)
+        //     .collect();
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Va,
@@ -3125,10 +3197,10 @@ Line
                     mdoc_macro: Macro::Nd,
                     nodes: vec![
                         Element::Text("short".to_string()),
-                        Element::Text("description".to_string())
+                        Element::Text("description".to_string()),
+                        Element::Text("Line 2".to_string())
                     ],
                 }),
-                Element::Text("Line 2".to_string())
             ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -3143,11 +3215,11 @@ Line
                     mdoc_macro: Macro::Nd,
                     nodes: vec![
                         Element::Text("short".to_string()),
-                        Element::Text("description".to_string())
+                        Element::Text("description".to_string()),
+                        Element::Text("Line 1".to_string()),
+                        Element::Text("Line 2".to_string())
                     ],
                 }),
-                Element::Text("Line 1".to_string()),
-                Element::Text("Line 2".to_string()),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Sh {
                         title: "SECTION".to_string(),
@@ -3168,14 +3240,14 @@ Line
                     mdoc_macro: Macro::Nd,
                     nodes: vec![
                         Element::Text("name".to_string()),
-                        Element::Text("description".to_string())
-                    ],
-                }),
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Nm,
-                    nodes: vec![
-                        Element::Text("name1".to_string()),
-                        Element::Text("name2".to_string())
+                        Element::Text("description".to_string()),
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::Nm,
+                            nodes: vec![
+                                Element::Text("name1".to_string()),
+                                Element::Text("name2".to_string())
+                            ],
+                        })
                     ],
                 })
             ];
@@ -3474,11 +3546,7 @@ Line
 
         #[test]
         fn sh_without_title() {
-            let content = ".Sh\nLine 1\n";
-
-            let mdoc = MdocParser::parse_mdoc(content);
-            // TODO: Format and compare pest errors??
-            assert!(mdoc.is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Sh\nLine 1\n").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -3675,11 +3743,7 @@ Line
 
         #[test]
         fn ss_without_title() {
-            let content = ".Ss\nLine 1";
-
-            let mdoc = MdocParser::parse_mdoc(content);
-            // TODO: Format and compare pest errors??
-            assert!(mdoc.is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Ss\nLine 1").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -4243,8 +4307,7 @@ Line
 
         #[test]
         fn en_no_words() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".En").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".En").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -4640,8 +4703,7 @@ Line
 
         #[test]
         fn vt_empty() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Vt").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Vt").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -5463,7 +5525,7 @@ arg2 Fc
 
         #[test]
         fn fo_not_args() {
-            assert!(MdocParser::parse_mdoc(".Fo.Fc").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Fo.Fc").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -6000,47 +6062,49 @@ Line
         }
 
         #[test]
+
         fn rs_wrong_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
 Line1
 Line2
 .Re
 "#
             )
-            .is_err());
-            assert!(MdocParser::parse_mdoc(
+            .unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs El1 El2 El3 
 Re"#
             )
-            .is_err());
-            assert!(MdocParser::parse_mdoc(
+            .unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
 arg Re"#
             )
-            .is_err());
-            assert!(MdocParser::parse_mdoc(
+            .unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
 Line
 .Re
 "#
             )
-            .is_err());
+            .unwrap().elements, vec![]);
         }
 
         #[test]
         fn rs_no_args() {
-            assert!(MdocParser::parse_mdoc(
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
             .Re"#
             )
-            .is_err());
+            .unwrap().elements, vec![]);
         }
 
         #[test]
+        #[test]
+
         fn rs_not_parsed() {
-            assert!(MdocParser::parse_mdoc(
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
 .%A John Doe
 .%B Title Line Ad addr1
@@ -6049,8 +6113,8 @@ Line
 .Ad addr
 .Re"#
             )
-            .is_err());
-            assert!(MdocParser::parse_mdoc(
+            .unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs %A John Doe 
 .%B Title Line Ad addr1
 .%D January 1, 1970
@@ -6058,7 +6122,7 @@ Line
 .Ad addr
 .Re"#
             )
-            .is_err());
+            .unwrap().elements, vec![]);
         }
 
         #[test]
@@ -6198,7 +6262,7 @@ Rs
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::D,
                         nodes: vec![
-                            Element::Text("1970".to_string()),
+                            Element::Text("January".to_string()),
                             Element::Text("1,".to_string()),
                             Element::Text("1970".to_string()),
                         ],
@@ -6544,8 +6608,11 @@ Line
 
             #[test]
             fn a_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%A").is_err());
+                let content = ".%A";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6614,8 +6681,11 @@ Line
 
             #[test]
             fn b_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%B").is_err());
+                let content = ".%B";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6684,8 +6754,11 @@ Line
 
             #[test]
             fn c_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%C").is_err());
+                let content = ".%C";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6768,8 +6841,11 @@ Line
 
             #[test]
             fn d_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%D").is_err());
+                let content = ".%D";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6838,8 +6914,11 @@ Line
 
             #[test]
             fn i_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%I").is_err());
+                let content = ".%I";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6910,8 +6989,11 @@ Line
 
             #[test]
             fn j_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%J").is_err());
+                let content = ".%J";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -6982,8 +7064,11 @@ Line
 
             #[test]
             fn n_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%N").is_err());
+                let content = ".%N";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7056,8 +7141,11 @@ Line
 
             #[test]
             fn o_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%O").is_err());
+                let content = ".%O";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7126,8 +7214,11 @@ Line
 
             #[test]
             fn p_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%P").is_err());
+                let content = ".%P";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7196,8 +7287,11 @@ Line
 
             #[test]
             fn q_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%Q").is_err());
+                let content = ".%Q";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7270,8 +7364,11 @@ Line
 
             #[test]
             fn r_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%R").is_err());
+                let content = ".%R";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7342,8 +7439,11 @@ Line
 
             #[test]
             fn t_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%T").is_err());
+                let content = ".%T";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7394,8 +7494,11 @@ Line
 
             #[test]
             fn u_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%U").is_err());
+                let content = ".%U";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -7464,8 +7567,11 @@ Line
 
             #[test]
             fn v_no_args() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".%V").is_err());
+                let content = ".%V";
+                let elements = vec![];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements);
             }
 
             #[test]
@@ -8299,10 +8405,13 @@ Line
 
                 for (str_type, enum_type) in st_types {
                     let content = format!(".St {str_type} word");
-                    let elements = vec![Element::Macro(MacroNode {
-                        mdoc_macro: Macro::St(enum_type),
-                        nodes: vec![Element::Text("word".to_string())],
-                    })];
+                    let elements = vec![
+                        Element::Macro(MacroNode {
+                            mdoc_macro: Macro::St(enum_type),
+                            nodes: vec![],
+                        }),
+                        Element::Text("word".to_string())
+                    ];
 
                     let mdoc = MdocParser::parse_mdoc(content).unwrap();
                     assert_eq!(mdoc.elements, elements, "St type: {str_type}");
@@ -8311,23 +8420,22 @@ Line
 
             #[test]
             fn st_no_abbreviation() {
-                // TODO: Format and compare pest errors??
-                assert!(MdocParser::parse_mdoc(".St word").is_err())
+                assert_eq!(MdocParser::parse_mdoc(".St word").unwrap().elements, vec![])
             }
 
             #[test]
             fn st_parsed() {
-                let content = ".St -ansiC word Ad addr1";
-                let elements = vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::St(StType::AnsiC),
-                    nodes: vec![
-                        Element::Text("word".to_string()),
-                        Element::Macro(MacroNode {
-                            mdoc_macro: Macro::Ad,
-                            nodes: vec![Element::Text("addr1".to_string())],
-                        }),
-                    ],
-                })];
+                let content = ".St -ansiC Ad addr1";
+                let elements = vec![
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::St(StType::AnsiC),
+                        nodes: vec![]
+                    }),
+                    Element::Macro(MacroNode {
+                        mdoc_macro: Macro::Ad,
+                        nodes: vec![Element::Text("addr1".to_string())],
+                    }),
+                ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
                 assert_eq!(mdoc.elements, elements);
@@ -8368,9 +8476,13 @@ Line
         }
 
         #[test]
+
         fn ad_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ad").is_err());
+            let content = ".Ad";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -8464,8 +8576,13 @@ Line
         }
 
         #[test]
+
         fn an_no_args() {
-            assert!(MdocParser::parse_mdoc(".An").is_err());
+            let content = ".An";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -8729,9 +8846,13 @@ Line
         }
 
         #[test]
+
         fn cd_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Cd").is_err());
+            let content = ".Cd";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -8796,8 +8917,11 @@ Line
 
         #[test]
         fn cm_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Cm").is_err());
+            let content = ".Cm";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9112,9 +9236,14 @@ Line
             assert_eq!(mdoc.elements, elements);
         }
 
+        
         #[test]
         fn dt_no_args() {
-            assert!(MdocParser::parse_mdoc(".Dt").is_err())
+            let content = ".Dt";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9134,7 +9263,11 @@ Line
 
         #[test]
         fn dv_no_args() {
-            assert!(MdocParser::parse_mdoc(".Dv").is_err())
+            let content = ".Dv";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9196,7 +9329,11 @@ Line
 
         #[test]
         fn em_no_args() {
-            assert!(MdocParser::parse_mdoc(".Em").is_err());
+            let input = ".Em";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9255,7 +9392,11 @@ Line
 
         #[test]
         fn er_no_args() {
-            assert!(MdocParser::parse_mdoc(".Er").is_err());
+            let input = ".Er";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9316,10 +9457,11 @@ Line
         }
 
         #[test]
+
         fn es_bad_args() {
-            assert!(MdocParser::parse_mdoc(".Es").is_err());
-            assert!(MdocParser::parse_mdoc(".Es (").is_err());
-            assert!(MdocParser::parse_mdoc(".Es { }").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Es").unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(".Es (").unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(".Es { }").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -9385,8 +9527,13 @@ Line
         }
 
         #[test]
+
         fn ev_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ev").is_err());
+            let input = ".Ev";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9440,8 +9587,13 @@ Line
         }
 
         #[test]
+
         fn ex_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ex").is_err());
+            let input = ".Ex";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9492,8 +9644,13 @@ Line
         }
 
         #[test]
+
         fn fa_no_args() {
-            assert!(MdocParser::parse_mdoc(".Fa").is_err())
+            let input = ".Fa";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9572,7 +9729,11 @@ Line
 
         #[test]
         fn fd_no_args() {
-            assert!(MdocParser::parse_mdoc(".Fd").is_err());
+            let input = ".Fd";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9685,7 +9846,7 @@ Line
 
         #[test]
         fn r#fn() {
-            let input = ".Fn \"int funcname\" \"int arg0\" \"int arg1\"\n.Fn funcname \"int arg0\"\n.Fn funcname arg0";
+            let input = ".Fn \"int funcname\" \"int arg0\" \"int arg1\"\n.Fn funcname \"int arg0\"\n.Fn funcname arg0\n.Fn ( funcname )";
             let elements = vec![
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Fn {
@@ -9708,15 +9869,26 @@ Line
                     },
                     nodes: vec![Element::Text("arg0".to_string())],
                 }),
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Fn {
+                        funcname: "(funcname".to_string(),
+                    },
+                    nodes: vec![Element::Text(")".to_string())],
+                }),
             ];
 
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elements);
         }
 
+        
         #[test]
         fn fn_no_args() {
-            assert!(MdocParser::parse_mdoc(".Fn").is_err());
+            let input = ".Fn";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9773,7 +9945,11 @@ Line
 
         #[test]
         fn fr_no_args() {
-            assert!(MdocParser::parse_mdoc(".Fr").is_err());
+            let input = ".Fr";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -9831,7 +10007,11 @@ Line
 
         #[test]
         fn ft_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ft").is_err());
+            let input = ".Ft";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10008,7 +10188,11 @@ Line
 
         #[test]
         fn ic_no_args() {
-            assert!(MdocParser::parse_mdoc(".Ic").is_err());
+            let input = ".Ic";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10066,7 +10250,11 @@ Line
 
         #[test]
         fn in_no_args() {
-            assert!(MdocParser::parse_mdoc(".In").is_err());
+            let input = ".In";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10125,8 +10313,7 @@ Line
 
         #[test]
         fn lb_wrong_args() {
-            assert!(MdocParser::parse_mdoc(".Lb").is_err());
-            // assert!(MdocParser::parse_mdoc(".Lb libname1 libname2").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Lb").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -10175,7 +10362,11 @@ Line
 
         #[test]
         fn li_no_args() {
-            assert!(MdocParser::parse_mdoc(".Li").is_err());
+            let input = ".Li";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10234,7 +10425,11 @@ Line
 
         #[test]
         fn lk_no_args() {
-            assert!(MdocParser::parse_mdoc(".Lk").is_err());
+            let input = ".Lk";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10336,8 +10531,12 @@ Line
 
         #[test]
         fn ms_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ms").is_err());
+            let content = ".Ms";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
+
         }
 
         #[test]
@@ -10396,25 +10595,12 @@ Line
         }
 
         #[test]
-        fn mt_wrong_arg() {
-            let content = ".Mt abc@gmail.com abcdefg";
-
-            let elements = vec![
-                Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Mt,
-                    nodes: vec![Element::Text("abc@gmail.com".to_string())],
-                }),
-                Element::Text("abcdefg".to_string()),
-            ];
+        fn mt_no_args() {
+            let content = ".Mt";
+            let elements = vec![];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
-        }
-
-        #[test]
-        fn mt_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Mt").is_err());
         }
 
         #[test]
@@ -10460,19 +10646,29 @@ Line
         fn no() {
             let content = ".No a b c";
 
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::No,
-                nodes: vec![Element::Text("a b c".to_string())],
-            })];
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::No,
+                    nodes: vec![
+                        Element::Text("a".to_string()),
+                        Element::Text("b".to_string()),
+                        Element::Text("c".to_string())
+                    ],
+                })
+            ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements)
         }
 
+
         #[test]
         fn no_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".No").is_err());
+            let content = ".No";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10642,9 +10838,13 @@ Line
         }
 
         #[test]
+
         fn ot_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ot").is_err());
+            let content = ".Ot";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10704,8 +10904,11 @@ Line
 
         #[test]
         fn pa_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Pa").is_err());
+            let content = ".Pa";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10774,10 +10977,14 @@ Line
             assert_eq!(mdoc.elements, elements);
         }
 
+
         #[test]
         fn pf_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Pf").is_err());
+            let content = ".Pf";
+            let elements = vec![];
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -10873,8 +11080,7 @@ Line
 
         #[test]
         fn rv_no_std() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Rv f1 f2").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Rv f1 f2").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -10892,8 +11098,7 @@ Line
 
         #[test]
         fn rv_no_std_and_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Rv").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Rv").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11013,25 +11218,29 @@ Line
         fn sx() {
             let content = ".Sx MANUAL STRUCTURE";
 
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Sx,
-                nodes: vec![Element::Text("MANUAL STRUCTURE".to_string())],
-            })];
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Sx,
+                    nodes: vec![
+                        Element::Text("MANUAL".to_string()),
+                        Element::Text("STRUCTURE".to_string())
+                    ],
+                }),
+            ];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
             assert_eq!(mdoc.elements, elements);
         }
 
+
         #[test]
         fn sx_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Sx").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Sx").unwrap().elements, vec![]);
         }
 
         #[test]
         fn sx_wrong_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Sx Ar value").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Sx Ar value").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11041,7 +11250,10 @@ Line
             let elements = vec![
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Sx,
-                    nodes: vec![Element::Text("MANUAL STRUCTURE".to_string())],
+                    nodes: vec![
+                        Element::Text("MANUAL".to_string()),
+                        Element::Text("STRUCTURE".to_string())
+                    ],
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ar,
@@ -11063,7 +11275,10 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Sx,
-                    nodes: vec![Element::Text("MANUAL STRUCTURE".to_string())],
+                    nodes: vec![
+                        Element::Text("MANUAL".to_string()),
+                        Element::Text("STRUCTURE".to_string())
+                    ],
                 }),
             ];
 
@@ -11088,8 +11303,7 @@ Line
 
         #[test]
         fn sy_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Sy").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Sy").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11217,8 +11431,7 @@ Line
 
         #[test]
         fn tn_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Tn").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Tn").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11400,8 +11613,7 @@ Line
 
         #[test]
         fn va_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Va").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Va").unwrap().elements, vec![]);
         }
 
         #[test]
@@ -11468,10 +11680,9 @@ Line
 
         #[test]
         fn xr_no_args() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Xr mandoc").is_err());
-            assert!(MdocParser::parse_mdoc(".Xr 1").is_err());
-            assert!(MdocParser::parse_mdoc(".Xr").is_err());
+            assert_eq!(MdocParser::parse_mdoc(".Xr mandoc").unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(".Xr 1").unwrap().elements, vec![]);
+            assert_eq!(MdocParser::parse_mdoc(".Xr").unwrap().elements, vec![]);
         }
 
         #[test]
