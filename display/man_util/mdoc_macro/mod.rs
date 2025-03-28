@@ -9,6 +9,7 @@
 
 use text_production::StType;
 use types::*;
+use crate::man_util::parser::Element;
 
 pub mod text_production;
 pub mod types;
@@ -115,7 +116,9 @@ pub enum Macro {
     In {
         filename: String,
     },
-    It,
+    It{
+        head: Vec<Element>
+    },
     Lb {
         lib_name: String,
     },
