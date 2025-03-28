@@ -263,11 +263,12 @@ bl_block =  { bl_open ~ it_block* ~ el_close }
 block_line = { (!NEWLINE ~ ANY)+ }
 
 // -- It
-ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
-// tab = @{ ta | (ws ~ ws ~ ws ~ ws) | "\t" }
+ta       = ${ "."? ~ "Ta" ~ NEWLINE? } 
+ta_head  = @{ ta | (ws ~ ws ~ ws ~ ws) | "\t" }
+ta_body  = ${ "."? ~ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 
-it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
-it_body  = ${ (!(".It") ~ !(".El") ~ (ta | element))* }
+it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ (ta_head | arg))* ~ ws* ~ NEWLINE? }
+it_body  = ${ (!(".It") ~ !(".El") ~ (ta_body | element))* }
 it_block = ${ it_head ~ it_body }
 
 // -- Nd
