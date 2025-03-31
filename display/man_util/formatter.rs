@@ -126,14 +126,8 @@ impl MdocFormatter {
         &mut self,
         formatted: &str,
         current_line: &mut String,
-        lines: &mut Vec<String>
+        lines: &mut Vec<String>,
     ) {
-        let get_indent = |l: &str| {
-            l.chars()
-                .take_while(|ch|ch.is_whitespace())
-                .collect::<String>()
-        };
-
         let max_width = self.formatting_settings.width;
         if current_line.chars().count() + formatted.chars().count() > max_width {
             for word in formatted.split_whitespace() {
@@ -155,13 +149,10 @@ impl MdocFormatter {
         } else {
             let is_all_control = formatted.chars().all(|ch| ch.is_ascii_control());
 
-            for word in line.split_whitespace() {
-                if current_line.chars().count() + word.chars().count() >= max_width {
-                    lines.push(indent.clone() + current_line.trim());
-                    current_line.clear();
+            if is_all_control {
+                if let Some(' ') = current_line.chars().last() {
+                    current_line.pop();
                 }
-                current_line.push_str(word);
-                current_line.push(' ');
             }
 
             if self.formatting_state.suppress_space {
@@ -184,33 +175,7 @@ impl MdocFormatter {
                     _   => unreachable!()
                 }
                 
-                current_line.push_str(line);
-
-                if !line.is_empty() 
-                    && !is_all_control 
-                    && current_line.chars().last() != Some('\n') 
-                    && current_line.chars().last() != Some(' ') 
-                {
-                    match self.formatting_state.spacing.as_str() {
-                        " " => current_line.push(' '),
-                        ""  => {},
-                        _   => unreachable!()
-                    }
-                    
-                }
             }
-
-            if !current_line.is_empty(){
-                let indent = get_indent(&*current_line);
-                lines.push(indent.clone() + current_line.trim());
-                current_line.clear();
-            }
-        }
-        let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
-            current_line.is_empty()); 
-        if is_not_empty{
-            let indent = " ".repeat(self.formatting_state.current_indent);
-            *current_line = indent + current_line;
         }
     }
 
