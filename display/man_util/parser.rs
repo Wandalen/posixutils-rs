@@ -1741,7 +1741,7 @@ impl MdocParser {
 
     // Parses (`Ap`)[https://man.openbsd.org/mdoc#Ap]:
     // `Ap`
-    fn parse_ap(_pair: Pair<Rule>) -> Element {
+    fn parse_ap(pair: Pair<Rule>) -> Element {
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
@@ -2241,7 +2241,7 @@ impl MdocParser {
 
     // Parses (`Ns`)[https://man.openbsd.org/mdoc#Ns]:
     // `Ns`
-    fn parse_ns(_pair: Pair<Rule>) -> Element {
+    fn parse_ns(pair: Pair<Rule>) -> Element {
         let nodes = pair.into_inner().map(Self::parse_element).collect();
         
         Element::Macro(MacroNode {
@@ -2422,7 +2422,7 @@ impl MdocParser {
 
     // Parses (`Ux`)[https://man.openbsd.org/mdoc#Ux]:
     // `Ux`
-    fn parse_ux(_pair: Pair<Rule>) -> Element {
+    fn parse_ux(pair: Pair<Rule>) -> Element {
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
