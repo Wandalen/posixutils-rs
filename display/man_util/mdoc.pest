@@ -159,6 +159,7 @@ element = {
 }
 
 mdoc = { SOI ~ (("." ~ comment_macro ~ NEWLINE)* ~ element)* ~ EOI? }
+args = { SOI ~ ws* ~ arg* ~ ws* ~ EOI? }
 
 // ----- Block full-explicit macros
 
@@ -264,12 +265,11 @@ bl_block =  { bl_open ~ it_block* ~ el_close }
 block_line = { (!NEWLINE ~ ANY)+ }
 
 // -- It
-ta       = ${ "."? ~ "Ta" ~ NEWLINE? } 
-ta_head  = @{ ta | (ws ~ ws ~ ws ~ ws) | "\t" }
-ta_body  = ${ "."? ~ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
+ta_head  = ${ (!"." ~ "Ta") | "    " | "\t" }
+ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 
-it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ (ta_head | arg))* ~ ws* ~ NEWLINE? }
-it_body  = ${ (!(".It") ~ !(".El") ~ (ta_body | element))* }
+it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ (ta_head | word))* ~ ws* ~ NEWLINE? }
+it_body  = ${ (!(".It") ~ !(".El") ~ element)* }
 it_block = ${ it_head ~ it_body }
 
 // -- Nd

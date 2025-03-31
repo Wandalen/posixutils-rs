@@ -211,7 +211,7 @@ impl MdocParser {
             Rule::inline => Self::parse_inline(pair),
             Rule::arg => Self::parse_arg(pair.into_inner().next().unwrap()),
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
-            Rule::ta_head | Rule::ta_body => Self::parse_ta(pair),
+            Rule::ta | Rule::ta_head => Self::parse_ta(pair),
             Rule::text_line => {
                 Element::Text(pair.into_inner().next().unwrap().as_str().to_string())
             }
@@ -254,6 +254,8 @@ impl MdocParser {
         // elements.iter().for_each(|e| println!("{e:?}"));
 
         let mut mdoc = MdocDocument { elements };
+
+        println!("{:#?}", mdoc);
 
         let validator = &mut MdocValidator::default();
         validator.validate(&mut mdoc)?;
@@ -418,14 +420,47 @@ impl MdocParser {
 // Block full-implicit macros parsing
 impl MdocParser {
     fn parse_it_block(pair: Pair<Rule>) -> Element {
+        fn string_to_elements(input: &str) -> Vec<Element>{
+            if let Ok(pairs) = MdocParser::parse(Rule::args, input){
+                pairs
+                    .flat_map(|p| {
+                        let inner_rules = p.into_inner();
+                        inner_rules.map(MdocParser::parse_element)
+                    })
+                    .filter(|el|{
+                        !matches!(el, Element::Eoi)
+                    })
+                    .collect()
+            }else{
+                vec![]
+            }
+        }
+        
         let mut inner_pairs = pair.into_inner();
 
-        let head: Vec<_> = inner_pairs
+        let mut head: Vec<_> = inner_pairs
             .next()
             .unwrap()
             .into_inner()
             .map(Self::parse_element)
             .collect();
+        
+        let mut parse_buffer = String::new();
+        let mut new_head = vec![];
+        for element in head{
+            match element{
+                Element::Text(text) => {
+                    parse_buffer.push_str(&(text + " "));
+                },
+                _ => {
+                    new_head.extend(string_to_elements(&parse_buffer));
+                    parse_buffer.clear();
+                    new_head.push(element);
+                }
+            }
+        }
+        new_head.extend(string_to_elements(&parse_buffer));
+        head = new_head;
 
         let nodes = inner_pairs
             .next()
