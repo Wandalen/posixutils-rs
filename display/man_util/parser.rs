@@ -255,7 +255,7 @@ impl MdocParser {
 
         let mut mdoc = MdocDocument { elements };
 
-        println!("{:#?}", mdoc);
+        //println!("{:#?}", mdoc);
 
         let validator = &mut MdocValidator::default();
         validator.validate(&mut mdoc)?;
@@ -2459,8 +2459,8 @@ impl MdocParser {
             _ => unreachable!(),
         };
 
-        let section = inner.next()
-            .expect("Xr macro expected the second argument.");
+        let section = inner.next().unwrap();
+
         let section = match section.as_rule() {
             Rule::text_arg => section.as_str().to_string(),
             _ => unreachable!(),
@@ -7704,8 +7704,7 @@ Line
                                 Element::Text(arg.clone()),
                                 Element::Text("word".to_string()),
                             ],
-                        }),
-                        Element::Text("word".to_string()),
+                        })
                     ];
 
                     let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -7745,8 +7744,7 @@ Line
                             Element::Text(AtType::Version(1.to_string()).to_string()),
                             Element::Text("word".to_string())
                         ],
-                    }),
-                    Element::Text("word".to_string()),
+                    })
                 ];
 
                 let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -11751,7 +11749,7 @@ Line
                         section: "1".to_string(),
                     },
                     nodes: vec![
-                        Element::Text("text".to_string())
+                        Element::Text("test".to_string())
                     ],
                 }),
                 Element::Macro(MacroNode {
