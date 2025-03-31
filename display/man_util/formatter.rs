@@ -123,59 +123,67 @@ impl MdocFormatter {
 // Base formatting functions.
 impl MdocFormatter {
     fn append_formatted_text(
-        &mut self,
-        formatted: &str,
-        current_line: &mut String,
-        lines: &mut Vec<String>,
+        &self, 
+        formatted: &str, 
+        current_line: &mut String, 
+        lines: &mut Vec<String>
     ) {
+        let get_indent = |l: &str| {
+            l.chars()
+                .take_while(|ch|ch.is_whitespace())
+                .collect::<String>()
+        };
+
+        let is_one_line = formatted.lines().count() == 1;
+
         let max_width = self.formatting_settings.width;
-        if current_line.chars().count() + formatted.chars().count() > max_width {
-            for word in formatted.split_whitespace() {
-                if current_line.chars().count() + word.chars().count() >= max_width {
-                    lines.push(current_line.trim_end().to_string());
-                    current_line.clear();
+        for line in formatted.split("\n"){
+            if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
+                let indent = get_indent(&*line);
+                let max_width = max_width - indent.len();
+
+                for word in line.split_whitespace() {
+                    if current_line.chars().count() + word.chars().count() >= max_width {
+                        lines.push(indent.clone() + current_line.trim());
+                        current_line.clear();
+                    }
+                    current_line.push_str(word);
+                    if !word.chars().all(|ch|ch.is_control()){
+                        current_line.push(' ');
+                    }
+
+                    println!("{:?} | {:?}", line, current_line);
                 }
-               
-                if self.formatting_state.suppress_space {
-                    if current_line.chars().last() == Some(' ') {
+            } else {
+                let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
+                if is_all_control {
+                    if let Some(' ') = current_line.chars().last() {
                         current_line.pop();
                     }
-                    self.formatting_state.suppress_space = false;
-                }
-
-                current_line.push_str(word);
-                current_line.push(' ');
-            }
-        } else {
-            let is_all_control = formatted.chars().all(|ch| ch.is_ascii_control());
-
-            if is_all_control {
-                if let Some(' ') = current_line.chars().last() {
-                    current_line.pop();
-                }
-            }
-
-            if self.formatting_state.suppress_space {
-                if current_line.chars().last() == Some(' ') {
-                    current_line.pop();
-                }
-                self.formatting_state.suppress_space = false;
-            }
-
-            current_line.push_str(formatted);
-            
-            if !formatted.is_empty()
-                && !is_all_control 
-                && current_line.chars().last() != Some('\n') 
-                && current_line.chars().last() != Some(' ') 
-            {
-                match self.formatting_state.spacing.as_str() {
-                    " " => current_line.push(' '),
-                    ""  => {},
-                    _   => unreachable!()
                 }
                 
+                current_line.push_str(line);
+
+                if !line.is_empty() 
+                    && !is_all_control 
+                    && current_line.chars().last() != Some('\n') 
+                    && current_line.chars().last() != Some(' ') 
+                {
+                    current_line.push_str(&self.formatting_state.spacing);
+                }
             }
+
+            if !current_line.is_empty() && !is_one_line{
+                let indent = get_indent(&*current_line);
+                lines.push(indent.clone() + current_line.trim());
+                current_line.clear();
+            }
+        }
+        let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
+            current_line.is_empty()); 
+        if is_not_empty{
+            let indent = " ".repeat(self.formatting_state.current_indent);
+            *current_line = indent + current_line;
         }
     }
 
@@ -217,7 +225,7 @@ impl MdocFormatter {
 
         for node in ast.elements {
             let formatted_node = self.format_node(node);            
-            println!("Formatted node: {} - {}", formatted_node, self.formatting_state.suppress_space);
+            //println!("Formatted node: {} - {}", formatted_node, self.formatting_state.suppress_space);
             self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
 
@@ -234,7 +242,11 @@ impl MdocFormatter {
         );
         lines.push(self.format_footer());
 
-        lines.join("\n").into_bytes()
+        let mut content = lines.join("\n");
+
+        content = content.replace(" \x08", "");
+        
+        content.into_bytes()
     }
 
     fn format_default_header(&mut self) -> String {
@@ -1060,8 +1072,7 @@ impl MdocFormatter {
             .join("\n");
 
         if !compact{
-            let vertical_space = "\n\n".to_string();
-            content = vertical_space.clone() + &content; //+ &vertical_space;
+            content = content.replace("\n", "\n\n");
         }
 
         content
@@ -1318,7 +1329,7 @@ impl MdocFormatter {
         &self, 
         items: Vec<Vec<String>>,
         columns: Vec<String>,
-        compact: bool
+        _compact: bool
     ) -> String{
         fn format_table(table: Vec<Vec<String>>, col_count: usize, max_line_width: usize) -> String {
             if table.is_empty() {
@@ -1375,10 +1386,10 @@ impl MdocFormatter {
         
         content = content.lines()
             .map(|line|{
-                let mut line = " ".repeat(origin_indent) + line;
-                if !compact{
-                    line += "\n";
-                }
+                let line = " ".repeat(origin_indent) + line;
+                // if !compact{
+                //     line += "\n";
+                // }
                 line
             })
             .collect::<Vec<_>>()
@@ -1671,7 +1682,7 @@ impl MdocFormatter {
 
     fn format_ss_block(&mut self, title: String, macro_node: MacroNode) -> String {        
         let spacing = vec![" "; self.formatting_settings.indent].join("");
-        let mut content = macro_node
+        let content = macro_node
             .nodes
             .into_iter()
             .map(|node| {
@@ -1690,9 +1701,9 @@ impl MdocFormatter {
             title_ident = 1;
         }
 
-        let title_line = " ".repeat(title_ident) + &title.to_uppercase() + "\n";
+        //let title_line = " ".repeat(title_ident) + &title + "\n"; //.to_uppercase()
 
-        content = title_line + &content;
+        //content = title_line + &content;
         
         let title_line = format!(
             "{}{}\n",
@@ -2488,7 +2499,7 @@ impl MdocFormatter {
     }
 
     fn format_lp(&self) -> String {
-        format!("\n\n")
+        format!("\n \n")
     }
 
     fn format_ms(&mut self, macro_node: MacroNode) -> String {
@@ -2506,7 +2517,7 @@ impl MdocFormatter {
 
     fn format_ns(&mut self, macro_node: MacroNode) -> String {
         self.formatting_state.suppress_space = true;
-        self.format_inline_macro(macro_node)
+        "\x08".to_string() + &self.format_inline_macro(macro_node)
     }
 
     fn format_nx(&self, macro_node: MacroNode) -> String {
@@ -2544,7 +2555,7 @@ impl MdocFormatter {
     }
 
     fn format_pp(&self, _macro_node: MacroNode) -> String {
-        format!("\n\n")
+        format!("\n \n")
     }
 
     fn format_rv(&mut self, macro_node: MacroNode) -> String {
@@ -3601,9 +3612,12 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Bl -column \"A col\" \"B col\"
 .It item1 Ta item2
-.It item1 Ta item2";
+.It item1 Ta item2
+.El";
         let output = "PROGNAME(section)                   section                  PROGNAME(section)
 
+item1  item2
+item1  item2
 
 footer text                     January 1, 1970                    footer text";
         test_formatting(input, output);
@@ -4017,6 +4031,7 @@ footer text                     January 1, 1970                    footer text";
         #[test]
         fn an() {
             let input = ".Dd January 1, 1970
+.Dt PROGNAME section
 .Os Debian
 .An Kristaps
 .An Kristaps
@@ -4027,11 +4042,11 @@ footer text                     January 1, 1970                    footer text";
 .An -nosplit
 .An Kristaps
 .An Kristaps";
-            let output = "
+            let output = "PROGNAME(section)                   section                  PROGNAME(section)
+
 Kristaps Kristaps Kristaps
 Kristaps
-Kristaps
-Kristaps Kristaps
+Kristaps Kristaps Kristaps
 
 Debian                          January 1, 1970                         Debian";
             test_formatting(input, output);
@@ -4537,7 +4552,7 @@ footer text                     January 1, 1970                    footer text";
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
 file/path file2/path
-
+ 
 The BSD.lv Project: https://bsd.lv
 
 footer text                     January 1, 1970                    footer text";
@@ -4717,14 +4732,14 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Pa name1 name2
+.Ad name1 name2 
 .Pp
-.Pa name1 name2";
+.Ad name1 name2";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
 name1 name2
-
+ 
 name1 name2
 
 footer text                     January 1, 1970                    footer text";
