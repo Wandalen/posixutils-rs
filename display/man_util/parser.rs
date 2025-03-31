@@ -1396,19 +1396,6 @@ impl MdocParser {
     }
 
     fn parse_text_production(pair: Pair<Rule>) -> Element {
-        fn process_delimiters(
-            inner: &[Pair<Rule>],
-            mut i: usize,
-            rule: Rule,
-        ) -> (Vec<Element>, usize) {
-            let mut nodes = Vec::new();
-            while i < inner.len() && inner[i].as_rule() == rule {
-                nodes.push(MdocParser::parse_element(inner[i].clone()));
-                i += 1;
-            }
-            (nodes, i)
-        }
-
         fn parse_x_args<F, D>(
             pair: Pair<Rule>,
             macro_value: Macro,
@@ -1432,7 +1419,7 @@ impl MdocParser {
             let mut i = 0;
 
             // Process opening delimiters.
-            let (open_nodes, new_i) = MdocParser::MdocParser::process_delimiters(&inner, i, Rule::opening_delimiter);
+            let (open_nodes, new_i) = MdocParser::process_delimiters(&inner, i, Rule::opening_delimiter);
             nodes.extend(open_nodes);
             i = new_i;
 
@@ -1453,7 +1440,7 @@ impl MdocParser {
             }
 
             // Process closing delimiters.
-            let (close_nodes, _) = MdocParser::MdocParser::process_delimiters(&inner, i, Rule::closing_delimiter);
+            let (close_nodes, _) = MdocParser::process_delimiters(&inner, i, Rule::closing_delimiter);
             nodes.extend(close_nodes);
 
             Element::Macro(MacroNode {
@@ -2520,11 +2507,8 @@ mod tests {
 
         #[test]
         fn bd_no_closing_macro() {
-            let content = ".Bd -literal -offset indent -compact\nLine 1\nLine 2\n";
-
-            let mdoc = MdocParser::parse_mdoc(content);
-            // TODO: Format and compare pest errors??
-            assert!(mdoc.is_err());
+            let input = ".Bd -literal -offset indent -compact\nLine 1\nLine 2\n";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
@@ -2533,10 +2517,8 @@ mod tests {
             let content = ".Bd -literal -offset indent -compact\nLine 1\nLine 2\n";
 
             for closing_macro in closing_macros {
-                let content = format!("{content}.{closing_macro}");
-                let mdoc = MdocParser::parse_mdoc(content);
-                // TODO: Format and compare pest errors??
-                assert!(mdoc.is_err());
+                let input = format!("{content}.{closing_macro}");
+                assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
             }
         }
 
@@ -2607,8 +2589,8 @@ mod tests {
 
         #[test]
         fn bd_invalid_offset() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Bd -literal -offset invalid_offset\n.Ed").is_err())
+            let input = ".Bd -literal -offset invalid_offset\n.Ed";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
@@ -2629,14 +2611,14 @@ mod tests {
 
         #[test]
         fn bd_not_parsed() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Bd -literal -compact Ad addr1\n.Ed").is_err());
+            let input = ".Bd -literal -compact Ad addr1\n.Ed";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
         fn bd_not_callable() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ad addr1 Bd -literal\n.Ed").is_err());
+            let input = ".Ad addr1 Bd -literal\n.Ed";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
@@ -2656,11 +2638,8 @@ mod tests {
 
         #[test]
         fn bf_no_closing_macro() {
-            let content = ".Bf -emphasis\nLine 1\nLine 2\n";
-
-            let mdoc = MdocParser::parse_mdoc(content);
-            // TODO: Format and compare pest errors??
-            assert!(mdoc.is_err());
+            let input = ".Bf -emphasis\nLine 1\nLine 2\n";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
@@ -2669,10 +2648,8 @@ mod tests {
             let content = ".Bf -emphasis\nLine 1\nLine 2\n";
 
             for closing_macro in closing_macros {
-                let content = format!("{content}.{closing_macro}");
-                let mdoc = MdocParser::parse_mdoc(content);
-                // TODO: Format and compare pest errors??
-                assert!(mdoc.is_err());
+                let input = format!("{content}.{closing_macro}");
+                assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
             }
         }
 
@@ -2700,20 +2677,21 @@ mod tests {
 
         #[test]
         fn bf_invalid_type() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Bf -invalid\n.Ef").is_err())
+            let input = ".Bf -invalid\n.Ef";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
         fn bf_not_parsed() {
             // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Bf Em Ad addr1\n.Ef").is_err());
+            let input = ".Bf Em Ad addr1\n.Ef";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
         fn bf_not_callable() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ad addr1 Bf Em\n.Ef").is_err());
+            let input = ".Ad addr1 Bf Em\n.Ef";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
@@ -2745,11 +2723,8 @@ mod tests {
 
         #[test]
         fn bk_no_words() {
-            let content = ".Bk\n.Ek";
-
-            let mdoc = MdocParser::parse_mdoc(content);
-            // TODO: Format and compare pest errors??
-            assert!(mdoc.is_err());
+            let input = ".Bk\n.Ek";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
@@ -2767,8 +2742,8 @@ mod tests {
 
         #[test]
         fn bk_not_callable() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ad addr1 Bk -words\n.Ek").is_err());
+            let input = ".Ad addr1 Bk -words\n.Ek";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
@@ -2812,11 +2787,8 @@ mod tests {
 
         #[test]
         fn bl_no_closing_macro() {
-            let content = ".Bl -bullet\nLine 1\nLine 2\n";
-
-            let mdoc = MdocParser::parse_mdoc(content);
-            // TODO: Format and compare pest errors??
-            assert!(mdoc.is_err());
+            let input = ".Bl -bullet\nLine 1\nLine 2\n";
+            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
         }
 
         #[test]
@@ -2825,10 +2797,8 @@ mod tests {
             let content = ".Bl -bullet\nLine 1\nLine 2\n";
 
             for closing_macro in closing_macros {
-                let content = format!("{content}.{closing_macro}");
-                let mdoc = MdocParser::parse_mdoc(content);
-                // TODO: Format and compare pest errors??
-                assert!(mdoc.is_err());
+                let input = format!("{content}.{closing_macro}");
+                assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
             }
         }
 
@@ -3003,8 +2973,10 @@ mod tests {
 
         #[test]
         fn bl_not_callable() {
-            // TODO: Format and compare pest errors??
-            assert!(MdocParser::parse_mdoc(".Ad addr1 Bl Em\n.El").is_err());
+            let content = ".Ad addr1 Bl Em\n.El";
+
+            let mdoc = MdocParser::parse_mdoc(content).unwrap();
+            assert_eq!(mdoc.elements, vec![]);
         }
     }
 
@@ -6101,8 +6073,6 @@ Line
         }
 
         #[test]
-        #[test]
-
         fn rs_not_parsed() {
             assert_eq!(MdocParser::parse_mdoc(
                 r#".Rs
