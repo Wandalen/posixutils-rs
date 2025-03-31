@@ -123,9 +123,9 @@ impl MdocFormatter {
 // Base formatting functions.
 impl MdocFormatter {
     fn append_formatted_text(
-        &self, 
-        formatted: &str, 
-        current_line: &mut String, 
+        &mut self,
+        formatted: &str,
+        current_line: &mut String,
         lines: &mut Vec<String>
     ) {
         let get_indent = |l: &str| {
@@ -135,25 +135,53 @@ impl MdocFormatter {
         };
 
         let max_width = self.formatting_settings.width;
-        for line in formatted.split("\n"){
-            if current_line.chars().count() + line.chars().count() > max_width {
-                let indent = get_indent(&*line);
-                let max_width = max_width - indent.len();
-
-                for word in line.split_whitespace() {
-                    if current_line.chars().count() + word.chars().count() >= max_width {
-                        lines.push(indent.clone() + current_line.trim());
-                        current_line.clear();
-                    }
-                    current_line.push_str(word);
-                    current_line.push(' ');
+        if current_line.chars().count() + formatted.chars().count() > max_width {
+            for word in formatted.split_whitespace() {
+                if current_line.chars().count() + word.chars().count() >= max_width {
+                    lines.push(current_line.trim_end().to_string());
+                    current_line.clear();
                 }
-            } else {
-                let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
-                if is_all_control {
-                    if let Some(' ') = current_line.chars().last() {
+               
+                if self.formatting_state.suppress_space {
+                    if current_line.chars().last() == Some(' ') {
                         current_line.pop();
                     }
+                    self.formatting_state.suppress_space = false;
+                }
+
+                current_line.push_str(word);
+                current_line.push(' ');
+            }
+        } else {
+            let is_all_control = formatted.chars().all(|ch| ch.is_ascii_control());
+
+            for word in line.split_whitespace() {
+                if current_line.chars().count() + word.chars().count() >= max_width {
+                    lines.push(indent.clone() + current_line.trim());
+                    current_line.clear();
+                }
+                current_line.push_str(word);
+                current_line.push(' ');
+            }
+
+            if self.formatting_state.suppress_space {
+                if current_line.chars().last() == Some(' ') {
+                    current_line.pop();
+                }
+                self.formatting_state.suppress_space = false;
+            }
+
+            current_line.push_str(formatted);
+            
+            if !formatted.is_empty()
+                && !is_all_control 
+                && current_line.chars().last() != Some('\n') 
+                && current_line.chars().last() != Some(' ') 
+            {
+                match self.formatting_state.spacing.as_str() {
+                    " " => current_line.push(' '),
+                    ""  => {},
+                    _   => unreachable!()
                 }
                 
                 current_line.push_str(line);
@@ -217,13 +245,14 @@ impl MdocFormatter {
     }
 
     pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
+        println!("{:?}", ast);
+
         let mut lines = Vec::new();
         let mut current_line = String::new();
 
         for node in ast.elements {
-            let formatted_node = self.format_node(node);
-
-            //lines.push(formatted_node);
+            let formatted_node = self.format_node(node);            
+            println!("Formatted node: {} - {}", formatted_node, self.formatting_state.suppress_space);
             self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
 
@@ -413,7 +442,7 @@ impl MdocFormatter {
             Macro::Bx => self.format_bx(macro_node),
             Macro::Dx => self.format_dx(macro_node),
             Macro::Ad => self.format_ad(macro_node),
-            Macro::Ap => self.format_ap(),
+            Macro::Ap => self.format_ap(macro_node),
             Macro::Ar => self.format_ar(macro_node),
             Macro::Bt => self.format_bt(),
             Macro::Cd => self.format_cd(macro_node),
@@ -433,7 +462,7 @@ impl MdocFormatter {
             Macro::Es {
                 opening_delimiter,
                 closing_delimiter,
-            } => self.format_es(opening_delimiter, closing_delimiter),
+            } => self.format_es(opening_delimiter, closing_delimiter, macro_node),
             Macro::Ev => self.format_ev(macro_node),
             Macro::Ex => self.format_ex(macro_node),
             Macro::Fa => self.format_fa(macro_node),
@@ -456,24 +485,28 @@ impl MdocFormatter {
             Macro::Ms => self.format_ms(macro_node),
             Macro::Mt => self.format_mt(macro_node),
             Macro::No => self.format_no(macro_node),
-            Macro::Ns => self.format_ns(),
+            Macro::Ns => self.format_ns(macro_node),
             Macro::Nx => self.format_nx(macro_node),
             Macro::Os => self.format_os(macro_node),
             Macro::Ox => self.format_ox(macro_node),
             Macro::Pa => self.format_pa(macro_node),
-            Macro::Pf { prefix } => self.format_pf(prefix.as_str()),
+            Macro::Pf { prefix } => self.format_pf(prefix.as_str(), macro_node),
             Macro::Pp => self.format_pp(macro_node),
             Macro::Rv => self.format_rv(macro_node),
-            Macro::Sm(sm_mode) => self.format_sm(sm_mode),
-            Macro::St(st_type) => self.format_st(st_type),
+            Macro::Sm(sm_mode) => self.format_sm(sm_mode, macro_node),
+            Macro::St(st_type) => self.format_st(st_type, macro_node),
             Macro::Sx => self.format_sx(macro_node),
             Macro::Sy => self.format_sy(macro_node),
             Macro::Tg { term } => self.format_tg(term),
             Macro::Tn => self.format_tn(macro_node),
             Macro::Ud => self.format_ud(),
-            Macro::Ux => self.format_ux(),
+            Macro::Ux => self.format_ux(macro_node),
             Macro::Va => self.format_va(macro_node),
-            Macro::Xr { name, section } => self.format_xr(name.as_str(), section.as_str()),
+            Macro::Xr { name, section } => self.format_xr(
+                name.as_str(), 
+                section.as_str(), 
+                macro_node
+            ),
 
             _ => String::new(),
         }
@@ -2109,8 +2142,9 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_ap(&self) -> String {
-        "'".to_string()
+    fn format_ap(&self, macro_node: MacroNode) -> String {
+        let content = self.format_inline_macro(macro_node);
+        format!("'{}", content)
     }
 
     fn format_an(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
@@ -2264,8 +2298,10 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_es(&self, opening_delimiter: char, closing_delimiter: char) -> String {
-        format!("{}{}", opening_delimiter, closing_delimiter)
+    fn format_es(&self, opening_delimiter: char, closing_delimiter: char, macro_node: MacroNode) -> String {
+        let c = self.format_inline_macro(macro_node);
+
+        format!("{}{} {}", opening_delimiter, closing_delimiter, c)
     }
 
     fn format_ev(&mut self, macro_node: MacroNode) -> String {
@@ -2359,7 +2395,7 @@ impl MdocFormatter {
     }
 
     fn format_fn(&mut self, funcname: &str, macro_node: MacroNode) -> String {
-        let mut result = format!("{funcname}()");
+        let mut result = format!("{funcname}(");
         let mut prev_was_open = false;
         let mut is_first_node = true;
 
@@ -2379,7 +2415,7 @@ impl MdocFormatter {
                             true => result.push_str(&self.format_text_node(&text)),
                             false => {
                                 let offset = if is_first_node { "" } else { self.formatting_state.spacing.as_str() };
-                                let formatted_node = format!(",{}{}", offset, self.format_text_node(&text));
+                                let formatted_node = format!("{}{}", offset, self.format_text_node(&text));
                                 result.push_str(&formatted_node);
                             }
                         }
@@ -2393,6 +2429,8 @@ impl MdocFormatter {
                 is_first_node = false;
             }
         }
+
+        result.push(')');
 
         result
     }
@@ -2497,12 +2535,13 @@ impl MdocFormatter {
     }
 
     fn format_no(&mut self, macro_node: MacroNode) -> String {
+        self.formatting_state.suppress_space = false;
         self.format_inline_macro(macro_node)
     }
 
-    fn format_ns(&mut self) -> String {
+    fn format_ns(&mut self, macro_node: MacroNode) -> String {
         self.formatting_state.suppress_space = true;
-        String::new()
+        self.format_inline_macro(macro_node)
     }
 
     fn format_nx(&self, macro_node: MacroNode) -> String {
@@ -2531,9 +2570,12 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_pf(&mut self, prefix: &str) -> String {
-        self.formatting_state.suppress_space = true;
-        prefix.to_string()
+    fn format_pf(&mut self, prefix: &str, macro_node: MacroNode) -> String {
+        // self.formatting_state.suppress_space = true;
+        let c = self.format_inline_macro(macro_node);
+        
+        format!("{}{}", prefix, c)
+        
     }
 
     fn format_pp(&self, _macro_node: MacroNode) -> String {
@@ -2573,7 +2615,7 @@ impl MdocFormatter {
         }
     }
 
-    fn format_sm(&mut self, sm_mode: Option<SmMode>) -> String {
+    fn format_sm(&mut self, sm_mode: Option<SmMode>, macro_node: MacroNode) -> String {
         self.formatting_state.spacing = match sm_mode {
             Some(SmMode::On) => " ".to_string(),
             Some(SmMode::Off) => "".to_string(),
@@ -2583,11 +2625,16 @@ impl MdocFormatter {
                 _ => " ".to_string(),
             },
         };
-        self.formatting_state.spacing.clone()
+
+        let c= self.format_inline_macro(macro_node);
+
+        format!("{}{}", self.formatting_state.spacing, c)
     }
 
-    fn format_st(&self, st_type: StType) -> String {
-        st_type.to_string()
+    fn format_st(&self, st_type: StType, macro_node: MacroNode) -> String {
+        let content = self.format_inline_macro(macro_node);
+
+        format!("{} {}", st_type.to_string(), content)
     }
 
     fn format_sx(&mut self, macro_node: MacroNode) -> String {
@@ -2616,16 +2663,19 @@ impl MdocFormatter {
         "currently under development.".to_string()
     }
 
-    fn format_ux(&self) -> String {
-        "UNIX".to_string()
+    fn format_ux(&self, macro_node: MacroNode) -> String {
+        let content = self.format_inline_macro(macro_node);
+
+        format!("UNIX {content}")
     }
 
     fn format_va(&mut self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_xr(&self, name: &str, section: &str) -> String {
-        format!("{name}({section})")
+    fn format_xr(&self, name: &str, section: &str, macro_node: MacroNode) -> String {
+        let content = self.format_inline_macro(macro_node);
+        format!("{name}({section}) {content}")
     }
 }
 
@@ -4024,14 +4074,15 @@ Debian                          January 1, 1970                         Debian";
 
         #[test]
         fn ap() {
-            let input = ".Dd January 1, 1970
+            let input = 
+".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Ap";
+.Ap Text Line Ns addr";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
-'
+'Text Lineaddr
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4055,18 +4106,20 @@ footer text                     January 1, 1970                    footer text";
 
         #[test]
         fn at() {
-            let input = ".Dd January 1, 1970
+            let input = 
+".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
 .At
 .At III
 .At V.1
-.At ( V.1 )";
+.At ( V.1 )
+.At ( V.1 ) subnode Ad ( addr )";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
 AT&T UNIX AT&T System III UNIX AT&T System V Release 1 UNIX (AT&T System V
-Release 1 UNIX)
+Release 1 UNIX) (AT&T System V Release 1 UNIX) subnode (addr)
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4365,7 +4418,7 @@ footer text                     January 1, 1970                    footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
-funcname(arg, arg2, arg3)
+funcname(arg arg2 arg3)
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4587,23 +4640,6 @@ footer text                     January 1, 1970                    footer text";
         }
 
         #[test]
-        fn ns_temp() {
-            let input = 
-".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Ad addr1 Ns Ad addr2
-.Ad addr1 Ns Ad addr2 Ns addr3";
-            let output = 
-"PROGNAME(section)                   section                  PROGNAME(section)
-
-addr1addr2 addr1addr2addr3
-
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
-        }
-
-        #[test]
         fn ns() {
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
@@ -4617,7 +4653,7 @@ footer text                     January 1, 1970                    footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
-name=value :Mpattern -ooutput a b c a b c
+name=value :Mpattern -ooutput a b ca b c
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -5228,7 +5264,7 @@ footer text                     January 1, 1970                    footer text";
             let output = 
 "PROGNAME(section)                   section                  PROGNAME(section)
 
-(random()), text!
+(random() text!)
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
