@@ -66,9 +66,10 @@ pub enum Macro {
     Cm,
     D1,
     Db, // Obsolete
-    Dd {
-        date: DdDate,
-    },
+    // Dd {
+    //     date: DdDate,
+    // },
+    Dd,
     Dl,
     Do,
     Dc, // Close a Do block

@@ -625,11 +625,12 @@ db = ${ "Db" ~ !text_arg ~ (ws+ ~ text_arg)? ~ NEWLINE? }
 
 // -- Dd
 
-traditional_date = ${ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ }
-wrong_date       = ${ (!"$" ~ text_arg)+ }
-mdocdate         = ${ month_day ~ ws+ ~ year }
-date             = ${ (mdocdate | traditional_date | wrong_date) }
-dd               = ${ "Dd" ~ !text_arg ~ (ws+ ~ ("$" ~ "Mdocdate" ~ ":"? ~ ws*)? ~ date? ~ "$"?)? ~ NEWLINE? }
+// traditional_date = ${ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ }
+// wrong_date       = ${ (!"$" ~ text_arg)+ }
+// mdocdate         = ${ month_day ~ ws+ ~ year }
+// date             = ${ (mdocdate | traditional_date | wrong_date) }
+// dd               = ${ "Dd" ~ !text_arg ~ (ws+ ~ ("$" ~ "Mdocdate" ~ ":"? ~ ws*)? ~ date? ~ "$"?)? ~ NEWLINE? }
+dd = ${ "Dd" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 
 // -- Dt
 

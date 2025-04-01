@@ -266,7 +266,7 @@ impl MdocFormatter {
             .unwrap_or(Self::get_default_footer_text());
 
         if self.formatting_state.date.is_empty() {
-            self.format_dd(chrono::Local::now().date_naive().into());
+            self.formatting_state.date = self.format_dd("$Mdocdate$");
         }
 
         let mut space_size = self
@@ -429,7 +429,19 @@ impl MdocFormatter {
             Macro::Dv => self.format_dv(macro_node),
             Macro::Em => self.format_em(macro_node),
             Macro::An { author_name_type } => self.format_an(author_name_type, macro_node),
-            Macro::Dd { date } => self.format_dd(date),
+            Macro::Dd => {
+                match macro_node.nodes.is_empty() {
+                    true => self.formatting_state.date = self.format_dd(""),
+                    false => {
+                        match &macro_node.nodes[0] {
+                            Element::Text(l) => self.formatting_state.date = self.format_dd(l.as_str()),
+                            _ => unreachable!()
+                        }
+                    }
+                };
+
+                String::new()
+            },
             Macro::Dt {
                 title,
                 section,
@@ -2247,16 +2259,65 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_dd(&mut self, date: DdDate) -> String {
-        self.formatting_state.date = match date {
-            DdDate::MDYFormat(dd_date) => format!(
-                "{} {}, {}",
-                dd_date.month_day.0, dd_date.month_day.1, dd_date.year
-            ),
-            DdDate::StrFormat(string) => string,
-        };
+    fn format_dd(&mut self, line: &str) -> String {
+        fn parse_month_name(month: &str) -> Option<u32> {
+            let mut months = HashMap::new();
+            months.insert("january", 1);
+            months.insert("february", 2);
+            months.insert("march", 3);
+            months.insert("april", 4);
+            months.insert("may", 5);
+            months.insert("june", 6);
+            months.insert("july", 7);
+            months.insert("august", 8);
+            months.insert("september", 9);
+            months.insert("october", 10);
+            months.insert("november", 11);
+            months.insert("december", 12);
+        
+            months.get(&month.to_lowercase()[..]).copied()
+        }
 
-        String::new()
+        let trimmed = line.trim();
+
+        if trimmed == "$Mdocdate$" {
+            return chrono::Utc::now().format("%B %-d, %Y").to_string();
+        }
+
+        let prefix = "$Mdocdate: ";
+        if trimmed.starts_with(prefix) {
+            let remainder = &trimmed[prefix.len()..];
+            let mut parts = remainder.split_whitespace();
+
+            let Some(month_str) = parts.next() else {
+                return line.to_string();
+            };
+            let Some(day_str) = parts.next() else {
+                return line.to_string();
+            };
+            let Some(year_str) = parts.next() else {
+                return line.to_string();
+            };
+
+            let Some(month_num) = parse_month_name(month_str) else {
+                return line.to_string();
+            };
+
+            let Ok(day_num) = day_str.parse::<u32>() else {
+                return line.to_string();
+            };
+            let Ok(year_num) = year_str.parse::<i32>() else {
+                return line.to_string();
+            };
+
+            let Some(date) = chrono::NaiveDate::from_ymd_opt(year_num, month_num, day_num) else {
+                return line.to_string();
+            };
+
+            return date.format("%B %-d, %Y").to_string();
+        }
+
+        line.to_string()
     }
 
     fn format_bx(&self, macro_node: MacroNode) -> String {
