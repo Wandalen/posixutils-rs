@@ -522,7 +522,6 @@ fn display_summary_database(command: &str, keyword: &str) -> Result<bool, ManErr
     Ok(status.success())
 }
 
-/// 
 #[derive(Default)]
 struct Man{
     args: Args,
@@ -683,7 +682,7 @@ impl Man{
             .filter_map(|s| PathBuf::from_str(s).ok())
             .collect::<Vec<_>>();
 
-        man.search_paths = vec![
+        man.search_paths = [
             man.args.augment_paths.clone(), 
             manpath,
             man.search_paths.clone(),
@@ -729,7 +728,7 @@ impl Man{
 
         if let Some(paths) = &self.args.local_file {
             if self.args.list_pathnames{
-                let paths = paths.into_iter()
+                let paths = paths.iter()
                     .filter(|path| path.exists())
                     .cloned()
                     .collect::<Vec<_>>(); 
@@ -742,7 +741,7 @@ impl Man{
             let command = if self.args.apropos { "apropos" } else { "whatis" };
 
             for keyword in &self.args.names {
-                let success = display_summary_database(command, &keyword)?;
+                let success = display_summary_database(command, keyword)?;
                 if !success {
                     no_errors = false;
                 }

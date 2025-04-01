@@ -60,9 +60,9 @@ pub enum Element {
     Eoi, // "End of input" marker
 }
 
-impl Into<String> for Element {
-    fn into(self) -> String {
-        match self {
+impl From<Element> for String {
+    fn from(element: Element) -> Self {
+        match element {
             Element::Text(text) => text,
             Element::Macro(macro_node) => format!("{:?}", macro_node),
             Element::Eoi => "EOI".to_string(),
@@ -92,7 +92,7 @@ pub enum MdocError {
 
 #[derive(Default)]
 struct MdocValidator {
-    sh_titles: HashSet<String>,
+    // sh_titles: HashSet<String>,
     ss_titles: HashSet<String>,
     first_name: Option<Vec<String>>,
 }
@@ -209,15 +209,6 @@ impl MdocParser {
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::ta | Rule::ta_head => Self::parse_ta(pair),
             Rule::text_line => Element::Text(pair.into_inner().next().unwrap().as_str().to_string()),
-            
-            Rule::text_with_newline => Element::Text(
-                pair
-                    .as_str()
-                    .to_string()
-                    .replace("\r\n", " ")
-                    .replace("\n", " ")
-            ),
-            
             Rule::line => Element::Text(pair.into_inner().next().unwrap().as_str().to_string()),
             Rule::EOI => Element::Eoi,
             _ => Element::Text(pair.as_str().to_string()),
@@ -493,9 +484,9 @@ impl MdocParser {
             .map(Self::parse_element)
             .collect();
 
-        while let Some(body) = inner_nodes.next() {
+        for body in inner_nodes {
             let mut inner = body.into_inner();
-            while let Some(pair) = inner.next() {
+            for pair in inner.by_ref() {
                 nodes.push(Self::parse_element(pair));
             }
         }
@@ -754,8 +745,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::ac)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -775,8 +765,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::bc)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -796,8 +785,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::brc)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -817,8 +805,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::dc)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -837,13 +824,13 @@ impl MdocParser {
     fn parse_eo_block(pair: Pair<Rule>) -> Element {
         let mut inner_pairs = pair.into_inner();
 
-        let mut head = inner_pairs.next().unwrap().into_inner();
+        let head = inner_pairs.next().unwrap().into_inner();
 
         let mut nodes = Vec::new();
         let mut opening_delimiter = None;
         let mut closing_delimiter = None;
 
-        while let Some(arg) = head.next() {
+        for arg in head {
             if arg.as_rule() == Rule::opening_delimiter {
                 opening_delimiter = Some(arg.as_str().parse::<char>().unwrap());
             } else {
@@ -875,8 +862,8 @@ impl MdocParser {
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Eo {
-                opening_delimiter: opening_delimiter,
-                closing_delimiter: closing_delimiter,
+                opening_delimiter,
+                closing_delimiter,
             },
             nodes,
         })
@@ -909,7 +896,7 @@ impl MdocParser {
         };
 
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::Fo { funcname: funcname },
+            mdoc_macro: Macro::Fo { funcname },
             nodes,
         })
     }
@@ -926,8 +913,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::oc)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -948,8 +934,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::pc)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -970,8 +955,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::qc)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -1046,8 +1030,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::sc)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -1068,8 +1051,7 @@ impl MdocParser {
         let nodes = pair
             .into_inner()
             .take_while(|p| p.as_rule() != Rule::pc)
-            .map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
-            .flatten()
+            .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
         Element::Macro(MacroNode {
@@ -1551,8 +1533,8 @@ impl MdocParser {
             parse_x_args(
                 pair,
                 Macro::Bsx,
-                |v| BsxType::format(v),
-                || BsxType::format_default(),
+                BsxType::format,
+                BsxType::format_default,
             )
         }
 
@@ -1620,8 +1602,8 @@ impl MdocParser {
             parse_x_args(
                 pair,
                 Macro::Dx,
-                |v| DxType::format(v),
-                || DxType::format_default(),
+                DxType::format,
+                DxType::format_default,
             )
         }
 
@@ -1631,8 +1613,8 @@ impl MdocParser {
             parse_x_args(
                 pair,
                 Macro::Fx,
-                |v| FxType::format(v),
-                || FxType::format_default(),
+                FxType::format,
+                FxType::format_default,
             )
         }
 
@@ -1653,8 +1635,8 @@ impl MdocParser {
             parse_x_args(
                 pair,
                 Macro::Nx,
-                |v| NxType::format(v),
-                || NxType::format_default(),
+                NxType::format,
+                NxType::format_default,
             )
         }
 
@@ -1664,8 +1646,8 @@ impl MdocParser {
             parse_x_args(
                 pair,
                 Macro::Ox,
-                |v| OxType::format(v),
-                || OxType::format_default(),
+                OxType::format,
+                OxType::format_default,
             )
         }
 
@@ -1820,74 +1802,6 @@ impl MdocParser {
             mdoc_macro: Macro::Dd,
             nodes
         })
-        // fn parse_block(pair: Pair<Rule>) -> DdDate {
-        //     match pair.as_rule() {
-        //         Rule::mdocdate => {
-        //             let mut mdy = pair.clone().into_inner();
-
-        //             let mut md = match mdy.next() {
-        //                 Some(md) => md.into_inner(),
-        //                 None => return DdDate::StrFormat(pair.as_str().to_string()),
-        //             };
-
-        //             let month = match md.next() {
-        //                 Some(month) => month.as_str().to_string(),
-        //                 None => return DdDate::StrFormat(pair.as_str().to_string()),
-        //             };
-        //             let day = match md.next() {
-        //                 Some(day) => match day.as_str().parse::<u8>() {
-        //                     Ok(day) => day,
-        //                     Err(_) => return DdDate::StrFormat(pair.as_str().to_string()),
-        //                 },
-        //                 None => return DdDate::StrFormat(pair.as_str().to_string()),
-        //             };
-
-        //             let year = match mdy.next() {
-        //                 Some(year) => match year.as_str().parse::<u16>() {
-        //                     Ok(year) => year,
-        //                     Err(_) => return DdDate::StrFormat(pair.as_str().to_string()),
-        //                 },
-        //                 None => return DdDate::StrFormat(pair.as_str().to_string()),
-        //             };
-
-        //             DdDate::MDYFormat(Date {
-        //                 month_day: (month, day),
-        //                 year: year,
-        //             })
-        //         }
-        //         Rule::traditional_date => {
-        //             let date_str = pair.as_str();
-        //             let date = match chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-        //                 Ok(date) => date,
-        //                 Err(_) => return DdDate::StrFormat(date_str.to_string()),
-        //             };
-        //             date.into()
-        //         }
-        //         Rule::wrong_date => DdDate::StrFormat(pair.as_str().to_string()),
-        //         _ => {
-        //             unreachable!()
-        //         }
-        //     }
-        // }
-
-        // match pair.into_inner().next() {
-        //     Some(inner_pair) => {
-        //         let date = parse_block(inner_pair.into_inner().next().unwrap());
-
-        //         Element::Macro(MacroNode {
-        //             mdoc_macro: Macro::Dd { date: date },
-        //             nodes: vec![],
-        //         })
-        //     }
-        //     None => {
-        //         let date = chrono::offset::Utc::now().date_naive().into();
-
-        //         Element::Macro(MacroNode {
-        //             mdoc_macro: Macro::Dd { date: date },
-        //             nodes: vec![],
-        //         })
-        //     }
-        // }
     }
 
     // Parses (`Dt`)[https://man.openbsd.org/mdoc#Dt]
@@ -1909,16 +1823,15 @@ impl MdocParser {
             unreachable!()
         };
 
-        let arch = match inner.next() {
-            Some(arch) => Some(arch.as_str().trim().to_string()),
-            None => None,
-        };
+        let arch = inner
+            .next()
+            .map(|arch| arch.as_str().trim().to_string());
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Dt {
-                title: title,
-                section: section,
-                arch: arch,
+                title,
+                section,
+                arch,
             },
             nodes: vec![],
         })
@@ -1978,8 +1891,8 @@ impl MdocParser {
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Es {
-                opening_delimiter: opening_delimiter,
-                closing_delimiter: closing_delimiter,
+                opening_delimiter,
+                closing_delimiter,
             },
             nodes
         })
@@ -2016,13 +1929,13 @@ impl MdocParser {
 
         let mut args = vec![];
 
-        while let Some(arg) = inner.next() {
+        for arg in inner {
             args.push(arg.as_str().to_string());
         }
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Fd {
-                directive: directive,
+                directive,
                 arguments: args,
             },
             nodes: vec![],
@@ -2059,7 +1972,7 @@ impl MdocParser {
         let nodes = inner_nodes.map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::Fn { funcname: funcname },
+            mdoc_macro: Macro::Fn { funcname },
             nodes,
         })
     }
@@ -2190,7 +2103,7 @@ impl MdocParser {
         let nodes = inner.map(MdocParser::parse_element).collect();
 
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::Lk { uri: uri },
+            mdoc_macro: Macro::Lk { uri },
             nodes,
         })
     }

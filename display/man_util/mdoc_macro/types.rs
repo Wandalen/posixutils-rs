@@ -11,8 +11,6 @@ use pest::iterators::Pair;
 
 use crate::man_util::parser::Rule;
 
-use chrono::Datelike;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum BdType {
     Centered,
@@ -118,41 +116,4 @@ pub enum AnType {
 pub enum SmMode {
     On,
     Off,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Date {
-    pub month_day: (String, u8),
-    pub year: u16,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum DdDate {
-    MDYFormat(Date),
-    StrFormat(String),
-}
-
-impl From<chrono::NaiveDate> for DdDate {
-    fn from(date: chrono::NaiveDate) -> DdDate {
-        let month = match date.month() {
-            1 => "January",
-            2 => "February",
-            3 => "March",
-            4 => "April",
-            5 => "May",
-            6 => "June",
-            7 => "July",
-            8 => "August",
-            9 => "September",
-            10 => "October",
-            11 => "November",
-            12 => "December",
-            _ => unreachable!(),
-        };
-
-        DdDate::MDYFormat(Date {
-            month_day: (month.to_string(), date.day() as u8),
-            year: date.year() as u16,
-        })
-    }
 }

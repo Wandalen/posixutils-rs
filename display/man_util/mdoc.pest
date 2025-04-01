@@ -30,11 +30,6 @@ text_arg = @{
   | ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") 
   | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ 
 }
-// text_with_newline = @{
-//   ("\\&" ~ (!ws ~ ANY)+) 
-// | ("\"" ~ (!"\"" ~ ANY)+ ~ "\"") 
-// | (!(ws | macro_arg | comment_start) ~ ANY)+ 
-// }
 
 // -- List of Callable macros
 macro_arg = { 
