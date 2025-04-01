@@ -2039,13 +2039,6 @@ impl MdocParser {
             _ => unreachable!()
         }
 
-        // if let Some(del) = inner_pairs.next() {
-        //     match del.as_rule() {
-        //         Rule::closing_delimiter => nodes.push(Element::Text(del.as_str().to_string())),
-        //         Rule::text_arg =>
-        //     }
-        // }
-
         let iter = inner_pairs.map(Self::parse_element);
         nodes.extend(iter);
 
@@ -2149,13 +2142,6 @@ impl MdocParser {
     // `No word ...`
 
     fn parse_no(pair: Pair<Rule>) -> Element {
-        // let words = pair
-        //     .into_inner()
-        //     .take_while(|p| p.as_rule() == Rule::text_arg)
-        //     .map(|p| p.as_str().to_string())
-        //     .collect::<Vec<_>>()
-        //     .join(" ");
-
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
@@ -2360,11 +2346,6 @@ impl MdocParser {
     // `Va [type] identifier ...`
 
     fn parse_va(pair: Pair<Rule>) -> Element {
-        // let nodes = pair
-        //     .into_inner()
-        //     .take_while(|p| p.as_rule() == Rule::text_arg)
-        //     .map(Self::parse_element)
-        //     .collect();
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
@@ -2380,22 +2361,12 @@ impl MdocParser {
 
         let name = inner.next().unwrap();
         let name = match name.as_rule() {
-            // Rule::text_with_newline => name
-            //     .as_str()
-            //     .to_string()
-            //     .replace("\r\n", "")
-            //     .replace("\n", ""),
             Rule::text_arg => name.as_str().to_string(),
             _ => unreachable!(),
         };
 
         let section = inner.next().unwrap();
         let section = match section.as_rule() {
-            // Rule::text_with_newline => section
-            //     .as_str()
-            //     .to_string()
-            //     .replace("\r\n", "")
-            //     .replace("\n", ""),
             Rule::text_arg => section.as_str().to_string(),
             _ => unreachable!(),
         };
