@@ -30,11 +30,11 @@ text_arg = @{
   | ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") 
   | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ 
 }
-text_with_newline = @{
-  ("\\&" ~ (!ws ~ ANY)+) 
-| ("\"" ~ (!"\"" ~ ANY)+ ~ "\"") 
-| (!(ws | macro_arg | comment_start) ~ ANY)+ 
-}
+// text_with_newline = @{
+//   ("\\&" ~ (!ws ~ ANY)+) 
+// | ("\"" ~ (!"\"" ~ ANY)+ ~ "\"") 
+// | (!(ws | macro_arg | comment_start) ~ ANY)+ 
+// }
 
 // -- List of Callable macros
 macro_arg = { 
@@ -659,7 +659,7 @@ es = ${
   ~ (ws+ ~ text_arg)*
   ~ ws*
 }
-ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ text_with_newline)+ ~ ws* }
+ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 ex = ${ "Ex" ~ !text_arg ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 fa = ${ "Fa" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 fl = ${ "Fl" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }
