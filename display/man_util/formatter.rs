@@ -140,7 +140,7 @@ impl MdocFormatter {
         for line in formatted.split("\n"){
             if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
                 let indent = get_indent(&*line);
-                let max_width = max_width - indent.len();
+                let max_width = max_width.saturating_sub(indent.len());
 
                 for word in line.split_whitespace() {
                     if current_line.chars().count() + word.chars().count() >= max_width {
@@ -152,7 +152,7 @@ impl MdocFormatter {
                         current_line.push(' ');
                     }
 
-                    println!("{:?} | {:?}", line, current_line);
+                    //println!("{:?} | {:?}", line, current_line);
                 }
             } else {
                 let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
@@ -218,7 +218,7 @@ impl MdocFormatter {
     }
 
     pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
-        println!("{:?}", ast);
+        //println!("{:?}", ast);
 
         let mut lines = Vec::new();
         let mut current_line = String::new();
@@ -250,7 +250,8 @@ impl MdocFormatter {
     }
 
     fn format_default_header(&mut self) -> String {
-        self.format_dt(None, "", None)
+        self.format_dt(None, "", None);
+        self.formatting_state.header_text.clone().unwrap_or_default()
     }
 
     fn get_default_footer_text() -> String {
@@ -492,9 +493,9 @@ impl MdocFormatter {
     fn format_text_node(&self, text: &str) -> String {
         let replacements: HashMap<&str, &str> = [
             // Spaces:
-            (r"\ ", " "), // unpaddable space
-            (r"\~", " "), // paddable space
-            (r"\0", " "), // digit-width space
+            (r"\ ", " "), // unpaddable space
+            (r"\~", " "), // paddable space
+            (r"\0", " "), // digit-width space
             (r"\|", " "), // one-sixth \(em narrow space
             (r"\^", " "), // one-twelfth \(em half-narrow space
             (r"\&", ""),  // zero-width space
@@ -2694,8 +2695,9 @@ mod tests {
             let input = r".Dd January 1, 1970
 .Os footer text
 \ \~\0\|\^\&\)\%\:";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
 
+   
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -2706,7 +2708,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(ba \(br \(ul \(ru \(rn \(bb \(sl \(rs";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 | │ _ _ ‾ ¦ / \
 
 footer text                     January 1, 1970                    footer text";
@@ -2718,7 +2721,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(ci \(bu \(dd \(dg \(lz \(sq \(ps \(sc \(lh \(rh \(at \(sh \(CR \(OK \(CL \(SP \(HE \(DI";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 ○ • ‡ † ◊ □ ¶ § ☜ ☞ @ # ↵ ✓ ♣ ♠ ♥ ♦
 
 footer text                     January 1, 1970                    footer text";
@@ -2730,7 +2734,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(co \(rg \(tm";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 © ® ™
 
 footer text                     January 1, 1970                    footer text";
@@ -2742,7 +2747,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(em \(en \(hy \e \(r! \(r?";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 — – ‐ \\ ¡ ¿
 
 footer text                     January 1, 1970                    footer text";
@@ -2754,7 +2760,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(Bq \(bq \(lq \(rq \(oq \(cq \(aq \(dq \(Fo \(Fc \(fo \(fc";
-            let output = "
+            let output = "UNTITLED                             LOCAL                            UNTITLED
+
 „ ‚ “ ” ‘ ’ ' \" « » ‹ ›
 
 footer text                     January 1, 1970                    footer text";
@@ -2771,7 +2778,8 @@ footer text                     January 1, 1970                    footer text";
 \(rt \[bracerighttp] \(rk \[bracerightmid] \(rb \[bracerightbt] \[bracerightex]
 \[parenlefttp] \[parenleftbt] \[parenleftex] \[parenrighttp] \[parenrightbt] \[parenrightex]
 ";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 [ ] { } ⟨ ⟩ ⎪ ⎪ ⎡ ⎣ ⎢ ⎤ ⎦ ⎥ ⎧ ⎧ ⎨ ⎨ ⎩ ⎩ ⎪ ⎫ ⎫ ⎬ ⎬ ⎭ ⎭ ⎪ ⎛ ⎝ ⎜ ⎞ ⎠ ⎟
 
 footer text                     January 1, 1970                    footer text";
@@ -2783,7 +2791,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(<- \(-> \(<> \(da \(ua \(va \(lA \(rA \(hA \(uA \(dA \(vA \(an";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 ← → ↔ ↓ ↑ ↕ ⇐ ⇒ ⇔ ⇑ ⇓ ⇕ ⎯
 
 footer text                     January 1, 1970                    footer text";
@@ -2795,7 +2804,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(AN \(OR \[tno] \(no \(te \(fa \(st \(tf \(3d \(or";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 ∧ ∨ ¬ ¬ ∃ ∀ ∋ ∴ ∴ |
 
 footer text                     January 1, 1970                    footer text";
@@ -2813,7 +2823,8 @@ footer text                     January 1, 1970                    footer text";
 \[coproduct] \(gr \(sr \[sqrt] \(lc \(rc \(lf \(rf \(if \(Ah \(Im \(Re
 \(wp \(pd \(-h \[hbar] \(12 \(14 \(34 \(18 \(38 \(58 \(78 \(S1 \(S2 \(S3
 ";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 - − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆ ⊇
 ∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³
 
@@ -2826,7 +2837,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(ff \(fi \(fl \(Fi \(Fl \(AE \(ae \(OE \(oe \(ss \(IJ \(ij";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 ﬀ ﬁ ﬂ ﬃ ﬄ Æ æ Œ œ ß Ĳ ĳ
 
 footer text                     January 1, 1970                    footer text";
@@ -2838,7 +2850,8 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Os footer text
 \\(a\" \\(a- \\(a. \\(a^ \\(aa \\\' \\(ga \\` \\(ab \\(ac \\(ad \\(ah \\(ao \\(a~ \\(ho \\(ha \\(ti";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 ˝ ¯ ˙ ^ ´ ´ ` ` ˘ ¸ ¨ ˇ ˚ ~ ˛ ^ ~
 
 footer text                     January 1, 1970                    footer text";
@@ -2855,7 +2868,8 @@ footer text                     January 1, 1970                    footer text";
 \(:o \(:u \(:y \(^A \(^E \(^I \(^O \(^U \(^a \(^e \(^i \(^o \(^u \(,C
 \(,c \(/L \(/l \(/O \(/o \(oA \(oa
 ";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü ÿ
 Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å
 
@@ -2868,7 +2882,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(-D \(Sd \(TP \(Tp \(.i \(.j";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 Ð ð Þ þ ı ȷ
 
 footer text                     January 1, 1970                    footer text";
@@ -2880,7 +2895,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(Do \(ct \(Eu \(eu \(Ye \(Po \(Cs \(Fn";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 $ ¢ € € ¥ £ ¤ ƒ
 
 footer text                     January 1, 1970                    footer text";
@@ -2892,7 +2908,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \(de \(%0 \(fm \(sd \(mc \(Of \(Om";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 ° ‰ ′ ″ µ ª º
 
 footer text                     January 1, 1970                    footer text";
@@ -2909,7 +2926,8 @@ footer text                     January 1, 1970                    footer text";
 \(*y \(*h \(*i \(*k \(*l \(*m \(*n \(*c \(*o \(*p \(*r \(*s
 \(*t \(*u \(*f \(*x \(*q \(*w \(+h \(+f \(+p \(+e \(ts
 ";
-            let output = r"
+            let output = r"UNTITLED                             LOCAL                            UNTITLED
+
 Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο
 π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς
 
@@ -2922,7 +2940,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \*(Ba \*(Ne \*(Ge \*(Le \*(Gt \*(Lt \*(Pm \*(If \*(Pi \*(Na \*(Am \*R \*(Tm \*q \*(Rq \*(Lq \*(lp \*(rp \*(lq \*(rq \*(ua \*(va \*(<= \*(>= \*(aa \*(ga \*(Px \*(Ai";
-            let output = "
+            let output = "UNTITLED                             LOCAL                            UNTITLED
+
 | ≠ ≥ ≤ > < ± infinity pi NaN & ® (Tm) \" ” “ ( ) “ ” ↑ ↕ ≤ ≥ ´ ` POSIX ANSI
 
 footer text                     January 1, 1970                    footer text";
@@ -2934,7 +2953,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \[u0100] \C'u01230' \[u025600]";
-            let output = "
+            let output = "UNTITLED                             LOCAL                            UNTITLED
+
 Ā ሰ 𥘀
 
 footer text                     January 1, 1970                    footer text";
@@ -2946,7 +2966,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r".Dd January 1, 1970
 .Os footer text
 \N'34' \[char43]";
-            let output = "
+            let output = "UNTITLED                             LOCAL                            UNTITLED
+
 \" +
 
 footer text                     January 1, 1970                    footer text";
@@ -3055,6 +3076,72 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
       tempor incididunt ut labore et dolore magna aliqua.
       Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
       ut aliquip ex ea commodo consequat.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bd_nested_blocks() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bd -unfilled -offset indent
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+.Ed
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bd -unfilled -offset indent
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+.Bd -unfilled -offset indent
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+.Bd -unfilled -offset indent
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+.Bd -unfilled -offset indent
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+.Ed
+.Ed
+.Ed
+.Ed
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+
+           Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+           Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+                 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+                       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                       Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+                             Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                             Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -3509,6 +3596,101 @@ Item head title2
 Item head title3
         Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
         dolore eu fugiat nulla pariatur.
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_nested_list() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -bullet -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -bullet -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -bullet -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -bullet -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+.El
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+•       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+•       Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+•       Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     •       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+             eiusmod tempor incididunt ut labore et dolore magna aliqua.
+     •       Ut enim ad minim veniam, quis nostrud exercitation ullamco
+             laboris nisi ut aliquip ex ea commodo consequat.
+     •       Duis aute irure dolor in reprehenderit in voluptate velit esse
+             cillum dolore eu fugiat nulla pariatur.
+     •
+             •       Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+                     sed do eiusmod tempor incididunt ut labore et dolore
+                     magna aliqua.
+             •       Ut enim ad minim veniam, quis nostrud exercitation
+                     ullamco laboris nisi ut aliquip ex ea commodo consequat.
+             •       Duis aute irure dolor in reprehenderit in voluptate velit
+                     esse cillum dolore eu fugiat nulla pariatur.
+             •
+                     •       Lorem ipsum dolor sit amet, consectetur
+                             adipiscing elit, sed do eiusmod tempor incididunt
+                             ut labore et dolore magna aliqua.
+                     •       Ut enim ad minim veniam, quis nostrud
+                             exercitation ullamco laboris nisi ut aliquip ex
+                             ea commodo consequat.
+                     •       Duis aute irure dolor in reprehenderit in
+                             voluptate velit esse cillum dolore eu fugiat
+                             nulla pariatur.
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -4944,7 +5126,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r#".Dd January 1, 1970
 .Os footer text
 .Aq"#;
-            let output = "
+            let output = "UNTITLED                             LOCAL                            UNTITLED
+
 ⟨⟩
 
 footer text                     January 1, 1970                    footer text";
@@ -4956,7 +5139,8 @@ footer text                     January 1, 1970                    footer text";
             let input = r#".Dd January 1, 1970
 .Os footer text
 .Aq Ad addr addr Ad addr Ad addr"#;
-            let output = "
+            let output = "UNTITLED                             LOCAL                            UNTITLED
+
 ⟨addr addr addr addr⟩
 
 footer text                     January 1, 1970                    footer text";
@@ -4973,7 +5157,8 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Ao
 .Ac"#;
-            let output = "
+            let output = "UNTITLED                             LOCAL                            UNTITLED
+
 ⟨⟩
 
 footer text                     January 1, 1970                    footer text";
@@ -4989,7 +5174,8 @@ footer text                     January 1, 1970                    footer text";
 .Ad addr 
 .Ad addr 
 .Ac"#;
-            let output = "
+            let output = "UNTITLED                             LOCAL                            UNTITLED
+
 ⟨addr addr addr addr⟩
 
 footer text                     January 1, 1970                    footer text";
@@ -5011,7 +5197,8 @@ Text loooooooong line
 Text loooooooong line
 Text loooooooong line
 .Ac"#;
-            let output = r#"
+            let output = r#"UNTITLED                             LOCAL                            UNTITLED
+
 ⟨addr addr addr Text loooooooong line Text loooooooong line Text loooooooong
 line Text loooooooong line Text loooooooong line Text loooooooong line⟩
 
@@ -5024,7 +5211,8 @@ footer text                     January 1, 1970                    footer text"#
             let input = r#".Dd January 1, 1970
 .Os Debian
 .Aq Ad addr Ad addr Ad addr Text looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong line"#;
-            let output = r#"
+            let output = r#"UNTITLED                             LOCAL                            UNTITLED
+
 ⟨addr addr addr Text
 looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong
 line⟩
@@ -5330,4 +5518,183 @@ footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
     }
+
+    ///*
+    mod mdoc {
+        use crate::man_util::formatter::tests::test_formatting;
+        use std::{path::{Path, PathBuf}, process::Command, str::FromStr};
+        use rstest::rstest;
+
+        /// Recursively finds all file paths within a directory and its subdirectories.
+        ///
+        /// # Arguments
+        ///
+        /// * `dir_path` - The starting directory `PathBuf`.
+        ///
+        /// # Returns
+        ///
+        /// A `Vec<String>` containing the full paths of all files found. Returns an
+        /// empty vector if the initial path is not a directory or if an error occurs
+        /// when reading the top-level directory. Paths that are not valid UTF-8 will be skipped.
+        fn get_dir_files_paths(dir_path: PathBuf) -> Vec<String> {
+            let mut results = Vec::new();
+            let _ = recursive_find_files(&dir_path, &mut results);
+            results
+        }
+
+        /// Helper function to perform the recursive search.
+        ///
+        /// Modifies the `results` vector directly. Returns `io::Result<()>` to indicate
+        /// if the read operation *on the current directory* succeeded, allowing the
+        /// caller (or the initial call) to handle top-level errors.
+        fn recursive_find_files(current_path: &Path, results: &mut Vec<String>) -> std::io::Result<()> {
+            if !current_path.is_dir() {
+                return Ok(());
+            }
+
+            let entries = std::fs::read_dir(current_path)?;
+
+            for entry_result in entries {
+                let Ok(entry) =  entry_result else{
+                    continue;
+                };
+                let path = entry.path();
+                if path.is_dir() {
+                    let _ = recursive_find_files(&path, results);
+                } else if path.is_file() && !path.to_str().unwrap().ends_with(":Zone.Identifier") {
+                    if let Some(path_str) = path.to_str() {
+                        results.push(path_str.to_string());
+                    }
+                }
+            }
+
+            Ok(())
+        }
+
+        //#[test]
+        fn format_mdoc() {
+            let test_dir = PathBuf::from_str("./test_files/mdoc").unwrap();
+            assert!(test_dir.exists());
+            
+            let dir_paths = get_dir_files_paths(test_dir);
+            
+            for path in dir_paths{
+                format_mdoc_file(&path);
+            }
+        }
+
+        #[rstest]
+        #[case("./test_files/mdoc/access.2")]
+        #[case("./test_files/mdoc/cvs.1")]
+        #[case("./test_files/mdoc/getfh.2")]
+        #[case("./test_files/mdoc/ioctl.2")]
+        #[case("./test_files/mdoc/munmap.2")]
+        #[case("./test_files/mdoc/rev.1")]
+        #[case("./test_files/mdoc/shutdown.2")]
+        #[case("./test_files/mdoc/talk.1")]
+        #[case("./test_files/mdoc/adjfreq.2")]
+        #[case("./test_files/mdoc/dc.1")]
+        #[case("./test_files/mdoc/getgroups.2")]
+        #[case("./test_files/mdoc/ipcs.1")]
+        #[case("./test_files/mdoc/mv.1")]
+        //#[case("./test_files/mdoc/rlog.1")]
+        #[case("./test_files/mdoc/signify.1")]
+        #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/atq.1")]
+        #[case("./test_files/mdoc/diff.1")]
+        #[case("./test_files/mdoc/getitimer.2")]
+        #[case("./test_files/mdoc/ktrace.2")]
+        #[case("./test_files/mdoc/nl.1")]
+        #[case("./test_files/mdoc/rup.1")]
+        #[case("./test_files/mdoc/sigreturn.2")]
+        #[case("./test_files/mdoc/top.1")]
+        #[case("./test_files/mdoc/bc.1")]
+        #[case("./test_files/mdoc/dup.2")]
+        #[case("./test_files/mdoc/getpeername.2")]
+        #[case("./test_files/mdoc/lpq.1")]
+        #[case("./test_files/mdoc/nm.1")]
+        #[case("./test_files/mdoc/sched_yield.2")]
+        #[case("./test_files/mdoc/sigsuspend.2")]
+        #[case("./test_files/mdoc/truncate.2")]
+        #[case("./test_files/mdoc/brk.2")]
+        #[case("./test_files/mdoc/execve.2")]
+        #[case("./test_files/mdoc/getpriority.2")]
+        #[case("./test_files/mdoc/mg.1")]
+        #[case("./test_files/mdoc/open.2")]
+        #[case("./test_files/mdoc/scp.1")]
+        #[case("./test_files/mdoc/size.1")]
+        #[case("./test_files/mdoc/umask.2")]
+        #[case("./test_files/mdoc/cal.1")]
+        #[case("./test_files/mdoc/fgen.1")]
+        #[case("./test_files/mdoc/getrtable.2")]
+        #[case("./test_files/mdoc/minherit.2")]
+        #[case("./test_files/mdoc/poll.2")]
+        #[case("./test_files/mdoc/select.2")]
+        #[case("./test_files/mdoc/snmp.1")]
+        #[case("./test_files/mdoc/w.1")]
+        #[case("./test_files/mdoc/cat.1")]
+        #[case("./test_files/mdoc/file.1")]
+        #[case("./test_files/mdoc/getrusage.2")]
+        #[case("./test_files/mdoc/mkdir.1")]
+        #[case("./test_files/mdoc/profil.2")]
+        #[case("./test_files/mdoc/semget.2")]
+        #[case("./test_files/mdoc/socket.2")]
+        #[case("./test_files/mdoc/wall.1")]
+        #[case("./test_files/mdoc/chdir.2")]
+        #[case("./test_files/mdoc/flex.1")]
+        #[case("./test_files/mdoc/getsid.2")]
+        #[case("./test_files/mdoc/mkfifo.2")]
+        #[case("./test_files/mdoc/quotactl.2")]
+        #[case("./test_files/mdoc/send.2")]
+        #[case("./test_files/mdoc/socketpair.2")]
+        #[case("./test_files/mdoc/write.2")]
+        #[case("./test_files/mdoc/chflags.2")]
+        #[case("./test_files/mdoc/flock.2")]
+        #[case("./test_files/mdoc/getsockname.2")]
+        #[case("./test_files/mdoc/mlockall.2")]
+        //#[case("./test_files/mdoc/rcs.1")]
+        #[case("./test_files/mdoc/setuid.2")]
+        #[case("./test_files/mdoc/statfs.2")]
+        #[case("./test_files/mdoc/ypconnect.2")]
+        #[case("./test_files/mdoc/chmod.2")]
+        #[case("./test_files/mdoc/fork.2")]
+        #[case("./test_files/mdoc/getsockopt.2")]
+        #[case("./test_files/mdoc/mopa.out.1")]
+        //#[case("./test_files/mdoc/rdist.1")]
+        //#[case("./test_files/mdoc/sftp.1")]
+        #[case("./test_files/mdoc/symlink.2")]
+        #[case("./test_files/mdoc/closefrom.2")]
+        #[case("./test_files/mdoc/fsync.2")]
+        #[case("./test_files/mdoc/gettimeofday.2")]
+        #[case("./test_files/mdoc/moptrace.1")]
+        #[case("./test_files/mdoc/read.2")]
+        #[case("./test_files/mdoc/shar.1")]
+        #[case("./test_files/mdoc/sync.2")]
+        #[case("./test_files/mdoc/cu.1")]
+        #[case("./test_files/mdoc/futex.2")]
+        //#[case("./test_files/mdoc/grep.1")]
+        #[case("./test_files/mdoc/msgrcv.2")]
+        #[case("./test_files/mdoc/reboot.2")]
+        #[case("./test_files/mdoc/shmctl.2")]
+        #[case("./test_files/mdoc/sysarch.2")]
+        #[case("./test_files/mdoc/cut.1")]
+        #[case("./test_files/mdoc/getdents.2")]
+        #[case("./test_files/mdoc/id.1")]
+        #[case("./test_files/mdoc/msgsnd.2")]
+        #[case("./test_files/mdoc/rename.2")]
+        #[case("./test_files/mdoc/shmget.2")]
+        #[case("./test_files/mdoc/t11.2")]
+        fn format_mdoc_file(#[case] path: &str){
+            let input = std::fs::read_to_string(path).unwrap();
+            let output = Command::new("mandoc")
+                .args(["-T", "locale", path])
+                .output()
+                .unwrap()
+                .stdout;
+            let output = String::from_utf8(output).unwrap();
+            println!("Current path: {}", path);
+            test_formatting(&input, &output);
+        }
+        
+    }//*/
 }
