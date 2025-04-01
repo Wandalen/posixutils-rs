@@ -233,7 +233,7 @@ impl MdocParser {
     pub fn parse_mdoc(input: impl AsRef<str>) -> Result<MdocDocument, MdocError> {
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
-        println!("Pairs:\n{pairs:#?}\n\n");
+        // println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -2401,8 +2401,6 @@ impl MdocParser {
         };
 
         let nodes = inner.map(Self::parse_element).collect();
-
-        println!("{:#?}", nodes);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Xr { name, section },
@@ -6544,8 +6542,6 @@ Line
     }
 
     mod inline {
-        use chrono::Datelike;
-
         use crate::man_util::parser::*;
 
         mod rs_submacros {
@@ -11758,29 +11754,5 @@ Line
             let mdoc = MdocParser::parse_mdoc(input).unwrap();
             assert_eq!(mdoc.elements, elements);
         }
-
-        //         #[text]
-        //         fn delimiters() {
-        //             let input = ".%D January 1, 1970. , . : ; ! ? April 2, 1971
-        // .Ms alpha beta gamma , . : delta
-        // .Pa name1 , . name2
-        // .Ap Text Line . , Text Line
-        // .Cm mod1 mod2 mod3 , . mod4
-        // ";
-        //             let elements = vec![
-        //                 Element::Macro(MacroNode {
-        //                     mdoc_macro: Macro::D{
-        //                         date:
-        //                     },
-        //                     nodes:vec![
-        //                         Element::Text("addr".to_string()),
-        //                     ]
-        //                 }),
-        //                 Element::Text("".to_string())
-        //             ];
-
-        //             let mdoc = MdocParser::parse_mdoc(input).unwrap();
-        //             assert_eq!(mdoc.elements, elements);
-        //         }
     }
 }
