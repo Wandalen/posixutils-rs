@@ -13,6 +13,7 @@
 WHITESPACE = _{ " " | "\t" }
 ws         = _{ WHITESPACE }
 NEWLINE    = _{ "\r"? ~ "\n" }
+_newline   = _{ "\r"? ~ "\n" }
 
 // -- Macro name separator to not allow merging macro name with arguments
 
@@ -27,7 +28,13 @@ word     = @{ (!(NEWLINE | ws) ~ ANY)+ }
 text_arg = @{
     ("\\&" ~ (!(ws | NEWLINE) ~ ANY)+) 
   | ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") 
-  | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ }
+  | (!(ws | NEWLINE | macro_arg | comment_start) ~ ANY)+ 
+}
+text_with_newline = @{
+  ("\\&" ~ (!ws ~ ANY)+) 
+| ("\"" ~ (!"\"" ~ ANY)+ ~ "\"") 
+| (!(ws | macro_arg | comment_start) ~ ANY)+ 
+}
 
 // -- List of Callable macros
 macro_arg = { 
@@ -154,7 +161,7 @@ inline = {
 // ----- Mdoc document
 
 element = {
-  ("."? ~ ( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline)) | 
+  ("."? ~ ( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline) ~ NEWLINE? ) | 
   text_line
 }
 
@@ -269,7 +276,7 @@ ta_head  = ${ (!"." ~ "Ta") | "    " | "\t" }
 ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 
 it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ (ta_head | word))* ~ ws* ~ NEWLINE? }
-it_body  = ${ (!(".It") ~ !(".El") ~ element)* }
+it_body  = ${ (!(".It") ~ !(".El") ~ element ~ NEWLINE?)* }
 it_block = ${ it_head ~ it_body }
 
 // -- Nd
@@ -437,7 +444,7 @@ at = ${
   ~ (ws+ ~ (at_type | text_arg))? 
   ~ (ws+ ~ closing_delimiter)*
   ~ (ws+ ~ text_arg)*
-  ~ ws* ~ NEWLINE? 
+  ~ ws*
 }
 
 bsx = ${ 
@@ -447,7 +454,7 @@ bsx = ${
   ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
   ~ (ws+ ~ closing_delimiter)*
   ~ (ws+ ~ text_arg)*
-  ~ ws* ~ NEWLINE? 
+  ~ ws*
 }
 
 bx = ${ 
@@ -458,7 +465,7 @@ bx = ${
   ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
   ~ (ws+ ~ closing_delimiter)*
   ~ (ws+ ~ text_arg)*
-  ~ ws* ~ NEWLINE? 
+  ~ ws*
 }
 
 dx = ${ 
@@ -468,7 +475,7 @@ dx = ${
   ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
   ~ (ws+ ~ closing_delimiter)*
   ~ (ws+ ~ text_arg)*
-  ~ ws* ~ NEWLINE? 
+  ~ ws*
 }
 
 fx = ${ 
@@ -478,7 +485,7 @@ fx = ${
   ~ (ws+ ~ !closing_delimiter ~ text_arg)? 
   ~ (ws+ ~ closing_delimiter)*
   ~ (ws+ ~ text_arg)*
-  ~ ws* ~ NEWLINE? 
+  ~ ws*
 }
 
 nx = ${ 
@@ -488,7 +495,7 @@ nx = ${
   ~ (ws+ ~ !closing_delimiter ~ text_arg)?
   ~ (ws+ ~ closing_delimiter)*
   ~ (ws+ ~ text_arg)*
-  ~ ws* ~ NEWLINE? 
+  ~ ws*
 }
 
 ox = ${ 
@@ -498,7 +505,7 @@ ox = ${
   ~ (ws+ ~ !closing_delimiter ~ text_arg)?
   ~ (ws+ ~ closing_delimiter)*
   ~ (ws+ ~ text_arg)*
-  ~ ws* ~ NEWLINE? 
+  ~ ws*
 }
 
 rv = ${ "Rv" ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
@@ -609,27 +616,22 @@ st_abbreviation =  {
 st              = ${ "St" ~ !text_arg ~ ws+ ~ st_abbreviation ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 
 // -- Other in-line macros
-ad = ${ "Ad" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+ad = ${ "Ad" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 
 an_split    =  { "-split" }
 an_no_split =  { "-nosplit" }
 an_name     = ${ text_arg ~ (ws+ ~ text_arg)* }
-an          = ${ "An" ~ !text_arg ~ ws+ ~ (an_split | an_no_split | an_name) ~ ws* ~ NEWLINE? }
+an          = ${ "An" ~ !text_arg ~ ws+ ~ (an_split | an_no_split | an_name) ~ ws* }
 
-ap = ${ "Ap" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
-ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+ap = ${ "Ap" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }
+ar = ${ "Ar" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }
 bt = ${ "Bt" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
-cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+cd = ${ "Cd" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+cm = ${ "Cm" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 db = ${ "Db" ~ !text_arg ~ (ws+ ~ text_arg)? ~ NEWLINE? }
 
 // -- Dd
 
-// traditional_date = ${ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ ~ "-" ~ ASCII_DIGIT+ }
-// wrong_date       = ${ (!"$" ~ text_arg)+ }
-// mdocdate         = ${ month_day ~ ws+ ~ year }
-// date             = ${ (mdocdate | traditional_date | wrong_date) }
-// dd               = ${ "Dd" ~ !text_arg ~ (ws+ ~ ("$" ~ "Mdocdate" ~ ":"? ~ ws*)? ~ date? ~ "$"?)? ~ NEWLINE? }
 dd = ${ "Dd" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 
 // -- Dt
@@ -646,26 +648,26 @@ fd        = ${ "Fd" ~ !text_arg ~ ws+ ~ directive ~ (ws+ ~ word)* ~ ws* ~ NEWLIN
 
 // -- Other in-line macros
 
-dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-em = ${ "Em" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-er = ${ "Er" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+dv = ${ "Dv" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+em = ${ "Em" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+er = ${ "Er" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 es = ${ 
-  "Es" 
+  "Es"
   ~ !text_arg 
   ~ ws+ ~ opening_delimiter 
   ~ ws+ ~ closing_delimiter 
   ~ (ws+ ~ text_arg)*
-  ~ NEWLINE? 
+  ~ ws*
 }
-ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-ex = ${ "Ex" ~ !text_arg ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ NEWLINE? }
-fa = ${ "Fa" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-fl = ${ "Fl" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
-Fn = ${ "Fn" ~ !text_arg ~ (ws+ ~ opening_delimiter)? ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-fr = ${ "Fr" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-ft = ${ "Ft" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+ev = ${ "Ev" ~ !text_arg ~ (ws+ ~ text_with_newline)+ ~ ws* }
+ex = ${ "Ex" ~ !text_arg ~ ws+ ~ "-std" ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
+fa = ${ "Fa" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+fl = ${ "Fl" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }
+Fn = ${ "Fn" ~ !text_arg ~ (ws+ ~ opening_delimiter)? ~ (ws+ ~ text_arg)+ ~ ws* }
+fr = ${ "Fr" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+ft = ${ "Ft" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 hf = ${ "Hf" ~ !text_arg ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
-ic = ${ "Ic" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+ic = ${ "Ic" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 In = ${ 
   "In" 
   ~ !text_arg 
@@ -673,11 +675,11 @@ In = ${
   ~ ws+ ~ word 
   ~ (ws+ ~ closing_delimiter)? 
   ~ (ws+ ~ text_arg)*
-  ~ ws* ~ NEWLINE? 
+  ~ ws*
 }
 lb = ${ "Lb" ~ !text_arg ~ (ws+ ~ opening_delimiter)? ~ ws+ ~ word ~ (ws+ ~ closing_delimiter)? ~ ws* ~ NEWLINE? }
-li = ${ "Li" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-lk = ${ "Lk" ~ !text_arg ~ ws+ ~ uri ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+li = ${ "Li" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+lk = ${ "Lk" ~ !text_arg ~ ws+ ~ uri ~ (ws+ ~ text_arg)* ~ ws* }
 lp = ${ "Lp" ~ !text_arg ~ (ws+ ~ line)? ~ ws* ~ NEWLINE? }
 
 // -- Delimeters
@@ -690,14 +692,14 @@ closing_delimiter = { "." | "," | ":" | ";" | ")" | "]" | "?" | "!" }
 os = ${ "Os" ~ !text_arg ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 
 // -- Sections and cross references
-sx = ${ "Sx" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-xr = ${ "Xr" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+sx = ${ "Sx" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+xr = ${ "Xr" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 tg = ${ "Tg" ~ !text_arg ~ (ws+ ~ arg){, 1} ~ ws* ~ NEWLINE? }
 pp = ${ "Pp" ~ !text_arg ~ (ws+ ~ word)* ~ ws* ~ NEWLINE? }
 
 // -- Spacing control
-pf = ${ "Pf" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-ns = ${ "Ns" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+pf = ${ "Pf" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+ns = ${ "Ns" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }
 
 sm_on = { "on" }
 sm_off = { "off" }
@@ -705,22 +707,22 @@ spacing_mode = { sm_on | sm_off }
 sm = ${ "Sm"  ~ !text_arg ~ (ws+ ~ spacing_mode)? ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 
 // -- Semantic markup for command line utilities
-pa = ${ "Pa" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+pa = ${ "Pa" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 
 // -- Semantic markup for function libraries
-ot = ${ "Ot" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-va = ${ "Va" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+ot = ${ "Ot" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+va = ${ "Va" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 
 // -- Various semantic markup
-mt = ${ "Mt" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-ms = ${ "Ms" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+mt = ${ "Mt" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+ms = ${ "Ms" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 
 // -- Physical markup
-sy = ${ "Sy" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
-no = ${ "No" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+sy = ${ "Sy" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
+no = ${ "No" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 
-tn = ${ "Tn" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* ~ NEWLINE? }
+tn = ${ "Tn" ~ !text_arg ~ (ws+ ~ text_arg)+ ~ ws* }
 // Prints “currently under development”
 ud = ${ "Ud" ~ !text_arg ~ ws* ~ NEWLINE? }
 // Prints “UNIX”
-ux = ${ "Ux" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+ux = ${ "Ux" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }

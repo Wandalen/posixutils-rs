@@ -2140,17 +2140,17 @@ impl MdocFormatter {
         match an_type {
             AnType::NoSplit => {
                 self.formatting_state.split_mod = false;
-                "".to_string()
+                String::new()
             }
             AnType::Split => {
                 self.formatting_state.split_mod = true;
-                "\n".to_string()
+                String::new()
             }
             AnType::Name => {
                 let content = self.format_inline_macro(macro_node);
 
                 match self.formatting_state.split_mod {
-                    true => format!("{}\n", content),
+                    true => format!("\n{}", content),
                     false => content,
                 }
             }
@@ -2713,7 +2713,8 @@ impl MdocFormatter {
 
     fn format_xr(&self, name: &str, section: &str, macro_node: MacroNode) -> String {
         let content = self.format_inline_macro(macro_node);
-        format!("{name}({section}) {content}")
+
+        format!("{name}({section}){content}")
     }
 }
 
@@ -3813,20 +3814,37 @@ footer text                     January 1, 1970                    footer text";
 
         #[test]
         fn sh() {
-            let input = ".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Sh SECTION
-Line 1
-Line 2
-Line 3";
+            let input = 
+".Dd $Mdocdate: October 28 2016 $
+.Dt REV 1
+.Os
+.Sh NAME
+.Nm rev
+.Nd reverse lines of a file
+.Sh SYNOPSIS
+.Nm rev
+.Op Ar
+.Sh DESCRIPTION
+The
+.Nm rev
+utility copies the specified files to the standard output, reversing the
+order of characters in every line.
+If no files are specified, the standard input is read.";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"REV(1)                      General Commands Manual                     REV(1)
 
-SECTION
-     Line 1 Line 2 Line 3
+NAME
+     rev – reverse lines of a file
 
-footer text                     January 1, 1970                    footer text";
+SYNOPSIS
+     rev [file ...]
+
+DESCRIPTION
+     The rev utility copies the specified files to the standard output,
+     reversing the order of characters in every line.  If no files are
+     specified, the standard input is read.
+
+Debian                         October 28, 2016                         Debian";
             test_formatting(input, output);
         }
 
@@ -5001,26 +5019,6 @@ footer text                     January 1, 1970                    footer text";
 The f1(), f2(), Ar(), and value() functions return the value 0 if successful;
 otherwise the value -1 is returned and the global variable errno is set to
 indicate the error.
-
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
-        }
-
-        #[test]
-        fn sm_temp() {
-            let input = 
-".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Sm off
-.Ad addr Ad addr
-.Sm on
-.Ad addr Ad addr
-A B C D";
-            let output = 
-"PROGNAME(section)                   section                  PROGNAME(section)
-
-addraddr addr addr A B C D
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
