@@ -966,6 +966,69 @@ fn get_symbol(last_symbol: &str, list_type: &BlType) -> String{
     }
 }
 
+fn interleave<T: Clone + std::fmt::Debug>(v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
+    if v1.is_empty(){
+        return v2;
+    }else if v2.is_empty(){
+        return v1;
+    }
+
+    let len1 = v1.len();
+    let len2 = v2.len();
+
+    let mut result = Vec::with_capacity(len1 + len2);
+
+    let mut iter1 = v1.iter();
+    let mut iter2 = v2.iter();
+
+    for (item1, item2) in iter1.by_ref().zip(iter2.by_ref()) {
+        //print!("|{:?}, {:?}|", item1, item2);
+        result.push(item1.clone()); 
+        result.push(item2.clone());
+    }
+
+    result.extend(iter1.cloned());
+    result.extend(iter2.cloned());
+
+    result
+}
+
+fn get_multilined(body: &Vec<String>) -> Vec<Vec<String>> {
+    body.iter()
+        .filter(|el| el.lines().count() > 1)
+        .map(|s| {
+            s.split("\n")
+            .map(|l|l.to_string())
+            .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>()
+}
+
+fn get_onelined(
+    body: &Vec<String>, 
+    line_width: usize, 
+    indent_str: &str, 
+    offset: &OffsetType
+) -> Vec<Vec<String>>{
+    body.split(|el| el.lines().count() > 1)
+        .collect::<Vec<_>>()
+        .iter()
+        .map(|v|{
+            let mut content = split_by_width(
+                v.join(" ").split_whitespace()                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(), 
+                line_width
+            );
+            content = add_indent_to_lines(content, line_width, &offset);
+            for line in content.iter_mut(){
+                *line = indent_str.to_string() + &line;
+            }
+            content
+        })
+        .collect::<Vec<_>>()
+}
+
 // Formatting block full-explicit.
 impl MdocFormatter {
     fn get_indent_from_offset_type(&self, offset: &Option<OffsetType>) -> usize{
@@ -1120,10 +1183,6 @@ impl MdocFormatter {
             .collect::<Vec<String>>()
             .join("");
 
-        // if let Some(c) = content.strip_prefix(self.formatting_state.spacing){
-        //     content = c.to_string(); 
-        // }
-
         let normal_font = if !font_change.is_empty() {
             "\x1b[0m"
         }else{
@@ -1169,22 +1228,13 @@ impl MdocFormatter {
         let mut symbol = get_symbol("", &list_type);
         let mut content = String::new();
         for (_, body) in items{
-            // if {
-
-            // }else{
-
-            // }
-            let body = body.join(" ");
-            let mut body = split_by_width(
-                body.split_whitespace()                    
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>(), 
-                line_width
-            );
-            body = add_indent_to_lines(body, line_width, &offset);
-            for line in body.iter_mut(){
-                *line = indent_str.clone() + &line;
-            }
+            let multilined = get_multilined(&body);
+            let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
+            let mut body = interleave(onelined, multilined)
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();  
+            
             if let Some(first_line) = body.get_mut(0){
                 if !first_line.chars().all(|ch| ch.is_whitespace()){
                     symbol = get_symbol(symbol.as_str(), &list_type);
@@ -1214,14 +1264,13 @@ impl MdocFormatter {
 
         let mut content = String::new();
         for (_, body) in items{
-            let body = body.join(" ");
-            let mut body = split_by_width(
-                body.split_whitespace()                    
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>(),
-                line_width + indent
-            );
-            body = add_indent_to_lines(body, line_width + indent, &offset);
+            let multilined = get_multilined(&body);
+            let onelined = get_onelined(&body, line_width + indent, &indent_str, &offset);   
+            let mut body = interleave(onelined, multilined)
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>(); 
+
             content.push_str(&body.join("\n"));
             content.push('\n');
             if !compact{
@@ -1434,16 +1483,13 @@ impl MdocFormatter {
 
         let mut content = String::new();
         for (head, body) in items{
-            let mut body = split_by_width(
-                body.split_whitespace()                    
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>(), 
-                line_width
-            );
-            body = add_indent_to_lines(body, line_width, &offset);
-            for line in body.iter_mut(){
-                *line = indent_str.clone() + &line;
-            }
+            let multilined = get_multilined(&body);
+            let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
+            let mut body = interleave(onelined, multilined)
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>(); 
+
             let space = if head.len() < indent.saturating_sub(2){
                 if let Some(line) = body.first_mut(){
                     line.replace_range(0..indent, "");
@@ -1600,8 +1646,10 @@ impl MdocFormatter {
         macro_node: MacroNode,
     ) -> String {
         let heads = self.get_heads(macro_node.clone(), &list_type);
+        self.formatting_state.current_indent += self.formatting_settings.indent;
         let bodies = self.get_bodies(macro_node, &list_type);
-
+        self.formatting_state.current_indent = 
+            self.formatting_state.current_indent.saturating_sub(self.formatting_settings.indent);
         let items = heads.into_iter()
             .zip(bodies.clone().into_iter())
             .collect::<Vec<_>>();
@@ -1616,7 +1664,7 @@ impl MdocFormatter {
             BlType::Hang => self.format_bl_hang_block(items, offset, compact)
         };
 
-        content
+        "\n".to_string() + &content
     }
 }
 
@@ -3626,7 +3674,7 @@ footer text                     January 1, 1970                    footer text";
             }
 
             #[test]
-            fn bl_nested_lists() {
+            fn bl_symbol_nested_lists() {
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
@@ -3711,6 +3759,679 @@ DESCRIPTION
                              exercitation ullamco laboris nisi ut aliquip ex
                              ea commodo consequat.
                      •       Duis aute irure dolor in reprehenderit in
+                             voluptate velit esse cillum dolore eu fugiat
+                             nulla pariatur.
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_item_nested_lists() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -item -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -item -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -item -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -item -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+.El
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+incididunt ut labore et dolore magna aliqua.
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+aliquip ex ea commodo consequat.
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore
+eu fugiat nulla pariatur.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+     tempor incididunt ut labore et dolore magna aliqua.
+     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+     ut aliquip ex ea commodo consequat.
+     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+     dolore eu fugiat nulla pariatur.
+     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+     tempor incididunt ut labore et dolore magna aliqua.
+     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+     ut aliquip ex ea commodo consequat.
+     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+     dolore eu fugiat nulla pariatur.
+     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+     tempor incididunt ut labore et dolore magna aliqua.
+     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+     ut aliquip ex ea commodo consequat.
+     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+     dolore eu fugiat nulla pariatur.
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_ohang_nested_lists() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -ohang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -ohang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -ohang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -ohang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+.El
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor
+incididunt ut labore et dolore magna aliqua.
+head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
+aliquip ex ea commodo consequat.
+head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore
+eu fugiat nulla pariatur.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     head1
+     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+     tempor incididunt ut labore et dolore magna aliqua.
+     head2
+     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+     ut aliquip ex ea commodo consequat.
+     head3
+     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+     dolore eu fugiat nulla pariatur.
+     head4
+     head1
+     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+     tempor incididunt ut labore et dolore magna aliqua.
+     head2
+     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+     ut aliquip ex ea commodo consequat.
+     head3
+     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+     dolore eu fugiat nulla pariatur.
+     head4
+     head1
+     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+     tempor incididunt ut labore et dolore magna aliqua.
+     head2
+     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+     ut aliquip ex ea commodo consequat.
+     head3
+     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+     dolore eu fugiat nulla pariatur.
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_inset_nested_lists() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -inset -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -inset -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -inset -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -inset -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+.El
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+tempor incididunt ut labore et dolore magna aliqua.
+head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+ut aliquip ex ea commodo consequat.
+head3 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+dolore eu fugiat nulla pariatur.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+     eiusmod tempor incididunt ut labore et dolore magna aliqua.
+     head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+     nisi ut aliquip ex ea commodo consequat.
+     head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
+     cillum dolore eu fugiat nulla pariatur.
+     head4 
+     head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+     eiusmod tempor incididunt ut labore et dolore magna aliqua.
+     head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+     nisi ut aliquip ex ea commodo consequat.
+     head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
+     cillum dolore eu fugiat nulla pariatur.
+     head4 
+     head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+     eiusmod tempor incididunt ut labore et dolore magna aliqua.
+     head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+     nisi ut aliquip ex ea commodo consequat.
+     head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
+     cillum dolore eu fugiat nulla pariatur.
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_column_nested_lists() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -column -width indent -compact col1 col2 col3 col4
+.It head1 Ta Lorem ipsum dolor sit amet, Ta consectetur adipiscing elit, Ta sed do eiusmod tempor incididunt ut Ta labore et dolore magna aliqua. 
+.It head2 Ta Ut enim ad minim veniam, Ta quis nostrud exercitation ullamco Ta laboris nisi ut aliquip ex Ta ea commodo consequat. 
+.It head3 Ta Duis aute irure dolor in Ta reprehenderit in voluptate velit Ta esse cillum dolore eu Ta fugiat nulla pariatur. 
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -column -width indent -compact col1 col2 col3 col4
+.It head1 Ta Lorem ipsum dolor sit amet, Ta consectetur adipiscing elit, Ta sed do eiusmod tempor incididunt ut Ta labore et dolore magna aliqua. 
+.It head2 Ta Ut enim ad minim veniam, Ta quis nostrud exercitation ullamco Ta laboris nisi ut aliquip ex Ta ea commodo consequat. 
+.It head3 Ta Duis aute irure dolor in Ta reprehenderit in voluptate velit Ta esse cillum dolore eu Ta fugiat nulla pariatur. 
+.It head4
+.Bl -column -width indent -compact col1 col2 col3 col4
+.It head1 Ta Lorem ipsum dolor sit amet, Ta consectetur adipiscing elit, Ta sed do eiusmod tempor incididunt ut Ta labore et dolore magna aliqua. 
+.It head2 Ta Ut enim ad minim veniam, Ta quis nostrud exercitation ullamco Ta laboris nisi ut aliquip ex Ta ea commodo consequat. 
+.It head3 Ta Duis aute irure dolor in Ta reprehenderit in voluptate velit Ta esse cillum dolore eu Ta fugiat nulla pariatur. 
+.It head4
+.Bl -column -width indent -compact col1 col2 col3 col4
+.It head1 Ta Lorem ipsum dolor sit amet, Ta consectetur adipiscing elit, Ta sed do eiusmod tempor incididunt ut Ta labore et dolore magna aliqua. 
+.It head2 Ta Ut enim ad minim veniam, Ta quis nostrud exercitation ullamco Ta laboris nisi ut aliquip ex Ta ea commodo consequat. 
+.It head3 Ta Duis aute irure dolor in Ta reprehenderit in voluptate velit Ta esse cillum dolore eu Ta fugiat nulla pariatur. 
+.El
+.El
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+head1   Lorem ipsum dolor sit amet,
+                consectetur adipiscing elit,
+                        sed do eiusmod tempor incididunt ut
+                                labore et dolore magna aliqua.
+head2   Ut enim ad minim veniam,
+                quis nostrud exercitation ullamco
+                        laboris nisi ut aliquip ex
+                                ea commodo consequat.
+head3   Duis aute irure dolor in
+                reprehenderit in voluptate velit
+                        esse cillum dolore eu
+                                fugiat nulla pariatur.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     head1   Lorem ipsum dolor sit amet,
+                     consectetur adipiscing elit,
+                             sed do eiusmod tempor incididunt ut
+                                     labore et dolore magna aliqua.
+     head2   Ut enim ad minim veniam,
+                     quis nostrud exercitation ullamco
+                             laboris nisi ut aliquip ex
+                                     ea commodo consequat.
+     head3   Duis aute irure dolor in
+                     reprehenderit in voluptate velit
+                             esse cillum dolore eu
+                                     fugiat nulla pariatur.
+     head4
+     head1   Lorem ipsum dolor sit amet,
+                     consectetur adipiscing elit,
+                             sed do eiusmod tempor incididunt ut
+                                     labore et dolore magna aliqua.
+     head2   Ut enim ad minim veniam,
+                     quis nostrud exercitation ullamco
+                             laboris nisi ut aliquip ex
+                                     ea commodo consequat.
+     head3   Duis aute irure dolor in
+                     reprehenderit in voluptate velit
+                             esse cillum dolore eu
+                                     fugiat nulla pariatur.
+     head4
+     head1   Lorem ipsum dolor sit amet,
+                     consectetur adipiscing elit,
+                             sed do eiusmod tempor incididunt ut
+                                     labore et dolore magna aliqua.
+     head2   Ut enim ad minim veniam,
+                     quis nostrud exercitation ullamco
+                             laboris nisi ut aliquip ex
+                                     ea commodo consequat.
+     head3   Duis aute irure dolor in
+                     reprehenderit in voluptate velit
+                             esse cillum dolore eu
+                                     fugiat nulla pariatur.
+
+
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_tag_nested_lists() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -tag -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -tag -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -tag -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -tag -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+.El
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+head2   Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+head3   Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+             eiusmod tempor incididunt ut labore et dolore magna aliqua.
+     head2   Ut enim ad minim veniam, quis nostrud exercitation ullamco
+             laboris nisi ut aliquip ex ea commodo consequat.
+     head3   Duis aute irure dolor in reprehenderit in voluptate velit esse
+             cillum dolore eu fugiat nulla pariatur.
+     head4
+             head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+                     sed do eiusmod tempor incididunt ut labore et dolore
+                     magna aliqua.
+             head2   Ut enim ad minim veniam, quis nostrud exercitation
+                     ullamco laboris nisi ut aliquip ex ea commodo consequat.
+             head3   Duis aute irure dolor in reprehenderit in voluptate velit
+                     esse cillum dolore eu fugiat nulla pariatur.
+             head4
+                     head1   Lorem ipsum dolor sit amet, consectetur
+                             adipiscing elit, sed do eiusmod tempor incididunt
+                             ut labore et dolore magna aliqua.
+                     head2   Ut enim ad minim veniam, quis nostrud
+                             exercitation ullamco laboris nisi ut aliquip ex
+                             ea commodo consequat.
+                     head3   Duis aute irure dolor in reprehenderit in
+                             voluptate velit esse cillum dolore eu fugiat
+                             nulla pariatur.
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_hang_nested_lists() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -hang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -hang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -hang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -hang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+.El
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+head2   Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+head3   Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+             eiusmod tempor incididunt ut labore et dolore magna aliqua.
+     head2   Ut enim ad minim veniam, quis nostrud exercitation ullamco
+             laboris nisi ut aliquip ex ea commodo consequat.
+     head3   Duis aute irure dolor in reprehenderit in voluptate velit esse
+             cillum dolore eu fugiat nulla pariatur.
+     head4
+             head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+                     sed do eiusmod tempor incididunt ut labore et dolore
+                     magna aliqua.
+             head2   Ut enim ad minim veniam, quis nostrud exercitation
+                     ullamco laboris nisi ut aliquip ex ea commodo consequat.
+             head3   Duis aute irure dolor in reprehenderit in voluptate velit
+                     esse cillum dolore eu fugiat nulla pariatur.
+             head4
+                     head1   Lorem ipsum dolor sit amet, consectetur
+                             adipiscing elit, sed do eiusmod tempor incididunt
+                             ut labore et dolore magna aliqua.
+                     head2   Ut enim ad minim veniam, quis nostrud
+                             exercitation ullamco laboris nisi ut aliquip ex
+                             ea commodo consequat.
+                     head3   Duis aute irure dolor in reprehenderit in
+                             voluptate velit esse cillum dolore eu fugiat
+                             nulla pariatur.
+     Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
+     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+
+footer text                     January 1, 1970                    footer text";
+                test_formatting(input, output);
+            }
+
+            #[test]
+            fn bl_mixed_nested_lists() {
+                let input = ".Dd January 1, 1970
+.Dt PROGNAME 1
+.Os footer text
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -bullet -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>
+.Sh DESCRIPTION
+.Ss SUBSECTION
+Adssdf sdfmsdpf  sdfm sdfmsdpf
+.Ms <alpha>
+.Bl -bullet -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -hang -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.It head4
+.Bl -tag -width indent -compact
+.It head1
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
+.It head2
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+.It head3
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
+.El
+.El
+.El
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+.Ms <alpha>";
+                let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
+
+Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+•       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+        eiusmod tempor incididunt ut labore et dolore magna aliqua.
+•       Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+        nisi ut aliquip ex ea commodo consequat.
+•       Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+        dolore eu fugiat nulla pariatur.
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
+g wefwefwer werwe rwe r wer <alpha>
+
+DESCRIPTION
+   SUBSECTION
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     •       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+             eiusmod tempor incididunt ut labore et dolore magna aliqua.
+     •       Ut enim ad minim veniam, quis nostrud exercitation ullamco
+             laboris nisi ut aliquip ex ea commodo consequat.
+     •       Duis aute irure dolor in reprehenderit in voluptate velit esse
+             cillum dolore eu fugiat nulla pariatur.
+     •
+             head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+                     sed do eiusmod tempor incididunt ut labore et dolore
+                     magna aliqua.
+             head2   Ut enim ad minim veniam, quis nostrud exercitation
+                     ullamco laboris nisi ut aliquip ex ea commodo consequat.
+             head3   Duis aute irure dolor in reprehenderit in voluptate velit
+                     esse cillum dolore eu fugiat nulla pariatur.
+             head4
+                     head1   Lorem ipsum dolor sit amet, consectetur
+                             adipiscing elit, sed do eiusmod tempor incididunt
+                             ut labore et dolore magna aliqua.
+                     head2   Ut enim ad minim veniam, quis nostrud
+                             exercitation ullamco laboris nisi ut aliquip ex
+                             ea commodo consequat.
+                     head3   Duis aute irure dolor in reprehenderit in
                              voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
      Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
