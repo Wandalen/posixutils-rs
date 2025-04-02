@@ -1264,13 +1264,14 @@ impl MdocFormatter {
 
         let mut content = String::new();
         for (_, body) in items{
-            let multilined = get_multilined(&body);
-            let onelined = get_onelined(&body, line_width + indent, &indent_str, &offset);   
-            let mut body = interleave(onelined, multilined)
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>(); 
-
+            let body = body.join(" ");
+            let mut body = split_by_width(
+                body.split_whitespace()                    
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+                line_width + indent
+            );
+            body = add_indent_to_lines(body, line_width + indent, &offset);
             content.push_str(&body.join("\n"));
             content.push('\n');
             if !compact{
