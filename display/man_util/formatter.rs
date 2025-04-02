@@ -132,20 +132,30 @@ impl MdocFormatter {
             l.chars()
                 .take_while(|ch|ch.is_whitespace())
                 .collect::<String>()
-        };
+        }; 
 
         let is_one_line = formatted.lines().count() == 1;
 
         let max_width = self.formatting_settings.width;
         for line in formatted.split("\n"){
+            if !is_one_line && !current_line.is_empty(){
+                lines.push(current_line.clone());
+                current_line.clear();
+            }
+
             if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
                 let indent = get_indent(&*line);
                 let max_width = max_width.saturating_sub(indent.len());
 
                 for word in line.split_whitespace() {
-                    if current_line.chars().count() + word.chars().count() >= max_width {
+                    if current_line.chars().count() + word.chars().count() + 1 >= max_width {
                         lines.push(indent.clone() + current_line.trim());
                         current_line.clear();
+                    }
+                    if let Some(ch) = current_line.chars().last(){
+                        if !ch.is_whitespace(){
+                            current_line.push(' ');
+                        }
                     }
                     current_line.push_str(word);
                     if !word.chars().all(|ch|ch.is_control()){
@@ -154,36 +164,15 @@ impl MdocFormatter {
 
                     //println!("{:?} | {:?}", line, current_line);
                 }
-            } else {
-                let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
-                if is_all_control {
-                    if let Some(' ') = current_line.chars().last() {
-                        current_line.pop();
-                    }
-                }
-                
-                current_line.push_str(line);
+                let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
+                    current_line.is_empty());
 
-                if !line.is_empty() 
-                    && !is_all_control 
-                    && current_line.chars().last() != Some('\n') 
-                    && current_line.chars().last() != Some(' ') 
-                {
-                    current_line.push_str(&self.formatting_state.spacing);
+                if is_not_empty{
+                    *current_line = indent + current_line.trim();
                 }
+            } else{
+                lines.push(line.to_string());
             }
-
-            if !current_line.is_empty() && !is_one_line{
-                let indent = get_indent(&*current_line);
-                lines.push(indent.clone() + current_line.trim());
-                current_line.clear();
-            }
-        }
-        let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
-            current_line.is_empty()); 
-        if is_not_empty{
-            let indent = " ".repeat(self.formatting_state.current_indent);
-            *current_line = indent + current_line;
         }
     }
 
@@ -224,7 +213,10 @@ impl MdocFormatter {
         let mut current_line = String::new();
 
         for node in ast.elements {
-            let formatted_node = self.format_node(node);            
+            let formatted_node = self.format_node(node);  
+            if formatted_node.is_empty(){
+                continue;
+            }       
             //println!("Formatted node: {} - {}", formatted_node, self.formatting_state.suppress_space);
             self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
@@ -329,21 +321,7 @@ impl MdocFormatter {
             Element::Eoi => "".to_string(),
         };
 
-        content.lines()
-            .map(|line|{
-                let indent_is_small = line.chars()
-                    .take_while(|ch| ch.is_whitespace())
-                    .count() < self.formatting_state.current_indent;
-                let is_not_empty = !(line.chars().all(|ch| ch.is_whitespace()) || line.is_empty()); 
-                let line = if indent_is_small && is_not_empty{
-                    " ".repeat(self.formatting_state.current_indent) + line
-                }else{
-                    line.to_string()
-                };
-                line
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
+        content
     }
 
     fn format_macro_node(&mut self, macro_node: MacroNode) -> String {
@@ -1026,55 +1004,81 @@ impl MdocFormatter {
 
         self.formatting_state.current_indent += indent;
         let indent = self.formatting_state.current_indent;
-        let indent = " ".repeat(indent);
-        let line_width = self.formatting_settings.width.saturating_sub(indent.len());
+        let indent_str = " ".repeat(indent);
+        let line_width = self.formatting_settings.width.saturating_sub(indent);
 
         let formatted_elements = macro_node.nodes
             .into_iter()
-            .map(|el| self.format_node(el.clone()))
-            .map(|formatted_element| {
-                formatted_element
-                    .split_whitespace()
-                    .map(|s|s.to_string())
-                    .collect::<Vec<_>>()
+            .map(|el| {
+                let is_aligned_macro = if let Element::Macro( MacroNode{ mdoc_macro, .. } ) = el.clone(){
+                    matches!(mdoc_macro, Macro::Bl{ .. }) ||
+                    matches!(mdoc_macro, Macro::Bd{ .. })
+                }else{
+                    false
+                };
+                let string = self.format_node(el.clone());
+                let content = if is_aligned_macro{
+                    vec![string]
+                }else{
+                    string
+                        .split_whitespace()
+                        .map(|s|s.to_string())
+                        .collect::<Vec<_>>()
+                };
+                (is_aligned_macro, content)
             });
 
         if line_width == 0{
             let content = formatted_elements
-                    .flatten()
-                    .collect::<Vec<_>>()
-                    .join(" ");
+                .map(|(_, s)| s)
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" ");
             return content;
         }
 
-        let lines = match block_type{
-            BdType::Centered | BdType::Filled | BdType::Ragged => {
-                let words = formatted_elements
-                    .flatten()
+        let mut lines = vec![];
+        let mut is_last_aligned_macro = false;
+        for (is_aligned_macro, content) in formatted_elements{
+            if is_aligned_macro{
+                lines.extend(content);
+            }else{   
+                let mut content = content;
+                if let BdType::Centered | BdType::Filled | BdType::Ragged = block_type{
+                    if !is_last_aligned_macro{
+                        if let Some(current_line) = lines.last(){
+                            let current_line = current_line.split_whitespace()
+                                .map(|s|s.to_string())
+                                .collect::<Vec<_>>();
+                            content = vec![current_line, content].concat();
+                        }
+                    }
+                }     
+                let l = split_by_width(content, line_width);
+                let l = add_indent_to_lines(l, line_width, &offset)
+                    .iter()
+                    .map(|line|{
+                        indent_str.clone() + line
+                    })
                     .collect::<Vec<_>>();
-
-                split_by_width(words, line_width)
-            },
-            BdType::Literal | BdType::Unfilled => {
-                let mut lines = vec![];
-                for formatted_element in formatted_elements{
-                    lines.extend(split_by_width(formatted_element, line_width));
-                }
-                lines
+                lines.extend(l);
             }
-        };
-        
-        let mut content = add_indent_to_lines(lines, line_width, &offset)
-            .iter()
-            .map(|line|{
-                indent.clone() + line
-            })
-            .collect::<Vec<_>>()        
-            .join("\n");
+            is_last_aligned_macro = is_aligned_macro;
+        }
+
+        let mut content = lines.join("\n");
+
+        self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(indent);
 
         if !compact{
-            content = content.replace("\n", "\n\n");
+            content = "\n".to_string() + &content;
         }
+
+        while let Some('\n') = content.chars().last(){
+            content.pop();
+        }
+
+        content += "\n\n";
 
         content
     }
@@ -1165,6 +1169,11 @@ impl MdocFormatter {
         let mut symbol = get_symbol("", &list_type);
         let mut content = String::new();
         for (_, body) in items{
+            // if {
+
+            // }else{
+
+            // }
             let body = body.join(" ");
             let mut body = split_by_width(
                 body.split_whitespace()                    
@@ -1657,9 +1666,27 @@ impl MdocFormatter {
         content
     }
 
+    fn add_missing_indent(&self, content: &mut String){
+        *content = content.split("\n")
+            .map(|line|{
+                let indent_is_small = line.chars()
+                    .take_while(|ch| ch.is_whitespace())
+                    .count() < self.formatting_settings.indent;
+                let is_not_empty = !(line.chars().all(|ch| ch.is_whitespace()) || line.is_empty()); 
+                let line = if indent_is_small && is_not_empty{
+                    " ".repeat(self.formatting_settings.indent) + line.trim_start()
+                }else{
+                    line.to_string()
+                };
+                line
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+
     fn format_sh_block(&mut self, title: String, macro_node: MacroNode) -> String {
-        let spacing = vec![" "; self.formatting_settings.indent].join("");
-        let content = macro_node
+        self.formatting_state.current_indent += self.formatting_settings.indent;
+        let mut content = macro_node
             .nodes
             .into_iter()
             .map(|node| {
@@ -1672,18 +1699,23 @@ impl MdocFormatter {
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("");
+
+        self.add_missing_indent(&mut content);
+
+        self.formatting_state.current_indent = 0;
                 
         format!(
-            "{}\n{}{}\n", 
+            "\n{}\n{}", 
             title.to_uppercase(), 
-            spacing,
             content
         )
     }
 
     fn format_ss_block(&mut self, title: String, macro_node: MacroNode) -> String {        
-        let spacing = vec![" "; self.formatting_settings.indent].join("");
-        let content = macro_node
+        if self.formatting_state.current_indent == 0{
+            self.formatting_state.current_indent += self.formatting_settings.indent;
+        }
+        let mut content = macro_node
             .nodes
             .into_iter()
             .map(|node| {
@@ -1697,26 +1729,18 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
             .join("");
 
+        self.add_missing_indent(&mut content);
+
+        self.formatting_state.current_indent = 0;
+
         let mut title_ident = self.formatting_settings.indent.saturating_sub(2);
         if title_ident == 0 {
             title_ident = 1;
         }
-
-        //let title_line = " ".repeat(title_ident) + &title + "\n"; //.to_uppercase()
-
-        //content = title_line + &content;
         
-        let title_line = format!(
-            "{}{}\n",
-            vec![" "; title_ident].join(""),
-            title
-        );
-
         format!(
-            "{}{}{}",
-            title_line,
-            spacing,
-            content
+            "{}{title}\n{content}",
+            " ".repeat(title_ident),
         )
     }
 }
@@ -3114,7 +3138,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .Ed
 .Ed
 .Ed
-Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
+Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer
 .Ms <alpha>";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
@@ -3602,7 +3626,7 @@ footer text                     January 1, 1970                    footer text";
             }
 
             #[test]
-            fn bl_nested_list() {
+            fn bl_nested_lists() {
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
