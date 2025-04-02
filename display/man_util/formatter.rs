@@ -1,6 +1,6 @@
 use crate::FormattingSettings;
 use aho_corasick::AhoCorasick;
-use std::collections::HashMap;
+use std::{collections::HashMap, mem::replace, thread::current};
 use terminfo::Database;
 
 use super::{
@@ -122,68 +122,109 @@ impl MdocFormatter {
 
 // Base formatting functions.
 impl MdocFormatter {
-    fn append_formatted_text(
-        &self, 
-        formatted: &str, 
-        current_line: &mut String, 
-        lines: &mut Vec<String>
-    ) {
+    // fn append_formatted_text(
+    //     &self, 
+    //     formatted: &str, 
+    //     current_line: &mut String, 
+    //     lines: &mut Vec<String>
+    // ) {
+    //     let get_indent = |l: &str| {
+    //         l.chars()
+    //             .take_while(|ch|ch.is_whitespace())
+    //             .collect::<String>()
+    //     };
+
+    //     let is_one_line = formatted.lines().count() == 1;
+    //     let max_width = self.formatting_settings.width;
+
+    //     for line in formatted.split("\n"){
+    //         if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
+    //             let indent = get_indent(line);
+
+    //             let max_width = max_width.saturating_sub(indent.len());
+
+    //             for word in line.split_whitespace() {
+    //                 if current_line.chars().count() + word.chars().count() >= max_width {
+    //                     lines.push(indent.clone() + current_line.trim());
+    //                     current_line.clear();
+    //                 }
+    //                 current_line.push_str(word);
+    //                 if !word.chars().all(|ch|ch.is_control()){
+    //                     current_line.push(' ');
+    //                 }
+
+    //                 //println!("{:?} | {:?}", line, current_line);
+    //             }
+    //         } else {
+    //             let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
+    //             if is_all_control {
+    //                 if let Some(' ') = current_line.chars().last() {
+    //                     current_line.pop();
+    //                 }
+    //             }
+                
+    //             current_line.push_str(line);
+
+    //             if !line.is_empty() 
+    //                 && !is_all_control 
+    //                 && !current_line.ends_with('\n')
+    //                 && !current_line.ends_with(' ')
+    //             {
+    //                 current_line.push_str(&self.formatting_state.spacing);
+    //             }
+    //         }
+
+    //         if !current_line.is_empty() && !is_one_line{
+    //             let indent = get_indent(&*current_line);
+    //             lines.push(indent.clone() + current_line.trim());
+    //             current_line.clear();
+    //         }
+    //     }
+    //     let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
+    //         current_line.is_empty()); 
+    //     if is_not_empty{
+    //         let indent = " ".repeat(self.formatting_state.current_indent);
+    //         *current_line = indent + current_line;
+    //     }
+    // }
+
+    fn append_formatted_text(&self, formatted: &str, lines: &mut Vec<String>) {
         let get_indent = |l: &str| {
             l.chars()
                 .take_while(|ch|ch.is_whitespace())
                 .collect::<String>()
         };
 
-        let is_one_line = formatted.lines().count() == 1;
-
         let max_width = self.formatting_settings.width;
-        for line in formatted.split("\n"){
-            if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
-                let indent = get_indent(line);
-                let max_width = max_width.saturating_sub(indent.len());
 
-                for word in line.split_whitespace() {
-                    if current_line.chars().count() + word.chars().count() >= max_width {
-                        lines.push(indent.clone() + current_line.trim());
+        for original_line in formatted.lines() {
+            let indent = get_indent(original_line);
+            let content = original_line.trim_start();
+            
+            if content.is_empty() {
+                lines.push(String::new());
+                continue;
+            }
+    
+            let available_width = max_width.saturating_sub(indent.len());
+            if content.len() <= available_width {
+                lines.push(format!("{}{}", indent, content));
+            } else {
+                let mut current_line = String::new();
+                for word in content.split_whitespace() {
+                    if current_line.len() + 1 + word.len() > available_width && !current_line.is_empty() {
+                        lines.push(format!("{}{}", indent, current_line));
                         current_line.clear();
                     }
-                    current_line.push_str(word);
-                    if !word.chars().all(|ch|ch.is_control()){
+                    if !current_line.is_empty() {
                         current_line.push(' ');
                     }
-
-                    //println!("{:?} | {:?}", line, current_line);
+                    current_line.push_str(word);
                 }
-            } else {
-                let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
-                if is_all_control {
-                    if let Some(' ') = current_line.chars().last() {
-                        current_line.pop();
-                    }
-                }
-                
-                current_line.push_str(line);
-
-                if !line.is_empty() 
-                    && !is_all_control 
-                    && !current_line.ends_with('\n')
-                    && !current_line.ends_with(' ')
-                {
-                    current_line.push_str(&self.formatting_state.spacing);
+                if !current_line.is_empty() {
+                    lines.push(format!("{}{}", indent, current_line));
                 }
             }
-
-            if !current_line.is_empty() && !is_one_line{
-                let indent = get_indent(&*current_line);
-                lines.push(indent.clone() + current_line.trim());
-                current_line.clear();
-            }
-        }
-        let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
-            current_line.is_empty()); 
-        if is_not_empty{
-            let indent = " ".repeat(self.formatting_state.current_indent);
-            *current_line = indent + current_line;
         }
     }
 
@@ -207,7 +248,8 @@ impl MdocFormatter {
                 _ => continue,
             };
 
-            self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+            // self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+            self.append_formatted_text(&formatted_node, &mut lines);
         }
 
         if !current_line.is_empty() {
@@ -224,29 +266,31 @@ impl MdocFormatter {
         let mut current_line = String::new();
 
         for node in ast.elements {
-            let formatted_node = self.format_node(node);            
+            let formatted_node: String = self.format_node(node);            
             //println!("Formatted node: {} - {}", formatted_node, self.formatting_state.suppress_space);
-            self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+            // self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+            println!("{}", formatted_node.clone().replace("\n", " NEWLINE "));
+
+            self.append_formatted_text(&formatted_node, &mut lines);
+
         }
 
-        if !current_line.is_empty() {
-            lines.push(current_line.trim_end().to_string());
-        }
+        // if !current_line.is_empty() {
+        //     lines.push(current_line.trim_end().to_string());
+        // }
 
         lines.insert(
-            0,
-            self.formatting_state
-                .header_text
-                .clone()
-                .unwrap_or_else(|| self.format_default_header()),
+        0,
+        self.formatting_state
+            .header_text
+            .clone()
+            .unwrap_or_else(|| self.format_default_header()),
         );
         lines.push(self.format_footer());
 
-        let mut content = lines.join("\n");
+        // println!("lines: {:?}", lines);
 
-        content = content.replace(" \x08", "");
-        
-        content.into_bytes()
+        lines.join("\n").replace(" \x08", "").into_bytes()
     }
 
     fn format_default_header(&mut self) -> String {
@@ -368,7 +412,7 @@ impl MdocFormatter {
             Macro::Ta => self.format_ta(),
 
             // Block full-implicit
-            Macro::It{ head} => self.format_it_block(head, macro_node),
+            Macro::It { head} => self.format_it_block(head, macro_node),
             Macro::Nd => self.format_nd(macro_node),
             Macro::Nm => self.format_nm(macro_node),
             Macro::Sh { title } => self.format_sh_block(title, macro_node),
@@ -1726,7 +1770,24 @@ impl MdocFormatter {
             .nodes
             .into_iter()
             .map(|node| {
-                let mut content = self.format_node(node);
+                // let mut content = self.format_node(node);
+                let mut content = match node {
+                    Element::Macro(ref macro_node) => {
+                        match macro_node.mdoc_macro {
+                            Macro::In { ref filename } => {
+                                if title.eq_ignore_ascii_case("SYNOPSIS") {
+                                    self.format_in_synopsis(filename.as_str(), macro_node.clone())
+                                } else {
+                                    self.format_in(filename.as_str(), macro_node.clone())
+                                }
+                            },
+                            _ => self.format_node(node)
+                        }
+                    },
+                    Element::Text(text) => self.format_text_node(&text),
+                    Element::Eoi => String::new()
+                };
+
                 if !content.ends_with('\n') && !content.is_empty() {
                     content.push_str(&self.formatting_state.spacing);
                 }
@@ -1735,9 +1796,9 @@ impl MdocFormatter {
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("");
-                
+            
         format!(
-            "{}\n{}{}\n", 
+            "{}\n{}{}\n\n", 
             title.to_uppercase(), 
             spacing,
             content
@@ -2559,6 +2620,29 @@ impl MdocFormatter {
         }
 
         result.push_str(&format!("<{filename}>"));
+
+        if let Some(node) = iter.next() {
+            match node {
+                Element::Text(close_del) => result.push_str(close_del.as_str()),
+                _ => unreachable!()
+            }
+        }
+
+        result
+    }
+
+    fn format_in_synopsis(&self, filename: &str, macro_node: MacroNode) -> String {
+        let mut result = String::new();
+        let mut iter = macro_node.nodes.into_iter();
+
+        if let Some(node) = iter.next() {
+            match node {
+                Element::Text(open_del) => result.push_str(open_del.as_str()),
+                _=> unreachable!()
+            }
+        }
+
+        result.push_str(&format!("#include <{filename}>\n"));
 
         if let Some(node) = iter.next() {
             match node {
