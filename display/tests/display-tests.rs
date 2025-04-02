@@ -10,3 +10,4 @@
 mod echo;
 mod more;
 mod printf;
+mod man;
