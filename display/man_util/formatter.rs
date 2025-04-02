@@ -401,12 +401,7 @@ impl MdocFormatter {
             } => self.format_bd_block(block_type, offset, compact, macro_node),
             Macro::Bf(bf_type) => self.format_bf_block(bf_type, macro_node),
             Macro::Bk => self.format_bk_block(macro_node),
-            Macro::Bl {
-                list_type,
-                offset,
-                compact,
-                columns,
-            } => self.format_bl_block(list_type, offset, compact, columns, macro_node),
+            Macro::Bl { .. } => self.format_bl_blocks(macro_node),
 
             // Special block macro ta formatting
             Macro::Ta => self.format_ta(),
@@ -1108,6 +1103,45 @@ fn get_onelined(
         .collect::<Vec<_>>()
 }
 
+fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
+    let MacroNode{ mdoc_macro, nodes } = bl;
+
+    let super_macros = |nodes: Vec<Element>| {
+        Element::Macro(MacroNode {
+            mdoc_macro: mdoc_macro.clone(),
+            nodes
+        })
+    };
+
+    let nested_macros = super_macros(nodes.clone());
+
+    if let Macro::Bl { list_type: super_list_type, .. } = mdoc_macro.clone() {
+        let is_not_nested = |list_type: &BlType| {
+            matches!(list_type, BlType::Item | BlType::Inset | BlType::Column | BlType::Ohang )
+        };
+
+        if is_not_nested(&super_list_type){
+            let result = nodes
+                .split_inclusive(|el|{
+                    matches!(el, Element::Macro(MacroNode { mdoc_macro: Macro::Bl{..}, .. }))
+                })
+                .flat_map(|elements|{
+                    let mut elements = elements.to_vec();
+                    let Some(bl) = elements.pop() else{
+                        return vec![];
+                    };
+                    vec![super_macros(elements), bl]
+                })
+                .collect::<Vec<_>>();
+            if !result.is_empty(){
+                return result;
+            }
+        }
+    }
+
+    vec![nested_macros]
+}
+
 // Formatting block full-explicit.
 impl MdocFormatter {
     fn get_indent_from_offset_type(&self, offset: &Option<OffsetType>) -> usize{
@@ -1115,8 +1149,8 @@ impl MdocFormatter {
             return self.formatting_settings.indent;
         };
         match offset{
-            OffsetType::Indent => 6,
-            OffsetType::IndentTwo => 6 * 2,
+            OffsetType::Indent => 8,
+            OffsetType::IndentTwo => 8 * 2,
             _ => self.formatting_settings.indent
         }
     }
@@ -1274,7 +1308,7 @@ impl MdocFormatter {
         }else{
             (2, 1)
         };
-        let full_indent = origin_indent + indent + symbol_indent;
+        let full_indent = origin_indent + indent;
         let line_width = width.saturating_sub(full_indent);
         let indent_str = " ".repeat(full_indent);
 
@@ -1525,12 +1559,6 @@ impl MdocFormatter {
         let indent_str = " ".repeat(origin_indent + indent);
         let origin_indent_str = " ".repeat(origin_indent);
 
-        // let items = items.into_iter()
-        //     .map(|(head, body)|{
-        //         (head, body.join(" "))    
-        //     })
-        //     .collect::<Vec<_>>();
-
         let mut content = String::new();
         for (head, body) in items{
             let multilined = get_multilined(&body);
@@ -1542,7 +1570,7 @@ impl MdocFormatter {
 
             let space = if head.len() < indent.saturating_sub(2){
                 if let Some(line) = body.first_mut(){
-                    line.replace_range(0..indent, "");
+                    *line = line.trim_start().to_string();
                 }
                 " ".repeat(indent - head.len())
             }else{
@@ -1577,42 +1605,47 @@ impl MdocFormatter {
         let line_width = width.saturating_sub(origin_indent + indent);
         let indent_str = " ".repeat(origin_indent + indent);
         let origin_indent_str = " ".repeat(origin_indent);
-        
-        let items = items.into_iter()
-            .map(|(head, body)|{
-                (head, body.join(" "))    
-            })
-            .collect::<Vec<_>>();
 
         let mut content = String::new();
         for (head, body) in items{
-            let body = body.split_whitespace().collect::<Vec<_>>();
-            let mut i = 0;
-            let mut head = head; 
-            if head.len() > indent.saturating_sub(1){
-                while head.len() < line_width + indent && i < body.len() {
-                    if head.len() + body[i].len() >= line_width + indent{
-                        break;
-                    }
-                    head.push_str(&(" ".to_string() + body[i]));
-                    i += 1;
-                }
-            }
-            let mut body = split_by_width(
-                body.get(i..)
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>(), 
-                line_width
-            );
-            body = add_indent_to_lines(body, line_width, &offset);
-            for line in body.iter_mut(){
-                *line = indent_str.clone() + line;
-            }
+            // let first_lines_count = body.get(0)
+            //     .cloned()
+            //     .unwrap_or(String::new())
+            //     .lines().count();
+            // let first_line = body.get(0)
+            //     .cloned()
+            //     .unwrap_or_default()
+            //     .split_whitespace()
+            //     .map(|s|s.to_string())
+            //     .collect::<Vec<_>>();
+            // let mut i = 0;
+            // let mut j = 0;
+            // let mut head = head; 
+            // if head.len() > indent.saturating_sub(1) || first_lines_count == 1{
+            //     while head.len() < line_width + indent && i < first_line.len() {
+            //         if head.len() + first_line[i].len() >= line_width + indent{
+            //             break;
+            //         }
+            //         head.push_str(&(" ".to_string() + &first_line[i]));
+            //         i += 1;
+            //         j += first_line[i].len() + 1;
+            //     }
+            // }
+
+            let mut body = body;
+            // if let Some(line) = body.get_mut(0){
+            //     line.replace_range(0..j, "");
+            // }
+            let multilined = get_multilined(&body);
+            let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
+            body = interleave(onelined, multilined)
+                 .into_iter()
+                 .flatten()
+                 .collect::<Vec<_>>(); 
+
             if head.len() < indent.saturating_sub(1){
                 if let Some(line) = body.first_mut(){
-                    line.replace_range(0..indent, "");
+                    *line = line.trim_start().to_string(); 
                 }
                 let space = " ".repeat(indent - head.len());
                 content.push_str(&(origin_indent_str.clone() + &head + &space + &body.join("\n") + "\n"));
@@ -1696,10 +1729,10 @@ impl MdocFormatter {
         macro_node: MacroNode,
     ) -> String {
         let heads = self.get_heads(macro_node.clone(), &list_type);
-        self.formatting_state.current_indent += self.formatting_settings.indent;
+        self.formatting_state.current_indent += self.get_indent_from_offset_type(&offset);
         let bodies = self.get_bodies(macro_node, &list_type);
         self.formatting_state.current_indent = 
-            self.formatting_state.current_indent.saturating_sub(self.formatting_settings.indent);
+            self.formatting_state.current_indent.saturating_sub(self.get_indent_from_offset_type(&offset));
         let items = heads.into_iter()
             .zip(bodies.clone())
             .collect::<Vec<_>>();
@@ -1715,6 +1748,32 @@ impl MdocFormatter {
         };
 
         "\n".to_string() + &content
+    }
+
+    fn format_bl_blocks(
+        &mut self,
+        macro_node: MacroNode,
+    ) -> String {
+        split_nested_bl(macro_node)
+            .into_iter()
+            .map(|element|{
+                let Element::Macro(ref macro_node) = element else{
+                    return self.format_node(element);
+                };
+                let MacroNode { mdoc_macro, .. } = macro_node.clone();
+                let Macro::Bl { 
+                    list_type, 
+                    offset, 
+                    compact, 
+                    columns 
+                } = mdoc_macro.clone() else {
+                    print!("{:?}", mdoc_macro);
+                    return self.format_node(element);
+                };
+                self.format_bl_block(list_type, offset, compact, columns, macro_node.clone())
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -4383,11 +4442,11 @@ footer text                     January 1, 1970                    footer text";
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
 .Bl -hang -width indent -compact
-.It head1
+.It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
-.It head2
+.It Item head title1
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
-.It head3
+.It Item head title1
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El
 Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
@@ -4397,27 +4456,27 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
 .Bl -hang -width indent -compact
-.It head1
+.It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
-.It head2
+.It Item head title2
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
-.It head3
+.It Item head title3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
-.It head4
+.It Item head title4
 .Bl -hang -width indent -compact
-.It head1
+.It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
-.It head2
+.It Item head title2
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
-.It head3
+.It Item head title3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
-.It head4
+.It Item head title4
 .Bl -hang -width indent -compact
-.It head1
+.It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
-.It head2
+.It Item head title2
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
-.It head3
+.It Item head title3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El
 .El
@@ -4427,41 +4486,44 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
 Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
-head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-        eiusmod tempor incididunt ut labore et dolore magna aliqua.
-head2   Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
-        nisi ut aliquip ex ea commodo consequat.
-head3   Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
-        dolore eu fugiat nulla pariatur.
+Item head title1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
+        do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+Item head title1 Ut enim ad minim veniam, quis nostrud exercitation ullamco
+        laboris nisi ut aliquip ex ea commodo consequat.
+Item head title1 Duis aute irure dolor in reprehenderit in voluptate velit
+        esse cillum dolore eu fugiat nulla pariatur.
 Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
    SUBSECTION
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
-     head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-             eiusmod tempor incididunt ut labore et dolore magna aliqua.
-     head2   Ut enim ad minim veniam, quis nostrud exercitation ullamco
-             laboris nisi ut aliquip ex ea commodo consequat.
-     head3   Duis aute irure dolor in reprehenderit in voluptate velit esse
-             cillum dolore eu fugiat nulla pariatur.
-     head4
-             head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit,
-                     sed do eiusmod tempor incididunt ut labore et dolore
-                     magna aliqua.
-             head2   Ut enim ad minim veniam, quis nostrud exercitation
-                     ullamco laboris nisi ut aliquip ex ea commodo consequat.
-             head3   Duis aute irure dolor in reprehenderit in voluptate velit
-                     esse cillum dolore eu fugiat nulla pariatur.
-             head4
-                     head1   Lorem ipsum dolor sit amet, consectetur
+     Item head title1 Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+             sed do eiusmod tempor incididunt ut labore et dolore magna
+             aliqua.
+     Item head title2 Ut enim ad minim veniam, quis nostrud exercitation
+             ullamco laboris nisi ut aliquip ex ea commodo consequat.
+     Item head title3 Duis aute irure dolor in reprehenderit in voluptate
+             velit esse cillum dolore eu fugiat nulla pariatur.
+     Item head title4
+             Item head title1 Lorem ipsum dolor sit amet, consectetur
+                     adipiscing elit, sed do eiusmod tempor incididunt ut
+                     labore et dolore magna aliqua.
+             Item head title2 Ut enim ad minim veniam, quis nostrud
+                     exercitation ullamco laboris nisi ut aliquip ex ea
+                     commodo consequat.
+             Item head title3 Duis aute irure dolor in reprehenderit in
+                     voluptate velit esse cillum dolore eu fugiat nulla
+                     pariatur.
+             Item head title4
+                     Item head title1 Lorem ipsum dolor sit amet, consectetur
                              adipiscing elit, sed do eiusmod tempor incididunt
                              ut labore et dolore magna aliqua.
-                     head2   Ut enim ad minim veniam, quis nostrud
+                     Item head title2 Ut enim ad minim veniam, quis nostrud
                              exercitation ullamco laboris nisi ut aliquip ex
                              ea commodo consequat.
-                     head3   Duis aute irure dolor in reprehenderit in
-                             voluptate velit esse cillum dolore eu fugiat
+                     Item head title3 Duis aute irure dolor in reprehenderit
+                             in voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
      Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
