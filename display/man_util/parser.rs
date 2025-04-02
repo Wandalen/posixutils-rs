@@ -430,7 +430,7 @@ impl MdocParser {
                     .collect()
             }else{
                 vec![]
-            }
+            }  
         }
         
         let mut inner_pairs = pair.into_inner();

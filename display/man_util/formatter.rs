@@ -52,7 +52,7 @@ impl Default for FormattingState {
 #[derive(Debug)]
 pub struct MdocFormatter {
     formatting_settings: FormattingSettings,
-    formatting_state: FormattingState,
+    formatting_state: FormattingState
 }
 
 // Helper funcitons.
