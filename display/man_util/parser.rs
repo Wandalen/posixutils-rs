@@ -255,8 +255,6 @@ impl MdocParser {
 
         let mut mdoc = MdocDocument { elements };
 
-        //println!("{:#?}", mdoc);
-
         let validator = &mut MdocValidator::default();
         validator.validate(&mut mdoc)?;
 
@@ -395,7 +393,6 @@ impl MdocParser {
 
         let nodes = pairs
             .take_while(|p| p.as_rule() != Rule::el_close)
-            // .filter_map(|p| p.into_inner().next().map(Self::parse_it_block))
             .map(Self::parse_it_block)
             .collect();
 
