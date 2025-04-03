@@ -49,7 +49,8 @@ pub enum Macro {
     Bk,
     Bf(BfType),
     Bl {
-        list_type: BlType,
+        list_type: BlType, 
+        width: Option<u8>,
         offset: Option<OffsetType>,
         compact: bool,
         columns: Vec<String>,

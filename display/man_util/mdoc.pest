@@ -256,9 +256,14 @@ bl_type   = {
   | bl_tag
 }
 
+bl_width = { ws+ ~ "-width" ~ ws+ ~ text_arg }
+bl_offset = { ws+ ~ "-offset" ~ ws+ ~ offset }
+bl_compact = { ws+ ~ compact }
+bl_param = { bl_width | bl_offset | bl_compact }
+
 bl_columns = { text_arg+ }
 
-bl_open  = ${ "Bl" ~ ws+ ~ bl_type ~ (ws+ ~ ("-width" | "-offset") ~ ws+ ~ offset)? ~ (ws+ ~ compact)? ~ (ws+ ~ bl_columns)* ~ ws* ~ NEWLINE }
+bl_open  = ${ "Bl" ~ ws+ ~ bl_type ~ bl_param{, 3} ~ (ws+ ~ bl_columns)* ~ ws* ~ NEWLINE }
 el_close =  { ".El" ~ NEWLINE? }
 bl_block =  { bl_open ~ it_block* ~ el_close }
 

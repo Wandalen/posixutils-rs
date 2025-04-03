@@ -122,7 +122,7 @@ impl MdocFormatter {
 
 // Base formatting functions.
 impl MdocFormatter {
-    fn append_formatted_text(
+    fn append_formatted_text( 
         &self, 
         formatted: &str,
         // current_line: &mut String, 
@@ -134,51 +134,37 @@ impl MdocFormatter {
                 .collect::<String>()
         };
 
+        let is_one_line = formatted.lines().count() == 1;
         let max_width = self.formatting_settings.width;
 
-        for original_line in formatted.lines() {
-            let indent = get_indent(original_line);
-            let mut content = original_line.trim_start().to_string();
-
-            // println!("content: {}| length: {}| indent: {}|", content.trim(), content.len(), indent.len());
-            
-            // ??????????????????????
-            if content.is_empty() {
-                lines.push(String::new());
-                continue;
+        for line in formatted.split("\n"){
+            if !is_one_line && !current_line.is_empty(){
+                lines.push(current_line.clone());
+                current_line.clear();
             }
-    
-            let available_width = max_width.saturating_sub(indent.len());
-            let content_len = content.chars().count();
-            // let current_len = current_line.chars().count();
 
-            // println!("max width: {} | available width: {}", max_width, available_width);
+            if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
+                let indent = get_indent(line);
 
-            if content_len <= available_width {
-            // if content_len + current_len <= available_width {
-                if content.ends_with(' ') {
-                    content.pop();
-                }
-                lines.push(format!("{}{}", indent, content));
-                // current_line.push_str(&format!("{}{}", indent, content));
-            } else {
-                let mut current_line = String::new();
-                for word in content.split_whitespace() {
-                    let current_len = current_line.chars().count();
-                    let word_len = word.chars().count();
+                let max_width = max_width.saturating_sub(indent.len());                    
 
-                    if current_len + 1 + word_len > available_width && !current_line.is_empty() {
-                        lines.push(format!("{}{}", indent, current_line));
-                        current_line.clear();
-                    }
-                    if !current_line.is_empty() {
-                        current_line.push(' ');
+                for word in line.split_whitespace() {
+                    if current_line.chars().count() + word.chars().count() + 1 >= max_width {
+                        lines.push(indent.clone() + current_line.trim());
+                        current_line.clear(); 
                     }
                     current_line.push_str(word);
+                    if !word.chars().all(|ch|ch.is_control()){
+                        current_line.push(' ');
+                    }
                 }
-                if !current_line.is_empty() {
-                    lines.push(format!("{}{}", indent, current_line));
+                let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
+                    current_line.is_empty());
+                if is_not_empty{
+                    *current_line = indent + current_line;
                 }
+            } else{
+                lines.push(line.to_string());
             }
         }
     }
@@ -203,7 +189,6 @@ impl MdocFormatter {
                 _ => continue,
             };
 
-            // self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
             self.append_formatted_text(&formatted_node, &mut lines);
         }
 
@@ -222,16 +207,28 @@ impl MdocFormatter {
 
         for node in ast.elements {
             let formatted_node: String = self.format_node(node);            
-            //println!("Formatted node: {} - {}", formatted_node, self.formatting_state.suppress_space);
-            // println!("{}", formatted_node.clone().replace("\n", " NEWLINE "));
-
-            self.append_formatted_text(&formatted_node, &mut lines);
+            if formatted_node.is_empty(){
+                continue;
+            } 
+            
             // self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+            self.append_formatted_text(&formatted_node, &mut lines);
+
         }
 
         if !current_line.is_empty() {
             lines.push(current_line.trim_end().to_string());
         }
+
+        let first_empty_count= lines.iter()
+            .take_while(|l|{
+                l.chars().all(|ch|ch.is_whitespace())
+            })
+            .count();
+
+        lines = lines.split_at(first_empty_count).1.to_vec();
+        
+        lines.insert(0, "".to_string());
 
         lines.insert(
         0,
@@ -1054,36 +1051,96 @@ fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
 
     let nested_macros = super_macros(nodes.clone());
 
-    if let Macro::Bl { list_type: super_list_type, .. } = mdoc_macro.clone() {
-        let is_not_nested = |list_type: &BlType| {
-            matches!(list_type, BlType::Item | BlType::Inset | BlType::Column | BlType::Ohang )
+    let Macro::Bl { list_type: super_list_type, .. } = mdoc_macro.clone() else {
+        return vec![nested_macros]; 
+    };
+    let is_not_nested = |list_type: &BlType| {
+        matches!(list_type, BlType::Item | BlType::Inset | BlType::Column | BlType::Ohang )
+    };
+
+    if !is_not_nested(&super_list_type){
+        return vec![nested_macros];
+    }
+
+    let mut bl_elements = vec![];
+    let mut it_elements = vec![];
+    for it in nodes{
+        let Element::Macro(MacroNode { mdoc_macro: Macro::It{ head }, nodes: it_nodes }) = it else{
+            if !it_elements.is_empty(){
+                bl_elements.push((true, super_macros(it_elements.clone())));
+                it_elements.clear();
+            }
+            bl_elements.push((true, it));
+            continue;
         };
 
-        if is_not_nested(&super_list_type){
-
-
-            let it_elements = nodes
-                .split(|el|{
-                    matches!(el, Element::Macro(MacroNode { mdoc_macro: Macro::Bl{..}, .. }))
-                })
-                .map(|elements| super_macros(elements.to_vec()))
-                .collect::<Vec<_>>();
-
-            let bl_elements = nodes.iter()
-                .filter(|el|{
-                    matches!(el, Element::Macro(MacroNode { mdoc_macro: Macro::Bl{..}, .. }))
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-
-            let result = interleave(it_elements, bl_elements);
-            if !result.is_empty(){
-                return result;
+        let mut head_elements = vec![];
+        for element in head{
+            if matches!(element, Element::Macro(MacroNode { mdoc_macro: Macro::Bl{ .. }, .. })){
+                if !head_elements.is_empty(){
+                    if !it_elements.is_empty(){
+                        bl_elements.push((true, super_macros(it_elements.clone())));
+                        it_elements.clear();
+                    }
+                    bl_elements.push((true, super_macros(vec![Element::Macro(
+                        MacroNode { mdoc_macro: Macro::It{ head: head_elements.clone() }, nodes: vec![] })
+                    ])));
+                    head_elements.clear();
+                }
+                bl_elements.push((false, element));
+            }else{
+                head_elements.push(element);
             }
+        }
+
+        let mut body_elements = vec![];
+        for element in it_nodes{
+            if matches!(element, Element::Macro(MacroNode { mdoc_macro: Macro::Bl{ .. }, .. })){
+                if !head_elements.is_empty() || !body_elements.is_empty(){
+                    if !it_elements.is_empty(){
+                        bl_elements.push((true, super_macros(it_elements.clone())));
+                        it_elements.clear();
+                    }
+                    bl_elements.push((true, super_macros(vec![Element::Macro(
+                        MacroNode { mdoc_macro: Macro::It{ head: head_elements.clone() }, nodes: body_elements.clone() }
+                    )])));
+                    head_elements.clear();
+                    body_elements.clear();
+                }
+                bl_elements.push((false, element));
+            }else{
+                body_elements.push(element);
+            }
+        }
+
+        if !head_elements.is_empty() || !body_elements.is_empty(){
+            it_elements.push(Element::Macro(
+                MacroNode { mdoc_macro: Macro::It{ head: head_elements }, nodes: body_elements }
+            ));
         }
     }
 
-    vec![nested_macros]
+    if !it_elements.is_empty(){
+        bl_elements.push((true, super_macros(it_elements)));
+    }
+
+    return if !bl_elements.is_empty(){
+        bl_elements.into_iter()
+            .flat_map(|(checked, bl)|{
+                if checked{
+                    return vec![bl];
+                }
+                if let Element::Macro(ref node) = bl{
+                    if let MacroNode{ mdoc_macro: Macro::Bl{ .. }, .. } = node{
+                        return split_nested_bl(node.clone());
+                    }
+                }
+                vec![]
+            })
+            .collect::<Vec<_>>()
+    }else{
+        vec![nested_macros]
+    };
 }
 
 /// Trim, but leaves '\n' on ends
@@ -1103,7 +1160,10 @@ fn trim(string: &mut String){
 
 // Formatting block full-explicit.
 impl MdocFormatter {
-    fn get_indent_from_offset_type(&self, offset: &Option<OffsetType>) -> usize{
+    fn get_indent_from_offset_type(&self, width: &Option<u8>, offset: &Option<OffsetType>) -> usize{
+        if let Some(width) = width{
+            return *width as usize;
+        }
         let Some(offset) = offset else {
             return self.formatting_settings.indent;
         };
@@ -1131,7 +1191,7 @@ impl MdocFormatter {
         compact: bool,
         macro_node: MacroNode,
     ) -> String {
-        let indent = self.get_indent_from_offset_type(&offset);
+        let indent = self.get_indent_from_offset_type(&None, &offset);
         let mut offset = self.get_offset_from_offset_type(&offset);
         if block_type == BdType::Centered{
             offset = OffsetType::Center;
@@ -1297,11 +1357,12 @@ impl MdocFormatter {
     fn format_bl_symbol_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
+        width: Option<u8>,
         offset: Option<OffsetType>,
         list_type: BlType,
         compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&offset);
+        let indent = self.get_indent_from_offset_type(&width, &offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1348,10 +1409,11 @@ impl MdocFormatter {
     fn format_bl_item_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
+        width: Option<u8>,
         offset: Option<OffsetType>, 
         compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&offset);
+        let indent = self.get_indent_from_offset_type(&width, &offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1382,10 +1444,11 @@ impl MdocFormatter {
     fn format_bl_ohang_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
+        width: Option<u8>,
         offset: Option<OffsetType>, 
         compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&offset);
+        let indent = self.get_indent_from_offset_type(&width, &offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1432,6 +1495,7 @@ impl MdocFormatter {
     fn format_bl_inset_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
+        width: Option<u8>,
         offset: Option<OffsetType>, 
         compact: bool,
         list_type: BlType
@@ -1441,7 +1505,7 @@ impl MdocFormatter {
             BlType::Diag => "  ", 
             _ => " "
         };
-        let indent = self.get_indent_from_offset_type(&offset);
+        let indent = self.get_indent_from_offset_type(&width, &offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1564,14 +1628,11 @@ impl MdocFormatter {
     fn format_bl_tag_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
+        width: Option<u8>,
         offset: Option<OffsetType>, 
         compact: bool
     ) -> String{
-        let indent = if offset != Some(OffsetType::Indent){
-            self.get_indent_from_offset_type(&offset)
-        }else{
-            8
-        };
+        let indent = self.get_indent_from_offset_type(&width, &offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1597,8 +1658,7 @@ impl MdocFormatter {
                 "\n".to_string()
             };
             content.push_str(
-                &(origin_indent_str.clone() + &head + &space + 
-                &body.join("\n") + "\n")
+                &(origin_indent_str.clone() + &head + &space + &body.join("\n") + "\n")
             );
             if !compact{
                 content.push('\n');
@@ -1614,22 +1674,19 @@ impl MdocFormatter {
         &self, 
         items: Vec<(String, Vec<String>)>,
         is_first_block: Vec<bool>,
+        width: Option<u8>,
         offset: Option<OffsetType>, 
         compact: bool
     ) -> String{
-        let indent = if offset != Some(OffsetType::Indent){
-            self.get_indent_from_offset_type(&offset)
-        }else{
-            8
-        };
+        let indent = self.get_indent_from_offset_type(&width, &offset);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
         let indent_str = " ".repeat(origin_indent + indent);
         let origin_indent_str = " ".repeat(origin_indent);
-
         let mut content = String::new();
+
         for (i, (head, body)) in items.into_iter().enumerate(){
             let mut body = body;
             let mut head = head.clone(); 
@@ -1671,7 +1728,11 @@ impl MdocFormatter {
                 if let Some(line) = body.first_mut(){
                     *line = line.trim_start().to_string(); 
                 }
-                let space = " ".repeat(indent - head.len());
+                let space = if is_first_block[i]{
+                    "\n".to_string() + &origin_indent_str.clone() + &" ".repeat(indent)
+                }else{
+                    " ".repeat(indent - head.len())
+                };
                 content.push_str(&(origin_indent_str.clone() + &head + &space + body.join("\n").trim_end() + "\n"));
             }else{
                 content.push_str(&(origin_indent_str.clone() + head.trim_end() + "\n" + body.join("\n").trim_end() + "\n"));
@@ -1749,27 +1810,28 @@ impl MdocFormatter {
     fn format_bl_block(
         &mut self,
         list_type: BlType,
+        width: Option<u8>,
         offset: Option<OffsetType>,
         compact: bool,
         columns: Vec<String>,
         macro_node: MacroNode,
     ) -> String {
         let heads = self.get_heads(macro_node.clone(), &list_type);
-        self.formatting_state.current_indent += self.get_indent_from_offset_type(&offset);
+        self.formatting_state.current_indent += self.get_indent_from_offset_type(&width, &offset);
         let bodies = self.get_bodies(macro_node.clone(), &list_type);
         self.formatting_state.current_indent = 
-            self.formatting_state.current_indent.saturating_sub(self.get_indent_from_offset_type(&offset));
+            self.formatting_state.current_indent.saturating_sub(self.get_indent_from_offset_type(&width, &offset));
         let items = heads.into_iter()
             .zip(bodies.clone())
             .collect::<Vec<_>>();
 
         let content = match list_type {
-            BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, offset, list_type, compact),
-            BlType::Item => self.format_bl_item_block(items, offset, compact),
-            BlType::Ohang => self.format_bl_ohang_block(items, offset, compact),
-            BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, offset, compact, list_type),
+            BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, width, offset, list_type, compact),
+            BlType::Item => self.format_bl_item_block(items, width, offset, compact),
+            BlType::Ohang => self.format_bl_ohang_block(items, width, offset, compact),
+            BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, width, offset, compact, list_type),
             BlType::Column => self.format_bl_column_block(bodies, columns, compact),
-            BlType::Tag => self.format_bl_tag_block(items, offset, compact),
+            BlType::Tag => self.format_bl_tag_block(items, width, offset, compact),
             BlType::Hang => {
                 let MacroNode{ nodes, .. } = macro_node;
                 let is_first_block = nodes.iter()
@@ -1782,7 +1844,7 @@ impl MdocFormatter {
                         false
                     })
                     .collect::<Vec<_>>();
-                self.format_bl_hang_block(items, is_first_block, offset, compact)
+                self.format_bl_hang_block(items, is_first_block, width, offset, compact)
             }
         };
 
@@ -1802,13 +1864,14 @@ impl MdocFormatter {
                 let MacroNode { mdoc_macro, .. } = macro_node.clone();
                 let Macro::Bl { 
                     list_type, 
+                    width,
                     offset, 
                     compact, 
                     columns 
                 } = mdoc_macro.clone() else {
                     return self.format_node(element);
                 };
-                self.format_bl_block(list_type, offset, compact, columns, macro_node.clone())
+                self.format_bl_block(list_type, width, offset, compact, columns, macro_node.clone())
             })
             .collect::<Vec<_>>()
             .join("\n")
@@ -1866,6 +1929,8 @@ impl MdocFormatter {
     }
 
     fn format_sh_block(&mut self, title: String, macro_node: MacroNode) -> String {
+        let mut ss_lines_positions = vec![];
+        let mut current_lines_count = 0;
         let mut prev_node = Macro::Soi;
         self.formatting_state.current_indent += self.formatting_settings.indent;
         let mut content = macro_node
@@ -1887,6 +1952,8 @@ impl MdocFormatter {
                             };
 
                             prev_node = macro_node.mdoc_macro.clone();
+                            println!("Loop: Fromated In macro {}", formatted.replace("\n", "NEWLINE"));
+
                             return formatted;
                         } 
                         // else if title.eq_ignore_ascii_case("AUTHORS") {
@@ -1904,9 +1971,17 @@ impl MdocFormatter {
                     Element::Eoi => String::new()
                 };
 
+                if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })){
+                    ss_lines_positions.push(current_lines_count);
+                }
+
                 if !content.ends_with('\n') && !content.is_empty() {
                     content.push_str(&self.formatting_state.spacing);
                 }
+
+                current_lines_count += content.lines().count();
+
+                println!("Sh block: Fromated In macro {}", content.replace("\n", "NEWLINE"));
 
                 content
             })
@@ -3570,7 +3645,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -bullet -width indent -compact
+.Bl -bullet -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3596,7 +3671,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1  
 .Os footer text
-.Bl -column -width indent -compact col1 col2 col3
+.Bl -column -width 8 -compact col1 col2 col3
 .It Cell 1 Ta Cell 2 Ta Cell 3
 Line 1
 .It Cell 4 Ta Cell 5 Ta Cell 6
@@ -3619,7 +3694,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -column -width indent -compact col1 col2 col3
+.Bl -column -width 8 -compact col1 col2 col3
 .It AAAAAA AAAAAAAAAAAA AAAAA Ta BBBBBB BBBBBBBBB BBBBBB Ta CCCCCC CCCCCCCCCC CCCCCCC
 Line 1
 .It DDDDDD DDDDDDDDDDDD DDDDD Ta EEEEEE EEEEEEEEE EEEEEE Ta FFFFFF FFFFFFFFFF FFFFFFF
@@ -3648,7 +3723,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -dash -width indent -compact
+.Bl -dash -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3674,7 +3749,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -diag -width indent -compact
+.Bl -diag -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3700,7 +3775,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -enum -width indent -compact
+.Bl -enum -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3726,7 +3801,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -item -width indent -compact
+.Bl -item -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3752,7 +3827,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -hang -width indent -compact
+.Bl -hang -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3778,7 +3853,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -inset -width indent -compact
+.Bl -inset -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3804,7 +3879,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -ohang -width indent -compact
+.Bl -ohang -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3833,7 +3908,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -tag -width indent-two -compact
+.Bl -tag -width 12 -compact
 .It head1 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3859,7 +3934,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -hang -width indent -compact
+.Bl -hang -width 8 -compact
 .It Item head title1 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It Item head title2
@@ -3885,7 +3960,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -inset -width indent -compact
+.Bl -inset -width 8 -compact
 .It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It Item head title2
@@ -3911,7 +3986,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -ohang -width indent -compact
+.Bl -ohang -width 8 -compact
 .It Item head title1 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It Item head title2
@@ -3940,7 +4015,7 @@ footer text                     January 1, 1970                    footer text";
                 let input = ".Dd January 1, 1970
 .Dt PROGNAME 1
 .Os footer text
-.Bl -tag -width indent -compact
+.Bl -tag -width 8 -compact
 .It Item head title1 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It Item head title2
@@ -3971,7 +4046,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -bullet -width indent -compact
+.Bl -bullet -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3985,7 +4060,7 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 .Ss SUBSECTION
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -bullet -width indent -compact
+.Bl -bullet -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -3993,7 +4068,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -bullet -width indent -compact
+.Bl -bullet -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4001,7 +4076,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -bullet -width indent -compact
+.Bl -bullet -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4066,7 +4141,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -item -width indent -compact
+.Bl -item -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4080,7 +4155,7 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 .Ss SUBSECTION
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -item -width indent -compact
+.Bl -item -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4088,7 +4163,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -item -width indent -compact
+.Bl -item -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4096,7 +4171,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -item -width indent -compact
+.Bl -item -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4155,7 +4230,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -ohang -width indent -compact
+.Bl -ohang -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4169,7 +4244,7 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 .Ss SUBSECTION
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -ohang -width indent -compact
+.Bl -ohang -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4177,7 +4252,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -ohang -width indent -compact
+.Bl -ohang -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4185,7 +4260,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -ohang -width indent -compact
+.Bl -ohang -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4258,7 +4333,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -inset -width indent -compact
+.Bl -inset -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4272,7 +4347,7 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 .Ss SUBSECTION
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -inset -width indent -compact
+.Bl -inset -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4280,7 +4355,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -inset -width indent -compact
+.Bl -inset -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4288,7 +4363,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -inset -width indent -compact
+.Bl -inset -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4349,7 +4424,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -column -width indent -compact col1 col2 col3 col4
+.Bl -column -width 8 -compact col1 col2 col3 col4
 .It head1 Ta Lorem ipsum dolor sit amet, Ta consectetur adipiscing elit, Ta sed do eiusmod tempor incididunt ut Ta labore et dolore magna aliqua. 
 .It head2 Ta Ut enim ad minim veniam, Ta quis nostrud exercitation ullamco Ta laboris nisi ut aliquip ex Ta ea commodo consequat. 
 .It head3 Ta Duis aute irure dolor in Ta reprehenderit in voluptate velit Ta esse cillum dolore eu Ta fugiat nulla pariatur. 
@@ -4360,17 +4435,17 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 .Ss SUBSECTION
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -column -width indent -compact col1 col2 col3 col4
+.Bl -column -width 8 -compact col1 col2 col3 col4
 .It head1 Ta Lorem ipsum dolor sit amet, Ta consectetur adipiscing elit, Ta sed do eiusmod tempor incididunt ut Ta labore et dolore magna aliqua. 
 .It head2 Ta Ut enim ad minim veniam, Ta quis nostrud exercitation ullamco Ta laboris nisi ut aliquip ex Ta ea commodo consequat. 
 .It head3 Ta Duis aute irure dolor in Ta reprehenderit in voluptate velit Ta esse cillum dolore eu Ta fugiat nulla pariatur. 
 .It head4
-.Bl -column -width indent -compact col1 col2 col3 col4
+.Bl -column -width 8 -compact col1 col2 col3 col4
 .It head1 Ta Lorem ipsum dolor sit amet, Ta consectetur adipiscing elit, Ta sed do eiusmod tempor incididunt ut Ta labore et dolore magna aliqua. 
 .It head2 Ta Ut enim ad minim veniam, Ta quis nostrud exercitation ullamco Ta laboris nisi ut aliquip ex Ta ea commodo consequat. 
 .It head3 Ta Duis aute irure dolor in Ta reprehenderit in voluptate velit Ta esse cillum dolore eu Ta fugiat nulla pariatur. 
 .It head4
-.Bl -column -width indent -compact col1 col2 col3 col4
+.Bl -column -width 8 -compact col1 col2 col3 col4
 .It head1 Ta Lorem ipsum dolor sit amet, Ta consectetur adipiscing elit, Ta sed do eiusmod tempor incididunt ut Ta labore et dolore magna aliqua. 
 .It head2 Ta Ut enim ad minim veniam, Ta quis nostrud exercitation ullamco Ta laboris nisi ut aliquip ex Ta ea commodo consequat. 
 .It head3 Ta Duis aute irure dolor in Ta reprehenderit in voluptate velit Ta esse cillum dolore eu Ta fugiat nulla pariatur. 
@@ -4454,7 +4529,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -tag -width indent -compact
+.Bl -tag -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4468,7 +4543,7 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 .Ss SUBSECTION
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -tag -width indent -compact
+.Bl -tag -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4476,7 +4551,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -tag -width indent -compact
+.Bl -tag -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4484,7 +4559,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -tag -width indent -compact
+.Bl -tag -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4549,7 +4624,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -hang -width indent -compact
+.Bl -hang -width 8 -compact
 .It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It Item head title2
@@ -4563,7 +4638,7 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 .Ss SUBSECTION
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -hang -width indent -compact
+.Bl -hang -width 8 -compact
 .It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It Item head title2
@@ -4571,7 +4646,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It Item head title3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It Item head title4
-.Bl -hang -width indent -compact
+.Bl -hang -width 8 -compact
 .It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It Item head title2
@@ -4579,7 +4654,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It Item head title3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It Item head title4
-.Bl -hang -width indent -compact
+.Bl -hang -width 8 -compact
 .It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It Item head title2
@@ -4647,7 +4722,7 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -bullet -width indent -compact
+.Bl -bullet -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4661,7 +4736,7 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 .Ss SUBSECTION
 Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Ms <alpha>
-.Bl -bullet -width indent -compact
+.Bl -bullet -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4669,7 +4744,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -hang -width indent -compact
+.Bl -hang -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2
@@ -4677,7 +4752,7 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .It head3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .It head4
-.Bl -tag -width indent -compact
+.Bl -tag -width 8 -compact
 .It head1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
 .It head2

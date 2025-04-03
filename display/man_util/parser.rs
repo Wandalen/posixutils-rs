@@ -351,6 +351,54 @@ impl MdocParser {
     // Parses (`Bl`)[https://man.openbsd.org/mdoc#Bl]
     // `Bl -type [-width val] [-offset val] [-compact] [col ...]`
     fn parse_bl_block(pair: Pair<Rule>) -> Element {
+        fn parse_bl_parameter(
+            pair: Pair<Rule>, 
+            width: &mut Option<u8>,
+            offset: &mut Option<OffsetType>,
+            compact: &mut bool,
+            columns: &mut Vec<String>, 
+            count: &mut (usize, usize, usize)
+        ) -> bool{
+            match pair.as_rule(){
+                Rule::bl_width => {
+                    if count.0 > 0{
+                        return true;
+                    }
+                    count.0 += 1;
+                    let width_p = pair.into_inner()
+                        .find(|p| Rule::word == p.as_rule())
+                        .map(|p| p.as_str())
+                        .unwrap_or("");
+                    if width_p.is_empty(){
+                        *width = Some(15);
+                    }else if width_p.chars().all(|ch| ch.is_ascii_digit()){
+                        *width = str::parse::<u8>(width_p).ok();
+                    }else{
+                        *width = Some(15);
+                    }
+                },
+                Rule::bl_offset => {
+                    if count.1 > 0{
+                        return true;
+                    }
+                    count.1 += 1;
+                    let offset_p = pair.into_inner()
+                        .find(|p| Rule::offset == p.as_rule())
+                        .unwrap();
+                    *offset = Some(OffsetType::from(offset_p));
+                },
+                Rule::bl_compact => {
+                    if count.2 > 0{
+                        return true;
+                    }
+                    count.2 += 1;
+                    *compact = true;
+                },
+                _ => columns.push(pair.as_str().to_string())
+            }
+            false
+        }
+
         fn parse_bl_open(pair: Pair<Rule>) -> Macro {
             let mut inner = pair.into_inner();
 
@@ -359,13 +407,38 @@ impl MdocParser {
             let list_type = BlType::from(bl_type_pair);
 
             let mut offset: Option<OffsetType> = None;
+            let mut width: Option<u8> = None;
             let mut compact = false;
             let mut columns = vec![];
+            let mut count = (0,0,0);
 
+            let mut has_repeat = false;
             for opt_pair in inner {
                 match opt_pair.as_rule() {
-                    Rule::offset => offset = Some(OffsetType::from(opt_pair)),
-                    Rule::compact => compact = true,
+                    Rule::bl_param => {
+                        for parameter in opt_pair.into_inner() {
+                            if !has_repeat{ 
+                                has_repeat = parse_bl_parameter(
+                                    parameter.clone(),
+                                    &mut width,
+                                    &mut offset,
+                                    &mut compact,
+                                    &mut columns,
+                                    &mut count
+                                );
+                            }
+                            
+                            if has_repeat{
+                                columns.extend(
+                                    parameter.as_str().split(" ")
+                                    .filter(|s| !s.is_empty())
+                                    .map(|s|s.to_string())
+                                    .collect::<Vec<_>>()
+                                );
+                                continue;
+                            }
+                        }
+                    },
                     Rule::bl_columns => {
                         for col in opt_pair.into_inner() {
                             columns.push(col.as_str().to_string());
@@ -377,6 +450,7 @@ impl MdocParser {
 
             Macro::Bl {
                 list_type,
+                width,
                 offset,
                 compact,
                 columns,
@@ -389,7 +463,6 @@ impl MdocParser {
 
         let nodes = pairs
             .take_while(|p| p.as_rule() != Rule::el_close)
-            // .filter_map(|p| p.into_inner().next().map(Self::parse_it_block))
             .map(Self::parse_it_block)
             .collect();
 
@@ -2725,18 +2798,19 @@ mod tests {
 
         #[test]
         fn bl() {
-            let content = r#".Bl -bullet -width indent-two -compact col1 col2 col3
+            let content = r#".Bl -bullet -width 15 -offset indent-two -compact col1 col2 col3
 .It Line 1
 .It Line 2
 .El"#;
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
+                    width: Some(15),
                     offset: Some(OffsetType::IndentTwo),
                     compact: true,
                     columns: vec!["col1".to_string(), "col2".to_string(), "col3".to_string()],
                 },
-                nodes: vec![
+                nodes: vec![ 
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::It{ 
                             head: vec![
@@ -2785,6 +2859,7 @@ mod tests {
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
+                    width: None,
                     offset: None,
                     compact: false,
                     columns: vec![],
@@ -2816,6 +2891,7 @@ mod tests {
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::Bl {
                         list_type: enum_type,
+                        width: None,
                         offset: None,
                         compact: false,
                         columns: vec![],
@@ -2830,18 +2906,18 @@ mod tests {
 
         #[test]
         fn bl_width() {
-            let mut width_types: HashMap<&str, OffsetType> = Default::default();
-            width_types.insert("indent", OffsetType::Indent);
-            width_types.insert("indent-two", OffsetType::IndentTwo);
-            width_types.insert("left", OffsetType::Left);
-            width_types.insert("right", OffsetType::Right);
+            let mut width_types: HashMap<&str, Option<u8>> = Default::default();
+            width_types.insert("15", Some(15));
+            width_types.insert("300", Some(15));
+            width_types.insert("left", Some(15));
 
-            for (str_type, enum_type) in width_types {
+            for (str_type, width_result) in width_types {
                 let content = format!(".Bl -bullet -width {str_type}\n.El");
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::Bl {
                         list_type: BlType::Bullet,
-                        offset: Some(enum_type),
+                        width: width_result,
+                        offset: None,
                         compact: false,
                         columns: vec![],
                     },
@@ -2866,6 +2942,7 @@ mod tests {
                 let elements = vec![Element::Macro(MacroNode {
                     mdoc_macro: Macro::Bl {
                         list_type: BlType::Bullet,
+                        width: None,
                         offset: Some(enum_type),
                         compact: false,
                         columns: vec![],
@@ -2885,6 +2962,7 @@ mod tests {
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
+                    width: None,
                     offset: None,
                     compact: false,
                     columns: vec!["-offset".to_string(), "invalid_offset".to_string()],
@@ -2902,6 +2980,7 @@ mod tests {
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
+                    width: None,
                     offset: None,
                     compact: true,
                     columns: vec![],
@@ -2919,6 +2998,7 @@ mod tests {
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
+                    width: None,
                     offset: None,
                     compact: false,
                     columns: vec!["col1".to_string(), "col2".to_string(), "col3".to_string()],
@@ -2931,12 +3011,143 @@ mod tests {
         }
 
         #[test]
+        fn bl_parameters() {
+            let mut parameters_cases: HashMap<&str, (Option<u8>, Option<OffsetType>, bool, Vec<String>)> = Default::default();
+            parameters_cases.insert(
+                "-width 15 -offset indent-two -compact col1 col2", 
+                (Some(15), Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-width 15 -compact -offset indent-two col1 col2", 
+                (Some(15), Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-offset indent-two -width 15 -compact col1 col2", 
+                (Some(15), Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-offset indent-two -compact -width 15 col1 col2", 
+                (Some(15), Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-compact -width 15 -offset indent-two col1 col2", 
+                (Some(15), Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-compact -offset indent-two -width 15 col1 col2", 
+                (Some(15), Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-width 15 -offset indent-two col1 col2", 
+                (Some(15), Some(OffsetType::IndentTwo), false, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-width 15 -compact col1 col2", 
+                (Some(15), None, true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-offset indent-two -width 15 col1 col2", 
+                (Some(15), Some(OffsetType::IndentTwo), false, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-offset indent-two -compact col1 col2", 
+                (None, Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-compact -offset indent-two col1 col2", 
+                (None, Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-compact -width 15 col1 col2", 
+                (Some(15), None, true, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-width 15 col1 col2", 
+                (Some(15), None, false, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-offset indent-two col1 col2", 
+                (None, Some(OffsetType::IndentTwo), false, vec!["col1".to_string(), "col2".to_string()])
+            );
+            parameters_cases.insert(
+                "-compact col1 col2", 
+                (None, None, true, vec!["col1".to_string(), "col2".to_string()])
+            );
+
+            for (input, output) in parameters_cases {
+                let (width, offset, compact, columns) = output;
+                let content = format!(".Bl -bullet {input}\n.El");
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bl {
+                        list_type: BlType::Bullet,
+                        width,
+                        offset,
+                        compact,
+                        columns,
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements, "Bl parameters: {input}");
+            }
+        }
+
+        #[test]
+        fn bl_invalid_parameters() {
+            let mut parameters_cases: HashMap<&str, (Option<u8>, Option<OffsetType>, bool, Vec<&str>)> = Default::default();
+            parameters_cases.insert(
+                "-width 15 -width 15 -offset indent", 
+                (Some(15), None, false, "-width 15 -offset indent".split(" ").collect::<Vec<_>>())
+            );
+            parameters_cases.insert(
+                "-offset indent -offset indent -compact", 
+                (None, Some(OffsetType::Indent), false, "-offset indent -compact".split(" ").collect::<Vec<_>>())
+            );
+            parameters_cases.insert(
+                "-width 15 word -width 15 -offset indent", 
+                (Some(15), None, false, "word -width 15 -offset indent".split(" ").collect::<Vec<_>>())
+            );
+            parameters_cases.insert(
+                "-compact -width 15 -offset indent -width 15", 
+                (Some(15), Some(OffsetType::Indent), true, "-width 15".split(" ").collect::<Vec<_>>())
+            );
+            parameters_cases.insert(
+                "-compact -compact -width 15", 
+                (None, None, true, "-compact -width 15".split(" ").collect::<Vec<_>>())
+            );
+            parameters_cases.insert(
+                "-compact word -width 15", 
+                (None, None, true, "word -width 15".split(" ").collect::<Vec<_>>())
+            );
+
+            for (input, output) in parameters_cases {
+                let (width, offset, compact, columns) = output;
+                let content = format!(".Bl -bullet {input}\n.El");
+                let elements = vec![Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bl {
+                        list_type: BlType::Bullet,
+                        width,
+                        offset,
+                        compact,
+                        columns: columns.iter().map(|s|s.to_string()).collect::<Vec<_>>(),
+                    },
+                    nodes: vec![],
+                })];
+
+                let mdoc = MdocParser::parse_mdoc(content).unwrap();
+                assert_eq!(mdoc.elements, elements, "Bl parameters: {input}");
+            }
+        }
+
+        #[test]
         fn bl_not_parsed() {
             // Callable macro as opaque text
             let content = ".Bl -bullet Ad\n.El";
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
+                    width: None,
                     offset: None,
                     compact: false,
                     columns: vec!["Ad".to_string()],
@@ -2973,6 +3184,7 @@ Some text
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Hang,
+                    width: None,
                     offset: None,
                     compact: false,
                     columns: vec![],
@@ -3026,6 +3238,7 @@ Line
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
+                    width: None,
                     offset: None,
                     compact: false,
                     columns: vec![],
@@ -3068,6 +3281,7 @@ Line
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Column,
+                    width: None,
                     offset: None,
                     compact: false,
                     columns: vec![],
