@@ -1073,7 +1073,7 @@ fn interleave<T: Clone + std::fmt::Debug>(v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
     result
 }
 
-fn get_multilined(body: &Vec<String>) -> Vec<Vec<String>> {
+fn get_multilined(body: &[String]) -> Vec<Vec<String>> {
     body.iter()
         .filter(|el| el.lines().count() > 1)
         .map(|s| {
@@ -1085,7 +1085,7 @@ fn get_multilined(body: &Vec<String>) -> Vec<Vec<String>> {
 }
 
 fn get_onelined(
-    body: &Vec<String>, 
+    body: &[String], 
     line_width: usize, 
     indent_str: &str, 
     offset: &OffsetType
@@ -1093,6 +1093,7 @@ fn get_onelined(
     body.split(|el| el.lines().count() > 1)
         .collect::<Vec<_>>()
         .iter()
+        .filter(|s| !s.is_empty())
         .map(|v|{
             let mut content = split_by_width(
                 v.join(" ").split_whitespace()                    
@@ -1100,9 +1101,9 @@ fn get_onelined(
                 .collect::<Vec<_>>(), 
                 line_width
             );
-            content = add_indent_to_lines(content, line_width, &offset);
+            content = add_indent_to_lines(content, line_width, offset);
             for line in content.iter_mut(){
-                *line = indent_str.to_string() + &line;
+                *line = indent_str.to_string() + line;
             }
             content
         })
@@ -1212,8 +1213,7 @@ impl MdocFormatter {
 
         if line_width == 0{
             let content = formatted_elements
-                .map(|(_, s)| s)
-                .flatten()
+                .flat_map(|(_, s)| s)
                 .collect::<Vec<_>>()
                 .join(" ");
             return content;
@@ -1232,7 +1232,7 @@ impl MdocFormatter {
                             let current_line = current_line.split_whitespace()
                                 .map(|s|s.to_string())
                                 .collect::<Vec<_>>();
-                            content = vec![current_line, content].concat();
+                            content = [current_line, content].concat();
                         }
                     }
                 }     
@@ -1622,6 +1622,7 @@ impl MdocFormatter {
     fn format_bl_hang_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
+        is_first_block: Vec<bool>,
         offset: Option<OffsetType>, 
         compact: bool
     ) -> String{
@@ -1638,35 +1639,34 @@ impl MdocFormatter {
         let origin_indent_str = " ".repeat(origin_indent);
 
         let mut content = String::new();
-        for (head, body) in items{
-            // let first_lines_count = body.get(0)
-            //     .cloned()
-            //     .unwrap_or(String::new())
-            //     .lines().count();
-            // let first_line = body.get(0)
-            //     .cloned()
-            //     .unwrap_or_default()
-            //     .split_whitespace()
-            //     .map(|s|s.to_string())
-            //     .collect::<Vec<_>>();
-            // let mut i = 0;
-            // let mut j = 0;
-            // let mut head = head; 
-            // if head.len() > indent.saturating_sub(1) || first_lines_count == 1{
-            //     while head.len() < line_width + indent && i < first_line.len() {
-            //         if head.len() + first_line[i].len() >= line_width + indent{
-            //             break;
-            //         }
-            //         head.push_str(&(" ".to_string() + &first_line[i]));
-            //         i += 1;
-            //         j += first_line[i].len() + 1;
-            //     }
-            // }
-
+        for (i, (head, body)) in items.into_iter().enumerate(){
             let mut body = body;
-            // if let Some(line) = body.get_mut(0){
-            //     line.replace_range(0..j, "");
-            // }
+            let mut head = head.clone(); 
+
+            if !is_first_block[i]{
+                let first_line = body.get(0)
+                    .cloned()
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .map(|s|s.to_string())
+                    .collect::<Vec<_>>();
+                let mut i = 0;
+                let mut j = 0;
+                if head.len() > indent.saturating_sub(1){
+                    while head.len() < line_width + indent && i < first_line.len() {
+                        if head.len() + first_line[i].len() >= line_width + indent{
+                            break;
+                        }
+                        head.push_str(&(" ".to_string() + &first_line[i]));
+                        j += first_line[i].len() + 1;
+                        i += 1;
+                    }
+                }
+                if let Some(line) = body.get_mut(0){
+                    line.replace_range(0..j, "");
+                }
+            }
+
             let multilined = get_multilined(&body);
             let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
             body = interleave(onelined, multilined)
@@ -1674,19 +1674,33 @@ impl MdocFormatter {
                  .flatten()
                  .collect::<Vec<_>>(); 
 
+            body.retain(|s| !s.is_empty());
+
             if head.len() < indent.saturating_sub(1){
                 if let Some(line) = body.first_mut(){
                     *line = line.trim_start().to_string(); 
                 }
                 let space = " ".repeat(indent - head.len());
-                content.push_str(&(origin_indent_str.clone() + &head + &space + &body.join("\n") + "\n"));
+                content.push_str(&(origin_indent_str.clone() + &head + &space + body.join("\n").trim_end() + "\n"));
             }else{
-                content.push_str(&(origin_indent_str.clone() + &head + "\n" + &body.join("\n") + "\n"));
-            };
+                content.push_str(&(origin_indent_str.clone() + head.trim_end() + "\n" + body.join("\n").trim_end() + "\n"));
+            }
             if !compact{
                 content.push('\n');
             }
         } 
+
+        if let Some(position) = content.find(|ch| ch != '\n'){
+            if let Some(c) = content.strip_prefix(&("\n".repeat(position))){
+                content = c.to_string();
+            }
+        }
+
+        if let Some(position) = content.rfind(|ch| ch != '\n'){
+            if let Some(c) = content.strip_suffix(&("\n".repeat(content.len() - 2 - position))){
+                content = c.to_string();
+            }
+        }
 
         content
     }
@@ -1761,7 +1775,7 @@ impl MdocFormatter {
     ) -> String {
         let heads = self.get_heads(macro_node.clone(), &list_type);
         self.formatting_state.current_indent += self.get_indent_from_offset_type(&offset);
-        let bodies = self.get_bodies(macro_node, &list_type);
+        let bodies = self.get_bodies(macro_node.clone(), &list_type);
         self.formatting_state.current_indent = 
             self.formatting_state.current_indent.saturating_sub(self.get_indent_from_offset_type(&offset));
         let items = heads.into_iter()
@@ -1775,7 +1789,20 @@ impl MdocFormatter {
             BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, offset, compact, list_type),
             BlType::Column => self.format_bl_column_block(bodies, columns, compact),
             BlType::Tag => self.format_bl_tag_block(items, offset, compact),
-            BlType::Hang => self.format_bl_hang_block(items, offset, compact)
+            BlType::Hang => {
+                let MacroNode{ nodes, .. } = macro_node;
+                let is_first_block = nodes.iter()
+                    .map(|el|{
+                        if let Element::Macro(MacroNode { nodes, .. }) = el{
+                            if let Some(Element::Macro(MacroNode { mdoc_macro, .. })) = nodes.get(0){
+                                return matches!(mdoc_macro, &Macro::Bl{ .. } | &Macro::Bd{ .. } );
+                            }
+                        }
+                        false
+                    })
+                    .collect::<Vec<_>>();
+                self.format_bl_hang_block(items, is_first_block, offset, compact)
+            }
         };
 
         "\n".to_string() + &content
@@ -1946,7 +1973,7 @@ impl MdocFormatter {
             .into_iter()
             .map(|node| {
                 let mut content = self.format_node(node);
-                if content.chars().last() != Some('\n') && !content.is_empty() {
+                if !content.ends_with('\n') && !content.is_empty() {
                     content.push_str(&self.formatting_state.spacing);
                 }
                 content
@@ -4511,9 +4538,9 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf
 .Bl -hang -width indent -compact
 .It Item head title1
 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. 
-.It Item head title1
+.It Item head title2
 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
-.It Item head title1
+.It Item head title3
 Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
 .El
 Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g wefwefwer werwe rwe r wer 
@@ -4555,9 +4582,9 @@ Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g
 Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
 Item head title1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
         do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-Item head title1 Ut enim ad minim veniam, quis nostrud exercitation ullamco
+Item head title2 Ut enim ad minim veniam, quis nostrud exercitation ullamco
         laboris nisi ut aliquip ex ea commodo consequat.
-Item head title1 Duis aute irure dolor in reprehenderit in voluptate velit
+Item head title3 Duis aute irure dolor in reprehenderit in voluptate velit
         esse cillum dolore eu fugiat nulla pariatur.
 Adssdf sdfmsdpf  sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
