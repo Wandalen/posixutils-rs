@@ -16,6 +16,7 @@ pub mod types;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Macro {
+    Soi,
     A,
     B,
     C,

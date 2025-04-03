@@ -2042,7 +2042,12 @@ impl MdocParser {
             _ => unreachable!()
         };
 
-        let nodes = inner_nodes.map(Self::parse_element).collect();
+        let nodes = inner_nodes.map(|n| {
+            if n.as_rule() == Rule::text_arg {
+                return Element::Text(n.as_str().to_string().replace("\"", ""))
+            }
+            Self::parse_element(n)
+        }).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Fn { funcname },
