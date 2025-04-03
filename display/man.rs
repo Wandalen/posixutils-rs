@@ -38,7 +38,7 @@ const MAN_SECTIONS: [Section; 10] = [
     Section::S7, 
     Section::S4, 
     Section::S9, 
-    Section::S3p
+    Section::S3p 
 ];
 
 /// Possible default config file paths to check if `-C` is not provided.

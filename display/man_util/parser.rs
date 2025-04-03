@@ -406,7 +406,7 @@ impl MdocParser {
             Rule::bf_block => Self::parse_bf_block(pair),
             Rule::bk_block => Self::parse_bk_block(pair),
             Rule::bl_block => Self::parse_bl_block(pair),
-            _ => unreachable!(),
+            _ => unreachable!(), 
         }
     }
 }
