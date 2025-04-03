@@ -31,7 +31,8 @@ pub struct FormattingState {
     spacing: String,
     date: String,
     split_mod: bool,
-    current_indent: usize 
+    current_indent: usize,
+    // prev_macro: Macro
 }
 
 impl Default for FormattingState {
@@ -44,7 +45,8 @@ impl Default for FormattingState {
             spacing: " ".to_string(),
             date: String::default(),
             split_mod: false,
-            current_indent: 0
+            current_indent: 0,
+            // prev_macro: Macro::Soi
         }
     }
 }
@@ -140,111 +142,111 @@ impl MdocFormatter {
             .join("\n");
     }
 
-    fn append_formatted_text(
-        &self, 
-        formatted: &str, 
-        current_line: &mut String, 
-        lines: &mut Vec<String>
-    ) {
-        let get_indent = |l: &str| {
-            l.chars()
-                .take_while(|ch|ch.is_whitespace())
-                .collect::<String>()
-        };
-
-        let is_one_line = formatted.lines().count() == 1;
-        let max_width = self.formatting_settings.width;
-
-        for line in formatted.split("\n"){
-            if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
-                let indent = get_indent(line);
-
-                let max_width = max_width.saturating_sub(indent.len());
-
-                for word in line.split_whitespace() {
-                    if current_line.chars().count() + word.chars().count() >= max_width {
-                        lines.push(indent.clone() + current_line.trim());
-                        current_line.clear();
-                    }
-                    current_line.push_str(word);
-                    if !word.chars().all(|ch|ch.is_control()){
-                        current_line.push(' ');
-                    }
-
-                    //println!("{:?} | {:?}", line, current_line);
-                }
-            } else {
-                let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
-                if is_all_control {
-                    if let Some(' ') = current_line.chars().last() {
-                        current_line.pop();
-                    }
-                }
-                
-                current_line.push_str(line);
-
-                if !line.is_empty() 
-                    && !is_all_control 
-                    && !current_line.ends_with('\n')
-                    && !current_line.ends_with(' ')
-                {
-                    current_line.push_str(&self.formatting_state.spacing);
-                }
-            }
-
-            if !current_line.is_empty() && !is_one_line{
-                let indent = get_indent(&*current_line);
-                lines.push(indent.clone() + current_line.trim());
-                current_line.clear();
-            }
-        }
-        let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
-            current_line.is_empty()); 
-        if is_not_empty{
-            let indent = " ".repeat(self.formatting_state.current_indent);
-            *current_line = indent + current_line;
-        }
-    }
-
-    // fn append_formatted_text(&self, formatted: &str, lines: &mut Vec<String>) {
+    // fn append_formatted_text(
+    //     &self, 
+    //     formatted: &str, 
+    //     current_line: &mut String, 
+    //     lines: &mut Vec<String>
+    // ) {
     //     let get_indent = |l: &str| {
     //         l.chars()
     //             .take_while(|ch|ch.is_whitespace())
     //             .collect::<String>()
     //     };
 
+    //     let is_one_line = formatted.lines().count() == 1;
     //     let max_width = self.formatting_settings.width;
 
-    //     for original_line in formatted.lines() {
-    //         let indent = get_indent(original_line);
-    //         let content = original_line.trim_start();
-            
-    //         if content.is_empty() {
-    //             lines.push(String::new());
-    //             continue;
-    //         }
-    
-    //         let available_width = max_width.saturating_sub(indent.len());
-    //         if content.len() <= available_width {
-    //             lines.push(format!("{}{}", indent, content));
-    //         } else {
-    //             let mut current_line = String::new();
-    //             for word in content.split_whitespace() {
-    //                 if current_line.len() + 1 + word.len() > available_width && !current_line.is_empty() {
-    //                     lines.push(format!("{}{}", indent, current_line));
+    //     for line in formatted.split("\n"){
+    //         if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
+    //             let indent = get_indent(line);
+
+    //             let max_width = max_width.saturating_sub(indent.len());
+
+    //             for word in line.split_whitespace() {
+    //                 if current_line.chars().count() + word.chars().count() >= max_width {
+    //                     lines.push(indent.clone() + current_line.trim());
     //                     current_line.clear();
     //                 }
-    //                 if !current_line.is_empty() {
+    //                 current_line.push_str(word);
+    //                 if !word.chars().all(|ch|ch.is_control()){
     //                     current_line.push(' ');
     //                 }
-    //                 current_line.push_str(word);
+
+    //                 //println!("{:?} | {:?}", line, current_line);
     //             }
-    //             if !current_line.is_empty() {
-    //                 lines.push(format!("{}{}", indent, current_line));
+    //         } else {
+    //             let is_all_control = line.chars().all(|ch| ch.is_ascii_control());
+    //             if is_all_control {
+    //                 if let Some(' ') = current_line.chars().last() {
+    //                     current_line.pop();
+    //                 }
+    //             }
+                
+    //             current_line.push_str(line);
+
+    //             if !line.is_empty() 
+    //                 && !is_all_control 
+    //                 && !current_line.ends_with('\n')
+    //                 && !current_line.ends_with(' ')
+    //             {
+    //                 current_line.push_str(&self.formatting_state.spacing);
     //             }
     //         }
+
+    //         if !current_line.is_empty() && !is_one_line{
+    //             let indent = get_indent(&*current_line);
+    //             lines.push(indent.clone() + current_line.trim());
+    //             current_line.clear();
+    //         }
+    //     }
+    //     let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
+    //         current_line.is_empty()); 
+    //     if is_not_empty{
+    //         let indent = " ".repeat(self.formatting_state.current_indent);
+    //         *current_line = indent + current_line;
     //     }
     // }
+
+    fn append_formatted_text(&self, formatted: &str, lines: &mut Vec<String>) {
+        let get_indent = |l: &str| {
+            l.chars()
+                .take_while(|ch|ch.is_whitespace())
+                .collect::<String>()
+        };
+
+        let max_width = self.formatting_settings.width;
+
+        for original_line in formatted.lines() {
+            let indent = get_indent(original_line);
+            let content = original_line.trim_start();
+            
+            if content.is_empty() {
+                lines.push(String::new());
+                continue;
+            }
+    
+            let available_width = max_width.saturating_sub(indent.len());
+            if content.len() <= available_width {
+                lines.push(format!("{}{}", indent, content));
+            } else {
+                let mut current_line = String::new();
+                for word in content.split_whitespace() {
+                    if current_line.len() + 1 + word.len() > available_width && !current_line.is_empty() {
+                        lines.push(format!("{}{}", indent, current_line));
+                        current_line.clear();
+                    }
+                    if !current_line.is_empty() {
+                        current_line.push(' ');
+                    }
+                    current_line.push_str(word);
+                }
+                if !current_line.is_empty() {
+                    lines.push(format!("{}{}", indent, current_line));
+                }
+            }
+        }
+    }
 
     pub fn format_synopsis_section(&mut self, ast: MdocDocument) -> Vec<u8> {
         let mut lines = Vec::new();
@@ -266,8 +268,8 @@ impl MdocFormatter {
                 _ => continue,
             };
 
-            self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
-            // self.append_formatted_text(&formatted_node, &mut lines);
+            // self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+            self.append_formatted_text(&formatted_node, &mut lines);
         }
 
         if !current_line.is_empty() {
@@ -286,10 +288,10 @@ impl MdocFormatter {
         for node in ast.elements {
             let formatted_node: String = self.format_node(node);            
             //println!("Formatted node: {} - {}", formatted_node, self.formatting_state.suppress_space);
-            self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+            // self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
             // println!("{}", formatted_node.clone().replace("\n", " NEWLINE "));
 
-            // self.append_formatted_text(&formatted_node, &mut lines);
+            self.append_formatted_text(&formatted_node, &mut lines);
 
         }
 
@@ -1609,34 +1611,8 @@ impl MdocFormatter {
 
         let mut content = String::new();
         for (head, body) in items{
-            // let first_lines_count = body.get(0)
-            //     .cloned()
-            //     .unwrap_or(String::new())
-            //     .lines().count();
-            // let first_line = body.get(0)
-            //     .cloned()
-            //     .unwrap_or_default()
-            //     .split_whitespace()
-            //     .map(|s|s.to_string())
-            //     .collect::<Vec<_>>();
-            // let mut i = 0;
-            // let mut j = 0;
-            // let mut head = head; 
-            // if head.len() > indent.saturating_sub(1) || first_lines_count == 1{
-            //     while head.len() < line_width + indent && i < first_line.len() {
-            //         if head.len() + first_line[i].len() >= line_width + indent{
-            //             break;
-            //         }
-            //         head.push_str(&(" ".to_string() + &first_line[i]));
-            //         i += 1;
-            //         j += first_line[i].len() + 1;
-            //     }
-            // }
 
             let mut body = body;
-            // if let Some(line) = body.get_mut(0){
-            //     line.replace_range(0..j, "");
-            // }
             let multilined = get_multilined(&body);
             let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
             body = interleave(onelined, multilined)
@@ -1803,6 +1779,10 @@ impl MdocFormatter {
     }
 
     fn format_nm(&mut self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_nm_synopsis(&mut self, macro_node: MacroNode) -> String {
         let content = macro_node
             .nodes
             .into_iter()
@@ -1825,15 +1805,54 @@ impl MdocFormatter {
     }
 
     fn format_sh_block(&mut self, title: String, macro_node: MacroNode) -> String {
+        let mut prev_node = Macro::Soi;
         self.formatting_state.current_indent += self.formatting_settings.indent;
         let mut content = macro_node
             .nodes
             .into_iter()
             .map(|node| {
-                let mut content = self.format_node(node);
-                if content.chars().last() != Some('\n') && !content.is_empty() {
+                let mut content = match node {
+                    Element::Macro(ref macro_node) => {
+                        if title.eq_ignore_ascii_case("SYNOPSIS") {
+                            let formatted = match &macro_node.mdoc_macro {
+                                Macro::In { 
+                                    ref filename 
+                                } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
+                                Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
+                                Macro::Nm => self.format_nm_synopsis(macro_node.clone()),
+                                Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
+                                Macro::Fn { funcname } => self.format_fn_synopsis(&funcname, macro_node.clone()),
+                                _ => self.format_macro_node(macro_node.clone())
+                            };
+
+                            prev_node = macro_node.mdoc_macro.clone();
+
+                            println!("Loop: Fromated In macro {}", formatted.replace("\n", "NEWLINE"));
+
+
+                            return formatted;
+                        } 
+                        // else if title.eq_ignore_ascii_case("AUTHORS") {
+                            // match &macro_node.mdoc_macro {
+                            //     Macro::An { author_name_type } => self.format_an_authors(author_name_type.clone(), macro_node.clone()),
+                            //     _ => self.format_node(node)
+                            // }
+                        // } 
+                        else {
+                            self.format_macro_node(macro_node.clone())
+                        }
+
+                    },
+                    Element::Text(ref text) => self.format_text_node(&text),
+                    Element::Eoi => String::new()
+                };
+
+                if !content.ends_with('\n') && !content.is_empty() {
                     content.push_str(&self.formatting_state.spacing);
                 }
+
+                println!("Sh block: Fromated In macro {}", content.replace("\n", "NEWLINE"));
+
                 content
             })
             .filter(|s| !s.is_empty())
@@ -1849,44 +1868,6 @@ impl MdocFormatter {
             title.to_uppercase(), 
             content
         )
-        // let spacing = vec![" "; self.formatting_settings.indent].join("");
-        // let content = macro_node
-        //     .nodes
-        //     .into_iter()
-        //     .map(|node| {
-        //         // let mut content = self.format_node(node);
-        //         let mut content = match node {
-        //             Element::Macro(ref macro_node) => {
-        //                 match macro_node.mdoc_macro {
-        //                     Macro::In { ref filename } => {
-        //                         if title.eq_ignore_ascii_case("SYNOPSIS") {
-        //                             self.format_in_synopsis(filename.as_str(), macro_node.clone())
-        //                         } else {
-        //                             self.format_in(filename.as_str(), macro_node.clone())
-        //                         }
-        //                     },
-        //                     _ => self.format_node(node)
-        //                 }
-        //             },
-        //             Element::Text(text) => self.format_text_node(&text),
-        //             Element::Eoi => String::new()
-        //         };
-
-        //         if !content.ends_with('\n') && !content.is_empty() {
-        //             content.push_str(&self.formatting_state.spacing);
-        //         }
-        //         content
-        //     })
-        //     .filter(|s| !s.is_empty())
-        //     .collect::<Vec<_>>()
-        //     .join("");
-            
-        // format!(
-        //     "{}\n{}{}\n\n", 
-        //     title.to_uppercase(), 
-        //     spacing,
-        //     content
-        // )
     }
 
     fn format_ss_block(&mut self, title: String, macro_node: MacroNode) -> String {        
@@ -2269,6 +2250,10 @@ impl MdocFormatter {
     }
 
     fn format_vt(&mut self, macro_node: MacroNode) -> String {
+        self.format_inline_macro(macro_node)
+    }
+
+    fn format_vt_synopsis(&mut self, macro_node: MacroNode) -> String {
         self.format_partial_implicit_block(macro_node)
             .trim()
             .to_string()
@@ -2345,6 +2330,10 @@ impl MdocFormatter {
                 }
             }
         }
+    }
+
+    fn format_an_authors(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
+        unimplemented!()
     }
 
     fn format_ar(&self, macro_node: MacroNode) -> String {
@@ -2441,7 +2430,8 @@ impl MdocFormatter {
             line.push_str(&" ".repeat(self.formatting_settings.width - final_len));
         }
 
-        self.formatting_state.header_text = Some(line + "\n");
+        // self.formatting_state.header_text = Some(line + "\n");
+        self.formatting_state.header_text = Some(line);
         String::new()
     }
 
@@ -2662,6 +2652,47 @@ impl MdocFormatter {
         result
     }
 
+    fn format_fn_synopsis(&mut self, funcname: &str, macro_node: MacroNode) -> String {
+        let mut result = format!("{funcname}(");
+        let mut prev_was_open = false;
+        let mut is_first_node = true;
+
+        for node in macro_node.nodes {
+            match node {
+                Element::Text(text) => match text.as_str() {
+                    "(" | "[" => {
+                        result.push_str(&text);
+                        prev_was_open = true;
+                    }
+                    ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
+                        result.push_str(&text);
+                        prev_was_open = false;
+                    }
+                    _ => {
+                        match prev_was_open {
+                            true => result.push_str(&self.format_text_node(&text)),
+                            false => {
+                                let offset = if is_first_node { "" } else { self.formatting_state.spacing.as_str() };
+                                let formatted_node = format!("{}{}", offset, self.format_text_node(&text));
+                                result.push_str(&formatted_node);
+                            }
+                        }
+                        prev_was_open = false;
+                    }
+                },
+                _ => unreachable!("macro can't contain macro node or EOI!"),
+            }
+
+            if is_first_node {
+                is_first_node = false;
+            }
+        }
+
+        result.push_str(");\n");
+
+        result
+    }
+
     fn format_fr(&mut self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
 
@@ -2669,7 +2700,12 @@ impl MdocFormatter {
 
     fn format_ft(&mut self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
+    }
 
+    fn format_ft_synopsis(&mut self, macro_node: MacroNode) -> String {
+        let content = self.format_inline_macro(macro_node);
+        
+        format!("\n{}\n", content)
     }
 
     fn format_fx(&self, macro_node: MacroNode) -> String {
@@ -2709,8 +2745,12 @@ impl MdocFormatter {
         result
     }
 
-    fn format_in_synopsis(&self, filename: &str, macro_node: MacroNode) -> String {
-        let mut result = String::new();
+    fn format_in_synopsis(&self, filename: &str, macro_node: MacroNode, prev_node: &Macro) -> String {
+        let mut result = match prev_node {
+            Macro::Fn { .. } => "\n".to_string(),
+            _ => String::new()
+        };
+
         let mut iter = macro_node.nodes.into_iter();
 
         if let Some(node) = iter.next() {
@@ -2728,6 +2768,8 @@ impl MdocFormatter {
                 _ => unreachable!()
             }
         }
+
+        println!("Function: Fromated In macro {}", result.replace("\n", "NEWLINE"));
 
         result
     }
