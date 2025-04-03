@@ -163,7 +163,7 @@ impl MdocFormatter {
                 let is_not_empty = !(current_line.chars().all(|ch| ch.is_whitespace()) || 
                     current_line.is_empty());
                 if is_not_empty{
-                    *current_line = indent + current_line.trim();
+                    *current_line = indent + current_line;
                 }
             } else{
                 lines.push(line.to_string());
