@@ -2810,7 +2810,7 @@ mod tests {
                     compact: true,
                     columns: vec!["col1".to_string(), "col2".to_string(), "col3".to_string()],
                 },
-                nodes: vec![
+                nodes: vec![ 
                     Element::Macro(MacroNode {
                         mdoc_macro: Macro::It{ 
                             head: vec![

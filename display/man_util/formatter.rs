@@ -124,7 +124,7 @@ impl MdocFormatter {
 
 // Base formatting functions.
 impl MdocFormatter {
-    fn append_formatted_text(
+    fn append_formatted_text( 
         &self, 
         formatted: &str, 
         current_line: &mut String, 
