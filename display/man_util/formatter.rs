@@ -302,6 +302,15 @@ impl MdocFormatter {
             lines.push(current_line.trim_end().to_string());
         }
 
+        let first_emplty_count= lines.iter()
+            .take_while(|l|{
+                l.chars().all(|ch|ch.is_whitespace())
+            })
+            .count();
+
+        lines = lines.split_at(first_emplty_count).1.to_vec();
+        
+
         lines.insert(
         0,
         self.formatting_state
@@ -1128,18 +1137,23 @@ fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
         };
 
         if is_not_nested(&super_list_type){
-            let result = nodes
-                .split_inclusive(|el|{
+
+
+            let it_elements = nodes
+                .split(|el|{
                     matches!(el, Element::Macro(MacroNode { mdoc_macro: Macro::Bl{..}, .. }))
                 })
-                .flat_map(|elements|{
-                    let mut elements = elements.to_vec();
-                    let Some(bl) = elements.pop() else{
-                        return vec![];
-                    };
-                    vec![super_macros(elements), bl]
-                })
+                .map(|elements| super_macros(elements.to_vec()))
                 .collect::<Vec<_>>();
+
+            let bl_elements = nodes.iter()
+                .filter(|el|{
+                    matches!(el, Element::Macro(MacroNode { mdoc_macro: Macro::Bl{..}, .. }))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            let result = interleave(it_elements, bl_elements);
             if !result.is_empty(){
                 return result;
             }
@@ -1147,6 +1161,21 @@ fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
     }
 
     vec![nested_macros]
+}
+
+/// Trim, but leaves '\n' on ends
+fn trim(string: &mut String){
+    if let Some(position) = string.find(|ch| ch != '\n'){
+        if let Some(s) = string.strip_prefix(&("\n".repeat(position))){
+            *string = s.to_string();
+        }
+    }
+
+    if let Some(position) = string.rfind(|ch| ch != '\n'){
+        if let Some(s) = string.strip_suffix(&("\n".repeat(string.len().saturating_sub(2 + position)))){
+            *string = s.to_string();
+        }
+    }
 }
 
 // Formatting block full-explicit.
@@ -1346,9 +1375,11 @@ impl MdocFormatter {
         let mut symbol = get_symbol("", &list_type);
         let mut content = String::new();
         for (_, body) in items{
+            let mut body = body;
+            body.retain(|s| !s.is_empty());
             let multilined = get_multilined(&body);
             let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
-            let mut body = interleave(onelined, multilined)
+            body = interleave(onelined, multilined)
                 .into_iter()
                 .flatten()
                 .collect::<Vec<_>>();  
@@ -1357,13 +1388,17 @@ impl MdocFormatter {
                 if !first_line.chars().all(|ch| ch.is_whitespace()){
                     symbol = get_symbol(symbol.as_str(), &list_type);
                 }
-                first_line.replace_range(origin_indent..(origin_indent + symbol_range), &symbol);
+                if first_line.len() > origin_indent + symbol_range{
+                    first_line.replace_range(origin_indent..(origin_indent + symbol_range), &symbol);
+                }
             }
             content.push_str(&(body.join("\n") + "\n"));
             if !compact{
                 content.push('\n');
             }
         }  
+
+        trim(&mut content);
 
         content
     }
@@ -1396,6 +1431,8 @@ impl MdocFormatter {
                 content.push('\n');
             }
         } 
+
+        trim(&mut content);
 
         content
     }
@@ -1444,6 +1481,8 @@ impl MdocFormatter {
                 content.push('\n');
             }
         }
+
+        trim(&mut content);
 
         content
     }
@@ -1500,6 +1539,8 @@ impl MdocFormatter {
             }
         }
 
+        trim(&mut content);
+
         content
     }
 
@@ -1532,7 +1573,7 @@ impl MdocFormatter {
                 let indent_step = 8;
                 
                 if total_width > max_line_width {
-                    for (i, cell) in row.iter().enumerate() {
+                    for (i, cell) in row.iter().take(col_widths.len()).enumerate() {
                         result.push_str(&" ".repeat(offset));
                         result.push_str(&format!("{:<width$}\n", cell, width = col_widths[i]));
                         offset += indent_step;
@@ -1568,6 +1609,12 @@ impl MdocFormatter {
             })
             .collect::<Vec<_>>()
             .join("\n");
+
+        trim(&mut content);
+
+        if !content.ends_with("\n"){
+            content.push('\n');
+        }
 
         content
     }
@@ -1615,6 +1662,8 @@ impl MdocFormatter {
                 content.push('\n');
             }
         } 
+
+        trim(&mut content);
 
         content
     }
@@ -1690,17 +1739,7 @@ impl MdocFormatter {
             }
         } 
 
-        if let Some(position) = content.find(|ch| ch != '\n'){
-            if let Some(c) = content.strip_prefix(&("\n".repeat(position))){
-                content = c.to_string();
-            }
-        }
-
-        if let Some(position) = content.rfind(|ch| ch != '\n'){
-            if let Some(c) = content.strip_suffix(&("\n".repeat(content.len() - 2 - position))){
-                content = c.to_string();
-            }
-        }
+        trim(&mut content);
 
         content
     }
@@ -1825,7 +1864,6 @@ impl MdocFormatter {
                     compact, 
                     columns 
                 } = mdoc_macro.clone() else {
-                    print!("{:?}", mdoc_macro);
                     return self.format_node(element);
                 };
                 self.format_bl_block(list_type, offset, compact, columns, macro_node.clone())
@@ -6560,7 +6598,7 @@ footer text                     January 1, 1970                    footer text";
         }
     }
 
-    ///*
+    /*
     mod mdoc {
         use crate::man_util::formatter::tests::test_formatting;
         use std::{path::{Path, PathBuf}, process::Command, str::FromStr};
@@ -6737,5 +6775,5 @@ footer text                     January 1, 1970                    footer text";
             test_formatting(&input, &output);
         }
         
-    }//*/
+    }*/
 }
