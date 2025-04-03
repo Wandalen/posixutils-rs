@@ -151,7 +151,7 @@ impl MdocFormatter {
                 for word in line.split_whitespace() {
                     if current_line.chars().count() + word.chars().count() + 1 >= max_width {
                         lines.push(indent.clone() + current_line.trim());
-                        current_line.clear();
+                        current_line.clear(); 
                     }
                     // if let Some(ch) = current_line.chars().last(){
                     //     if !ch.is_whitespace(){
