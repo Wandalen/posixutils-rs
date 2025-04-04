@@ -6006,8 +6006,6 @@ file/path file2/path
 
 The BSD.lv Project: https://bsd.lv
 
-The BSD.lv Project: https://bsd.lv
-
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
@@ -6190,11 +6188,9 @@ footer text                     January 1, 1970                    footer text";
 .Pp
 .Lk https://bsd.lv The BSD.lv Project";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
-name1 name2
-
-name1 name2
+file/path file2/path
 
 The BSD.lv Project: https://bsd.lv
 
@@ -6209,11 +6205,11 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Rv -std f1 f2 Ar value";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
-The f1(), f2(), Ar(), and value() functions return the value 0 if
-successful; otherwise the value -1 is returned and the global variable errno
-is set to indicate the error.
+The f1(), f2(), Ar(), and value() functions return the value 0 if successful;
+otherwise the value -1 is returned and the global variable errno is set to
+indicate the error.
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6839,7 +6835,7 @@ footer text                     January 1, 1970                    footer text";
 
         #[rstest]
         #[case("./test_files/mdoc/access.2")]
-        // #[case("./test_files/mdoc/cvs.1")]
+        #[case("./test_files/mdoc/cvs.1")]
         #[case("./test_files/mdoc/getfh.2")]
         #[case("./test_files/mdoc/ioctl.2")]
         #[case("./test_files/mdoc/munmap.2")]
