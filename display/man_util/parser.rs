@@ -2103,23 +2103,25 @@ impl MdocParser {
     // .In filename
     fn parse_in(pair: Pair<Rule>) -> Element {
         let mut inner_pairs = pair.into_inner();
-        let mut filename =  String::new();
-        let mut nodes = Vec::new();
+        // let mut filename =  String::new();
+        // let mut nodes = Vec::new();
         let arg = inner_pairs.next().unwrap();
 
-        match arg.as_rule() {
+        let filename = match arg.as_rule() {
             Rule::opening_delimiter => {
-                nodes.push(Element::Text(arg.as_str().to_string()));
+                // nodes.push(Element::Text(arg.as_str().to_string()));
                 let name = inner_pairs.next().unwrap().as_str();
-                filename.push_str(name);
+                // filename.push_str(name);
+                format!("{}{}", arg.as_str(), name)
             },
-            Rule::word => filename.push_str(arg.as_str()),
+            Rule::word => arg.as_str().to_string(),
             _ => unreachable!()
-        }
+        };
 
-        let iter = inner_pairs.map(Self::parse_element);
-        nodes.extend(iter);
-
+        // let iter = inner_pairs.map(Self::parse_element);
+        // nodes.extend(iter);
+        let nodes = inner_pairs.map(Self::parse_element).collect();
+        
         Element::Macro(MacroNode {
             mdoc_macro: Macro::In { filename },
             nodes
@@ -2286,6 +2288,14 @@ impl MdocParser {
         let mut inner_pairs = pair.into_inner();
 
         let prefix = inner_pairs.next().unwrap().as_str().to_string();
+        // let prefix = match first_arg {
+        //     "(" | "[" | ")" | "]" | "!" | "?" | "." | "," | ":" | ";" => {
+        //         let prefix = inner_pairs.next().unwrap().as_str();
+        //         format!("{}{}", first_arg, prefix)
+        //     }
+        //     _ => first_arg.to_string()
+        // };
+
         let nodes = inner_pairs.map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {

@@ -213,7 +213,7 @@ impl MdocFormatter {
         for node in ast.elements {
             let mut formatted_node: String = self.format_node(node.clone());
 
-            println!("[format_mdoc] Formatted node: {}", formatted_node);
+            // println!("[format_mdoc] Formatted node: {}", formatted_node);
 
             if formatted_node.is_empty(){
                 continue;
@@ -259,6 +259,7 @@ impl MdocFormatter {
             .join("\n")
             .replace(" \x08", "")
             .replace("\\(nl)", "")
+            .replace("\\(rs) ", "")
             .into_bytes()
     }
 
@@ -2799,99 +2800,75 @@ impl MdocFormatter {
         result
     }
 
-    fn format_fn(&mut self, funcname: &str, macro_node: MacroNode) -> String {
+    fn format_fn(&mut self, funcname: &str, macro_node: MacroNode) -> String {        
         let mut result = format!("{funcname}(");
-        let mut prev_was_open = false;
-        let mut is_first_node = true;
+        let mut iter = macro_node.nodes.iter();
 
-        for node in macro_node.nodes {
+        if let Some(node) = iter.next() {
             match node {
-                Element::Text(text) => match text.as_str() {
-                    "(" | "[" => {
-                        result.push_str(&text);
-                        prev_was_open = true;
-                    }
-                    ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
-                        result.push_str(&text);
-                        prev_was_open = false;
-                    }
+                Element::Text(arg) => match arg.as_str() {
+                    "(" | "[" | ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
+                        let c = iter.map(|n| self.format_node(n.clone())).collect::<String>();
+                        return format!("{}){} {}", result, arg, c);
+                    },
                     _ => {
-                        match prev_was_open {
-                            true => result.push_str(&self.format_text_node(&text)),
-                            false => {
-                                let offset = if is_first_node { "" } else { self.formatting_state.spacing.as_str() };
-                                let formatted_node = format!("{}{},", offset, self.format_text_node(&text));
-                                result.push_str(&formatted_node);
+                        let mut prev_was_open = false;
+                        let mut is_first_node = true;
+                
+                        for node in macro_node.nodes {
+                            match node {
+                                Element::Text(text) => match text.as_str() {
+                                    "(" | "[" => {
+                                        result.push_str(&text);
+                                        prev_was_open = true;
+                                    }
+                                    ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
+                                        result.push_str(&text);
+                                        prev_was_open = false;
+                                    }
+                                    _ => {
+                                        match prev_was_open {
+                                            true => result.push_str(&self.format_text_node(&text)),
+                                            false => {
+                                                let offset = if is_first_node { "" } else { self.formatting_state.spacing.as_str() };
+                                                let formatted_node = format!("{}{},", offset, self.format_text_node(&text));
+                                                result.push_str(&formatted_node);
+                                            }
+                                        }
+                                        prev_was_open = false;
+                                    }
+                                },
+                                _ => unreachable!("macro can't contain macro node or EOI!"),
+                            }
+                
+                            if is_first_node {
+                                is_first_node = false;
                             }
                         }
-                        prev_was_open = false;
+                
+                        if result.ends_with(",") {
+                            result.pop();
+                        }
+                
+                        result.push(')');
+                
+                        return result;
                     }
                 },
-                _ => unreachable!("macro can't contain macro node or EOI!"),
+                _ => unreachable!()
             }
+        };
 
-            if is_first_node {
-                is_first_node = false;
-            }
-        }
-
-        if result.ends_with(",") {
-            result.pop();
-        }
-
-        result.push(')');
-
-        result
+        let c = iter.map(|n| self.format_node(n.clone())).collect::<String>();
+        format!("{}) {}", result, c)
     }
 
     fn format_fn_synopsis(&mut self, funcname: &str, macro_node: MacroNode) -> String {
-        let mut result = format!("{funcname}(");
-        let mut prev_was_open = false;
-        let mut is_first_node = true;
-
-        for node in macro_node.nodes {
-            match node {
-                Element::Text(text) => match text.as_str() {
-                    "(" | "[" => {
-                        result.push_str(&text);
-                        prev_was_open = true;
-                    }
-                    ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => {
-                        result.push_str(&text);
-                        prev_was_open = false;
-                    }
-                    _ => {
-                        match prev_was_open {
-                            true => result.push_str(&self.format_text_node(&text)),
-                            false => {
-                                let offset = if is_first_node { "" } else { self.formatting_state.spacing.as_str() };
-                                let formatted_node = format!("{}{},", offset, self.format_text_node(&text));
-                                result.push_str(&formatted_node);
-                            }
-                        }
-                        prev_was_open = false;
-                    }
-                },
-                _ => unreachable!("macro can't contain macro node or EOI!"),
-            }
-
-            if is_first_node {
-                is_first_node = false;
-            }   
-        }
-
-        if result.ends_with(",") {
-            result.pop();
-        }
-
-        result.push_str(");\n");
-
-        result
+        format!("{};\n", &self.format_fn(funcname, macro_node))
     }
 
     fn format_fr(&mut self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
-
     }
 
     fn format_ft(&mut self, macro_node: MacroNode) -> String {
@@ -2919,21 +2896,15 @@ impl MdocFormatter {
     }
 
     fn format_in(&self, filename: &str, macro_node: MacroNode) -> String {
-        println!("nodes: {:?}", macro_node.nodes.clone());
+        let mut result = if is_first_char_delimiter(&filename) {
+            let mut filename = filename.to_string();
+            let del = filename.remove(0);
+            format!("{}<{}>", del, filename)
+        } else {
+            format!("<{}>", filename)
+        };
 
-        let mut result = String::new();
-        let mut iter = macro_node.nodes.into_iter();
-        
-        if let Some(node) = iter.next() {
-            match node {
-                Element::Text(open_del) => result.push_str(open_del.as_str()),
-                _=> unreachable!()
-            }
-        }
-
-        result.push_str(&format!("<{filename}>"));
-
-        if let Some(node) = iter.next() {
+        if let Some(node) = macro_node.nodes.into_iter().next() {
             match node {
                 Element::Text(close_del) => result.push_str(close_del.as_str()),
                 _ => unreachable!()
@@ -3042,13 +3013,7 @@ impl MdocFormatter {
     }
 
     fn format_pf(&mut self, prefix: &str, macro_node: MacroNode) -> String {
-        // self.formatting_state.suppress_space = true;
-        let c = self.format_inline_macro(macro_node);
-        
-        println!("Pf formatted nodes: {}", c);
-
-        format!("{}{}", prefix, c)
-        
+        format!("{}\\(rs){}", prefix, &self.format_inline_macro(macro_node))
     }
 
     fn format_pp(&self, _macro_node: MacroNode) -> String {
@@ -3110,6 +3075,10 @@ impl MdocFormatter {
     fn format_st(&self, st_type: StType, macro_node: MacroNode) -> String {
         let content = self.format_inline_macro(macro_node);
 
+        if is_first_char_delimiter(&content) {
+            return format!("{}{}", st_type, content);
+        }
+
         format!("{} {}", st_type, content)
     }
 
@@ -3152,12 +3121,23 @@ impl MdocFormatter {
     fn format_xr(&self, name: &str, section: &str, macro_node: MacroNode) -> String {
         let content = self.format_inline_macro(macro_node);
 
+        if is_first_char_delimiter(&content) {
+            return format!("{name}({section}){content}");
+        }
+        
         format!("{name}({section}) {content}")
     }
 }
 
 fn is_first_char_alnum(s: &str) -> bool {
     s.chars().next().map(|c| c.is_ascii_alphanumeric()).unwrap_or(false)
+}
+
+fn is_first_char_delimiter(s: &str) -> bool {
+    s.chars().next().map(|c| match c {
+        '(' | '[' | ')' | ']' | '.' | ',' | ':' | ';' | '!' | '?' => true,
+        _ => false
+    }).unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -6125,9 +6105,9 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Ar value Pf $ Ar variable_name";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
-value $ variable_name
+value $variable_name
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6637,7 +6617,7 @@ footer text                     January 1, 1970                    footer text";
             let output = 
 "PROGNAME(section)                   section                  PROGNAME(section)
 
-(random() text,!)
+(random()) text!
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
