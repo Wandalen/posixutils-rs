@@ -3046,11 +3046,7 @@ impl MdocFormatter {
 
         let ending_2 = if macro_node.nodes.len() <= 1 { "s" } else { "" };
 
-        if !content.is_empty() {
-            format!("The {content} function{ending_1} return{ending_2} the value 0 if successful; otherwise the value -1 is returned and the global variable errno is set to indicate the error.")
-        } else {
-            String::new()
-        }
+        format!("The {content} function{ending_1} return{ending_2} the value 0 if successful; otherwise the value -1 is returned and the global variable errno is set to indicate the error.")
     }
 
     fn format_sm(&mut self, sm_mode: Option<SmMode>, macro_node: MacroNode) -> String {
@@ -6145,6 +6141,22 @@ footer text                     January 1, 1970                    footer text";
 The f1(), f2(), Ar(), and value() functions return the value 0 if successful;
 otherwise the value -1 is returned and the global variable errno is set to
 indicate the error.
+
+footer text                     January 1, 1970                    footer text";
+            test_formatting(input, output);
+        }
+
+        #[test]
+        fn rv_std() {
+            let input = ".Dd January 1, 1970
+.Dt PROGNAME section
+.Os footer text
+.Rv -std";
+            let output =
+"PROGNAME(section)                   section                  PROGNAME(section)
+
+The function returns the value 0 if successful; otherwise the value -1 is
+returned and the global variable errno is set to indicate the error.
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
