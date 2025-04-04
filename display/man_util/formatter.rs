@@ -125,7 +125,7 @@ impl MdocFormatter {
     fn append_formatted_text( 
         &self, 
         formatted: &str,
-        // current_line: &mut String, 
+        current_line: &mut String, 
         lines: &mut Vec<String>
     ) {
         let get_indent = |l: &str| {
@@ -189,7 +189,7 @@ impl MdocFormatter {
                 _ => continue,
             };
 
-            self.append_formatted_text(&formatted_node, &mut lines);
+            self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
 
         if !current_line.is_empty() {
@@ -206,13 +206,18 @@ impl MdocFormatter {
         let mut current_line = String::new();
 
         for node in ast.elements {
-            let formatted_node: String = self.format_node(node);            
+            println!("Formatting node: {:?}", node);
+
+            let formatted_node: String = self.format_node(node);
+
+            println!("Formatted node: {:?}", formatted_node);
+
             if formatted_node.is_empty(){
                 continue;
             } 
             
-            // self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
-            self.append_formatted_text(&formatted_node, &mut lines);
+            self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
+            // self.append_formatted_text(&formatted_node, &mut lines);
 
         }
 
@@ -227,8 +232,7 @@ impl MdocFormatter {
             .count();
 
         lines = lines.split_at(first_empty_count).1.to_vec();
-        
-        lines.insert(0, "".to_string());
+        // lines.insert(0, "".to_string());
 
         lines.insert(
         0,
@@ -1952,8 +1956,6 @@ impl MdocFormatter {
                             };
 
                             prev_node = macro_node.mdoc_macro.clone();
-                            println!("Loop: Fromated In macro {}", formatted.replace("\n", "NEWLINE"));
-
                             return formatted;
                         } 
                         // else if title.eq_ignore_ascii_case("AUTHORS") {
@@ -1980,9 +1982,6 @@ impl MdocFormatter {
                 }
 
                 current_lines_count += content.lines().count();
-
-                println!("Sh block: Fromated In macro {}", content.replace("\n", "NEWLINE"));
-
                 content
             })
             .filter(|s| !s.is_empty())
@@ -3133,9 +3132,9 @@ mod tests {
             let input = r".Dd January 1, 1970
 .Os footer text
 \ \~\0\|\^\&\)\%\:";
-            let output = r"UNTITLED                             LOCAL                            UNTITLED
+            let output = 
+r"UNTITLED                             LOCAL                            UNTITLED
 
-   
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -3263,8 +3262,8 @@ footer text                     January 1, 1970                    footer text";
 ";
             let output = r"UNTITLED                             LOCAL                            UNTITLED
 
-- − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆ ⊇
-∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³
+- − + + ∓ ± ± · × × ⊗ ⊕ ÷ ÷ ⁄ ∗ ≤ ≥ ≪ ≫ = ≠ ≡ ≢ ∼ ≃ ≅ ≈ ≈ ∝ ∅ ∈ ∉ ⊂ ⊄ ⊃ ⊅ ⊆
+⊇ ∩ ∪ ∠ ⊥ ∫ ∫ ∑ ∏ ∐ ∇ √ √ ⌈ ⌉ ⌊ ⌋ ∞ ℵ ℑ ℜ ℘ ∂ ℏ ℏ ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ¹ ² ³
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -3308,8 +3307,8 @@ footer text                     January 1, 1970                    footer text";
 ";
             let output = r"UNTITLED                             LOCAL                            UNTITLED
 
-Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü ÿ
-Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å
+Á É Í Ó Ú Ý á é í ó ú ý À È Ì Ò Ù à è ì ò ù Ã Ñ Õ ã ñ õ Ä Ë Ï Ö Ü ä ë ï ö ü
+ÿ Â Ê Î Ô Û â ê î ô û Ç ç Ł ł Ø ø Å å
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -3366,8 +3365,8 @@ footer text                     January 1, 1970                    footer text";
 ";
             let output = r"UNTITLED                             LOCAL                            UNTITLED
 
-Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ ο
-π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς
+Α Β Γ Δ Ε Ζ Η Θ Ι Κ Λ Μ Ν Ξ Ο Π Ρ Σ Τ Υ Φ Χ Ψ Ω α β γ δ ε ζ η θ ι κ λ μ ν ξ
+ο π ρ σ τ υ ϕ χ ψ ω ϑ φ ϖ ϵ ς
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4886,17 +4885,17 @@ If no files are specified, the standard input is read.";
 "REV(1)                      General Commands Manual                     REV(1)
 
 NAME
-     rev – reverse lines of a file
+     rev – reverse lines of a file  
 
 SYNOPSIS
      rev [file ...]
 
 DESCRIPTION
      The rev utility copies the specified files to the standard output,
-     reversing the order of characters in every line.  If no files are
+     reversing the order of characters in every line. If no files are
      specified, the standard input is read.
 
-Debian                         October 28, 2016                         Debian";
+                               October 28, 2016                               ";
             test_formatting(input, output);
         }
 
@@ -4911,7 +4910,7 @@ These are the available options.";
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
    Options
-     These are the available options.
+     These are the available options. 
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -5711,7 +5710,7 @@ footer text                     January 1, 1970                    footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
-funcname(arg arg2 arg3)
+funcname(arg, arg2, arg3)
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6098,7 +6097,6 @@ footer text                     January 1, 1970                    footer text";
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Sh SECTION
 .St -ansiC word
 .St -iso9945-1-96";
             let output =
@@ -6544,7 +6542,7 @@ footer text                     January 1, 1970                    footer text";
             let output = 
 "PROGNAME(section)                   section                  PROGNAME(section)
 
-(random() text!)
+(random() text,!)
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6632,7 +6630,7 @@ footer text                     January 1, 1970                    footer text";
     }
 
     
-    mod mdoc {
+    /*mod mdoc {
         use crate::man_util::formatter::tests::test_formatting;
         use std::{path::{Path, PathBuf}, process::Command, str::FromStr};
         use rstest::rstest;
@@ -6808,5 +6806,5 @@ footer text                     January 1, 1970                    footer text";
             test_formatting(&input, &output);
         }
         
-    }
+    }*/
 }

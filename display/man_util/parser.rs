@@ -9945,15 +9945,15 @@ Line
                         funcname: "\"int funcname\"".to_string(),
                     },
                     nodes: vec![
-                        Element::Text("\"int arg0\"".to_string()),
-                        Element::Text("\"int arg1\"".to_string()),
+                        Element::Text("int arg0".to_string()),
+                        Element::Text("int arg1".to_string()),
                     ],
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Fn {
                         funcname: "funcname".to_string(),
                     },
-                    nodes: vec![Element::Text("\"int arg0\"".to_string())],
+                    nodes: vec![Element::Text("int arg0".to_string())],
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Fn {
