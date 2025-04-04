@@ -8,6 +8,7 @@ use super::{
     parser::{Element, MacroNode, MdocDocument},
 };
 
+/// Regex for converting escape sequences to true UTF-8 chars
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
     regex::Regex::new(
         r"(?x)
@@ -22,15 +23,25 @@ static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Laz
     .unwrap()
 });
 
+
+/// Formatter state
 #[derive(Debug)]
 pub struct FormattingState {
+    /// Utility name; mdoc title
     first_name: Option<String>,
+    /// Suppress space printing
     suppress_space: bool,
+    /// Header content
     header_text: Option<String>,
+    /// Footer content
     footer_text: Option<String>,
+    /// Space between adjacent macros 
     spacing: String,
+    /// Mdoc date for header and footer
     date: String,
+    /// Sm split mode
     split_mod: bool,
+    /// Indentation of current macros nesting level
     current_indent: usize,
 }
 
@@ -49,6 +60,7 @@ impl Default for FormattingState {
     }
 }
 
+/// Formatter settings and state
 #[derive(Debug)]
 pub struct MdocFormatter {
     formatting_settings: FormattingSettings,
@@ -64,6 +76,7 @@ impl MdocFormatter {
         }
     }
 
+    /// Check if italic is supported for this terminal
     fn supports_italic(&self) -> bool {
         if let Ok(info) = Database::from_env() {
             return info.raw("sitm").is_some();
@@ -71,6 +84,7 @@ impl MdocFormatter {
         false
     }
 
+    /// Check if bold is supported for this terminal
     fn supports_bold(&self) -> bool {
         if let Ok(info) = Database::from_env() {
             return info.raw("bold").is_some();
@@ -78,6 +92,7 @@ impl MdocFormatter {
         false
     }
 
+    /// Check if undeline is supported for this terminal
     fn supports_underline(&self) -> bool {
         if let Ok(info) = Database::from_env() {
             return info.raw("smul").is_some();
@@ -85,6 +100,7 @@ impl MdocFormatter {
         false
     }
 
+    /// Replaces escape sequences in [`text`] [`str`] to true UTF-8 chars 
     fn replace_unicode_escapes(&self, text: &str) -> String {
         REGEX_UNICODE
             .replace_all(text, |caps: &regex::Captures| {
@@ -122,6 +138,9 @@ impl MdocFormatter {
 
 // Base formatting functions.
 impl MdocFormatter {
+    /// Append formatted macros on highest mdoc level. 
+    /// Split lines longer than terminal width and 
+    /// adds indentation for new lines 
     fn append_formatted_text( 
         &self, 
         formatted: &str,
@@ -169,6 +188,8 @@ impl MdocFormatter {
         }
     }
 
+    /// If -h man parameter is enabled this function is used instead 
+    /// [`format_mdoc`] for displaying only `SINOPSYS` section
     pub fn format_synopsis_section(&mut self, ast: MdocDocument) -> Vec<u8> {
         let mut lines = Vec::new();
         let mut current_line = String::new();
@@ -199,9 +220,8 @@ impl MdocFormatter {
         lines.join("\n").into_bytes()
     }
 
+    /// Format full [`MdocDocument`] and returns UTF-8 binary string 
     pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
-        //println!("{:?}", ast);
-
         let mut lines = Vec::new();
         let mut current_line = String::new();
 
@@ -236,7 +256,6 @@ impl MdocFormatter {
             .count();
 
         lines = lines.split_at(first_empty_count).1.to_vec();
-        // lines.insert(0, "".to_string());
 
         lines.insert(
         0,
@@ -257,11 +276,11 @@ impl MdocFormatter {
         self.format_dt(None, "", None);
         self.formatting_state.header_text.clone().unwrap_or_default()
     }
-
+ 
     fn get_default_footer_text() -> String {
         String::new()
     }
-
+ 
     fn format_footer(&mut self) -> String {
         let footer_text = self
             .formatting_state
@@ -326,6 +345,7 @@ impl MdocFormatter {
         content
     }
 
+    /// Convert one [`Element`] AST to [`String`]
     fn format_node(&mut self, node: Element) -> String {
         match node {
             Element::Macro(macro_node) => self.format_macro_node(macro_node),
@@ -334,6 +354,7 @@ impl MdocFormatter {
         }
     }
 
+    /// Convert one [`MacroNode`] AST to [`String`] 
     fn format_macro_node(&mut self, macro_node: MacroNode) -> String {
         match macro_node.clone().mdoc_macro {
             // Block full-explicit
@@ -485,6 +506,7 @@ impl MdocFormatter {
         }
     }
 
+    /// Convert text node to [`String`]. Escape sequences is converted to true UTF-8 chars
     fn format_text_node(&self, text: &str) -> String {
         let replacements: HashMap<&str, &str> = [
             // Spaces:
@@ -902,6 +924,7 @@ impl MdocFormatter {
     }
 }
 
+/// Split words on lines no longer than [`width`] 
 fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
     if width == 0{
         return words.iter()
@@ -943,6 +966,7 @@ fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
     lines
 }
 
+/// Add indentation for every line in [`lines`] according to offset
 fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: &OffsetType) -> Vec<String>{
     lines.into_iter()
         .map(|line|{
@@ -964,6 +988,9 @@ fn add_indent_to_lines(lines: Vec<String>, width: usize, offset: &OffsetType) ->
         .collect::<Vec<_>>()
 }
 
+/// Returns list symbol [`String`] according [`list_type`]. 
+/// If [`BlType::Enum`], then this function will return 
+/// [`String`] with next list number according to [`last_symbol`]
 fn get_symbol(last_symbol: &str, list_type: &BlType) -> String{
     match list_type{
         BlType::Bullet => "•".to_string(),
@@ -983,6 +1010,10 @@ fn get_symbol(last_symbol: &str, list_type: &BlType) -> String{
     }
 }
 
+/// Merge vectors in such manner: 
+/// [a, a, a], [b, b, b] -> [a, b, a, b, a, b]
+/// [a, a, a], [b, b] -> [a, b, a, b, a]
+/// [a, a], [b, b, b] -> [a, b, a, b, a, b]
 fn interleave<T: Clone + std::fmt::Debug>(v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
     if v1.is_empty(){
         return v2;
@@ -1010,6 +1041,7 @@ fn interleave<T: Clone + std::fmt::Debug>(v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
     result
 }
 
+/// Returns only lines with '\n' from [`lines`]
 fn get_multilined(body: &[String]) -> Vec<Vec<String>> {
     body.iter()
         .filter(|el| el.lines().count() > 1)
@@ -1021,13 +1053,15 @@ fn get_multilined(body: &[String]) -> Vec<Vec<String>> {
         .collect::<Vec<_>>()
 }
 
+/// Returns only lines without '\n' from [`lines`]. 
+/// Also split long lines and adds indent to them 
 fn get_onelined(
-    body: &[String], 
+    lines: &[String], 
     line_width: usize, 
     indent_str: &str, 
     offset: &OffsetType
 ) -> Vec<Vec<String>>{
-    body.split(|el| el.lines().count() > 1)
+    lines.split(|el| el.lines().count() > 1)
         .collect::<Vec<_>>()
         .iter()
         .filter(|s| !s.is_empty())
@@ -1047,6 +1081,8 @@ fn get_onelined(
         .collect::<Vec<_>>()
 }
 
+/// If Bl has nested Bl macros, then this function 
+/// convert it to [`Vec<Element>`] flattening super Bl  
 fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
     let MacroNode{ mdoc_macro, nodes } = bl;
 
@@ -1166,6 +1202,7 @@ fn trim(string: &mut String){
     }
 }
 
+/// Removes empty lines or lines that contains only whitespaces from [`input`]
 fn remove_empty_lines(input: &str) -> String {
     let has_first_nl = input.chars().next() == Some('\n');
     let has_last_nl = input.chars().last() == Some('\n');
@@ -1199,6 +1236,8 @@ fn remove_empty_lines(input: &str) -> String {
 
 // Formatting block full-explicit.
 impl MdocFormatter {
+    /// Converts [`OffsetType`] to indentation size. 
+    /// If width is [`Option::Some`], then returns width value
     fn get_indent_from_offset_type(&self, width: &Option<u8>, offset: &Option<OffsetType>) -> usize{
         if let Some(width) = width{
             return *width as usize;
@@ -1213,6 +1252,9 @@ impl MdocFormatter {
         }
     }
 
+    /// Converts [`OffsetType`] to block alignment type ([`OffsetType`]). 
+    /// This function exists because [`OffsetType::Indent`] and 
+    /// [`OffsetType::IndentTwo`] exist
     fn get_offset_from_offset_type(&self, offset: &Option<OffsetType>) -> OffsetType{
         let Some(offset) = offset else{
             return OffsetType::Left;
@@ -1366,26 +1408,6 @@ impl MdocFormatter {
             .join(&self.formatting_state.spacing);
 
         content.replace("\n", " ").replace("\r", "")
-    }
-
-    fn add_missing_indent(&self, content: &mut String){
-        *content = content.split("\n")
-            .map(|line|{
-                let indent_is_small = line.chars()
-                    .take_while(|ch| ch.is_whitespace())
-                    .count() < self.formatting_settings.indent;
-
-                let is_not_empty = !(line.chars().all(|ch| ch.is_whitespace()) || line.is_empty()); 
-                let line = if indent_is_small && is_not_empty{
-                    " ".repeat(self.formatting_settings.indent) + line.trim_start()
-                }else{
-                    line.to_string()
-                };
-
-                line
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
     }
 
     fn format_bl_symbol_block(
@@ -1792,6 +1814,7 @@ impl MdocFormatter {
         content
     }
 
+    /// Extract head from It macro and format every element in it
     fn get_heads(&mut self, macro_node: MacroNode, list_type: &BlType) -> Vec<String>{
         macro_node.nodes
             .into_iter()
@@ -1818,6 +1841,9 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
     }
 
+    /// Extract head from each It macro of Bl macro and format 
+    /// every element in them. Then return [`Vec<String>`] of 
+    /// all formatted It macro heads 
     fn prepare_rows(&mut self, elements: Vec<Element>) -> Vec<String>{
         elements.split(|el| 
                 matches!(el, Element::Macro(MacroNode{ mdoc_macro: Macro::Ta, .. }))
@@ -1830,6 +1856,9 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
     }
 
+    /// Extract body from each It macro of Bl macro and format 
+    /// every element in them. Then return [`Vec<String>`] of 
+    /// all formatted It macro bodies
     fn get_bodies(&mut self, macro_node: MacroNode, list_type: &BlType) -> Vec<Vec<String>>{        
         macro_node.nodes
             .into_iter()
@@ -1902,7 +1931,7 @@ impl MdocFormatter {
         &mut self,
         macro_node: MacroNode,
     ) -> String {
-        let mut content = split_nested_bl(macro_node)
+        let content = split_nested_bl(macro_node)
             .into_iter()
             .map(|element|{
                 let Element::Macro(ref macro_node) = element else{
@@ -1975,6 +2004,29 @@ impl MdocFormatter {
         }
 
         content
+    }
+
+    /// If line don't have enought indentation according 
+    /// to [`self.formatting_settings.indent`], then 
+    /// indent is added to this line
+    fn add_missing_indent(&self, content: &mut String){
+        *content = content.split("\n")
+            .map(|line|{
+                let indent_is_small = line.chars()
+                    .take_while(|ch| ch.is_whitespace())
+                    .count() < self.formatting_settings.indent;
+
+                let is_not_empty = !(line.chars().all(|ch| ch.is_whitespace()) || line.is_empty()); 
+                let line = if indent_is_small && is_not_empty{
+                    " ".repeat(self.formatting_settings.indent) + line.trim_start()
+                }else{
+                    line.to_string()
+                };
+
+                line
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
     }
 
     fn format_sh_block(&mut self, title: String, macro_node: MacroNode) -> String {
@@ -2618,7 +2670,6 @@ impl MdocFormatter {
         }
 
         self.formatting_state.header_text = Some(line + "\n");
-        // self.formatting_state.header_text = Some(line);
         String::new()
     }
 
@@ -2890,7 +2941,6 @@ impl MdocFormatter {
 
     fn format_fr(&mut self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
-
     }
 
     fn format_ft(&mut self, macro_node: MacroNode) -> String {
@@ -2909,17 +2959,13 @@ impl MdocFormatter {
 
     fn format_hf(&mut self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
-
     }
 
     fn format_ic(&mut self, macro_node: MacroNode) -> String {
         self.format_inline_macro(macro_node)
-
     }
 
     fn format_in(&self, filename: &str, macro_node: MacroNode) -> String {
-        println!("nodes: {:?}", macro_node.nodes.clone());
-
         let mut result = String::new();
         let mut iter = macro_node.nodes.into_iter();
         
@@ -3152,6 +3198,7 @@ impl MdocFormatter {
     }
 }
 
+/// Check if first char of [`s`] string is ASCII digit or letter
 fn is_first_char_alnum(s: &str) -> bool {
     s.chars().next().map(|c| c.is_ascii_alphanumeric()).unwrap_or(false)
 }
@@ -3160,15 +3207,18 @@ fn is_first_char_alnum(s: &str) -> bool {
 mod tests {
     use crate::{man_util::formatter::MdocDocument, FormattingSettings, MdocFormatter, MdocParser};
 
+    /// Test settings
     const FORMATTING_SETTINGS: FormattingSettings = FormattingSettings {
         width: 78,
         indent: 5,
     };
 
+    /// Parse [`input`] into AST
     fn get_ast(input: &str) -> MdocDocument {
         MdocParser::parse_mdoc(input).unwrap()
     }
 
+    /// Universal function for all tests
     fn test_formatting(input: &str, output: &str) {
         let ast = get_ast(input);
 
@@ -6719,7 +6769,7 @@ footer text                     January 1, 1970                    footer text";
     }
 
     
-    /*mod mdoc {
+    mod mdoc {
         use crate::man_util::formatter::tests::test_formatting;
         use std::{path::{Path, PathBuf}, process::Command, str::FromStr};
         use rstest::rstest;
@@ -6783,106 +6833,107 @@ footer text                     January 1, 1970                    footer text";
         }
 
         #[rstest]
-        #[case("./test_files/mdoc/access.2")]
-        // #[case("./test_files/mdoc/cvs.1")]
-        #[case("./test_files/mdoc/getfh.2")]
-        #[case("./test_files/mdoc/ioctl.2")]
-        #[case("./test_files/mdoc/munmap.2")]
-        #[case("./test_files/mdoc/rev.1")]
-        #[case("./test_files/mdoc/shutdown.2")]
-        #[case("./test_files/mdoc/talk.1")]
-        #[case("./test_files/mdoc/adjfreq.2")]
-        #[case("./test_files/mdoc/dc.1")]
-        #[case("./test_files/mdoc/getgroups.2")]
-        #[case("./test_files/mdoc/ipcs.1")]
-        #[case("./test_files/mdoc/mv.1")]
-        //#[case("./test_files/mdoc/rlog.1")]
-        #[case("./test_files/mdoc/signify.1")]
-        #[case("./test_files/mdoc/tmux.1")]
-        #[case("./test_files/mdoc/atq.1")]
-        #[case("./test_files/mdoc/diff.1")]
-        #[case("./test_files/mdoc/getitimer.2")]
-        #[case("./test_files/mdoc/ktrace.2")]
-        #[case("./test_files/mdoc/nl.1")]
-        #[case("./test_files/mdoc/rup.1")]
-        #[case("./test_files/mdoc/sigreturn.2")]
-        #[case("./test_files/mdoc/top.1")]
-        #[case("./test_files/mdoc/bc.1")]
-        #[case("./test_files/mdoc/dup.2")]
-        #[case("./test_files/mdoc/getpeername.2")]
-        #[case("./test_files/mdoc/lpq.1")]
-        #[case("./test_files/mdoc/nm.1")]
-        #[case("./test_files/mdoc/sched_yield.2")]
-        #[case("./test_files/mdoc/sigsuspend.2")]
-        #[case("./test_files/mdoc/truncate.2")]
-        #[case("./test_files/mdoc/brk.2")]
-        #[case("./test_files/mdoc/execve.2")]
-        #[case("./test_files/mdoc/getpriority.2")]
-        #[case("./test_files/mdoc/mg.1")]
-        #[case("./test_files/mdoc/open.2")]
-        #[case("./test_files/mdoc/scp.1")]
-        #[case("./test_files/mdoc/size.1")]
-        #[case("./test_files/mdoc/umask.2")]
-        #[case("./test_files/mdoc/cal.1")]
-        #[case("./test_files/mdoc/fgen.1")]
-        #[case("./test_files/mdoc/getrtable.2")]
-        #[case("./test_files/mdoc/minherit.2")]
-        #[case("./test_files/mdoc/poll.2")]
-        #[case("./test_files/mdoc/select.2")]
-        #[case("./test_files/mdoc/snmp.1")]
-        #[case("./test_files/mdoc/w.1")]
-        #[case("./test_files/mdoc/cat.1")]
-        #[case("./test_files/mdoc/file.1")]
-        #[case("./test_files/mdoc/getrusage.2")]
-        #[case("./test_files/mdoc/mkdir.1")]
-        #[case("./test_files/mdoc/profil.2")]
-        #[case("./test_files/mdoc/semget.2")]
-        #[case("./test_files/mdoc/socket.2")]
-        #[case("./test_files/mdoc/wall.1")]
-        #[case("./test_files/mdoc/chdir.2")]
-        #[case("./test_files/mdoc/flex.1")]
-        #[case("./test_files/mdoc/getsid.2")]
-        #[case("./test_files/mdoc/mkfifo.2")]
-        #[case("./test_files/mdoc/quotactl.2")]
-        #[case("./test_files/mdoc/send.2")]
-        #[case("./test_files/mdoc/socketpair.2")]
-        #[case("./test_files/mdoc/write.2")]
-        #[case("./test_files/mdoc/chflags.2")]
-        #[case("./test_files/mdoc/flock.2")]
-        #[case("./test_files/mdoc/getsockname.2")]
-        #[case("./test_files/mdoc/mlockall.2")]
-        //#[case("./test_files/mdoc/rcs.1")]
-        #[case("./test_files/mdoc/setuid.2")]
-        #[case("./test_files/mdoc/statfs.2")]
-        #[case("./test_files/mdoc/ypconnect.2")]
-        #[case("./test_files/mdoc/chmod.2")]
-        #[case("./test_files/mdoc/fork.2")]
-        #[case("./test_files/mdoc/getsockopt.2")]
-        #[case("./test_files/mdoc/mopa.out.1")]
-        //#[case("./test_files/mdoc/rdist.1")]
-        //#[case("./test_files/mdoc/sftp.1")]
-        #[case("./test_files/mdoc/symlink.2")]
-        #[case("./test_files/mdoc/closefrom.2")]
-        #[case("./test_files/mdoc/fsync.2")]
-        #[case("./test_files/mdoc/gettimeofday.2")]
-        #[case("./test_files/mdoc/moptrace.1")]
-        #[case("./test_files/mdoc/read.2")]
-        #[case("./test_files/mdoc/shar.1")]
-        #[case("./test_files/mdoc/sync.2")]
-        #[case("./test_files/mdoc/cu.1")]
-        #[case("./test_files/mdoc/futex.2")]
-        //#[case("./test_files/mdoc/grep.1")]
-        #[case("./test_files/mdoc/msgrcv.2")]
-        #[case("./test_files/mdoc/reboot.2")]
-        #[case("./test_files/mdoc/shmctl.2")]
-        #[case("./test_files/mdoc/sysarch.2")]
-        #[case("./test_files/mdoc/cut.1")]
-        #[case("./test_files/mdoc/getdents.2")]
-        #[case("./test_files/mdoc/id.1")]
-        #[case("./test_files/mdoc/msgsnd.2")]
-        #[case("./test_files/mdoc/rename.2")]
-        #[case("./test_files/mdoc/shmget.2")]
-        #[case("./test_files/mdoc/t11.2")]
+        // #[case("./test_files/mdoc/access.2")]
+        // #[case("./test_files/mdoc/getfh.2")]
+        // #[case("./test_files/mdoc/ioctl.2")]
+        // #[case("./test_files/mdoc/munmap.2")]
+        // #[case("./test_files/mdoc/rev.1")]
+        // #[case("./test_files/mdoc/shutdown.2")]
+        // #[case("./test_files/mdoc/talk.1")]
+        // #[case("./test_files/mdoc/adjfreq.2")]
+        // #[case("./test_files/mdoc/dc.1")]
+        // #[case("./test_files/mdoc/getgroups.2")]
+        // #[case("./test_files/mdoc/ipcs.1")]
+        // #[case("./test_files/mdoc/mv.1")]
+        // #[case("./test_files/mdoc/signify.1")]
+        // #[case("./test_files/mdoc/tmux.1")]
+        // #[case("./test_files/mdoc/atq.1")]
+        // #[case("./test_files/mdoc/diff.1")]
+        // #[case("./test_files/mdoc/getitimer.2")]
+        // #[case("./test_files/mdoc/ktrace.2")]
+        // #[case("./test_files/mdoc/nl.1")]
+        // #[case("./test_files/mdoc/rup.1")]
+        // #[case("./test_files/mdoc/sigreturn.2")]
+        // #[case("./test_files/mdoc/top.1")]
+        // #[case("./test_files/mdoc/bc.1")]
+        // #[case("./test_files/mdoc/dup.2")]
+        // #[case("./test_files/mdoc/getpeername.2")]
+        // #[case("./test_files/mdoc/lpq.1")]
+        // #[case("./test_files/mdoc/nm.1")]
+        // #[case("./test_files/mdoc/sched_yield.2")]
+        // #[case("./test_files/mdoc/sigsuspend.2")]
+        // #[case("./test_files/mdoc/truncate.2")]
+        // #[case("./test_files/mdoc/brk.2")]
+        // #[case("./test_files/mdoc/execve.2")]
+        // #[case("./test_files/mdoc/getpriority.2")]
+        // #[case("./test_files/mdoc/mg.1")]
+        // #[case("./test_files/mdoc/open.2")]
+        // #[case("./test_files/mdoc/scp.1")]
+        // #[case("./test_files/mdoc/size.1")]
+        // #[case("./test_files/mdoc/umask.2")]
+        // #[case("./test_files/mdoc/cal.1")]
+        // #[case("./test_files/mdoc/fgen.1")]
+        // #[case("./test_files/mdoc/getrtable.2")]
+        // #[case("./test_files/mdoc/minherit.2")]
+        // #[case("./test_files/mdoc/poll.2")]
+        // #[case("./test_files/mdoc/select.2")]
+        // #[case("./test_files/mdoc/snmp.1")]
+        // #[case("./test_files/mdoc/w.1")]
+        // #[case("./test_files/mdoc/cat.1")]
+        // #[case("./test_files/mdoc/file.1")]
+        // #[case("./test_files/mdoc/getrusage.2")]
+        // #[case("./test_files/mdoc/mkdir.1")]
+        // #[case("./test_files/mdoc/profil.2")]
+        // #[case("./test_files/mdoc/semget.2")]
+        // #[case("./test_files/mdoc/socket.2")]
+        // #[case("./test_files/mdoc/wall.1")]
+        // #[case("./test_files/mdoc/chdir.2")]
+        // #[case("./test_files/mdoc/flex.1")]
+        // #[case("./test_files/mdoc/getsid.2")]
+        // #[case("./test_files/mdoc/mkfifo.2")]
+        // #[case("./test_files/mdoc/quotactl.2")]
+        // #[case("./test_files/mdoc/send.2")]
+        // #[case("./test_files/mdoc/socketpair.2")]
+        // #[case("./test_files/mdoc/write.2")]
+        // #[case("./test_files/mdoc/chflags.2")]
+        // #[case("./test_files/mdoc/flock.2")]
+        // #[case("./test_files/mdoc/getsockname.2")]
+        // #[case("./test_files/mdoc/mlockall.2")]
+        // #[case("./test_files/mdoc/setuid.2")]
+        // #[case("./test_files/mdoc/statfs.2")]
+        // #[case("./test_files/mdoc/ypconnect.2")]
+        // #[case("./test_files/mdoc/chmod.2")]
+        // #[case("./test_files/mdoc/fork.2")]
+        // #[case("./test_files/mdoc/getsockopt.2")]
+        // #[case("./test_files/mdoc/mopa.out.1")]
+        // #[case("./test_files/mdoc/symlink.2")]
+        // #[case("./test_files/mdoc/closefrom.2")]
+        // #[case("./test_files/mdoc/fsync.2")]
+        // #[case("./test_files/mdoc/gettimeofday.2")]
+        // #[case("./test_files/mdoc/moptrace.1")]
+        // #[case("./test_files/mdoc/read.2")]
+        // #[case("./test_files/mdoc/shar.1")]
+        // #[case("./test_files/mdoc/sync.2")]
+        // #[case("./test_files/mdoc/cu.1")]
+        // #[case("./test_files/mdoc/futex.2")]
+        // #[case("./test_files/mdoc/msgrcv.2")]
+        // #[case("./test_files/mdoc/reboot.2")]
+        // #[case("./test_files/mdoc/shmctl.2")]
+        // #[case("./test_files/mdoc/sysarch.2")]
+        // #[case("./test_files/mdoc/cut.1")]
+        // #[case("./test_files/mdoc/getdents.2")]
+        // #[case("./test_files/mdoc/id.1")]
+        // #[case("./test_files/mdoc/msgsnd.2")]
+        // #[case("./test_files/mdoc/rename.2")]
+        // #[case("./test_files/mdoc/shmget.2")]
+        // #[case("./test_files/mdoc/t11.2")]
+
+        #[case("./test_files/mdoc/cvs.1")]
+        #[case("./test_files/mdoc/rlog.1")]
+        #[case("./test_files/mdoc/rcs.1")]
+        #[case("./test_files/mdoc/rdist.1")]
+        #[case("./test_files/mdoc/sftp.1")]
+        #[case("./test_files/mdoc/grep.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")
@@ -6895,5 +6946,5 @@ footer text                     January 1, 1970                    footer text";
             test_formatting(&input, &output);
         }
         
-    }*/
+    }
 }

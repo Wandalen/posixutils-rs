@@ -24,7 +24,11 @@ use super::mdoc_macro::*;
 use std::mem::discriminant;
 use std::sync::LazyLock;
 
-static RS_SUBMACRO: LazyLock<Vec<Macro>> = LazyLock::new(|| {
+/// Default Bl -width parameter value
+const DEFAULT_INDENT: u8 = 20; 
+
+/// Rs submacros sorting order
+static RS_SUBMACRO_ORDER: LazyLock<Vec<Macro>> = LazyLock::new(|| {
     vec![
         Macro::A,
         Macro::T,
@@ -43,21 +47,29 @@ static RS_SUBMACRO: LazyLock<Vec<Macro>> = LazyLock::new(|| {
     ]
 });
 
+/// Mdoc files parser
 #[derive(Parser)]
 #[grammar = "./man_util/mdoc.pest"]
 pub struct MdocParser;
 
+/// Stores macro parameters and subnodes
 #[derive(Debug, Clone, PartialEq)]
 pub struct MacroNode {
+    /// Macro type
     pub mdoc_macro: Macro,
+    /// Sub nodes of current node
     pub nodes: Vec<Element>,
 }
 
+/// Mdoc language units
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
+    /// Text node
     Text(String),
+    /// Macro node 
     Macro(MacroNode),
-    Eoi, // "End of input" marker
+    /// "End of input" marker
+    Eoi,
 }
 
 impl From<Element> for String {
@@ -76,24 +88,30 @@ impl From<String> for Element {
     }
 }
 
+/// Stores full mdoc AST
 #[derive(Debug, Clone, PartialEq)]
 pub struct MdocDocument {
     pub elements: Vec<Element>,
 }
 
+/// Mdoc parsing errors
 #[derive(Error, Debug, PartialEq)]
 pub enum MdocError {
+    /// Pest rules violation
     #[error("mdoc: {0}")]
     Pest(#[from] Box<pest::error::Error<Rule>>),
 
+    /// Validation failed
     #[error("mdoc: {0}")]
     Validation(String),
 }
 
+/// Validates if parsing result AST meets the requirements  
 #[derive(Default)]
 struct MdocValidator {
-    // sh_titles: HashSet<String>,
+    /// Ss macros titles
     ss_titles: HashSet<String>,
+    /// Utility or current mdoc title
     first_name: Option<Vec<String>>,
 }
 
@@ -135,6 +153,7 @@ impl MdocValidator {
     //     }
     // }
     
+    // /// Check if mdoc dont have title duplicates
     // fn validate_sh(&mut self, sh_node: &MacroNode) -> Result<(), MdocError> {
     //     if let Macro::Sh { title } = &sh_node.mdoc_macro {
     //         if !self.sh_titles.insert(title.clone()) {
@@ -154,6 +173,7 @@ impl MdocValidator {
     //     Ok(())
     // }
 
+    /// Check if mdoc dont have subsection duplicates
     fn validate_ss(&mut self, ss_node: &MacroNode) -> Result<(), MdocError> {
         if let Macro::Ss { title } = &ss_node.mdoc_macro {
             if !self.ss_titles.insert(title.clone()) {
@@ -165,6 +185,7 @@ impl MdocValidator {
         Ok(())
     }
 
+    /// Validates certain element
     fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
         if let Element::Macro(macro_node) = element {
             match macro_node.mdoc_macro {
@@ -185,6 +206,7 @@ impl MdocValidator {
         Ok(())
     }
 
+    /// Validate full [`MdocDocument`]
     pub fn validate(&mut self, document: &mut MdocDocument) -> Result<(), MdocError> {
         for element in &mut document.elements {
             self.validate_element(element)?;
@@ -230,6 +252,7 @@ impl MdocParser {
         })
     }
 
+    /// Parses full mdoc file
     pub fn parse_mdoc(input: impl AsRef<str>) -> Result<MdocDocument, MdocError> {
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
@@ -248,8 +271,6 @@ impl MdocParser {
         // elements.iter().for_each(|e| println!("{e:?}"));
 
         let mut mdoc = MdocDocument { elements };
-
-        //println!("{:#?}", mdoc);
 
         let validator = &mut MdocValidator::default();
         validator.validate(&mut mdoc)?;
@@ -370,11 +391,11 @@ impl MdocParser {
                         .map(|p| p.as_str())
                         .unwrap_or("");
                     if width_p.is_empty(){
-                        *width = Some(15);
+                        *width = Some(DEFAULT_INDENT);
                     }else if width_p.chars().all(|ch| ch.is_ascii_digit()){
-                        *width = Some(str::parse::<u8>(width_p).ok().unwrap_or(15));
+                        *width = Some(str::parse::<u8>(width_p).ok().unwrap_or(DEFAULT_INDENT));
                     }else{
-                        *width = Some(15);
+                        *width = Some(DEFAULT_INDENT);
                     }
                 },
                 Rule::bl_offset => {
@@ -486,6 +507,8 @@ impl MdocParser {
 
 // Block full-implicit macros parsing
 impl MdocParser {
+    // Parses (`It`)[https://man.openbsd.org/mdoc#It]
+    // `It [head]`
     fn parse_it_block(pair: Pair<Rule>) -> Element {
         fn string_to_elements(input: &str) -> Vec<Element>{
             if let Ok(pairs) = MdocParser::parse(Rule::args, input){
@@ -546,7 +569,6 @@ impl MdocParser {
 
     // Parses (`Nd`)[https://man.openbsd.org/mdoc#Nd]
     // `Nd line`
-
     fn parse_nd(pair: Pair<Rule>) -> Element {
         let mut inner_nodes = pair.into_inner();
 
@@ -814,6 +836,8 @@ impl MdocParser {
 
 // Block partial-explicit parsing
 impl MdocParser {
+    // Parses (`Ao`)[https://man.openbsd.org/mdoc#Ao]:
+    // `Ao block`
     fn parse_ao_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -827,6 +851,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Ac`)[https://man.openbsd.org/mdoc#Ac]:
+    // `Ac`
     fn parse_ac(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Ac,
@@ -834,6 +860,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Bo`)[https://man.openbsd.org/mdoc#Bo]:
+    // `Bo block`
     fn parse_bo_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -847,6 +875,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Bc`)[https://man.openbsd.org/mdoc#Bc]:
+    // `Bc`
     fn parse_bc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Bc,
@@ -854,6 +884,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Bro`)[https://man.openbsd.org/mdoc#Bro]:
+    // `Bro`
     fn parse_bro_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -867,6 +899,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Brc`)[https://man.openbsd.org/mdoc#Brc]:
+    // `Brc`
     fn parse_brc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Brc,
@@ -874,6 +908,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Do`)[https://man.openbsd.org/mdoc#Do]:
+    // `Do`
     fn parse_do_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -887,6 +923,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Dc`)[https://man.openbsd.org/mdoc#Dc]:
+    // `Dc block`
     fn parse_dc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Dc,
@@ -894,6 +932,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Eo`)[https://man.openbsd.org/mdoc#Eo]:
+    // `Eo block`
     fn parse_eo_block(pair: Pair<Rule>) -> Element {
         let mut inner_pairs = pair.into_inner();
 
@@ -942,6 +982,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Ec`)[https://man.openbsd.org/mdoc#Ec]:
+    // `Ec`
     fn parse_ec(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Ec,
@@ -949,6 +991,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Fo`)[https://man.openbsd.org/mdoc#Fo]:
+    // `Fo block`
     fn parse_fo_block(pair: Pair<Rule>) -> Element {
         let mut inner_pairs = pair.into_inner();
 
@@ -974,6 +1018,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Fc`)[https://man.openbsd.org/mdoc#Fc]:
+    // `Fc`
     fn parse_fc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Fc,
@@ -981,7 +1027,8 @@ impl MdocParser {
         })
     }
 
-    // Parses oo_block
+    // Parses (`Oo`)[https://man.openbsd.org/mdoc#Oo]:
+    // `Oo block`
     fn parse_oo_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -995,6 +1042,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Oc`)[https://man.openbsd.org/mdoc#Oc]:
+    // `Oc`
     fn parse_oc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Oc,
@@ -1002,7 +1051,9 @@ impl MdocParser {
         })
     }
 
-    // Parses po_block
+
+    // Parses (`Po`)[https://man.openbsd.org/mdoc#Po]:
+    // `Po block`
     fn parse_po_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -1016,6 +1067,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Pc`)[https://man.openbsd.org/mdoc#Pc]:
+    // `Pc`
     fn parse_pc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Pc,
@@ -1023,7 +1076,8 @@ impl MdocParser {
         })
     }
 
-    // Parses qo_block
+    // Parses (`Qo`)[https://man.openbsd.org/mdoc#Qo]:
+    // `Qo block`
     fn parse_qo_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -1037,6 +1091,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Qc`)[https://man.openbsd.org/mdoc#Qc]:
+    // `Qc`
     fn parse_qc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Qc,
@@ -1044,14 +1100,15 @@ impl MdocParser {
         })
     }
 
-    // Parses rs_block
+    // Parses (`Rs`)[https://man.openbsd.org/mdoc#Rs]:
+    // `Rs`
     fn parse_rs_block(pair: Pair<Rule>) -> Element {
         fn rs_submacro_cmp(a: &Element, b: &Element) -> std::cmp::Ordering {
             let get_macro_order_position = |n| {
-                RS_SUBMACRO
+                RS_SUBMACRO_ORDER
                     .iter()
                     .position(|m| discriminant(m) == discriminant(n))
-                    .unwrap_or(RS_SUBMACRO.len())
+                    .unwrap_or(RS_SUBMACRO_ORDER.len())
             };
 
             let Element::Macro(MacroNode {
@@ -1091,6 +1148,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Re`)[https://man.openbsd.org/mdoc#Re]:
+    // `Re`
     fn parse_re(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Re,
@@ -1098,7 +1157,8 @@ impl MdocParser {
         })
     }
 
-    // Parses so_block
+    // Parses (`So`)[https://man.openbsd.org/mdoc#So]:
+    // `So block`
     fn parse_so_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -1112,6 +1172,8 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Sc`)[https://man.openbsd.org/mdoc#Sc]:
+    // `Sc`
     fn parse_sc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
             mdoc_macro: Macro::So,
@@ -1119,7 +1181,8 @@ impl MdocParser {
         })
     }
 
-    // Parses xo_block
+    // Parses (`Xo`)[https://man.openbsd.org/mdoc#Xo]:
+    // `Xo block`
     fn parse_xo_block(pair: Pair<Rule>) -> Element {
         let nodes = pair
             .into_inner()
@@ -1133,9 +1196,11 @@ impl MdocParser {
         })
     }
 
+    // Parses (`Xc`)[https://man.openbsd.org/mdoc#Xc]:
+    // `Xc`
     fn parse_xc(_pair: Pair<Rule>) -> Element {
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::Xo,
+            mdoc_macro: Macro::Xc,
             nodes: vec![],
         })
     }
@@ -2908,8 +2973,8 @@ mod tests {
         fn bl_width() {
             let mut width_types: HashMap<&str, Option<u8>> = Default::default();
             width_types.insert("15", Some(15));
-            width_types.insert("300", Some(15));
-            width_types.insert("left", Some(15));
+            width_types.insert("300", Some(20));
+            width_types.insert("left", Some(20));
 
             for (str_type, width_result) in width_types {
                 let content = format!(".Bl -bullet -width {str_type}\n.El");

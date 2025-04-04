@@ -13,6 +13,7 @@ use pest::iterators::Pair;
 
 use crate::man_util::parser::Rule;
 
+/// Types of formatting AT&T UNIX version
 #[derive(Debug, Clone, PartialEq)]
 pub enum AtType {
     General,
@@ -59,6 +60,7 @@ impl Default for AtType {
     }
 }
 
+/// Used for incapsulating formatting BSD/OS version logic
 pub struct BsxType;
 
 impl BsxType {
@@ -71,6 +73,7 @@ impl BsxType {
     }
 }
 
+/// Used for incapsulating formatting BSD version logic
 pub struct BxType;
 
 impl BxType {
@@ -86,6 +89,7 @@ impl BxType {
     }
 }
 
+/// Used for incapsulating formatting DragonFly version logic
 pub struct DxType;
 
 impl DxType {
@@ -98,6 +102,7 @@ impl DxType {
     }
 }
 
+/// Used for incapsulating formatting FreeBSD version logic
 pub struct FxType;
 
 impl FxType {
@@ -110,6 +115,7 @@ impl FxType {
     }
 }
 
+/// Used for incapsulating formatting NetBSD version logic
 pub struct NxType;
 
 impl NxType {
@@ -122,6 +128,7 @@ impl NxType {
     }
 }
 
+/// Used for incapsulating formatting OpenBSD version logic
 pub struct OxType;
 
 impl OxType {
@@ -134,6 +141,7 @@ impl OxType {
     }
 }
 
+/// Used for incapsulating formatting C language standards logic
 #[derive(Debug, Clone, PartialEq)]
 pub enum StType {
     // C Language Standards

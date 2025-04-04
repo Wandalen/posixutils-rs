@@ -14,6 +14,7 @@ use crate::man_util::parser::Element;
 pub mod text_production;
 pub mod types;
 
+/// Mdoc language units
 #[derive(Debug, Clone, PartialEq)]
 pub enum Macro {
     Soi,
@@ -176,6 +177,7 @@ pub enum Macro {
     Va,
     Vt,
     Xo,
+    Xc, // Close a scope opened by Xo
     Xr {
         name: String,
         section: String,
@@ -186,5 +188,4 @@ pub enum Macro {
     _El, // End a list context started by Bl
     _Ot, // Deprecated
     _Sc, // Close single-quoted context opened by So
-    _Xc, // Close a scope opened by Xo
 }
