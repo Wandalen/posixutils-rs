@@ -32,7 +32,6 @@ pub struct FormattingState {
     date: String,
     split_mod: bool,
     current_indent: usize,
-    formatted_macro: Option<Macro>
 }
 
 impl Default for FormattingState {
@@ -46,7 +45,6 @@ impl Default for FormattingState {
             date: String::default(),
             split_mod: false,
             current_indent: 0,
-            formatted_macro: None
         }
     }
 }
@@ -139,55 +137,13 @@ impl MdocFormatter {
         let is_one_line = formatted.lines().count() == 1;
         let max_width = self.formatting_settings.width;
 
-        for (idx, line) in formatted.split("\n").enumerate() {
-            if let Some(m) = &self.formatting_state.formatted_macro {
-                println!("Line: {}  | macro: {:?}", line, self.formatting_state.formatted_macro);
-
-                match m {
-                    Macro::An { author_name_type } => {
-                        if idx == 0 && line.is_empty() {
-                            self.formatting_state.formatted_macro = None;
-                            continue; 
-                        }
-
-                        // if self.formatting_state.split_mod {
-                        //     lines.push(current_line.clone());
-                        //     current_line.clear();
-
-                        //     lines.push("".to_string());
-
-                        //     self.formatting_state.formatted_macro = None;
-
-                        //     continue;
-                        // }
-
-                        // match author_name_type {
-                        //     AnType::Split =>  {
-                        //         lines.push(current_line.clone());
-                        //         current_line.clear();
-
-                        //         lines.push("".to_string());
-
-                        //         self.formatting_state.formatted_macro = None;
-
-                        //         continue;
-                        //     },
-                        //     _ => {}
-                        // }
-                    },
-                    Macro::Lp => { 
-                        lines.push(current_line.clone());
-                        current_line.clear();
-
-                        self.formatting_state.formatted_macro = None;
-
-                        continue;
-                    }
-                    _ => { self.formatting_state.formatted_macro = None }
-                }
-            }
-
+        for line in formatted.split("\n") {
             if !is_one_line && !current_line.is_empty(){
+                lines.push(current_line.trim_end().to_string());
+                current_line.clear();
+            }
+            
+            if line.starts_with("\\(nl)") {
                 lines.push(current_line.trim_end().to_string());
                 current_line.clear();
             }
@@ -257,6 +213,8 @@ impl MdocFormatter {
         for node in ast.elements {
             let mut formatted_node: String = self.format_node(node.clone());
 
+            println!("[format_mdoc] Formatted node: {}", formatted_node);
+
             if formatted_node.is_empty(){
                 continue;
             } 
@@ -287,7 +245,6 @@ impl MdocFormatter {
             .count();
 
         lines = lines.split_at(first_empty_count).1.to_vec();
-        // lines.insert(0, "".to_string());
 
         lines.insert(
         0,
@@ -301,6 +258,7 @@ impl MdocFormatter {
         lines
             .join("\n")
             .replace(" \x08", "")
+            .replace("\\(nl)", "")
             .into_bytes()
     }
 
@@ -1725,7 +1683,7 @@ impl MdocFormatter {
         &self, 
         items: Vec<(String, Vec<String>)>,
         width: Option<u8>,
-        offset: Option<OffsetType>, 
+        offset: Option<OffsetType>,
         compact: bool
     ) -> String{
         let indent = self.get_indent_from_offset_type(&width, &offset);
@@ -2546,21 +2504,18 @@ impl MdocFormatter {
         match an_type {
             AnType::NoSplit => {
                 self.formatting_state.split_mod = false;
-                // self.formatting_state.formatted_macro = Some(Macro::An { author_name_type: AnType::NoSplit });
                 String::new()
             }
             AnType::Split => {
                 self.formatting_state.split_mod = true;
-                // self.formatting_state.formatted_macro = Some(Macro::An { author_name_type: AnType::Split });
                 String::new()
             }
             AnType::Name => {
                 let content = self.format_inline_macro(macro_node);
                 match self.formatting_state.split_mod {
-                    true => format!("\n{}", content),
+                    true => format!("\\(nl){}", content),
                     false => content,
                 }
-                // self.format_inline_macro(macro_node)
             }
         }
     }
