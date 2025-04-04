@@ -366,13 +366,13 @@ impl MdocParser {
                     }
                     count.0 += 1;
                     let width_p = pair.into_inner()
-                        .find(|p| Rule::word == p.as_rule())
+                        .find(|p| Rule::text_arg == p.as_rule())
                         .map(|p| p.as_str())
                         .unwrap_or("");
                     if width_p.is_empty(){
                         *width = Some(15);
                     }else if width_p.chars().all(|ch| ch.is_ascii_digit()){
-                        *width = str::parse::<u8>(width_p).ok();
+                        *width = Some(str::parse::<u8>(width_p).ok().unwrap_or(15));
                     }else{
                         *width = Some(15);
                     }
@@ -3073,6 +3073,11 @@ mod tests {
                 "-compact col1 col2", 
                 (None, None, true, vec!["col1".to_string(), "col2".to_string()])
             );
+            parameters_cases.insert(
+                "-width 8 -compact", 
+                (Some(8), None, true, vec![])
+            );
+            
 
             for (input, output) in parameters_cases {
                 let (width, offset, compact, columns) = output;
