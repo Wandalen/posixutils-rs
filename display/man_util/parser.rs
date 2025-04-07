@@ -106,117 +106,118 @@ pub enum MdocError {
     Validation(String),
 }
 
-/// Validates if parsing result AST meets the requirements  
-#[derive(Default)]
-struct MdocValidator {
-    /// Ss macros titles
-    ss_titles: HashSet<String>,
-    /// Utility or current mdoc title
-    first_name: Option<Vec<String>>,
-}
+// /// Validates if parsing result AST meets the requirements  
+// #[derive(Default)]
+// struct MdocValidator {
+//     /// Ss macros titles
+//     ss_titles: HashSet<String>,
+//     /// Utility or current mdoc title
+//     first_name: Option<Vec<String>>,
+// }
 
-impl MdocValidator {
-    fn validate_nm(&mut self, nm_node: &mut MacroNode) -> Result<(), MdocError> {
-        if let MacroNode {
-            mdoc_macro: Macro::Nm,
-            nodes: name,
-        } = nm_node
-        {
-            match (&self.first_name, name) {
-                // Both remembered name and Nm name are present, or both are absent
-                (Some(_), name) if !name.is_empty() => {}
-                (None, name) if name.is_empty() => {}
-                // Nm has a name, but no remembered name
-                (None, name) if !name.is_empty() => {
-                    self.first_name = Some(name.iter().cloned().map(Element::into).collect());
-                }
-                // Nm has no name, but remembered name is present
-                (Some(first_name), name) if name.is_empty() => {
-                    *name = first_name.iter().cloned().map(Element::from).collect();
-                }
-                _ => unreachable!(),
-            }
-        }
-        Ok(())
-    }
+// impl MdocValidator {
+//     fn validate_nm(&mut self, nm_node: &mut MacroNode) -> Result<(), MdocError> {
+//         if let MacroNode {
+//             mdoc_macro: Macro::Nm,
+//             nodes: name,
+//         } = nm_node
+//         {
+//             match (&self.first_name, name) {
+//                 // Both remembered name and Nm name are present, or both are absent
+//                 (Some(_), name) if !name.is_empty() => {}
+//                 (None, name) if name.is_empty() => {}
+//                 // Nm has a name, but no remembered name
+//                 (None, name) if !name.is_empty() => {
+//                     self.first_name = Some(name.iter().cloned().map(Element::into).collect());
+//                 }
+//                 // Nm has no name, but remembered name is present
+//                 (Some(first_name), name) if name.is_empty() => {
+//                     *name = first_name.iter().cloned().map(Element::from).collect();
+//                 }
+//                 _ => unreachable!(),
+//             }
+//         }
+//         Ok(())
+//     }
 
-    // fn is_last_element_nd(element: &Element) -> bool {
-    //     match element {
-    //         Element::Macro(macro_node) => {
-    //             if let Some(last) = macro_node.nodes.last() {
-    //                 Self::is_last_element_nd(last)
-    //             } else {
-    //                 macro_node.mdoc_macro == Macro::Nd
-    //             }
-    //         }
-    //         _ => false,
-    //     }
-    // }
+//     fn is_last_element_nd(element: &Element) -> bool {
+//         match element {
+//             Element::Macro(macro_node) => {
+//                 if let Some(last) = macro_node.nodes.last() {
+//                     Self::is_last_element_nd(last)
+//                 } else {
+//                     macro_node.mdoc_macro == Macro::Nd
+//                 }
+//             }
+//             _ => false,
+//         }
+//     }
     
-    // /// Check if mdoc dont have title duplicates
-    // fn validate_sh(&mut self, sh_node: &MacroNode) -> Result<(), MdocError> {
-    //     if let Macro::Sh { title } = &sh_node.mdoc_macro {
-    //         if !self.sh_titles.insert(title.clone()) {
-    //             return Err(MdocError::Validation(format!(
-    //                 "Duplicate .Sh title found: {title}"
-    //             )));
-    //         }
-    //         if title == "NAME" && !sh_node.nodes.is_empty() {
-    //             let last_element = sh_node.nodes.last().unwrap();
-    //             if !Self::is_last_element_nd(last_element) {
-    //                 return Err(MdocError::Validation(
-    //                     ".Sh NAME must end with .Nd".to_string(),
-    //                 ));
-    //             }
-    //         }
-    //     }
-    //     Ok(())
-    // }
+//     /// Check if mdoc dont have title duplicates
+//     fn validate_sh(&mut self, sh_node: &MacroNode) -> Result<(), MdocError> {
+//         if let Macro::Sh { title } = &sh_node.mdoc_macro {
+//             if !self.sh_titles.insert(title.clone()) {
+//                 return Err(MdocError::Validation(format!(
+//                     "Duplicate .Sh title found: {title}"
+//                 )));
+//             }
+//             if title == "NAME" && !sh_node.nodes.is_empty() {
+//                 let last_element = sh_node.nodes.last().unwrap();
+//                 if !Self::is_last_element_nd(last_element) {
+//                     return Err(MdocError::Validation(
+//                         ".Sh NAME must end with .Nd".to_string(),
+//                     ));
+//                 }
+//             }
+//         }
+//         Ok(())
+//     }
 
-    /// Check if mdoc dont have subsection duplicates
-    fn validate_ss(&mut self, ss_node: &MacroNode) -> Result<(), MdocError> {
-        if let Macro::Ss { title } = &ss_node.mdoc_macro {
-            if !self.ss_titles.insert(title.clone()) {
-                return Err(MdocError::Validation(format!(
-                    "Duplicate .Ss title found: {title}",
-                )));
-            }
-        }
-        Ok(())
-    }
+//     /// Check if mdoc dont have subsection duplicates
+//     fn validate_ss(&mut self, ss_node: &MacroNode) -> Result<(), MdocError> {
+//         if let Macro::Ss { title } = &ss_node.mdoc_macro {
+//             if !self.ss_titles.insert(title.clone()) {
+//                 return Err(MdocError::Validation(format!(
+//                     "Duplicate .Ss title found: {title}",
+//                 )));
+//             }
+//         }
+//         Ok(())
+//     }
 
-    /// Validates certain element
-    fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
-        if let Element::Macro(macro_node) = element {
-            match macro_node.mdoc_macro {
-                Macro::Nm => self.validate_nm(macro_node)?,
-                // Macro::Sh { .. } => self.validate_sh(macro_node)?,
-                Macro::Ss { .. } => self.validate_ss(macro_node)?,
-                _ => {}
-            }
-        }
+//     /// Validates certain element
+//     fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
+//         if let Element::Macro(macro_node) = element {
+//             match macro_node.mdoc_macro {
+//                 Macro::Nm => self.validate_nm(macro_node)?,
+//                 // Macro::Sh { .. } => self.validate_sh(macro_node)?,
+//                 Macro::Ss { .. } => self.validate_ss(macro_node)?,
+//                 _ => {}
+//             }
+//         }
 
-        // Recursively validate child nodes
-        if let Element::Macro(MacroNode { nodes, .. }) = element {
-            for child in nodes {
-                self.validate_element(child)?;
-            }
-        }
+//         // Recursively validate child nodes
+//         if let Element::Macro(MacroNode { nodes, .. }) = element {
+//             for child in nodes {
+//                 self.validate_element(child)?;
+//             }
+//         }
 
-        Ok(())
-    }
+//         Ok(())
+//     }
 
-    /// Validate full [`MdocDocument`]
-    pub fn validate(&mut self, document: &mut MdocDocument) -> Result<(), MdocError> {
-        for element in &mut document.elements {
-            self.validate_element(element)?;
-        }
-        Ok(())
-    }
-}
+//     /// Validate full [`MdocDocument`]
+//     pub fn validate(&mut self, document: &mut MdocDocument) -> Result<(), MdocError> {
+//         for element in &mut document.elements {
+//             self.validate_element(element)?;
+//         }
+//         Ok(())
+//     }
+// }
 
 impl MdocParser {
     fn parse_element(pair: Pair<Rule>) -> Element {
+        //println!("\"{}\"", pair.as_str());
         match pair.as_rule() {
             Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
@@ -256,7 +257,7 @@ impl MdocParser {
     pub fn parse_mdoc(input: impl AsRef<str>) -> Result<MdocDocument, MdocError> {
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
-        // println!("Pairs:\n{pairs:#?}\n\n");
+        //println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -265,15 +266,21 @@ impl MdocParser {
                 inner_rules.map(Self::parse_element)
             })
             .collect();
-        elements.pop(); // Remove `Element::Eoi` element
+        if let Some(element) = elements.last(){
+            if let Element::Eoi = element{
+                elements.pop(); // Remove `Element::Eoi` element
+            }
+        }
+
+        //println!("{:#?}", elements);
 
         // TODO: debug only
         // elements.iter().for_each(|e| println!("{e:?}"));
 
-        let mut mdoc = MdocDocument { elements };
+        let mdoc = MdocDocument { elements };
 
-        let validator = &mut MdocValidator::default();
-        validator.validate(&mut mdoc)?;
+        //let validator = &mut MdocValidator::default();
+        //validator.validate(&mut mdoc)?;
 
         Ok(mdoc)
     }
@@ -392,8 +399,11 @@ impl MdocParser {
                         .unwrap_or("");
                     if width_p.is_empty(){
                         *width = Some(DEFAULT_INDENT);
-                    }else if width_p.chars().all(|ch| ch.is_ascii_digit()){
-                        *width = Some(str::parse::<u8>(width_p).ok().unwrap_or(DEFAULT_INDENT));
+                    }else if width_p.chars().take_while(|ch| ch.is_ascii_digit()).count() > 0{
+                        let width_p = width_p.chars()
+                            .take_while(|ch| ch.is_ascii_digit())
+                            .collect::<String>();
+                        *width = Some(str::parse::<u8>(&width_p).ok().unwrap_or(DEFAULT_INDENT));
                     }else{
                         *width = Some(DEFAULT_INDENT);
                     }
