@@ -264,6 +264,17 @@ impl MdocFormatter {
             .clone()
             .unwrap_or_else(|| self.format_default_header()),
         );
+
+        let mut last_is_nl= false;
+        while let Some(line) = lines.last().cloned(){
+            if line.chars().all(|ch|ch.is_whitespace()){
+                lines.pop();
+                last_is_nl = true;
+            }else{
+                break;
+            }
+        }
+
         lines.push(self.format_footer());
 
         lines
@@ -1141,13 +1152,12 @@ fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
         for element in it_nodes{
             if matches!(element, Element::Macro(MacroNode { mdoc_macro: Macro::Bl{ .. }, .. })){
                 if !head_elements.is_empty() || !body_elements.is_empty(){
-                    if !it_elements.is_empty(){
-                        bl_elements.push((true, super_macros(it_elements.clone())));
-                        it_elements.clear();
-                    }
-                    bl_elements.push((true, super_macros(vec![Element::Macro(
-                        MacroNode { mdoc_macro: Macro::It{ head: head_elements.clone() }, nodes: body_elements.clone() }
-                    )])));
+                    it_elements.push(Element::Macro(
+                         MacroNode { mdoc_macro: Macro::It{ head: head_elements.clone() }, nodes: body_elements.clone() }
+                    ));
+                    bl_elements.push((true, super_macros(it_elements.clone())));
+
+                    it_elements.clear();
                     head_elements.clear();
                     body_elements.clear();
                 }
@@ -1168,7 +1178,7 @@ fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
         bl_elements.push((true, super_macros(it_elements)));
     }
 
-    return if !bl_elements.is_empty(){
+    if !bl_elements.is_empty(){
         bl_elements.into_iter()
             .flat_map(|(checked, bl)|{
                 if checked{
@@ -1184,7 +1194,7 @@ fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
             .collect::<Vec<_>>()
     }else{
         vec![nested_macros]
-    };
+    }
 }
 
 /// Trim, but leaves '\n' on ends
@@ -1196,39 +1206,34 @@ fn trim(string: &mut String){
     }
 
     if let Some(position) = string.rfind(|ch| ch != '\n'){
-        if let Some(s) = string.strip_suffix(&("\n".repeat(string.len().saturating_sub(2 + position)))){
+        if let Some(s) = string.strip_suffix(&("\n".repeat(string.len().saturating_sub(position)))){
             *string = s.to_string();
         }
     }
 }
 
-/// Removes empty lines or lines that contains only whitespaces from [`input`]
-fn remove_empty_lines(input: &str) -> String {
-    let has_first_nl = input.chars().next() == Some('\n');
-    let has_last_nl = input.chars().last() == Some('\n');
+/// Removes reduntant empty lines or lines that contains only whitespaces from [`input`]
+fn remove_empty_lines(input: &str, delimiter_size: usize) -> String {
     let mut result = String::with_capacity(input.len());
     let mut iter = input.chars().peekable();
-
+    let lines_delimiter_big = "\n".repeat(delimiter_size);
+    let mut nl_count = 0;
     while let Some(current_char) = iter.next() {
         if current_char == '\n' {
             if iter.peek() != Some(&'\n') {
-                result.push('\n');
+                let lines_delimiter = if nl_count > 1{
+                    &lines_delimiter_big.clone()
+                }else{
+                    "\n"
+                };
+                result.push_str(lines_delimiter);
+                nl_count = 1;
+            }else{
+                nl_count += 1;
             }
         } else {
             result.push(current_char);
         }
-    }
-
-    result = result.split("\n")
-        .filter(|s| !s.chars().all(|s| s.is_whitespace()))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    if has_first_nl && result.chars().next() != Some('\n'){
-        result.insert(0,'\n');
-    }
-    if has_last_nl && result.chars().last() != Some('\n'){
-        result.push('\n');
     }
 
     result
@@ -1315,7 +1320,7 @@ impl MdocFormatter {
         let mut lines = vec![];
         let mut is_last_aligned_macro = false;
         for (is_aligned_macro, content) in formatted_elements{
-            if is_aligned_macro{
+            if is_aligned_macro{            
                 lines.extend(content);
             }else{   
                 let mut content = content;
@@ -1341,15 +1346,18 @@ impl MdocFormatter {
             is_last_aligned_macro = is_aligned_macro;
         }
 
-        let mut content = lines.join("\n");
-
         self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(indent);
 
-        if !compact{
-            content = "\n".to_string() + &content;
-        }
+        let mut content = lines.join("\n");
+        content = content.trim_end().to_string();
 
-        "\n".to_string() + &remove_empty_lines(&content) + "\n"
+        let delimeter_size = if compact{
+            1
+        }else{
+            2
+        };
+
+        "\n\n".to_string() + &remove_empty_lines(&content, delimeter_size) + "\n\n"
     }
 
     fn format_bf_block(&mut self, bf_type: BfType, macro_node: MacroNode) -> String {
@@ -1481,6 +1489,12 @@ impl MdocFormatter {
         let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
 
+        let delimiter = if compact{
+            "\n"
+        }else{
+            "\n\n"
+        };
+
         let mut content = String::new();
         for (_, body) in items{
             let body = body.join(" ");
@@ -1491,13 +1505,10 @@ impl MdocFormatter {
                 line_width + indent
             );
             body = add_indent_to_lines(body, line_width + indent, &offset);
-            content.push_str(&body.join("\n"));
-            content.push('\n');
-            if !compact{
-                content.push('\n');
-            }
+            content.push_str(&(body.join(delimiter) + delimiter));
         } 
 
+        content = remove_empty_lines(&content, delimiter.len());
         trim(&mut content);
 
         content
@@ -1523,6 +1534,12 @@ impl MdocFormatter {
             })
             .collect::<Vec<_>>();
 
+        let delimiter = if compact{
+            "\n"
+        }else{
+            "\n\n"
+        };
+
         let mut content = String::new();
         for (head, body) in items{
             let mut h = split_by_width(
@@ -1543,12 +1560,10 @@ impl MdocFormatter {
             for line in body.iter_mut(){
                 *line = origin_indent_str.clone() + line;
             }
-            content.push_str(&(body.join("\n") + "\n"));
-            if !compact{
-                content.push('\n');
-            }
+            content.push_str(&(body.join(delimiter).trim_end().to_string() + "\n"));
         }
 
+        content = remove_empty_lines(&content, delimiter.len());
         trim(&mut content);
 
         content
@@ -1625,7 +1640,7 @@ impl MdocFormatter {
 
             let col_count = table.iter()
                 .map(|row| row.len())
-                .min()
+                .max()
                 .unwrap_or(0);
             
             let mut col_widths = vec![0; col_count];
@@ -1647,6 +1662,9 @@ impl MdocFormatter {
                 
                 if total_width > max_line_width {
                     for (i, cell) in row.iter().take(col_widths.len()).enumerate() {
+                        if i >= col_widths.len(){
+                            break;
+                        }
                         result.push_str(&" ".repeat(offset));
                         result.push_str(&format!("{:<width$}\n", cell, width = col_widths[i]));
                         offset += indent_step;
@@ -1654,6 +1672,9 @@ impl MdocFormatter {
                 } else {
                     let mut line_width = 0;
                     for (i, cell) in row.iter().enumerate() {
+                        if i >= col_widths.len(){
+                            break;
+                        }
                         let cell_width = col_widths[i] + 1;
                         if line_width + cell_width > max_line_width {
                             result.push('\n');
@@ -1829,7 +1850,9 @@ impl MdocFormatter {
                     let content = head.iter()
                         .map(|element| self.format_node(element.clone()))
                         .collect::<Vec<_>>()
-                        .join(&self.formatting_state.spacing);
+                        .join(&self.formatting_state.spacing)
+                        .trim()
+                        .to_string();
 
                     if !content.is_empty(){
                         Some(content)
@@ -1924,7 +1947,7 @@ impl MdocFormatter {
 
         content = "\n".to_string() + &content + "\n";
 
-        remove_empty_lines(&content)
+        remove_empty_lines(&content, 2)
     }
 
     fn format_bl_blocks(
@@ -1952,7 +1975,7 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
             .join("");
 
-        remove_empty_lines(&content)
+        remove_empty_lines(&content, 2)
     }
 }
 
@@ -3087,11 +3110,7 @@ impl MdocFormatter {
     }
 
     fn format_pf(&mut self, prefix: &str, macro_node: MacroNode) -> String {
-        // self.formatting_state.suppress_space = true;
         let c = self.format_inline_macro(macro_node);
-        
-        println!("Pf formatted nodes: {}", c);
-
         format!("{}{}", prefix, c)
         
     }
@@ -3221,6 +3240,7 @@ mod tests {
     /// Universal function for all tests
     fn test_formatting(input: &str, output: &str) {
         let ast = get_ast(input);
+        //println!("{:#?}", ast);
 
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
         //println!("{:?}", formatter);
@@ -3679,7 +3699,8 @@ g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
    SUBSECTION
-     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha>
+     Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
+
              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
              eiusmod tempor incididunt ut labore et dolore magna aliqua.
              Ut enim ad minim veniam, quis nostrud exercitation ullamco
@@ -4255,6 +4276,7 @@ DESCRIPTION
                      •       Duis aute irure dolor in reprehenderit in
                              voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
+
      Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
@@ -4332,18 +4354,21 @@ DESCRIPTION
      ut aliquip ex ea commodo consequat.
      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
      dolore eu fugiat nulla pariatur.
+
      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
      tempor incididunt ut labore et dolore magna aliqua.
      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
      ut aliquip ex ea commodo consequat.
      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
      dolore eu fugiat nulla pariatur.
+
      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
      tempor incididunt ut labore et dolore magna aliqua.
      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
      ut aliquip ex ea commodo consequat.
      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
      dolore eu fugiat nulla pariatur.
+
      Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
@@ -4428,6 +4453,7 @@ DESCRIPTION
      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
      dolore eu fugiat nulla pariatur.
      head4
+
      head1
      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
      tempor incididunt ut labore et dolore magna aliqua.
@@ -4438,6 +4464,7 @@ DESCRIPTION
      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
      dolore eu fugiat nulla pariatur.
      head4
+
      head1
      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
      tempor incididunt ut labore et dolore magna aliqua.
@@ -4447,6 +4474,7 @@ DESCRIPTION
      head3
      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
      dolore eu fugiat nulla pariatur.
+
      Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
@@ -4525,6 +4553,7 @@ DESCRIPTION
      head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
      cillum dolore eu fugiat nulla pariatur.
      head4 
+
      head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
      eiusmod tempor incididunt ut labore et dolore magna aliqua.
      head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
@@ -4532,12 +4561,14 @@ DESCRIPTION
      head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
      cillum dolore eu fugiat nulla pariatur.
      head4 
+
      head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
      eiusmod tempor incididunt ut labore et dolore magna aliqua.
      head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
      nisi ut aliquip ex ea commodo consequat.
      head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
      cillum dolore eu fugiat nulla pariatur.
+
      Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
@@ -4621,7 +4652,8 @@ DESCRIPTION
                      reprehenderit in voluptate velit 
                              esse cillum dolore eu              
                                      fugiat nulla pariatur.        
-     head4  
+     head4
+
      head1
              Lorem ipsum dolor sit amet,
                      consectetur adipiscing elit,     
@@ -4637,7 +4669,8 @@ DESCRIPTION
                      reprehenderit in voluptate velit 
                              esse cillum dolore eu              
                                      fugiat nulla pariatur.        
-     head4  
+     head4
+
      head1
              Lorem ipsum dolor sit amet,
                      consectetur adipiscing elit,     
@@ -4653,6 +4686,7 @@ DESCRIPTION
                      reprehenderit in voluptate velit 
                              esse cillum dolore eu              
                                      fugiat nulla pariatur.        
+
      Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
@@ -4748,6 +4782,7 @@ DESCRIPTION
                      head3   Duis aute irure dolor in reprehenderit in
                              voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
+
      Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
@@ -4846,6 +4881,7 @@ DESCRIPTION
                      Item head title3 Duis aute irure dolor in reprehenderit
                              in voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
+
      Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
@@ -4941,6 +4977,7 @@ DESCRIPTION
                      head3   Duis aute irure dolor in reprehenderit in
                              voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
+
      Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
      gdfg dfg g wefwefwer werwe rwe r wer <alpha>
 
@@ -6771,169 +6808,174 @@ footer text                     January 1, 1970                    footer text";
     
     mod mdoc {
         use crate::man_util::formatter::tests::test_formatting;
-        use std::{path::{Path, PathBuf}, process::Command, str::FromStr};
+        use std::{
+            //path::{Path, PathBuf}, str::FromStr
+            process::Command
+        };
         use rstest::rstest;
 
-        /// Recursively finds all file paths within a directory and its subdirectories.
-        ///
-        /// # Arguments
-        ///
-        /// * `dir_path` - The starting directory `PathBuf`.
-        ///
-        /// # Returns
-        ///
-        /// A `Vec<String>` containing the full paths of all files found. Returns an
-        /// empty vector if the initial path is not a directory or if an error occurs
-        /// when reading the top-level directory. Paths that are not valid UTF-8 will be skipped.
-        fn get_dir_files_paths(dir_path: PathBuf) -> Vec<String> {
-            let mut results = Vec::new();
-            let _ = recursive_find_files(&dir_path, &mut results);
-            results
-        }
+        // /// Recursively finds all file paths within a directory and its subdirectories.
+        // ///
+        // /// # Arguments
+        // ///
+        // /// * `dir_path` - The starting directory `PathBuf`.
+        // ///
+        // /// # Returns
+        // ///
+        // /// A `Vec<String>` containing the full paths of all files found. Returns an
+        // /// empty vector if the initial path is not a directory or if an error occurs
+        // /// when reading the top-level directory. Paths that are not valid UTF-8 will be skipped.
+        // fn get_dir_files_paths(dir_path: PathBuf) -> Vec<String> {
+        //     let mut results = Vec::new();
+        //     let _ = recursive_find_files(&dir_path, &mut results);
+        //     results
+        // }
 
-        /// Helper function to perform the recursive search.
-        ///
-        /// Modifies the `results` vector directly. Returns `io::Result<()>` to indicate
-        /// if the read operation *on the current directory* succeeded, allowing the
-        /// caller (or the initial call) to handle top-level errors.
-        fn recursive_find_files(current_path: &Path, results: &mut Vec<String>) -> std::io::Result<()> {
-            if !current_path.is_dir() {
-                return Ok(());
-            }
+        // /// Helper function to perform the recursive search.
+        // ///
+        // /// Modifies the `results` vector directly. Returns `io::Result<()>` to indicate
+        // /// if the read operation *on the current directory* succeeded, allowing the
+        // /// caller (or the initial call) to handle top-level errors.
+        // fn recursive_find_files(current_path: &Path, results: &mut Vec<String>) -> std::io::Result<()> {
+        //     if !current_path.is_dir() {
+        //         return Ok(());
+        //     }
 
-            let entries = std::fs::read_dir(current_path)?;
+        //     let entries = std::fs::read_dir(current_path)?;
 
-            for entry_result in entries {
-                let Ok(entry) =  entry_result else{
-                    continue;
-                };
-                let path = entry.path();
-                if path.is_dir() {
-                    let _ = recursive_find_files(&path, results);
-                } else if path.is_file() && !path.to_str().unwrap().ends_with(":Zone.Identifier") {
-                    if let Some(path_str) = path.to_str() {
-                        results.push(path_str.to_string());
-                    }
-                }
-            }
+        //     for entry_result in entries {
+        //         let Ok(entry) =  entry_result else{
+        //             continue;
+        //         };
+        //         let path = entry.path();
+        //         if path.is_dir() {
+        //             let _ = recursive_find_files(&path, results);
+        //         } else if path.is_file() && !path.to_str().unwrap().ends_with(":Zone.Identifier") {
+        //             if let Some(path_str) = path.to_str() {
+        //                 results.push(path_str.to_string());
+        //             }
+        //         }
+        //     }
 
-            Ok(())
-        }
+        //     Ok(())
+        // }
 
-        //#[test]
-        fn format_mdoc() {
-            let test_dir = PathBuf::from_str("./test_files/mdoc").unwrap();
-            assert!(test_dir.exists());
+        // #[test]
+        // fn format_mdoc() {
+        //     let test_dir = PathBuf::from_str("./test_files/mdoc").unwrap();
+        //     assert!(test_dir.exists());
             
-            let dir_paths = get_dir_files_paths(test_dir);
+        //     let dir_paths = get_dir_files_paths(test_dir);
             
-            for path in dir_paths{
-                format_mdoc_file(&path);
-            }
-        }
+        //     for path in dir_paths{
+        //         format_mdoc_file(&path);
+        //     }
+        // }
+
+        
 
         #[rstest]
-        // #[case("./test_files/mdoc/access.2")]
-        // #[case("./test_files/mdoc/getfh.2")]
-        // #[case("./test_files/mdoc/ioctl.2")]
-        // #[case("./test_files/mdoc/munmap.2")]
-        // #[case("./test_files/mdoc/rev.1")]
-        // #[case("./test_files/mdoc/shutdown.2")]
-        // #[case("./test_files/mdoc/talk.1")]
-        // #[case("./test_files/mdoc/adjfreq.2")]
-        // #[case("./test_files/mdoc/dc.1")]
-        // #[case("./test_files/mdoc/getgroups.2")]
-        // #[case("./test_files/mdoc/ipcs.1")]
-        // #[case("./test_files/mdoc/mv.1")]
-        // #[case("./test_files/mdoc/signify.1")]
-        // #[case("./test_files/mdoc/tmux.1")]
-        // #[case("./test_files/mdoc/atq.1")]
-        // #[case("./test_files/mdoc/diff.1")]
-        // #[case("./test_files/mdoc/getitimer.2")]
-        // #[case("./test_files/mdoc/ktrace.2")]
-        // #[case("./test_files/mdoc/nl.1")]
-        // #[case("./test_files/mdoc/rup.1")]
-        // #[case("./test_files/mdoc/sigreturn.2")]
-        // #[case("./test_files/mdoc/top.1")]
-        // #[case("./test_files/mdoc/bc.1")]
-        // #[case("./test_files/mdoc/dup.2")]
-        // #[case("./test_files/mdoc/getpeername.2")]
-        // #[case("./test_files/mdoc/lpq.1")]
-        // #[case("./test_files/mdoc/nm.1")]
-        // #[case("./test_files/mdoc/sched_yield.2")]
-        // #[case("./test_files/mdoc/sigsuspend.2")]
-        // #[case("./test_files/mdoc/truncate.2")]
-        // #[case("./test_files/mdoc/brk.2")]
-        // #[case("./test_files/mdoc/execve.2")]
-        // #[case("./test_files/mdoc/getpriority.2")]
-        // #[case("./test_files/mdoc/mg.1")]
-        // #[case("./test_files/mdoc/open.2")]
-        // #[case("./test_files/mdoc/scp.1")]
-        // #[case("./test_files/mdoc/size.1")]
-        // #[case("./test_files/mdoc/umask.2")]
-        // #[case("./test_files/mdoc/cal.1")]
-        // #[case("./test_files/mdoc/fgen.1")]
-        // #[case("./test_files/mdoc/getrtable.2")]
-        // #[case("./test_files/mdoc/minherit.2")]
-        // #[case("./test_files/mdoc/poll.2")]
-        // #[case("./test_files/mdoc/select.2")]
-        // #[case("./test_files/mdoc/snmp.1")]
-        // #[case("./test_files/mdoc/w.1")]
-        // #[case("./test_files/mdoc/cat.1")]
-        // #[case("./test_files/mdoc/file.1")]
-        // #[case("./test_files/mdoc/getrusage.2")]
-        // #[case("./test_files/mdoc/mkdir.1")]
-        // #[case("./test_files/mdoc/profil.2")]
-        // #[case("./test_files/mdoc/semget.2")]
-        // #[case("./test_files/mdoc/socket.2")]
-        // #[case("./test_files/mdoc/wall.1")]
-        // #[case("./test_files/mdoc/chdir.2")]
-        // #[case("./test_files/mdoc/flex.1")]
-        // #[case("./test_files/mdoc/getsid.2")]
-        // #[case("./test_files/mdoc/mkfifo.2")]
-        // #[case("./test_files/mdoc/quotactl.2")]
-        // #[case("./test_files/mdoc/send.2")]
-        // #[case("./test_files/mdoc/socketpair.2")]
-        // #[case("./test_files/mdoc/write.2")]
-        // #[case("./test_files/mdoc/chflags.2")]
-        // #[case("./test_files/mdoc/flock.2")]
-        // #[case("./test_files/mdoc/getsockname.2")]
-        // #[case("./test_files/mdoc/mlockall.2")]
-        // #[case("./test_files/mdoc/setuid.2")]
-        // #[case("./test_files/mdoc/statfs.2")]
-        // #[case("./test_files/mdoc/ypconnect.2")]
-        // #[case("./test_files/mdoc/chmod.2")]
-        // #[case("./test_files/mdoc/fork.2")]
-        // #[case("./test_files/mdoc/getsockopt.2")]
-        // #[case("./test_files/mdoc/mopa.out.1")]
-        // #[case("./test_files/mdoc/symlink.2")]
-        // #[case("./test_files/mdoc/closefrom.2")]
-        // #[case("./test_files/mdoc/fsync.2")]
-        // #[case("./test_files/mdoc/gettimeofday.2")]
-        // #[case("./test_files/mdoc/moptrace.1")]
-        // #[case("./test_files/mdoc/read.2")]
-        // #[case("./test_files/mdoc/shar.1")]
-        // #[case("./test_files/mdoc/sync.2")]
-        // #[case("./test_files/mdoc/cu.1")]
-        // #[case("./test_files/mdoc/futex.2")]
-        // #[case("./test_files/mdoc/msgrcv.2")]
-        // #[case("./test_files/mdoc/reboot.2")]
-        // #[case("./test_files/mdoc/shmctl.2")]
-        // #[case("./test_files/mdoc/sysarch.2")]
-        // #[case("./test_files/mdoc/cut.1")]
-        // #[case("./test_files/mdoc/getdents.2")]
-        // #[case("./test_files/mdoc/id.1")]
-        // #[case("./test_files/mdoc/msgsnd.2")]
-        // #[case("./test_files/mdoc/rename.2")]
-        // #[case("./test_files/mdoc/shmget.2")]
-        // #[case("./test_files/mdoc/t11.2")]
+        #[case("./test_files/mdoc/access.2")]
+        #[case("./test_files/mdoc/getfh.2")]
+        #[case("./test_files/mdoc/ioctl.2")]
+        #[case("./test_files/mdoc/munmap.2")]
+        #[case("./test_files/mdoc/rev.1")]
+        #[case("./test_files/mdoc/shutdown.2")]
+        #[case("./test_files/mdoc/talk.1")]
+        #[case("./test_files/mdoc/adjfreq.2")]
+        #[case("./test_files/mdoc/dc.1")]
+        #[case("./test_files/mdoc/getgroups.2")]
+        #[case("./test_files/mdoc/ipcs.1")]
+        #[case("./test_files/mdoc/mv.1")]
+        #[case("./test_files/mdoc/signify.1")]
+        #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/atq.1")]
+        #[case("./test_files/mdoc/diff.1")]
+        #[case("./test_files/mdoc/getitimer.2")]
+        #[case("./test_files/mdoc/ktrace.2")]
+        #[case("./test_files/mdoc/nl.1")]
+        #[case("./test_files/mdoc/rup.1")]
+        #[case("./test_files/mdoc/sigreturn.2")]
+        #[case("./test_files/mdoc/top.1")]
+        #[case("./test_files/mdoc/bc.1")]
+        #[case("./test_files/mdoc/dup.2")]
+        #[case("./test_files/mdoc/getpeername.2")]
+        #[case("./test_files/mdoc/lpq.1")]
+        #[case("./test_files/mdoc/nm.1")]
+        #[case("./test_files/mdoc/sched_yield.2")]
+        #[case("./test_files/mdoc/sigsuspend.2")]
+        #[case("./test_files/mdoc/truncate.2")]
+        #[case("./test_files/mdoc/brk.2")]
+        #[case("./test_files/mdoc/execve.2")]
+        #[case("./test_files/mdoc/getpriority.2")]
+        #[case("./test_files/mdoc/mg.1")]
+        #[case("./test_files/mdoc/open.2")]
+        #[case("./test_files/mdoc/scp.1")]
+        #[case("./test_files/mdoc/size.1")]
+        #[case("./test_files/mdoc/umask.2")]
+        #[case("./test_files/mdoc/cal.1")]
+        #[case("./test_files/mdoc/fgen.1")]
+        #[case("./test_files/mdoc/getrtable.2")]
+        #[case("./test_files/mdoc/minherit.2")]
+        #[case("./test_files/mdoc/poll.2")]
+        #[case("./test_files/mdoc/select.2")]
+        #[case("./test_files/mdoc/snmp.1")]
+        #[case("./test_files/mdoc/w.1")]
+        #[case("./test_files/mdoc/cat.1")]
+        #[case("./test_files/mdoc/file.1")]
+        #[case("./test_files/mdoc/getrusage.2")]
+        #[case("./test_files/mdoc/mkdir.1")]
+        #[case("./test_files/mdoc/profil.2")]
+        #[case("./test_files/mdoc/semget.2")]
+        #[case("./test_files/mdoc/socket.2")]
+        #[case("./test_files/mdoc/wall.1")]
+        #[case("./test_files/mdoc/chdir.2")]
+        #[case("./test_files/mdoc/flex.1")]
+        #[case("./test_files/mdoc/getsid.2")]
+        #[case("./test_files/mdoc/mkfifo.2")]
+        #[case("./test_files/mdoc/quotactl.2")]
+        #[case("./test_files/mdoc/send.2")]
+        #[case("./test_files/mdoc/socketpair.2")]
+        #[case("./test_files/mdoc/write.2")]
+        #[case("./test_files/mdoc/chflags.2")]
+        #[case("./test_files/mdoc/flock.2")]
+        #[case("./test_files/mdoc/getsockname.2")]
+        #[case("./test_files/mdoc/mlockall.2")]
+        #[case("./test_files/mdoc/setuid.2")]
+        #[case("./test_files/mdoc/statfs.2")]
+        #[case("./test_files/mdoc/ypconnect.2")]
+        #[case("./test_files/mdoc/chmod.2")]
+        #[case("./test_files/mdoc/fork.2")]
+        #[case("./test_files/mdoc/getsockopt.2")]
+        #[case("./test_files/mdoc/mopa.out.1")]
+        #[case("./test_files/mdoc/symlink.2")]
+        #[case("./test_files/mdoc/closefrom.2")]
+        #[case("./test_files/mdoc/fsync.2")]
+        #[case("./test_files/mdoc/gettimeofday.2")]
+        #[case("./test_files/mdoc/moptrace.1")]
+        #[case("./test_files/mdoc/read.2")]
+        #[case("./test_files/mdoc/shar.1")]
+        #[case("./test_files/mdoc/sync.2")]
+        #[case("./test_files/mdoc/cu.1")]
+        #[case("./test_files/mdoc/futex.2")]
+        #[case("./test_files/mdoc/msgrcv.2")]
+        #[case("./test_files/mdoc/reboot.2")]
+        #[case("./test_files/mdoc/shmctl.2")]
+        #[case("./test_files/mdoc/sysarch.2")]
+        #[case("./test_files/mdoc/cut.1")]
+        #[case("./test_files/mdoc/getdents.2")]
+        #[case("./test_files/mdoc/id.1")]
+        #[case("./test_files/mdoc/msgsnd.2")]
+        #[case("./test_files/mdoc/rename.2")]
+        #[case("./test_files/mdoc/shmget.2")]
+        #[case("./test_files/mdoc/t11.2")]
 
-        #[case("./test_files/mdoc/cvs.1")]
-        #[case("./test_files/mdoc/rlog.1")]
-        #[case("./test_files/mdoc/rcs.1")]
-        #[case("./test_files/mdoc/rdist.1")]
-        #[case("./test_files/mdoc/sftp.1")]
-        #[case("./test_files/mdoc/grep.1")]
+        // #[case("./test_files/mdoc/cvs.1")]
+        // #[case("./test_files/mdoc/rlog.1")]
+        // #[case("./test_files/mdoc/rcs.1")]
+        // #[case("./test_files/mdoc/rdist.1")]
+        // #[case("./test_files/mdoc/sftp.1")]
+        // #[case("./test_files/mdoc/grep.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")
