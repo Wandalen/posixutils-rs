@@ -5,10 +5,13 @@ use terminfo::Database;
 
 use super::{
     mdoc_macro::{text_production::*, types::*, Macro},
-    parser::{Element, MacroNode, MdocDocument},
+    parser::{Element, MacroNode, MdocDocument, trim_quotes},
 };
 
 const NEW_LINE_ESCAPE: &str = "\\(nl)";
+
+/// Max Bl -width parameter value
+const MAX_INDENT: u8 = 20; 
 
 /// Regex for converting escape sequences to true UTF-8 chars
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
@@ -24,7 +27,6 @@ static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Laz
     )
     .unwrap()
 });
-
 
 /// Formatter state
 #[derive(Debug)]
@@ -393,7 +395,6 @@ impl MdocFormatter {
     fn replace_mdoc_escapes(&self, input: &str) -> String{
         let auth_replace = format!("{}\n", " ".repeat(self.formatting_settings.indent));
         let replacements: HashMap<&str, &str> = [
-            (" \x08 ", ""),
             (NEW_LINE_ESCAPE, "\n"),
             ("\\(rs) ", ""),
             ("\\(authnl)", &auth_replace),
@@ -1122,6 +1123,9 @@ fn get_onelined(
                 .collect::<Vec<_>>(), 
                 line_width
             );
+
+            //content = content.iter().map(|s| "<".to_string() + s + ">").collect::<>();
+
             content = add_indent_to_lines(content, line_width, offset);
             for line in content.iter_mut(){
                 *line = indent_str.to_string() + line;
@@ -1280,20 +1284,21 @@ fn remove_empty_lines(input: &str, delimiter_size: usize) -> String {
 
 // Formatting block full-explicit.
 impl MdocFormatter {
-    /// Converts [`OffsetType`] to indentation size. 
-    /// If width is [`Option::Some`], then returns width value
-    fn get_indent_from_offset_type(&self, width: &Option<u8>, offset: &Option<OffsetType>) -> usize{
-        if let Some(width) = width{
-            return *width as usize;
-        }
+    fn get_width_indent(&self, width: &Option<u8>) -> usize{
+        width.unwrap_or(0).min(MAX_INDENT) as usize
+    }
+
+    fn get_offset_indent(&self, offset: &Option<OffsetType>) -> usize{
         let Some(offset) = offset else {
-            return self.formatting_settings.indent;
+            return 0;
         };
-        match offset{
+        let offset = match offset{
             OffsetType::Indent => 8,
             OffsetType::IndentTwo => 8 * 2,
             _ => self.formatting_settings.indent
-        }
+        };
+
+        offset
     }
 
     /// Converts [`OffsetType`] to block alignment type ([`OffsetType`]). 
@@ -1316,16 +1321,16 @@ impl MdocFormatter {
         compact: bool,
         macro_node: MacroNode,
     ) -> String {
-        let indent = self.get_indent_from_offset_type(&None, &offset);
+        let indent = self.get_offset_indent(&offset);
         let mut offset = self.get_offset_from_offset_type(&offset);
         if block_type == BdType::Centered{
             offset = OffsetType::Center;
         }
 
         self.formatting_state.current_indent += indent;
-        let indent = self.formatting_state.current_indent;
-        let indent_str = " ".repeat(indent);
-        let line_width = self.formatting_settings.width.saturating_sub(indent);
+        let current_indent = self.formatting_state.current_indent;
+        let indent_str = " ".repeat(current_indent);
+        let line_width = self.formatting_settings.width.saturating_sub(current_indent);
 
         let formatted_elements = macro_node.nodes
             .into_iter()
@@ -1465,7 +1470,7 @@ impl MdocFormatter {
         list_type: BlType,
         compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&width, &offset);
+        let indent = self.get_width_indent(&width);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1518,11 +1523,10 @@ impl MdocFormatter {
     fn format_bl_item_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
-        width: Option<u8>,
         offset: Option<OffsetType>, 
         compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&width, &offset);
+        let indent = self.formatting_settings.indent; 
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1556,11 +1560,10 @@ impl MdocFormatter {
     fn format_bl_ohang_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
-        width: Option<u8>,
         offset: Option<OffsetType>, 
         compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&width, &offset);
+        let indent = self.formatting_settings.indent; 
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1611,7 +1614,6 @@ impl MdocFormatter {
     fn format_bl_inset_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
-        width: Option<u8>,
         offset: Option<OffsetType>, 
         compact: bool,
         list_type: BlType
@@ -1621,7 +1623,7 @@ impl MdocFormatter {
             BlType::Diag => "  ", 
             _ => " "
         };
-        let indent = self.get_indent_from_offset_type(&width, &offset);
+        let indent = self.formatting_settings.indent; 
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1669,8 +1671,7 @@ impl MdocFormatter {
     fn format_bl_column_block(
         &self, 
         items: Vec<Vec<String>>,
-        columns: Vec<String>,
-        _compact: bool
+        columns: Vec<String>
     ) -> String{
         fn split_cells(table: Vec<Vec<String>>, col_widths: &[usize]) -> Vec<Vec<String>>{
             let mut splitted_rows_table = vec![];
@@ -1783,12 +1784,7 @@ impl MdocFormatter {
         let line_width = width.saturating_sub(origin_indent);
 
         let columns = columns.into_iter()
-            .map(|c|{
-                c.strip_prefix("\"")
-                .map(|c|c.strip_suffix("\"").unwrap_or(&c))
-                .unwrap_or(&c)
-                .to_string()
-            })
+            .map(|c| trim_quotes(c))
             .collect::<Vec<_>>();
 
         let mut content = format_table(items, columns, line_width);
@@ -1816,7 +1812,7 @@ impl MdocFormatter {
         offset: Option<OffsetType>,
         compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&width, &offset);
+        let indent = self.get_width_indent(&width);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1833,14 +1829,17 @@ impl MdocFormatter {
                 .flatten()
                 .collect::<Vec<_>>(); 
 
-            let space = if head.len() < indent.saturating_sub(2){
+            let mut head = head; 
+            let space = if head.len() < indent{
                 if let Some(line) = body.first_mut(){
                     *line = line.trim_start().to_string();
                 }
+                head.retain(|ch|!(ch.is_whitespace() || ch.is_control()));
                 " ".repeat(indent - head.len())
             }else{
                 "\n".to_string()
             };
+
             content.push_str(
                 &(origin_indent_str.clone() + &head + &space + &body.join("\n") + "\n")
             );
@@ -1862,7 +1861,7 @@ impl MdocFormatter {
         offset: Option<OffsetType>, 
         compact: bool
     ) -> String{
-        let indent = self.get_indent_from_offset_type(&width, &offset);
+        let indent = self.get_width_indent(&width);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
@@ -1908,7 +1907,7 @@ impl MdocFormatter {
 
             body.retain(|s| !s.is_empty());
 
-            if head.len() < indent.saturating_sub(1){
+            if head.len() < indent{
                 if let Some(line) = body.first_mut(){
                     *line = line.trim_start().to_string(); 
                 }
@@ -2010,20 +2009,21 @@ impl MdocFormatter {
         macro_node: MacroNode,
     ) -> String {
         let heads = self.get_heads(macro_node.clone(), &list_type);
-        self.formatting_state.current_indent += self.get_indent_from_offset_type(&width, &offset);
+        let width_indent = self.get_width_indent(&width);
+        let offset_indent = self.get_offset_indent(&offset);
+        self.formatting_state.current_indent += offset_indent + width_indent;
         let bodies = self.get_bodies(macro_node.clone(), &list_type);
-        self.formatting_state.current_indent = 
-            self.formatting_state.current_indent.saturating_sub(self.get_indent_from_offset_type(&width, &offset));
+        self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(width_indent);
         let items = heads.into_iter()
             .zip(bodies.clone())
             .collect::<Vec<_>>();
 
         let mut content = match list_type {
             BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, width, offset, list_type, compact),
-            BlType::Item => self.format_bl_item_block(items, width, offset, compact),
-            BlType::Ohang => self.format_bl_ohang_block(items, width, offset, compact),
-            BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, width, offset, compact, list_type),
-            BlType::Column => self.format_bl_column_block(bodies, columns, compact),
+            BlType::Item => self.format_bl_item_block(items, offset, compact),
+            BlType::Ohang => self.format_bl_ohang_block(items, offset, compact),
+            BlType::Inset | BlType::Diag => self.format_bl_inset_block(items, offset, compact, list_type),
+            BlType::Column => self.format_bl_column_block(bodies, columns),
             BlType::Tag => self.format_bl_tag_block(items, width, offset, compact),
             BlType::Hang => {
                 let MacroNode{ nodes, .. } = macro_node;
@@ -2040,6 +2040,8 @@ impl MdocFormatter {
                 self.format_bl_hang_block(items, is_first_block, width, offset, compact)
             }
         };
+
+        self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(offset_indent);
 
         content = "\n".to_string() + &content + "\n";
 
@@ -2581,47 +2583,27 @@ impl MdocFormatter {
     
     fn format_aq(&mut self, macro_node: MacroNode) -> String {
         self.format_partial_implicit_block(macro_node, "⟨", "⟩")
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" ⟨{}⟩", formatted_block.trim())
     }
 
     fn format_bq(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" [{}]", formatted_block.trim())
         self.format_partial_implicit_block(macro_node, "[", "]")
     }
 
     fn format_brq(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" {{{}}}", formatted_block.trim())
         self.format_partial_implicit_block(macro_node, "{{", "}}")
     }
 
     fn format_d1(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
         let spaces = " ".repeat(self.formatting_settings.indent);
-
-        // format!(" {}{}", spaces, formatted_block.trim())
         self.format_partial_implicit_block(macro_node, &spaces, "")
     }
 
     fn format_dl(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
         let spaces = " ".repeat(self.formatting_settings.indent);
-
-        // format!(" {}{}", spaces, formatted_block.trim())
         self.format_partial_implicit_block(macro_node, &spaces, "")
     }
 
     fn format_dq(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" “{}”", formatted_block.trim())
         self.format_partial_implicit_block(macro_node, "“", "”")
     }
 
@@ -2632,37 +2614,22 @@ impl MdocFormatter {
     }
 
     fn format_op(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" [{}]", formatted_block.trim())
         self.format_partial_implicit_block(macro_node, "[", "]")
     }
 
     fn format_pq(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" ({})", formatted_block.trim())
         self.format_partial_implicit_block(macro_node, "(", ")")
     }
 
     fn format_ql(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" ‘{}’", formatted_block.trim())
         self.format_partial_implicit_block(macro_node, "‘", "’")
     }
 
     fn format_qq(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" \"{}\"", formatted_block.trim())
         self.format_partial_implicit_block(macro_node, "\"", "\"")
     }
 
     fn format_sq(&mut self, macro_node: MacroNode) -> String {
-        // let formatted_block = self.format_partial_implicit_block(macro_node);
-
-        // format!(" '{}'", formatted_block.trim())
         self.format_partial_implicit_block(macro_node, "\'", "\'")
     }
 
