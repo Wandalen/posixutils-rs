@@ -283,7 +283,7 @@ block_line = { (!NEWLINE ~ ANY)+ }
 ta_head  = ${ (!"." ~ "Ta") | "    " | "\t" }
 ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 
-it_head  = ${ ((ws | NEWLINE)* ~ ".")* ~ "It" ~ !text_arg ~ (ws* ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
+it_head  = ${ (ws* ~ ".")* ~ "It" ~ !text_arg ~ (ws* ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
 it_body  = ${ (!(".It") ~ !(".El") ~ element ~ NEWLINE?)* }
 it_block = ${ it_head ~ it_body }
 
@@ -459,16 +459,6 @@ at = ${
   ~ (ws+ ~ text_arg)* 
   ~ ws*
 }
-
-// at = ${ 
-//   "At" 
-//   ~ !text_arg
-//   ~ (ws+ ~ opening_delimiter)* 
-//   ~ (ws+ ~ (at_type | text_arg))? 
-//   ~ (ws+ ~ closing_delimiter)*
-//   ~ (ws+ ~ text_arg)*
-//   ~ ws*
-// }
 
 bsx = ${ 
   "Bsx" 

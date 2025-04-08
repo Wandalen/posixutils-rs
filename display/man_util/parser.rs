@@ -12,7 +12,6 @@ use pest_derive::Parser;
 use text_production::{AtType, BsxType};
 use thiserror::Error;
 use types::{BdType, BfType, OffsetType, SmMode};
-use std::collections::HashSet;
 
 use crate::man_util::mdoc_macro::text_production::{
     BxType, DxType, FxType, NxType, OxType, StType,
@@ -47,6 +46,11 @@ static RS_SUBMACRO_ORDER: LazyLock<Vec<Macro>> = LazyLock::new(|| {
 // static REGEX_WIDTH: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
 //     regex::Regex::new(r"[+-]?[0-9]*.[0-9]*[:unit:]?").unwrap()
 // });
+
+static BLOCK_PARTIAL_IMPLICIT: &[&str] = &[
+    "Aq", "Bq", "Brq", "D1", "Dl", "Dq",
+    "En", "Op", "Pq", "Ql", "Qq", "Sq", "Vt",
+];
 
 fn does_start_with_macro(word: &str) -> bool {
     match word {
@@ -93,18 +97,34 @@ fn does_start_with_macro(word: &str) -> bool {
     }
 }
 
-pub fn add_white_space_macros(text: &str) -> String {
+pub fn prepare_document(text: &str) -> String {
     text.lines()
         .map(|line| {
-            let trimmed = line.trim_start();
-            if let Some(first_word) = trimmed.split_whitespace().next() {
-                if does_start_with_macro(first_word) {
-                    return format!("\\&{}", line);
+            let mut processed_line = {
+                let trimmed = line.trim_start();
+                if let Some(first_word) = trimmed.split_whitespace().next() {
+                    if does_start_with_macro(first_word) {
+                        format!("\\&{}", line)
+                    } else {
+                        line.to_string()
+                    }
+                } else {
+                    line.to_string()
                 }
+            };
+
+            let count_partials = processed_line
+                .split_whitespace()
+                .filter(|word| BLOCK_PARTIAL_IMPLICIT.contains(word))
+                .count();
+
+            if count_partials > 0 {
+                processed_line.push_str(&"\n".repeat(count_partials));
             }
-            line.to_string()
+
+            processed_line
         })
-        .collect::<Vec<String>>()
+        .collect::<Vec<_>>()
         .join("\n")
 }
 
@@ -291,15 +311,6 @@ impl MdocParser {
             Rule::arg => Self::parse_arg(pair.into_inner().next().unwrap()),
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::ta | Rule::ta_head => Self::parse_ta(pair),
-            // Rule::text_line => {
-            //     if pair.as_str().strip_suffix("\n\n").is_some(){
-            //         Element::Text(pair.as_str().strip_suffix("\n").unwrap().to_string())
-            //     }else if pair.as_str().strip_suffix("\r\n\r\n").is_some(){
-            //         Element::Text(pair.as_str().strip_suffix("\r\n").unwrap().to_string())
-            //     }else{
-            //         Element::Text(pair.into_inner().next().unwrap().as_str().to_string())
-            //     }
-            // },
             Rule::text_line | Rule::line => Element::Text(trim_quotes(
                 pair
                 .into_inner()
@@ -334,7 +345,7 @@ impl MdocParser {
 
     /// Parses full mdoc file
     pub fn parse_mdoc(input: &str) -> Result<MdocDocument, MdocError> {
-        let input = add_white_space_macros(&input);
+        let input = prepare_document(&input);
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
         //println!("Pairs:\n{pairs:#?}\n\n");
@@ -1327,10 +1338,11 @@ impl MdocParser {
 
 /// Trim `"` quotes from [`String`]
 pub fn trim_quotes(s: String) -> String{
-    s.strip_prefix("\"")
-        .map(|s|s.strip_suffix("\"").unwrap_or(&s))
-        .unwrap_or(&s)
-        .to_string()
+    // s.strip_prefix("\"")
+    //     .map(|s|s.strip_suffix("\"").unwrap_or(&s))
+    //     .unwrap_or(&s)
+    //     .to_string()
+    s.replace("\"", "")
 }
 
 // In-line macros parsing
