@@ -11,7 +11,7 @@ use clap::{ArgAction, Parser, ValueEnum};
 use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
 use man_util::formatter::MdocFormatter;
 use man_util::config::{parse_config_file, ManConfig};
-use man_util::parser::MdocParser;
+use man_util::parser::{add_white_space_macros, MdocParser};
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::num::ParseIntError;
@@ -466,9 +466,10 @@ fn format_man_page(
 ) -> Result<Vec<u8>, ManError> {
     let content = String::from_utf8(man_bytes)
         .map_err(|err| ManError::ParseError(ParseError::FromUtf8Error(err)))?;
-    let mut formatter = MdocFormatter::new(*formatting);
 
-    let document = MdocParser::parse_mdoc(content)?;
+    let mut formatter = MdocFormatter::new(*formatting);
+    
+    let document = MdocParser::parse_mdoc(&content)?;
     let formatted_document = match synopsis {
         true  => formatter.format_synopsis_section(document),
         false => formatter.format_mdoc(document),

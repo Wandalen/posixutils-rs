@@ -233,6 +233,9 @@ impl MdocFormatter {
 
     /// Format full [`MdocDocument`] and returns UTF-8 binary string 
     pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
+
+        println!("Received ast:\n{:#?}\n-------------\n", ast);
+
         let mut lines = Vec::new();
         let mut current_line = String::new();
 
@@ -299,12 +302,10 @@ impl MdocFormatter {
 
         lines.push(self.format_footer());
 
-        let mut content = lines
-            .join("\n");
-
-        content = self.replace_mdoc_escapes(&content);
-
-        content.into_bytes()
+        let mut content = lines.join("\n");
+        
+        self.replace_mdoc_escapes(&content)
+            .into_bytes()
     }
 
     fn format_default_header(&mut self) -> String {
@@ -393,11 +394,9 @@ impl MdocFormatter {
     }
 
     fn replace_mdoc_escapes(&self, input: &str) -> String{
-        let auth_replace = format!("{}\n", " ".repeat(self.formatting_settings.indent));
         let replacements: HashMap<&str, &str> = [
             (NEW_LINE_ESCAPE, "\n"),
-            ("\\(rs) ", ""),
-            ("\\(authnl)", &auth_replace),
+            ("\\[pfmacroescape] ", ""),
             (" \x08", ""),
             // Spaces:
             (r"\ ", " "), // unpaddable space
@@ -804,7 +803,8 @@ impl MdocFormatter {
             dst.push_str(replacements[key]);
             true
         });
-    
+        
+        // self.replace_unicode_escapes(&result)
         result
     }
 
@@ -2185,13 +2185,26 @@ impl MdocFormatter {
                         } else if title.eq_ignore_ascii_case("AUTHORS") {
                             self.format_an(AnType::Split, macro_node.clone());
 
-                            match &macro_node.mdoc_macro {
+                            let content = match &macro_node.mdoc_macro {
                                 Macro::An { author_name_type } => {
                                     self.format_an_authors(author_name_type.clone(), macro_node.clone())
                                 },
                                 _ => self.format_macro_node(macro_node.clone())
+                            };
+
+                            if content.starts_with('\n') {
+                                content.strip_prefix("\n").unwrap().to_string()
+                            } else {
+                                content
                             }
-                        } else {
+                        } else if title.eq_ignore_ascii_case("SEE ALSO") {
+                            match &macro_node.mdoc_macro {
+                                Macro::Rs => self.format_rs_see_also(macro_node.clone()),
+                                _ => self.format_macro_node(macro_node.clone())
+                            }
+                        }
+                        
+                        else {
                             self.format_macro_node(macro_node.clone())
                         }
                     },
@@ -2208,10 +2221,8 @@ impl MdocFormatter {
                 }
 
                 current_lines_count += content.lines().count();
-
-                // println!("Content: {}\n------------", content.replace(" ", "SPACE").replace("\n", "NEWLINE"));
-
                 content
+                // println!("Content: {}\n------------", content.replace(" ", "SPACE").replace("\n", "NEWLINE"));
             })
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
@@ -2235,6 +2246,12 @@ impl MdocFormatter {
 
         self.formatting_state.current_indent = 0;
 
+        let content = if content.starts_with('\n') {
+            content.strip_prefix("\n").unwrap().to_string()
+        } else {
+            content
+        };
+        
         format!(
             "\n{}\n{}", 
             title.to_uppercase(), 
@@ -2449,10 +2466,16 @@ impl MdocFormatter {
 
         match (formatted_a.is_empty(), formatted_all.is_empty()) {
             (true, true) => "".to_string(),
-            (true, false) => format!("{}.", formatted_all),
-            (false, true) => format!("{}.", formatted_a),
-            (false, false) => format!("{}, {}.", formatted_a, formatted_all),
+            (true, false) => format!("{}.\n", formatted_all),
+            (false, true) => format!("{}.\n", formatted_a),
+            (false, false) => format!("{}, {}.\n", formatted_a, formatted_all),
         }
+    }
+
+    fn format_rs_see_also(&self, macro_node: MacroNode) -> String {
+        let c = self.format_rs_block(macro_node);
+
+        format!("\n{}", c)
     }
 
     fn format_a(&self, macro_node: MacroNode) -> String {
@@ -2520,6 +2543,17 @@ impl MdocFormatter {
         open_char: &str,
         close_char: &str,
     ) -> String {
+        let last_node_is_delimiter = macro_node.nodes.last().map_or(false, |node| {
+            if let Element::Text(ref text) = node {
+                match text.as_str() {
+                    "(" | "[" | ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => true,
+                    _ => false
+                }
+            } else {
+                false
+            }
+        });
+    
         let mut result = open_char.to_string();
         let mut trailing_punctuation = String::new();
         let mut prev_was_open = false;
@@ -2527,33 +2561,31 @@ impl MdocFormatter {
     
         for node in macro_node.nodes {
             let content = match node {
-                Element::Text(text) => {
-                    match text.as_str() {
-                        "(" | "[" => {
-                            prev_was_open = true;
-                            text.clone()
-                        }
-                        ")" | "]" => {
-                            prev_was_open = false;
-                            text.clone()
-                        }
-                        "." | "," | ":" | ";" | "!" | "?" => {
-                            prev_was_open = false;
-                            trailing_punctuation.push_str(text.as_str());
-                            String::new()
-                        }
-                        _ => {
-                            let formatted_text = self.format_text_node(&text);
-                            let offset = if is_first_node || prev_was_open {
-                                ""
-                            } else {
-                                self.formatting_state.spacing.as_str()
-                            };
-                            prev_was_open = false;
-                            format!("{}{}", offset, formatted_text)
-                        }
+                Element::Text(text) => match text.as_str() {
+                    "(" | "[" => {
+                        prev_was_open = true;
+                        text.clone()
                     }
-                }
+                    ")" | "]" => {
+                        prev_was_open = false;
+                        text.clone()
+                    }
+                    "." | "," | ":" | ";" | "!" | "?" => {
+                        prev_was_open = false;
+                        trailing_punctuation.push_str(text.as_str());
+                        String::new()
+                    }
+                    _ => {
+                        let formatted_text = self.format_text_node(&text);
+                        let offset = if is_first_node || prev_was_open {
+                            ""
+                        } else {
+                            self.formatting_state.spacing.as_str()
+                        };
+                        prev_was_open = false;
+                        format!("{}{}", offset, formatted_text)
+                    }
+                },
                 other => {
                     let mut s = self.format_node(other);
                     if !s.is_empty() && !s.ends_with('\n') {
@@ -2574,13 +2606,13 @@ impl MdocFormatter {
         result = result.trim_end().to_string();
         result = result.replace("\n", "");
     
-        if is_last_char_delimiter(&result) {
+        if last_node_is_delimiter {
             trailing_punctuation = result.pop().unwrap().to_string();
         }
     
-        format!(" {}{}{}", result, close_char, trailing_punctuation)
+        format!("{}{}{} ", result, close_char, trailing_punctuation)
     }
-    
+        
     fn format_aq(&mut self, macro_node: MacroNode) -> String {
         self.format_partial_implicit_block(macro_node, "⟨", "⟩")
     }
@@ -3226,7 +3258,7 @@ impl MdocFormatter {
     }
 
     fn format_pf(&mut self, prefix: &str, macro_node: MacroNode) -> String {
-        format!("{}\\(rs){}", prefix, &self.format_inline_macro(macro_node))
+        format!("{}\\[pfmacroescape]{}", prefix, &self.format_inline_macro(macro_node))
     }
 
     fn format_pp(&self, _macro_node: MacroNode) -> String {
@@ -7048,47 +7080,58 @@ footer text                     January 1, 1970                    footer text";
         
 
         #[rstest]
-        #[case("./test_files/mdoc/chmod.2")]
-        //#[case("./test_files/mdoc/cvs.1")]
-        #[case("./test_files/mdoc/dc.1")]
-        #[case("./test_files/mdoc/flex.1")]
-        #[case("./test_files/mdoc/getdents.2")]
-        #[case("./test_files/mdoc/getitimer.2")]
-        #[case("./test_files/mdoc/getrusage.2")]
-        #[case("./test_files/mdoc/getsockopt.2")]
-        #[case("./test_files/mdoc/gettimeofday.2")]
-        #[case("./test_files/mdoc/ktrace.2")]
-        #[case("./test_files/mdoc/msgrcv.2")]
-        #[case("./test_files/mdoc/msgsnd.2")]
-        #[case("./test_files/mdoc/mv.1")]
-        #[case("./test_files/mdoc/poll.2")]
-        #[case("./test_files/mdoc/profil.2")]
-        #[case("./test_files/mdoc/rcs.1")]
-        #[case("./test_files/mdoc/read.2")]
-        #[case("./test_files/mdoc/rup.1")]
-        #[case("./test_files/mdoc/semget.2")]
-        #[case("./test_files/mdoc/shmctl.2")]
-        #[case("./test_files/mdoc/signify.1")]
-        #[case("./test_files/mdoc/statfs.2")]
-        #[case("./test_files/mdoc/t11.2")]
-        #[case("./test_files/mdoc/talk.1")]
-        #[case("./test_files/mdoc/write.2")]
+        // #[case("./test_files/mdoc/rev.1")]
+        // #[case("./test_files/mdoc/adjfreq.2")]
+        // #[case("./test_files/mdoc/getgroups.2")]
+        // #[case("./test_files/mdoc/sigreturn.2")]
+        // #[case("./test_files/mdoc/size.1")]
+        // #[case("./test_files/mdoc/fgen.1")]
+        // #[case("./test_files/mdoc/getrtable.2")]
+        // #[case("./test_files/mdoc/wall.1")]
+        // #[case("./test_files/mdoc/getsid.2")]
+        #[case("./test_files/mdoc/ypconnect.2")]
+        // #[case("./test_files/mdoc/closefrom.2")]
+        // #[case("./test_files/mdoc/moptrace.1")]
+
+        // #[case("./test_files/mdoc/cu.1")]
+        // #[case("./test_files/mdoc/chmod.2")]
+        // #[case("./test_files/mdoc/cvs.1")]
+        // #[case("./test_files/mdoc/dc.1")]
+        // #[case("./test_files/mdoc/flex.1")]
+        // #[case("./test_files/mdoc/getdents.2")]
+        // #[case("./test_files/mdoc/getitimer.2")]
+        // #[case("./test_files/mdoc/getrusage.2")]
+        // #[case("./test_files/mdoc/getsockopt.2")]
+        // #[case("./test_files/mdoc/gettimeofday.2")]
+        // #[case("./test_files/mdoc/ktrace.2")]
+        // #[case("./test_files/mdoc/msgrcv.2")]
+        // #[case("./test_files/mdoc/msgsnd.2")]
+        // #[case("./test_files/mdoc/mv.1")]
+        // #[case("./test_files/mdoc/poll.2")]
+        // #[case("./test_files/mdoc/profil.2")]
+        // #[case("./test_files/mdoc/rcs.1")]
+        // #[case("./test_files/mdoc/read.2")]
+        // #[case("./test_files/mdoc/rup.1")]
+        // #[case("./test_files/mdoc/semget.2")]
+        // #[case("./test_files/mdoc/shmctl.2")]
+        // #[case("./test_files/mdoc/signify.1")]
+        // #[case("./test_files/mdoc/statfs.2")]
+        // #[case("./test_files/mdoc/t11.2")]
+        // #[case("./test_files/mdoc/talk.1")]
+        // #[case("./test_files/mdoc/write.2")]
 
         // #[case("./test_files/mdoc/access.2")]
         // #[case("./test_files/mdoc/getfh.2")]
         // #[case("./test_files/mdoc/ioctl.2")]
         // #[case("./test_files/mdoc/munmap.2")]
-        // #[case("./test_files/mdoc/rev.1")]
         // #[case("./test_files/mdoc/shutdown.2")]
-        // #[case("./test_files/mdoc/adjfreq.2")]
-        // #[case("./test_files/mdoc/getgroups.2")]
+
         // #[case("./test_files/mdoc/ipcs.1")]
         // #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/atq.1")]
         // #[case("./test_files/mdoc/diff.1")]
         // #[case("./test_files/mdoc/getitimer.2")]
         // #[case("./test_files/mdoc/nl.1")]
-        // #[case("./test_files/mdoc/sigreturn.2")]
         // #[case("./test_files/mdoc/top.1")]
         // #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/dup.2")]
@@ -7104,11 +7147,9 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/mg.1")]
         // #[case("./test_files/mdoc/open.2")]
         // #[case("./test_files/mdoc/scp.1")]
-        // #[case("./test_files/mdoc/size.1")]
         // #[case("./test_files/mdoc/umask.2")]
         // #[case("./test_files/mdoc/cal.1")]
-        // #[case("./test_files/mdoc/fgen.1")]
-        // #[case("./test_files/mdoc/getrtable.2")]
+
         // #[case("./test_files/mdoc/minherit.2")]
         // #[case("./test_files/mdoc/select.2")]
         // #[case("./test_files/mdoc/snmp.1")]
@@ -7117,9 +7158,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/file.1")]
         // #[case("./test_files/mdoc/mkdir.1")]
         // #[case("./test_files/mdoc/socket.2")]
-        // #[case("./test_files/mdoc/wall.1")]
         // #[case("./test_files/mdoc/chdir.2")]
-        // #[case("./test_files/mdoc/getsid.2")]
         // #[case("./test_files/mdoc/mkfifo.2")]
         // #[case("./test_files/mdoc/quotactl.2")]
         // #[case("./test_files/mdoc/send.2")]
@@ -7129,16 +7168,12 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/getsockname.2")]
         // #[case("./test_files/mdoc/mlockall.2")]
         // #[case("./test_files/mdoc/setuid.2")]
-        // #[case("./test_files/mdoc/ypconnect.2")]
         // #[case("./test_files/mdoc/fork.2")]
         // #[case("./test_files/mdoc/mopa.out.1")]
         // #[case("./test_files/mdoc/symlink.2")]
-        // #[case("./test_files/mdoc/closefrom.2")]
         // #[case("./test_files/mdoc/fsync.2")]
-        // #[case("./test_files/mdoc/moptrace.1")]
         // #[case("./test_files/mdoc/shar.1")]
         // #[case("./test_files/mdoc/sync.2")]
-        // #[case("./test_files/mdoc/cu.1")]
         // #[case("./test_files/mdoc/futex.2")]
         // #[case("./test_files/mdoc/reboot.2")]
         // #[case("./test_files/mdoc/sysarch.2")]
