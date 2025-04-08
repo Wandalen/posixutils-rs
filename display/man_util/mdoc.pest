@@ -21,7 +21,7 @@ comment_start = _{ "\\" ~ "\"" }
 comment_macro = _{ comment_start ~ (!(NEWLINE | EOI) ~ ANY)* }
 
 text_non_comment = ${ (!comment_start ~ word ~ ws*)+ }
-text_line        = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE | EOI) }
+text_line        = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE+ | EOI) }
 line             = { !"." ~ (comment_macro | text_non_comment)+ }
 
 word     = @{ (!(NEWLINE | ws) ~ ANY)+ }
