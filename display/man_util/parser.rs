@@ -223,15 +223,12 @@ impl MdocParser {
             Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
             Rule::block_full_implicit => Self::parse_block_full_implicit(pair),
             Rule::block_partial_implicit => Self::parse_block_partial_implicit(pair),
-            Rule::partial_implicit_element => {
-                Self::parse_element(pair.into_inner().next().unwrap())
-            }
+            Rule::partial_implicit_element => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::block_partial_explicit => Self::parse_block_partial_explicit(pair),
             Rule::inline => Self::parse_inline(pair),
             Rule::arg => Self::parse_arg(pair.into_inner().next().unwrap()),
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::ta | Rule::ta_head => Self::parse_ta(pair),
-            Rule::text_line | Rule::line => Element::Text(pair.into_inner().next().unwrap().as_str().to_string()),
             // Rule::text_line => {
             //     if pair.as_str().strip_suffix("\n\n").is_some(){
             //         Element::Text(pair.as_str().strip_suffix("\n").unwrap().to_string())
@@ -241,8 +238,20 @@ impl MdocParser {
             //         Element::Text(pair.into_inner().next().unwrap().as_str().to_string())
             //     }
             // },
+            Rule::text_line | Rule::line => Element::Text(pair
+                .into_inner()
+                .next()
+                .unwrap()
+                .as_str()
+                .to_string()
+                .replace("\"", "")
+            ),
             Rule::EOI => Element::Eoi,
-            _ => Element::Text(pair.as_str().to_string()),
+            _ => Element::Text(pair
+                .as_str()
+                .to_string()
+                .replace("\"", "")
+            ),
         }
     }
 
@@ -1020,15 +1029,9 @@ impl MdocParser {
 
         let mut nodes: Vec<_> = head.map(Self::parse_element).collect();
 
-        let next_arg = inner_pairs.next().unwrap();
-        if next_arg.as_rule() == Rule::fo_body {
-            let iter = next_arg
-                .into_inner()
-                .take_while(|p| p.as_rule() != Rule::fc)
-                .map(Self::parse_element);
-
-            nodes.extend(iter);
-        };
+        nodes.extend(inner_pairs
+            .filter_map(|p| p.into_inner().next().map(Self::parse_element))
+        );
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Fo { funcname },
@@ -1634,6 +1637,17 @@ impl MdocParser {
         // Parses (`At`)[https://man.openbsd.org/mdoc#At]:
         // `At [version]`
         fn parse_at(pair: Pair<Rule>) -> Element {
+            // unsafe { 
+            //     if PREV_ELEMENT_CONTAINS_NEWLINE {
+            //         let text = pair
+            //             .into_inner()
+            //             .map(|p| p.as_str().to_string())
+            //             .collect::<Vec<_>>()
+            //             .join(" ");
+            //         return Element::Text(format!("At {}", text))
+            //     }
+            // }
+
             let inner: Vec<_> = pair.into_inner().collect();
 
             if inner.is_empty() {
@@ -2186,22 +2200,24 @@ impl MdocParser {
     // .In filename
     fn parse_in(pair: Pair<Rule>) -> Element {
         let mut inner_pairs = pair.into_inner();
-        let mut filename =  String::new();
-        let mut nodes = Vec::new();
+        // let mut filename =  String::new();
+        // let mut nodes = Vec::new();
         let arg = inner_pairs.next().unwrap();
 
-        match arg.as_rule() {
+        let filename = match arg.as_rule() {
             Rule::opening_delimiter => {
-                nodes.push(Element::Text(arg.as_str().to_string()));
+                // nodes.push(Element::Text(arg.as_str().to_string()));
                 let name = inner_pairs.next().unwrap().as_str();
-                filename.push_str(name);
+                // filename.push_str(name);
+                format!("{}{}", arg.as_str(), name)
             },
-            Rule::word => filename.push_str(arg.as_str()),
+            Rule::word => arg.as_str().to_string(),
             _ => unreachable!()
-        }
+        };
 
-        let iter = inner_pairs.map(Self::parse_element);
-        nodes.extend(iter);
+        // let iter = inner_pairs.map(Self::parse_element);
+        // nodes.extend(iter);
+        let nodes = inner_pairs.map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::In { filename },
@@ -2369,6 +2385,14 @@ impl MdocParser {
         let mut inner_pairs = pair.into_inner();
 
         let prefix = inner_pairs.next().unwrap().as_str().to_string();
+        // let prefix = match first_arg {
+        //     "(" | "[" | ")" | "]" | "!" | "?" | "." | "," | ":" | ";" => {
+        //         let prefix = inner_pairs.next().unwrap().as_str();
+        //         format!("{}{}", first_arg, prefix)
+        //     }
+        //     _ => first_arg.to_string()
+        // };
+
         let nodes = inner_pairs.map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {

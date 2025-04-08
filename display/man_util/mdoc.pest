@@ -156,8 +156,15 @@ inline = {
 // ----- Mdoc document
 
 element = {
-  ("."? ~ ( ta | block_full_explicit | block_full_implicit | block_partial_implicit | block_partial_explicit | inline) ~ NEWLINE? ) | 
-  text_line
+  ("."? ~ ( ta 
+          | block_full_explicit 
+          | block_full_implicit 
+          | block_partial_implicit 
+          | block_partial_explicit 
+          | inline
+          ) ~ NEWLINE?
+  )
+  | text_line
 }
 
 mdoc = { SOI ~ (("." ~ comment_macro ~ NEWLINE)* ~ element)* ~ EOI? }
@@ -393,6 +400,7 @@ en_block  = ${ "En"  ~ !text_arg ~ (ws* ~ partial_implicit_element)+ ~ ws* ~ NEW
 op_block  = ${ "Op"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
 pq_block  = ${ "Pq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
 ql_block  = ${ "Ql"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
+// ql_block  = ${ "Ql"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* }
 qq_block  = ${ "Qq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
 sq_block  = ${ "Sq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
 vt_block  = ${ "Vt"  ~ !text_arg ~ (ws* ~ partial_implicit_element)+ ~ ws* ~ NEWLINE? }
@@ -437,15 +445,29 @@ at_type     =  {
   | at_system_v
 }
 
+line_start     = _{ SOI | NEWLINE }
+not_line_start = _{ !line_start }
+
 at = ${ 
-  "At" 
+  not_line_start
+  ~ "At" 
   ~ !text_arg
   ~ (ws+ ~ opening_delimiter)* 
   ~ (ws+ ~ (at_type | text_arg))? 
-  ~ (ws+ ~ closing_delimiter)*
-  ~ (ws+ ~ text_arg)*
+  ~ (ws+ ~ closing_delimiter)* 
+  ~ (ws+ ~ text_arg)* 
   ~ ws*
 }
+
+// at = ${ 
+//   "At" 
+//   ~ !text_arg
+//   ~ (ws+ ~ opening_delimiter)* 
+//   ~ (ws+ ~ (at_type | text_arg))? 
+//   ~ (ws+ ~ closing_delimiter)*
+//   ~ (ws+ ~ text_arg)*
+//   ~ ws*
+// }
 
 bsx = ${ 
   "Bsx" 
