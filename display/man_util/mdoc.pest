@@ -282,7 +282,7 @@ block_line = { (!NEWLINE ~ ANY)+ }
 ta_head  = ${ (!"." ~ "Ta") | "    " | "\t" }
 ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 
-it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ (ta_head | word))* ~ ws* ~ NEWLINE? }
+it_head  = ${ ".It" ~ !text_arg ~ (ws+ ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
 it_body  = ${ (!(".It") ~ !(".El") ~ element ~ NEWLINE?)* }
 it_block = ${ it_head ~ it_body }
 
@@ -367,8 +367,8 @@ qo_block = ${ qo_head ~ qo_body* ~ "."? ~ qc }
 
 // --- Rs & Re
 re       = ${ "Re" ~ !text_arg ~ ws* ~ NEWLINE? }
-rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ rs_submacro)* ~ ws* ~ NEWLINE? }
-rs_body  = ${ "."? ~ rs_submacro ~ ws* ~ NEWLINE? }
+rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ (rs_submacro | comment_macro))* ~ ws* ~ NEWLINE? }
+rs_body  = ${ "."? ~ (rs_submacro | comment_macro) ~ ws* ~ NEWLINE? }
 rs_block = ${ rs_head ~ rs_body* ~ "."? ~ re }
 
 // --- So & Sc
