@@ -38,7 +38,7 @@ impl From<Pair<'_, Rule>> for BdType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum OffsetType {
     Indent,
-    /// 2x [OffsetType::Indent]
+    /// 2x [`OffsetType::Indent`]
     IndentTwo,
     Left,
     Right,

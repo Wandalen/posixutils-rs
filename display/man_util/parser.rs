@@ -23,9 +23,6 @@ use super::mdoc_macro::*;
 use std::mem::discriminant;
 use std::sync::LazyLock;
 
-// /// Default Bl -width parameter value
-// const DEFAULT_INDENT: u8 = 20; 
-
 /// Rs submacros sorting order
 static RS_SUBMACRO_ORDER: LazyLock<Vec<Macro>> = LazyLock::new(|| {
     vec![
@@ -44,6 +41,10 @@ static RS_SUBMACRO_ORDER: LazyLock<Vec<Macro>> = LazyLock::new(|| {
         Macro::D,
         Macro::O,
     ]
+});
+
+static REGEX_WIDTH: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(r"[+-]?[0-9]*.[0-9]*[:unit:]?").unwrap()
 });
 
 /// Mdoc files parser
@@ -398,7 +399,7 @@ impl MdocParser {
     fn parse_bl_block(pair: Pair<Rule>) -> Element {
         fn parse_bl_parameter(
             pair: Pair<Rule>, 
-            width: &mut Option<u8>,
+            width: &mut Option<i8>,
             offset: &mut Option<OffsetType>,
             compact: &mut bool,
             columns: &mut Vec<String>, 
@@ -410,21 +411,22 @@ impl MdocParser {
                         return true;
                     }
                     count.0 += 1;
-                    let width_p = pair.into_inner()
+                    let mut width_p = pair.into_inner()
                         .find(|p| Rule::text_arg == p.as_rule())
-                        .map(|p| p.as_str())
-                        .unwrap_or("");
+                        .map(|p| p.as_str().to_string())
+                        .unwrap_or("".to_string());
+
                     if width_p.is_empty(){
                         *width = None;
-                    }else if width_p.chars().take_while(|ch| ch.is_ascii_digit()).count() > 0{
-                        let width_p = width_p.chars()
+                    }else if REGEX_WIDTH.is_match_at(&width_p, 0){                        
+                        width_p = width_p.chars()
                             .take_while(|ch| ch.is_ascii_digit())
                             .collect::<String>();
-                        if let Ok(w) = str::parse::<u8>(&width_p){
+                        if let Ok(w) = str::parse::<i8>(&width_p){
                             *width = Some(w);
                         }
                     }else{
-                        *width = Some(0); // Width = [`Some(0)`] means that width is addaptive to item heads. 
+                        *width = width_p.len().try_into().ok();
                     }
                 },
                 Rule::bl_offset => {
@@ -457,7 +459,7 @@ impl MdocParser {
             let list_type = BlType::from(bl_type_pair);
 
             let mut offset: Option<OffsetType> = None;
-            let mut width: Option<u8> = None;
+            let mut width: Option<i8> = None;
             let mut compact = false;
             let mut columns = vec![];
             let mut count = (0,0,0);
@@ -578,6 +580,7 @@ impl MdocParser {
                 }
             }
         }
+        
         new_head.extend(string_to_elements(&parse_buffer));
         head = new_head;
 
@@ -3045,10 +3048,10 @@ mod tests {
 
         #[test]
         fn bl_width() {
-            let mut width_types: HashMap<&str, Option<u8>> = Default::default();
+            let mut width_types: HashMap<&str, Option<i8>> = Default::default();
             width_types.insert("15", Some(15));
             width_types.insert("300", None);
-            width_types.insert("left", Some(0));
+            width_types.insert("left", None);
 
             for (str_type, width_result) in width_types {
                 let content = format!(".Bl -bullet -width {str_type}\n.El");
@@ -3151,7 +3154,7 @@ mod tests {
 
         #[test]
         fn bl_parameters() {
-            let mut parameters_cases: HashMap<&str, (Option<u8>, Option<OffsetType>, bool, Vec<String>)> = Default::default();
+            let mut parameters_cases: HashMap<&str, (Option<i8>, Option<OffsetType>, bool, Vec<String>)> = Default::default();
             parameters_cases.insert(
                 "-width 15 -offset indent-two -compact col1 col2", 
                 (Some(15), Some(OffsetType::IndentTwo), true, vec!["col1".to_string(), "col2".to_string()])
@@ -3239,7 +3242,7 @@ mod tests {
 
         #[test]
         fn bl_invalid_parameters() {
-            let mut parameters_cases: HashMap<&str, (Option<u8>, Option<OffsetType>, bool, Vec<&str>)> = Default::default();
+            let mut parameters_cases: HashMap<&str, (Option<i8>, Option<OffsetType>, bool, Vec<&str>)> = Default::default();
             parameters_cases.insert(
                 "-width 15 -width 15 -offset indent", 
                 (Some(15), None, false, "-width 15 -offset indent".split(" ").collect::<Vec<_>>())
