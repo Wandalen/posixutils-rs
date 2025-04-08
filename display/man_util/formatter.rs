@@ -313,7 +313,21 @@ impl MdocFormatter {
     }
  
     fn get_default_footer_text() -> String {
-        String::new()
+        use std::process::Command;
+
+        let mut footer_text = Command::new("uname")
+            .arg("-o")
+            .output()
+            .map(|o| String::from_utf8(o.stdout).unwrap_or_default())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        if footer_text.is_empty(){
+            footer_text = "()".to_string();
+        }
+
+        footer_text
     }
  
     fn format_footer(&mut self) -> String {
