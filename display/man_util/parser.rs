@@ -9,7 +9,6 @@
 
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
-use std::collections::HashSet;
 use text_production::{AtType, BsxType};
 use thiserror::Error;
 use types::{BdType, BfType, OffsetType, SmMode};
@@ -217,7 +216,8 @@ pub enum MdocError {
 
 impl MdocParser {
     fn parse_element(pair: Pair<Rule>) -> Element {
-        //println!("\"{}\"", pair.as_str());
+        //println!("\"{:?}\"", pair.as_str());
+
         match pair.as_rule() {
             Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
@@ -231,8 +231,16 @@ impl MdocParser {
             Rule::arg => Self::parse_arg(pair.into_inner().next().unwrap()),
             Rule::macro_arg => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::ta | Rule::ta_head => Self::parse_ta(pair),
-            Rule::text_line => Element::Text(pair.into_inner().next().unwrap().as_str().to_string()),
-            Rule::line => Element::Text(pair.into_inner().next().unwrap().as_str().to_string()),
+            Rule::text_line | Rule::line => Element::Text(pair.into_inner().next().unwrap().as_str().to_string()),
+            // Rule::text_line => {
+            //     if pair.as_str().strip_suffix("\n\n").is_some(){
+            //         Element::Text(pair.as_str().strip_suffix("\n").unwrap().to_string())
+            //     }else if pair.as_str().strip_suffix("\r\n\r\n").is_some(){
+            //         Element::Text(pair.as_str().strip_suffix("\r\n").unwrap().to_string())
+            //     }else{
+            //         Element::Text(pair.into_inner().next().unwrap().as_str().to_string())
+            //     }
+            // },
             Rule::EOI => Element::Eoi,
             _ => Element::Text(pair.as_str().to_string()),
         }
