@@ -300,7 +300,7 @@ impl MdocFormatter {
         let mut content = lines
             .join("\n");
 
-        content = replace_mdoc_escapes(&content);
+        content = self.replace_mdoc_escapes(&content);
 
         content.into_bytes()
     }
