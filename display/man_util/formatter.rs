@@ -224,7 +224,7 @@ impl MdocFormatter {
             lines.push(current_line.trim_end().to_string());
         }
 
-        let content = replace_mdoc_escapes(&lines.join("\n"));
+        let content = self.replace_mdoc_escapes(&lines.join("\n"));
 
         content.into_bytes()
     }
