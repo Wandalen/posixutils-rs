@@ -23,8 +23,8 @@ use super::mdoc_macro::*;
 use std::mem::discriminant;
 use std::sync::LazyLock;
 
-/// Default Bl -width parameter value
-const DEFAULT_INDENT: u8 = 20; 
+// /// Default Bl -width parameter value
+// const DEFAULT_INDENT: u8 = 20; 
 
 /// Rs submacros sorting order
 static RS_SUBMACRO_ORDER: LazyLock<Vec<Macro>> = LazyLock::new(|| {
@@ -100,9 +100,9 @@ pub enum MdocError {
     #[error("mdoc: {0}")]
     Pest(#[from] Box<pest::error::Error<Rule>>),
 
-    /// Validation failed
-    #[error("mdoc: {0}")]
-    Validation(String),
+    // /// Validation failed
+    // #[error("mdoc: {0}")]
+    // Validation(String),
 }
 
 // /// Validates if parsing result AST meets the requirements  
@@ -415,14 +415,16 @@ impl MdocParser {
                         .map(|p| p.as_str())
                         .unwrap_or("");
                     if width_p.is_empty(){
-                        *width = Some(DEFAULT_INDENT);
+                        *width = None;
                     }else if width_p.chars().take_while(|ch| ch.is_ascii_digit()).count() > 0{
                         let width_p = width_p.chars()
                             .take_while(|ch| ch.is_ascii_digit())
                             .collect::<String>();
-                        *width = Some(str::parse::<u8>(&width_p).ok().unwrap_or(DEFAULT_INDENT));
+                        if let Ok(w) = str::parse::<u8>(&width_p){
+                            *width = Some(w);
+                        }
                     }else{
-                        *width = Some(DEFAULT_INDENT);
+                        *width = Some(0); // Width = [`Some(0)`] means that width is addaptive to item heads. 
                     }
                 },
                 Rule::bl_offset => {
@@ -2775,7 +2777,17 @@ mod tests {
         #[test]
         fn bd_not_callable() {
             let input = ".Ad addr1 Bd -literal\n.Ed";
-            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()), 
+                    Element::Text("Bd".to_string()), 
+                    Element::Text("-literal".to_string())
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -2848,7 +2860,17 @@ mod tests {
         #[test]
         fn bf_not_callable() {
             let input = ".Ad addr1 Bf Em\n.Ef";
-            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()), 
+                    Element::Text("Bf".to_string()), 
+                    Element::Text("Em".to_string())
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -2900,7 +2922,17 @@ mod tests {
         #[test]
         fn bk_not_callable() {
             let input = ".Ad addr1 Bk -words\n.Ek";
-            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()), 
+                    Element::Text("Bk".to_string()), 
+                    Element::Text("-words".to_string())
+                ],
+            })];
+
+            let mdoc = MdocParser::parse_mdoc(input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -3015,8 +3047,8 @@ mod tests {
         fn bl_width() {
             let mut width_types: HashMap<&str, Option<u8>> = Default::default();
             width_types.insert("15", Some(15));
-            width_types.insert("300", Some(20));
-            width_types.insert("left", Some(20));
+            width_types.insert("300", None);
+            width_types.insert("left", Some(0));
 
             for (str_type, width_result) in width_types {
                 let content = format!(".Bl -bullet -width {str_type}\n.El");
@@ -3274,9 +3306,17 @@ mod tests {
         #[test]
         fn bl_not_callable() {
             let content = ".Ad addr1 Bl Em\n.El";
+            let elements = vec![Element::Macro(MacroNode {
+                mdoc_macro: Macro::Ad,
+                nodes: vec![
+                    Element::Text("addr1".to_string()), 
+                    Element::Text("Bl".to_string()), 
+                    Element::Text("Em".to_string())
+                ],
+            })];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
-            assert_eq!(mdoc.elements, vec![]);
+            assert_eq!(mdoc.elements, elements);
         }
     }
 
@@ -3683,10 +3723,7 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
-                    nodes: vec![
-                        Element::Text("name".to_string()),
-                        Element::Text("1".to_string()),
-                    ],
+                    nodes: vec![],
                 }),
             ];
 
@@ -3707,10 +3744,7 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
-                    nodes: vec![
-                        Element::Text("name".to_string()),
-                        Element::Text("1".to_string()),
-                    ],
+                    nodes: vec![],
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
