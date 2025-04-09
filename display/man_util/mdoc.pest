@@ -349,7 +349,7 @@ fo_body  = ${ !("."? ~ fc) ~ element }
 fo_block = ${ fo_head ~ fo_body* ~ "."? ~ fc }
 
 // --- Oo & Oc
-oc       = ${ "Oc" ~ !text_arg ~ ws* ~ NEWLINE? }
+oc       = ${ "Oc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 oo_head  = ${ "Oo" ~ !text_arg ~ (ws+ ~ !oc ~ text_arg)* ~ ws* ~ NEWLINE? }
 oo_body  = ${ !("."? ~ oc) ~ element }
 oo_block = ${ oo_head ~ oo_body* ~ "."? ~ oc }

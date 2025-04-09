@@ -2173,25 +2173,28 @@ impl MdocFormatter {
             .map(|node| {
                 let mut content = match node {
                     Element::Macro(ref macro_node) => {
-
-                        // println!("Sh block node:\n{:#?}\n----------------", macro_node.nodes.clone());
-
                         if title.eq_ignore_ascii_case("SYNOPSIS") {
                             let formatted = match &macro_node.mdoc_macro {
-                                Macro::In { 
-                                    ref filename 
-                                } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
                                 Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
                                 Macro::Nm => self.format_nm_synopsis(macro_node.clone()),
                                 Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
-                                Macro::Fn { funcname } => self.format_fn_synopsis(&funcname, macro_node.clone()),
+                                Macro::In { 
+                                    ref filename 
+                                } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
+                                Macro::Fd { 
+                                    directive, 
+                                    arguments 
+                                } => self.format_fd_synopsis(directive, arguments),
+                                Macro::Fn { 
+                                    funcname 
+                                } => self.format_fn_synopsis(&funcname, macro_node.clone()),
                                 _ => self.format_macro_node(macro_node.clone())
                             };
 
                             prev_node = macro_node.mdoc_macro.clone();
                             return formatted;
                         } else if title.eq_ignore_ascii_case("AUTHORS") {
-                            // self.format_an(AnType::Split, macro_node.clone());
+                            self.format_an_authors(AnType::Split, macro_node.clone());
 
                             match &macro_node.mdoc_macro {
                                 Macro::An { author_name_type } => {
@@ -2217,10 +2220,6 @@ impl MdocFormatter {
                 if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })){
                     ss_lines_positions.push(current_lines_count);
                 }
-
-                // if !content.ends_with('\n') && !content.is_empty() {
-                //     content.push_str(&self.formatting_state.spacing);
-                // }
 
                 current_lines_count += content.lines().count();
                 content
@@ -3025,6 +3024,10 @@ impl MdocFormatter {
             "{directive} {}",
             arguments.join(&self.formatting_state.spacing)
         )
+    }
+
+    fn format_fd_synopsis(&self, directive: &str, arguments: &[String]) -> String {
+        format!("{}\n", self.format_fd(directive, arguments))
     }
 
     fn format_fl(&mut self, macro_node: MacroNode) -> String {
@@ -5273,7 +5276,7 @@ If no files are specified, the standard input is read.";
 "REV(1)                      General Commands Manual                     REV(1)
 
 NAME
-     rev – reverse lines of a file  
+     rev – reverse lines of a file
 
 SYNOPSIS
      rev [file ...]
@@ -6336,7 +6339,7 @@ footer text                     January 1, 1970                    footer text";
 .Ns
 .No a b c";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
 name=value :Mpattern -ooutput a b ca b c
 
@@ -7114,12 +7117,13 @@ footer text                     January 1, 1970                    footer text";
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
         // #[case("./test_files/mdoc/tmux.1")]
-        #[case("./test_files/mdoc/nl.1")]
+        // #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/mg.1")]
         // #[case("./test_files/mdoc/snmp.1")]
         // #[case("./test_files/mdoc/rdist.1")]
         
+        // Block 1
         // #[case("./test_files/mdoc/chmod.2")]
         // #[case("./test_files/mdoc/cvs.1")]
         // #[case("./test_files/mdoc/dc.1")]
@@ -7128,6 +7132,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/getitimer.2")]
         // #[case("./test_files/mdoc/getrusage.2")]
         // #[case("./test_files/mdoc/getsockopt.2")]
+
         // #[case("./test_files/mdoc/gettimeofday.2")]
         // #[case("./test_files/mdoc/ktrace.2")]
         // #[case("./test_files/mdoc/msgrcv.2")]
@@ -7146,30 +7151,20 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/talk.1")]
         // #[case("./test_files/mdoc/write.2")]
 
-
-
-        // #[case("./test_files/mdoc/diff.1")]
-        // #[case("./test_files/mdoc/getitimer.2")]
-        // #[case("./test_files/mdoc/top.1")]
-
-        // #[case("./test_files/mdoc/execve.2")]
-        // #[case("./test_files/mdoc/open.2")]
-        // #[case("./test_files/mdoc/scp.1")]
-
-
-        // #[case("./test_files/mdoc/socket.2")]
-
-        // #[case("./test_files/mdoc/socketpair.2")]
-
-
-        // #[case("./test_files/mdoc/setuid.2")]
-
-        // #[case("./test_files/mdoc/shmget.2")]
-
-        // #[case("./test_files/mdoc/cvs.1")]
-        // #[case("./test_files/mdoc/rcs.1")]
-        // #[case("./test_files/mdoc/sftp.1")]
-        // #[case("./test_files/mdoc/grep.1")]
+        #[case("./test_files/mdoc/diff.1")]
+        #[case("./test_files/mdoc/getitimer.2")]
+        #[case("./test_files/mdoc/top.1")]
+        #[case("./test_files/mdoc/execve.2")]
+        #[case("./test_files/mdoc/open.2")]
+        #[case("./test_files/mdoc/scp.1")]
+        #[case("./test_files/mdoc/socket.2")]
+        #[case("./test_files/mdoc/socketpair.2")]
+        #[case("./test_files/mdoc/setuid.2")]
+        #[case("./test_files/mdoc/shmget.2")]
+        #[case("./test_files/mdoc/cvs.1")]
+        #[case("./test_files/mdoc/rcs.1")]
+        #[case("./test_files/mdoc/sftp.1")]
+        #[case("./test_files/mdoc/grep.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")
