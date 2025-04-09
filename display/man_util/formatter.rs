@@ -8,7 +8,7 @@ use super::{
     parser::{Element, MacroNode, MdocDocument, trim_quotes},
 };
 
-const NEW_LINE_ESCAPE: &str = "\\(nl)";
+// const NEW_LINE_ESCAPE: &str = "\\(nl)";
 
 /// Max Bl -width parameter value
 const MAX_INDENT: u8 = 20; 
@@ -28,13 +28,17 @@ static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Laz
     .unwrap()
 });
 
+static REGEX_NS_MACRO: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(r"\s*\\\[nsmacroescape\]\s*").unwrap()
+});
+
 /// Formatter state
 #[derive(Debug)]
 pub struct FormattingState {
     /// Utility name; mdoc title
     first_name: Option<String>,
     /// Suppress space printing
-    suppress_space: bool,
+    // suppress_space: bool,
     /// Header content
     header_text: Option<String>,
     /// Footer content
@@ -53,7 +57,7 @@ impl Default for FormattingState {
     fn default() -> Self {
         Self {
             first_name: None,
-            suppress_space: false,
+            // suppress_space: false,
             header_text: None,
             footer_text: None,
             spacing: " ".to_string(),
@@ -161,18 +165,17 @@ impl MdocFormatter {
         let max_width = self.formatting_settings.width;
 
         for line in formatted.split("\n") {
+            let line = self.replace_mdoc_escapes(line);
+
+            // println!("Current line:\n{}\n--------------------", line.replace("\n", "NEWLINE").replace(" ", "SPACE"));
+
             if !is_one_line && !current_line.is_empty(){
-                lines.push(current_line.trim_end().to_string());
-                current_line.clear();
-            }
-            
-            if line.starts_with("\\(nl)") {
                 lines.push(current_line.trim_end().to_string());
                 current_line.clear();
             }
 
             if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
-                let indent = get_indent(line);
+                let indent = get_indent(&line);
 
                 let max_width = max_width.saturating_sub(indent.len());                    
 
@@ -302,7 +305,7 @@ impl MdocFormatter {
 
         lines.push(self.format_footer());
 
-        let mut content = lines.join("\n");
+        let content = lines.join("\n");
         
         self.replace_mdoc_escapes(&content)
             .into_bytes()
@@ -395,9 +398,8 @@ impl MdocFormatter {
 
     fn replace_mdoc_escapes(&self, input: &str) -> String{
         let replacements: HashMap<&str, &str> = [
-            (NEW_LINE_ESCAPE, "\n"),
+            // (NEW_LINE_ESCAPE, "\n"),
             ("\\[pfmacroescape] ", ""),
-            (" \x08", ""),
             // Spaces:
             (r"\ ", " "), // unpaddable space
             (r"\~", " "), // paddable space
@@ -444,7 +446,7 @@ impl MdocFormatter {
             (r"\(em", r"—"), // em-dash
             (r"\(en", r"–"), // en-dash
             (r"\(hy", r"‐"), // hyphen
-            (r"\e",  r"\\"),  // back-slash
+            (r"\e",  r"\"),  // back-slash
             (r"\(r!", r"¡"), // upside-down exclamation
             (r"\(r?", r"¿"), // upside-down question
             // Quotes:
@@ -804,8 +806,10 @@ impl MdocFormatter {
             true
         });
         
-        // self.replace_unicode_escapes(&result)
-        result
+        result = REGEX_NS_MACRO.replace_all(&result, "").to_string();
+        self.replace_unicode_escapes(&result)
+        
+        // result
     }
 
     /// Convert one [`MacroNode`] AST to [`String`] 
@@ -956,7 +960,13 @@ impl MdocFormatter {
                 macro_node
             ),
 
-            _ => String::new(),
+            // _ => String::new(),
+            _ => {
+
+                println!("962: Macro Node: {:?}", macro_node);
+
+                self.format_inline_macro(macro_node)
+            }
         }
     }
 
@@ -2102,8 +2112,6 @@ impl MdocFormatter {
     }
 
     fn format_nm(&mut self, macro_node: MacroNode) -> String {
-        // println!("Nm nodes: {:?}\n-----------", macro_node.nodes.clone());
-
         self.format_inline_macro(macro_node)
     }
 
@@ -2126,7 +2134,7 @@ impl MdocFormatter {
             self.formatting_state.first_name = Some(content.clone());
         }
 
-        format!("\n{}", content)
+        format!("\n{}", content.trim())
     }
 
     /// If line don't have enought indentation according 
@@ -2183,7 +2191,7 @@ impl MdocFormatter {
                             prev_node = macro_node.mdoc_macro.clone();
                             return formatted;
                         } else if title.eq_ignore_ascii_case("AUTHORS") {
-                            self.format_an(AnType::Split, macro_node.clone());
+                            // self.format_an(AnType::Split, macro_node.clone());
 
                             match &macro_node.mdoc_macro {
                                 Macro::An { author_name_type } => {
@@ -2210,9 +2218,9 @@ impl MdocFormatter {
                     ss_lines_positions.push(current_lines_count);
                 }
 
-                if !content.ends_with('\n') && !content.is_empty() {
-                    content.push_str(&self.formatting_state.spacing);
-                }
+                // if !content.ends_with('\n') && !content.is_empty() {
+                //     content.push_str(&self.formatting_state.spacing);
+                // }
 
                 current_lines_count += content.lines().count();
                 content
@@ -2220,7 +2228,7 @@ impl MdocFormatter {
             })
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
-            .join(" ");
+            .join(&self.formatting_state.spacing);
 
         self.add_missing_indent(&mut content);
 
@@ -2293,9 +2301,6 @@ impl MdocFormatter {
             .nodes
             .into_iter()
             .map(|node| {
-
-                // println!("Node in f block: {:#?}", node.clone());
-
                 let mut content = self.format_node(node);
                 if !content.ends_with('\n') && !content.is_empty() {
                     content.push_str(&self.formatting_state.spacing);
@@ -2305,6 +2310,8 @@ impl MdocFormatter {
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("")
+            .trim()
+            .to_string()
     }
 
     fn format_a_block(&mut self, macro_node: MacroNode) -> String {
@@ -2371,13 +2378,13 @@ impl MdocFormatter {
         content.pop();
         content.pop();
         
-        format!("{}({}) ", funcname, content)
+        format!("{}({})", funcname, content)
     }
 
     fn format_o_block(&mut self, macro_node: MacroNode) -> String {
         let formatted_block = self.format_partial_explicit_block(macro_node);
 
-        format!("[{}] ", formatted_block)
+        format!("[{}]", formatted_block)
     }
 
     fn format_p_block(&mut self, macro_node: MacroNode) -> String {
@@ -2618,10 +2625,9 @@ impl MdocFormatter {
             is_first_node = false;
         }
     
-        result = result.trim_end().to_string();
-        result = result.replace('\n', "");
+        result = result.trim().to_string();
     
-        format!("{}{}{} ", result, close_char, trailing_punctuation)
+        format!("{}{}{}", result, close_char, trailing_punctuation)
     }
     
         
@@ -2662,11 +2668,11 @@ impl MdocFormatter {
     }
 
     fn format_pq(&mut self, mut macro_node: MacroNode) -> String {
-        println!("PQ Node:\n{:#?}\n----------------------------", macro_node.nodes.clone());
+        // println!("PQ Node:\n{:#?}\n----------------------------", macro_node.nodes.clone());
 
         let c = self.format_partial_implicit_block(&mut macro_node, "(", ")");
 
-        println!("PQ Result:\n{}\n------------------------------", c);
+        // println!("PQ Result:\n{}\n------------------------------", c);
 
         c
     }
@@ -2680,11 +2686,11 @@ impl MdocFormatter {
     }
 
     fn format_sq(&mut self, mut macro_node: MacroNode) -> String {
-        println!("SQ Node:\n{:#?}\n----------------------------", macro_node.nodes.clone());
+        // println!("SQ Node:\n{:#?}\n----------------------------", macro_node.nodes.clone());
 
         let c = self.format_partial_implicit_block(&mut macro_node, "\'", "\'");
     
-        println!("SQ Result:\n{}\n------------------------------", c);
+        // println!("SQ Result:\n{}\n------------------------------", c);
 
         c
     }
@@ -2764,7 +2770,7 @@ impl MdocFormatter {
             AnType::Name => {
                 let content = self.format_inline_macro(macro_node);
                 match self.formatting_state.split_mod {
-                    true => format!("\\(nl){}", content),
+                    true => format!("\n{}", content),
                     false => content,
                 }
             }
@@ -3022,6 +3028,9 @@ impl MdocFormatter {
     }
 
     fn format_fl(&mut self, macro_node: MacroNode) -> String {
+        if macro_node.nodes.is_empty() {
+            return "-\\[nsmacroescape]".to_string()
+        }
         let mut result = String::new();
         let mut prev_was_open = false;
         let mut is_first_node = true;
@@ -3240,13 +3249,14 @@ impl MdocFormatter {
     }
 
     fn format_no(&mut self, macro_node: MacroNode) -> String {
-        self.formatting_state.suppress_space = false;
+        // self.formatting_state.suppress_space = false;
         self.format_inline_macro(macro_node)
     }
 
     fn format_ns(&mut self, macro_node: MacroNode) -> String {
-        self.formatting_state.suppress_space = true;
-        "\x08".to_string() + &self.format_inline_macro(macro_node)
+        let content = self.format_inline_macro(macro_node);
+
+        format!("\\[nsmacroescape]{}", content)
     }
 
     fn format_nx(&self, macro_node: MacroNode) -> String {
@@ -7056,7 +7066,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/munmap.2")]
         // #[case("./test_files/mdoc/ipcs.1")]
         // #[case("./test_files/mdoc/atq.1")]
-        #[case("./test_files/mdoc/brk.2")]
+        // #[case("./test_files/mdoc/brk.2")]
         // #[case("./test_files/mdoc/cal.1")]
         // #[case("./test_files/mdoc/minherit.2")]
         // #[case("./test_files/mdoc/cat.1")]
@@ -7100,6 +7110,15 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/w.1")]
         // #[case("./test_files/mdoc/chflags.2")]
         // #[case("./test_files/mdoc/flock.2")]
+
+        // Bl -column
+        // #[case("./test_files/mdoc/shutdown.2")]
+        // #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/nl.1")]
+        // #[case("./test_files/mdoc/bc.1")]
+        // #[case("./test_files/mdoc/mg.1")]
+        // #[case("./test_files/mdoc/snmp.1")]
+        // #[case("./test_files/mdoc/rdist.1")]
         
         // #[case("./test_files/mdoc/chmod.2")]
         // #[case("./test_files/mdoc/cvs.1")]
@@ -7128,21 +7147,15 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/write.2")]
 
 
-        // #[case("./test_files/mdoc/shutdown.2")]
 
-        // #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/diff.1")]
         // #[case("./test_files/mdoc/getitimer.2")]
-        // #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/top.1")]
-        // #[case("./test_files/mdoc/bc.1")]
 
         // #[case("./test_files/mdoc/execve.2")]
-        // #[case("./test_files/mdoc/mg.1")]
         // #[case("./test_files/mdoc/open.2")]
         // #[case("./test_files/mdoc/scp.1")]
 
-        // #[case("./test_files/mdoc/snmp.1")]
 
         // #[case("./test_files/mdoc/socket.2")]
 
@@ -7155,7 +7168,6 @@ footer text                     January 1, 1970                    footer text";
 
         // #[case("./test_files/mdoc/cvs.1")]
         // #[case("./test_files/mdoc/rcs.1")]
-        // #[case("./test_files/mdoc/rdist.1")]
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
         fn format_mdoc_file(#[case] path: &str){

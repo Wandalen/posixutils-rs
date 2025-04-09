@@ -302,7 +302,7 @@ impl MdocParser {
         let input = prepare_document(&input);
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
-        println!("Pairs:\n{pairs:#?}\n\n");
+        // println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -912,10 +912,12 @@ impl MdocParser {
 
     // Parses (`Ac`)[https://man.openbsd.org/mdoc#Ac]:
     // `Ac`
-    fn parse_ac(_pair: Pair<Rule>) -> Element {
+    fn parse_ac(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Ac,
-            nodes: vec![],
+            nodes,
         })
     }
 
@@ -1097,10 +1099,15 @@ impl MdocParser {
 
     // Parses (`Oc`)[https://man.openbsd.org/mdoc#Oc]:
     // `Oc`
-    fn parse_oc(_pair: Pair<Rule>) -> Element {
+    fn parse_oc(pair: Pair<Rule>) -> Element {
+
+        println!("Parsing Oc macro");
+
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Oc,
-            nodes: vec![],
+            nodes,
         })
     }
 
@@ -1157,7 +1164,7 @@ impl MdocParser {
     // `Rs`
     fn parse_rs_block(pair: Pair<Rule>) -> Element {
 
-        println!("Rs block:\nNodes:\n{:#?}", pair);
+        // println!("Rs block:\nNodes:\n{:#?}", pair);
 
         fn rs_submacro_cmp(a: &Element, b: &Element) -> std::cmp::Ordering {
             let get_macro_order_position = |n| {
@@ -1198,7 +1205,7 @@ impl MdocParser {
 
         nodes.sort_by(rs_submacro_cmp);
 
-        println!("Rs block:\nFormatted nodes:\n{:#?}", nodes);
+        // println!("Rs block:\nFormatted nodes:\n{:#?}", nodes);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Rs,
@@ -1265,6 +1272,9 @@ impl MdocParser {
 
     fn parse_block_partial_explicit(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
+
+        println!("Rule: {:?}", pair.as_rule());
+
         match pair.as_rule() {
             Rule::ao_block => Self::parse_ao_block(pair),
             Rule::bo_block => Self::parse_bo_block(pair),
