@@ -2533,24 +2533,49 @@ impl MdocFormatter {
 impl MdocFormatter {
     fn format_partial_implicit_block(
         &mut self,
-        macro_node: MacroNode,
+        macro_node: &mut MacroNode,
         open_char: &str,
         close_char: &str,
     ) -> String {
-        // let last_node_is_delimiter = macro_node.nodes.last().map_or(false, |node| {
-        //     if let Element::Text(ref text) = node {
-        //         matches!(text.as_str(), "(" | "[" | ")" | "]" | "." | "," | ":" | ";" | "!" | "?")
-        //     } else {
-        //         false
-        //     }
-        // });
-
+        fn is_closing_delimiter(s: &str) -> bool {
+            matches!(s, ")" | "]" | "." | "," | ":" | ";" | "!" | "?")
+        }
+    
+        fn extract_trailing_delim(node: &mut MacroNode) -> Option<String> {
+            if node.nodes.is_empty() {
+                return None;
+            }
+    
+            let last_index = node.nodes.len() - 1;
+            match &mut node.nodes[last_index] {
+                Element::Text(ref text) => {
+                    if is_closing_delimiter(text) {
+                        if let Some(Element::Text(delim)) = node.nodes.pop() {
+                            return Some(delim);
+                        }
+                    }
+                    None
+                }
+                Element::Macro(ref mut inner_macro_node) => {
+                    if let Some(delim) = extract_trailing_delim(inner_macro_node) {
+                        if inner_macro_node.nodes.is_empty() {
+                            node.nodes.pop();
+                        }
+                        return Some(delim);
+                    }
+                    None
+                }
+                _ => None,
+            }
+        }
+    
+        let trailing_punctuation = extract_trailing_delim(macro_node).unwrap_or_default();
+    
         let mut result = open_char.to_string();
-        let mut trailing_punctuation = String::new();
         let mut prev_was_open = false;
         let mut is_first_node = true;
     
-        for node in macro_node.nodes {
+        for node in &macro_node.nodes {
             let content = match node {
                 Element::Text(text) => {
                     match text.as_str() {
@@ -2564,11 +2589,10 @@ impl MdocFormatter {
                         }
                         "." | "," | ":" | ";" | "!" | "?" => {
                             prev_was_open = false;
-                            trailing_punctuation.push_str(text.as_str());
                             String::new()
                         }
                         _ => {
-                            let formatted_text = self.format_text_node(&text);
+                            let formatted_text = self.format_text_node(text);
                             let offset = if is_first_node || prev_was_open {
                                 ""
                             } else {
@@ -2580,7 +2604,7 @@ impl MdocFormatter {
                     }
                 }
                 other => {
-                    let mut s = self.format_node(other);
+                    let mut s = self.format_node(other.clone());
                     if !s.is_empty() && !s.ends_with('\n') {
                         s.push_str(&self.formatting_state.spacing);
                     }
@@ -2596,77 +2620,69 @@ impl MdocFormatter {
     
         result = result.trim_end().to_string();
         result = result.replace('\n', "");
-
-        // let last_char_is_delimiter = result.chars().last().map_or(false, |ch| {
-        //     matches!(ch.to_string().as_str(), "(" | "[" | ")" | "]" | "." | "," | ":" | ";" | "!" | "?")
-        // });
-
-        // if last_char_is_delimiter && last_node_is_delimiter {
-        //     trailing_punctuation = result.pop().unwrap().to_string();
-        // }
     
         format!("{}{}{} ", result, close_char, trailing_punctuation)
     }
     
         
-    fn format_aq(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "⟨", "⟩")
+    fn format_aq(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "⟨", "⟩")
     }
 
-    fn format_bq(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "[", "]")
+    fn format_bq(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "[", "]")
     }
 
-    fn format_brq(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "{{", "}}")
+    fn format_brq(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "{{", "}}")
     }
 
-    fn format_d1(&mut self, macro_node: MacroNode) -> String {
+    fn format_d1(&mut self, mut macro_node: MacroNode) -> String {
         let spaces = " ".repeat(self.formatting_settings.indent);
-        self.format_partial_implicit_block(macro_node, &spaces, "")
+        self.format_partial_implicit_block(&mut macro_node, &spaces, "")
     }
 
-    fn format_dl(&mut self, macro_node: MacroNode) -> String {
+    fn format_dl(&mut self, mut macro_node: MacroNode) -> String {
         let spaces = " ".repeat(self.formatting_settings.indent);
-        self.format_partial_implicit_block(macro_node, &spaces, "")
+        self.format_partial_implicit_block(&mut macro_node, &spaces, "")
     }
 
-    fn format_dq(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "“", "”")
+    fn format_dq(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "“", "”")
     }
 
-    fn format_en(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "", "")
+    fn format_en(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "", "")
             .trim()
             .to_string()
     }
 
-    fn format_op(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "[", "]")
+    fn format_op(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "[", "]")
     }
 
-    fn format_pq(&mut self, macro_node: MacroNode) -> String {
+    fn format_pq(&mut self, mut macro_node: MacroNode) -> String {
         println!("PQ Node:\n{:#?}\n----------------------------", macro_node.nodes.clone());
 
-        let c = self.format_partial_implicit_block(macro_node, "(", ")");
+        let c = self.format_partial_implicit_block(&mut macro_node, "(", ")");
 
         println!("PQ Result:\n{}\n------------------------------", c);
 
         c
     }
 
-    fn format_ql(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "‘", "’")
+    fn format_ql(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "‘", "’")
     }
 
-    fn format_qq(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "\"", "\"")
+    fn format_qq(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "\"", "\"")
     }
 
-    fn format_sq(&mut self, macro_node: MacroNode) -> String {
+    fn format_sq(&mut self, mut macro_node: MacroNode) -> String {
         println!("SQ Node:\n{:#?}\n----------------------------", macro_node.nodes.clone());
 
-        let c = self.format_partial_implicit_block(macro_node, "\'", "\'");
+        let c = self.format_partial_implicit_block(&mut macro_node, "\'", "\'");
     
         println!("SQ Result:\n{}\n------------------------------", c);
 
@@ -2677,8 +2693,8 @@ impl MdocFormatter {
         self.format_inline_macro(macro_node)
     }
 
-    fn format_vt_synopsis(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_implicit_block(macro_node, "", "")
+    fn format_vt_synopsis(&mut self, mut macro_node: MacroNode) -> String {
+        self.format_partial_implicit_block(&mut macro_node, "", "")
             .trim()
             .to_string()
     }
@@ -7094,20 +7110,20 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/moptrace.1")]
 
         // Other
-        // #[case("./test_files/mdoc/rlog.1")]
-        // #[case("./test_files/mdoc/access.2")]
-        // #[case("./test_files/mdoc/munmap.2")]
-        // #[case("./test_files/mdoc/ipcs.1")]
-        // #[case("./test_files/mdoc/atq.1")]
-        // #[case("./test_files/mdoc/brk.2")]
-        // #[case("./test_files/mdoc/cal.1")]
-        // #[case("./test_files/mdoc/minherit.2")]
-        // #[case("./test_files/mdoc/cat.1")]
-        // #[case("./test_files/mdoc/file.1")]
-        // #[case("./test_files/mdoc/mkdir.1")] 
-        // #[case("./test_files/mdoc/getsockname.2")]
-        // #[case("./test_files/mdoc/mlockall.2")]
-        // #[case("./test_files/mdoc/cut.1")]
+        #[case("./test_files/mdoc/rlog.1")]
+        #[case("./test_files/mdoc/access.2")]
+        #[case("./test_files/mdoc/munmap.2")]
+        #[case("./test_files/mdoc/ipcs.1")]
+        #[case("./test_files/mdoc/atq.1")]
+        #[case("./test_files/mdoc/brk.2")]
+        #[case("./test_files/mdoc/cal.1")]
+        #[case("./test_files/mdoc/minherit.2")]
+        #[case("./test_files/mdoc/cat.1")]
+        #[case("./test_files/mdoc/file.1")]
+        #[case("./test_files/mdoc/mkdir.1")] 
+        #[case("./test_files/mdoc/getsockname.2")]
+        #[case("./test_files/mdoc/mlockall.2")]
+        #[case("./test_files/mdoc/cut.1")]
 
         // without bl
         // #[case("./test_files/mdoc/umask.2")]
@@ -7119,30 +7135,30 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sysarch.2")]
 
         // word as macro
-        #[case("./test_files/mdoc/fork.2")]
-        #[case("./test_files/mdoc/symlink.2")]
-        #[case("./test_files/mdoc/sync.2")]
-        #[case("./test_files/mdoc/futex.2")]
-        #[case("./test_files/mdoc/reboot.2")]
-        #[case("./test_files/mdoc/id.1")]
-        #[case("./test_files/mdoc/rename.2")]
-        #[case("./test_files/mdoc/cu.1")]
-        #[case("./test_files/mdoc/getfh.2")]
-        #[case("./test_files/mdoc/ioctl.2")]
-        #[case("./test_files/mdoc/dup.2")]
-        #[case("./test_files/mdoc/getpeername.2")]
-        #[case("./test_files/mdoc/lpq.1")]
-        #[case("./test_files/mdoc/nm.1")]
-        #[case("./test_files/mdoc/truncate.2")]
-        #[case("./test_files/mdoc/chdir.2")]
-        #[case("./test_files/mdoc/mkfifo.2")]
-        #[case("./test_files/mdoc/quotactl.2")]
-        #[case("./test_files/mdoc/send.2")]
-        #[case("./test_files/mdoc/getpriority.2")]
-        #[case("./test_files/mdoc/select.2")]
-        #[case("./test_files/mdoc/w.1")]
-        #[case("./test_files/mdoc/chflags.2")]
-        #[case("./test_files/mdoc/flock.2")]
+        // #[case("./test_files/mdoc/fork.2")]
+        // #[case("./test_files/mdoc/symlink.2")]
+        // #[case("./test_files/mdoc/sync.2")]
+        // #[case("./test_files/mdoc/futex.2")]
+        // #[case("./test_files/mdoc/reboot.2")]
+        // #[case("./test_files/mdoc/id.1")]
+        // #[case("./test_files/mdoc/rename.2")]
+        // #[case("./test_files/mdoc/cu.1")]
+        // #[case("./test_files/mdoc/getfh.2")]
+        // #[case("./test_files/mdoc/ioctl.2")]
+        // #[case("./test_files/mdoc/dup.2")]
+        // #[case("./test_files/mdoc/getpeername.2")]
+        // #[case("./test_files/mdoc/lpq.1")]
+        // #[case("./test_files/mdoc/nm.1")]
+        // #[case("./test_files/mdoc/truncate.2")]
+        // #[case("./test_files/mdoc/chdir.2")]
+        // #[case("./test_files/mdoc/mkfifo.2")]
+        // #[case("./test_files/mdoc/quotactl.2")]
+        // #[case("./test_files/mdoc/send.2")]
+        // #[case("./test_files/mdoc/getpriority.2")]
+        // #[case("./test_files/mdoc/select.2")]
+        // #[case("./test_files/mdoc/w.1")]
+        // #[case("./test_files/mdoc/chflags.2")]
+        // #[case("./test_files/mdoc/flock.2")]
         
         // #[case("./test_files/mdoc/chmod.2")]
         // #[case("./test_files/mdoc/cvs.1")]
