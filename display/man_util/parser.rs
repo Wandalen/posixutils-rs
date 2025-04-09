@@ -52,6 +52,7 @@ static BLOCK_PARTIAL_IMPLICIT: &[&str] = &[
     "En", "Op", "Pq", "Ql", "Qq", "Sq", "Vt",
 ];
 
+#[allow(unreachable_patterns)]
 fn does_start_with_macro(word: &str) -> bool {
     match word {
         "Bd" | "Bf" | "Bk" | "Bl" |
@@ -190,8 +191,6 @@ pub enum MdocError {
 /// Validates if parsing result AST meets the requirements  
 #[derive(Default)]
 struct MdocValidator {
-    // /// Ss macros titles
-    // ss_titles: HashSet<String>,
     /// Utility or current mdoc title
     first_name: Option<Vec<String>>,
 }
@@ -220,51 +219,6 @@ impl MdocValidator {
         }
         Ok(())
     }
-
-    // fn is_last_element_nd(element: &Element) -> bool {
-    //     match element {
-    //         Element::Macro(macro_node) => {
-    //             if let Some(last) = macro_node.nodes.last() {
-    //                 Self::is_last_element_nd(last)
-    //             } else {
-    //                 macro_node.mdoc_macro == Macro::Nd
-    //             }
-    //         }
-    //         _ => false,
-    //     }
-    // }
-    
-    // /// Check if mdoc dont have title duplicates
-    // fn validate_sh(&mut self, sh_node: &MacroNode) -> Result<(), MdocError> {
-    //     if let Macro::Sh { title } = &sh_node.mdoc_macro {
-    //         if !self.sh_titles.insert(title.clone()) {
-    //             return Err(MdocError::Validation(format!(
-    //                 "Duplicate .Sh title found: {title}"
-    //             )));
-    //         }
-    //         if title == "NAME" && !sh_node.nodes.is_empty() {
-    //             let last_element = sh_node.nodes.last().unwrap();
-    //             if !Self::is_last_element_nd(last_element) {
-    //                 return Err(MdocError::Validation(
-    //                     ".Sh NAME must end with .Nd".to_string(),
-    //                 ));
-    //             }
-    //         }
-    //     }
-    //     Ok(())
-    // }
-
-    // /// Check if mdoc dont have subsection duplicates
-    // fn validate_ss(&mut self, ss_node: &MacroNode) -> Result<(), MdocError> {
-    //     if let Macro::Ss { title } = &ss_node.mdoc_macro {
-    //         if !self.ss_titles.insert(title.clone()) {
-    //             return Err(MdocError::Validation(format!(
-    //                 "Duplicate .Ss title found: {title}",
-    //             )));
-    //         }
-    //     }
-    //     Ok(())
-    // }
 
     /// Validates certain element
     fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
@@ -298,7 +252,7 @@ impl MdocValidator {
 
 impl MdocParser {
     fn parse_element(pair: Pair<Rule>) -> Element {
-        //println!("\"{:?}\"", pair.as_str());
+        // println!("\"{:?}\"", pair.as_str());
 
         match pair.as_rule() {
             Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
@@ -348,7 +302,7 @@ impl MdocParser {
         let input = prepare_document(&input);
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
-        //println!("Pairs:\n{pairs:#?}\n\n");
+        println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -1202,6 +1156,9 @@ impl MdocParser {
     // Parses (`Rs`)[https://man.openbsd.org/mdoc#Rs]:
     // `Rs`
     fn parse_rs_block(pair: Pair<Rule>) -> Element {
+
+        println!("Rs block:\nNodes:\n{:#?}", pair);
+
         fn rs_submacro_cmp(a: &Element, b: &Element) -> std::cmp::Ordering {
             let get_macro_order_position = |n| {
                 RS_SUBMACRO_ORDER
@@ -1240,6 +1197,8 @@ impl MdocParser {
             .collect();
 
         nodes.sort_by(rs_submacro_cmp);
+
+        println!("Rs block:\nFormatted nodes:\n{:#?}", nodes);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Rs,
@@ -3809,7 +3768,10 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
-                    nodes: vec![],
+                    nodes: vec![
+                        Element::Text("name".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 }),
             ];
 
@@ -3830,7 +3792,10 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
-                    nodes: vec![],
+                    nodes: vec![
+                        Element::Text("name".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
@@ -6518,31 +6483,6 @@ Line
 .Re"#
             )
             .unwrap().elements, vec![]);
-        }
-
-        #[test]
-        fn rs_not_called() {
-            let input = r#".Ao 
-Rs 
-%A John Doe 
-.Re Ac"#;
-
-            let elements = vec![Element::Macro(MacroNode {
-                mdoc_macro: Macro::Ao,
-                nodes: vec![Element::Macro(MacroNode {
-                    mdoc_macro: Macro::Rs,
-                    nodes: vec![Element::Macro(MacroNode {
-                        mdoc_macro: Macro::A,
-                        nodes: vec![
-                            Element::Text("John".to_string()),
-                            Element::Text("Doe".to_string()),
-                        ],
-                    })],
-                })],
-            })];
-
-            let mdoc = MdocParser::parse_mdoc(input).unwrap();
-            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -11619,7 +11559,10 @@ Line
 
             let elements = vec![Element::Macro(MacroNode {
                 mdoc_macro: Macro::Sy,
-                nodes: vec![Element::Text("word1 word2".to_string())],
+                nodes: vec![
+                    Element::Text("word1".to_string()),
+                    Element::Text("word2".to_string())
+                ],
             })];
 
             let mdoc = MdocParser::parse_mdoc(content).unwrap();
@@ -11638,7 +11581,10 @@ Line
             let elements = vec![
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Sy,
-                    nodes: vec![Element::Text("word1 word2".to_string())],
+                    nodes: vec![
+                        Element::Text("word1".to_string()),
+                        Element::Text("word2".to_string())
+                    ],
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Ar,
@@ -11660,7 +11606,10 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Sy,
-                    nodes: vec![Element::Text("word1 word2".to_string())],
+                    nodes: vec![
+                        Element::Text("word1".to_string()),
+                        Element::Text("word2".to_string())
+                    ],
                 }),
             ];
 

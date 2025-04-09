@@ -300,7 +300,7 @@ nm_block = ${ "Nm" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
 // -- Sh
 
 sh_open          = ${ "Sh" ~ ws+ ~ block_line ~ ws* }
-sh_block_element =  { !("." ~ sh_block) ~ element }
+sh_block_element =  { !("." ~ sh_block) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 sh_block         =  { sh_open ~ (NEWLINE ~ sh_block_element*)? }
 
 // -- Ss
