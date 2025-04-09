@@ -156,13 +156,15 @@ inline = {
 // ----- Mdoc document
 
 element = {
-  ("."? ~ ( ta 
-          | block_full_explicit 
-          | block_full_implicit 
-          | block_partial_implicit 
-          | block_partial_explicit 
-          | inline
-          ) ~ NEWLINE?
+  (
+    ((ws | NEWLINE)* ~ ".")* ~ 
+    ( ta 
+    | block_full_explicit 
+    | block_full_implicit 
+    | block_partial_implicit 
+    | block_partial_explicit 
+    | inline
+    ) ~ NEWLINE?
   )
   | text_line
 }
@@ -263,14 +265,16 @@ bl_type   = {
   | bl_tag
 }
 
-bl_width = { ws+ ~ "-width" ~ ws+ ~ text_arg }
-bl_offset = { ws+ ~ "-offset" ~ ws+ ~ offset }
-bl_compact = { ws+ ~ compact }
-bl_param = { bl_width | bl_offset | bl_compact }
+bl_width = { "-width" ~ ws+ ~ text_arg }
+bl_offset = { "-offset" ~ ws+ ~ offset }
+column = @{
+    ("\\&" ~ (!(ws | NEWLINE) ~ ANY)+) 
+  | ("\"" ~ (!("\"" | NEWLINE) ~ ANY)+ ~ "\"") 
+  | (!(ws | NEWLINE) ~ ANY)+ 
+}
+bl_param = { bl_width | bl_offset | compact | column }
 
-bl_columns = { text_arg+ }
-
-bl_open  = ${ "Bl" ~ ws+ ~ bl_type ~ bl_param{, 3} ~ (ws+ ~ bl_columns)* ~ ws* ~ NEWLINE }
+bl_open  = ${ "Bl" ~ ws+ ~ bl_type ~ (ws+ ~ bl_param)* ~ ws* ~ NEWLINE }
 el_close =  { ".El" ~ NEWLINE? }
 bl_block =  { bl_open ~ it_block* ~ el_close }
 
@@ -282,8 +286,8 @@ block_line = { (!NEWLINE ~ ANY)+ }
 ta_head  = ${ (!"." ~ "Ta") | "    " | "\t" }
 ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 
-it_head  = ${ ".It" ~ !text_arg ~ (ws* ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
-it_body  = ${ (!(".It") ~ !(".El") ~ element ~ NEWLINE?)* }
+it_head  = ${ ((ws | NEWLINE)* ~ ".")* ~ "It" ~ !text_arg ~ (ws* ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
+it_body  = ${ (((ws | NEWLINE)* ~ ".")* ~ !("It") ~ !("El") ~ element ~ NEWLINE?)* }
 it_block = ${ it_head ~ it_body }
 
 // -- Nd

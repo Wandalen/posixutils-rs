@@ -10,6 +10,7 @@
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use text_production::{AtType, BsxType};
+use std::collections::HashSet;
 use thiserror::Error;
 use types::{BdType, BfType, OffsetType, SmMode};
 
@@ -101,119 +102,119 @@ pub enum MdocError {
     #[error("mdoc: {0}")]
     Pest(#[from] Box<pest::error::Error<Rule>>),
 
-    // /// Validation failed
-    // #[error("mdoc: {0}")]
-    // Validation(String),
+    /// Validation failed
+    #[error("mdoc: {0}")]
+    Validation(String),
 }
 
-// /// Validates if parsing result AST meets the requirements  
-// #[derive(Default)]
-// struct MdocValidator {
-//     /// Ss macros titles
-//     ss_titles: HashSet<String>,
-//     /// Utility or current mdoc title
-//     first_name: Option<Vec<String>>,
-// }
+/// Validates if parsing result AST meets the requirements  
+#[derive(Default)]
+struct MdocValidator {
+    /// Ss macros titles
+    ss_titles: HashSet<String>,
+    /// Utility or current mdoc title
+    first_name: Option<Vec<String>>,
+}
 
-// impl MdocValidator {
-//     fn validate_nm(&mut self, nm_node: &mut MacroNode) -> Result<(), MdocError> {
-//         if let MacroNode {
-//             mdoc_macro: Macro::Nm,
-//             nodes: name,
-//         } = nm_node
-//         {
-//             match (&self.first_name, name) {
-//                 // Both remembered name and Nm name are present, or both are absent
-//                 (Some(_), name) if !name.is_empty() => {}
-//                 (None, name) if name.is_empty() => {}
-//                 // Nm has a name, but no remembered name
-//                 (None, name) if !name.is_empty() => {
-//                     self.first_name = Some(name.iter().cloned().map(Element::into).collect());
-//                 }
-//                 // Nm has no name, but remembered name is present
-//                 (Some(first_name), name) if name.is_empty() => {
-//                     *name = first_name.iter().cloned().map(Element::from).collect();
-//                 }
-//                 _ => unreachable!(),
-//             }
-//         }
-//         Ok(())
-//     }
+impl MdocValidator {
+    fn validate_nm(&mut self, nm_node: &mut MacroNode) -> Result<(), MdocError> {
+        if let MacroNode {
+            mdoc_macro: Macro::Nm,
+            nodes: name,
+        } = nm_node
+        {
+            match (&self.first_name, name) {
+                // Both remembered name and Nm name are present, or both are absent
+                (Some(_), name) if !name.is_empty() => {}
+                (None, name) if name.is_empty() => {}
+                // Nm has a name, but no remembered name
+                (None, name) if !name.is_empty() => {
+                    self.first_name = Some(name.iter().cloned().map(Element::into).collect());
+                }
+                // Nm has no name, but remembered name is present
+                (Some(first_name), name) if name.is_empty() => {
+                    *name = first_name.iter().cloned().map(Element::from).collect();
+                }
+                _ => unreachable!(),
+            }
+        }
+        Ok(())
+    }
 
-//     fn is_last_element_nd(element: &Element) -> bool {
-//         match element {
-//             Element::Macro(macro_node) => {
-//                 if let Some(last) = macro_node.nodes.last() {
-//                     Self::is_last_element_nd(last)
-//                 } else {
-//                     macro_node.mdoc_macro == Macro::Nd
-//                 }
-//             }
-//             _ => false,
-//         }
-//     }
+    fn is_last_element_nd(element: &Element) -> bool {
+        match element {
+            Element::Macro(macro_node) => {
+                if let Some(last) = macro_node.nodes.last() {
+                    Self::is_last_element_nd(last)
+                } else {
+                    macro_node.mdoc_macro == Macro::Nd
+                }
+            }
+            _ => false,
+        }
+    }
     
-//     /// Check if mdoc dont have title duplicates
-//     fn validate_sh(&mut self, sh_node: &MacroNode) -> Result<(), MdocError> {
-//         if let Macro::Sh { title } = &sh_node.mdoc_macro {
-//             if !self.sh_titles.insert(title.clone()) {
-//                 return Err(MdocError::Validation(format!(
-//                     "Duplicate .Sh title found: {title}"
-//                 )));
-//             }
-//             if title == "NAME" && !sh_node.nodes.is_empty() {
-//                 let last_element = sh_node.nodes.last().unwrap();
-//                 if !Self::is_last_element_nd(last_element) {
-//                     return Err(MdocError::Validation(
-//                         ".Sh NAME must end with .Nd".to_string(),
-//                     ));
-//                 }
-//             }
-//         }
-//         Ok(())
-//     }
+    // /// Check if mdoc dont have title duplicates
+    // fn validate_sh(&mut self, sh_node: &MacroNode) -> Result<(), MdocError> {
+    //     if let Macro::Sh { title } = &sh_node.mdoc_macro {
+    //         if !self.sh_titles.insert(title.clone()) {
+    //             return Err(MdocError::Validation(format!(
+    //                 "Duplicate .Sh title found: {title}"
+    //             )));
+    //         }
+    //         if title == "NAME" && !sh_node.nodes.is_empty() {
+    //             let last_element = sh_node.nodes.last().unwrap();
+    //             if !Self::is_last_element_nd(last_element) {
+    //                 return Err(MdocError::Validation(
+    //                     ".Sh NAME must end with .Nd".to_string(),
+    //                 ));
+    //             }
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
-//     /// Check if mdoc dont have subsection duplicates
-//     fn validate_ss(&mut self, ss_node: &MacroNode) -> Result<(), MdocError> {
-//         if let Macro::Ss { title } = &ss_node.mdoc_macro {
-//             if !self.ss_titles.insert(title.clone()) {
-//                 return Err(MdocError::Validation(format!(
-//                     "Duplicate .Ss title found: {title}",
-//                 )));
-//             }
-//         }
-//         Ok(())
-//     }
+    /// Check if mdoc dont have subsection duplicates
+    fn validate_ss(&mut self, ss_node: &MacroNode) -> Result<(), MdocError> {
+        if let Macro::Ss { title } = &ss_node.mdoc_macro {
+            if !self.ss_titles.insert(title.clone()) {
+                return Err(MdocError::Validation(format!(
+                    "Duplicate .Ss title found: {title}",
+                )));
+            }
+        }
+        Ok(())
+    }
 
-//     /// Validates certain element
-//     fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
-//         if let Element::Macro(macro_node) = element {
-//             match macro_node.mdoc_macro {
-//                 Macro::Nm => self.validate_nm(macro_node)?,
-//                 // Macro::Sh { .. } => self.validate_sh(macro_node)?,
-//                 Macro::Ss { .. } => self.validate_ss(macro_node)?,
-//                 _ => {}
-//             }
-//         }
+    /// Validates certain element
+    fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
+        if let Element::Macro(macro_node) = element {
+            match macro_node.mdoc_macro {
+                Macro::Nm => self.validate_nm(macro_node)?,
+                // Macro::Sh { .. } => self.validate_sh(macro_node)?,
+                Macro::Ss { .. } => self.validate_ss(macro_node)?,
+                _ => {}
+            }
+        }
 
-//         // Recursively validate child nodes
-//         if let Element::Macro(MacroNode { nodes, .. }) = element {
-//             for child in nodes {
-//                 self.validate_element(child)?;
-//             }
-//         }
+        // Recursively validate child nodes
+        if let Element::Macro(MacroNode { nodes, .. }) = element {
+            for child in nodes {
+                self.validate_element(child)?;
+            }
+        }
 
-//         Ok(())
-//     }
+        Ok(())
+    }
 
-//     /// Validate full [`MdocDocument`]
-//     pub fn validate(&mut self, document: &mut MdocDocument) -> Result<(), MdocError> {
-//         for element in &mut document.elements {
-//             self.validate_element(element)?;
-//         }
-//         Ok(())
-//     }
-// }
+    /// Validate full [`MdocDocument`]
+    pub fn validate(&mut self, document: &mut MdocDocument) -> Result<(), MdocError> {
+        for element in &mut document.elements {
+            self.validate_element(element)?;
+        }
+        Ok(())
+    }
+}
 
 impl MdocParser {
     fn parse_element(pair: Pair<Rule>) -> Element {
@@ -295,10 +296,10 @@ impl MdocParser {
         // TODO: debug only
         // elements.iter().for_each(|e| println!("{e:?}"));
 
-        let mdoc = MdocDocument { elements };
+        let mut mdoc = MdocDocument { elements };
 
-        //let validator = &mut MdocValidator::default();
-        //validator.validate(&mut mdoc)?;
+        let validator = &mut MdocValidator::default();
+        validator.validate(&mut mdoc)?;
 
         Ok(mdoc)
     }
@@ -439,7 +440,7 @@ impl MdocParser {
                         .unwrap();
                     *offset = Some(OffsetType::from(offset_p));
                 },
-                Rule::bl_compact => {
+                Rule::compact => {
                     if count.2 > 0{
                         return true;
                     }
@@ -464,21 +465,18 @@ impl MdocParser {
             let mut columns = vec![];
             let mut count = (0,0,0);
 
-            let mut has_repeat = false;
             for opt_pair in inner {
                 match opt_pair.as_rule() {
                     Rule::bl_param => {
                         for parameter in opt_pair.into_inner() {
-                            if !has_repeat{ 
-                                has_repeat = parse_bl_parameter(
-                                    parameter.clone(),
-                                    &mut width,
-                                    &mut offset,
-                                    &mut compact,
-                                    &mut columns,
-                                    &mut count
-                                );
-                            }
+                            let has_repeat = parse_bl_parameter(
+                                parameter.clone(),
+                                &mut width,
+                                &mut offset,
+                                &mut compact,
+                                &mut columns,
+                                &mut count
+                            );
                             
                             if has_repeat{
                                 columns.extend(
@@ -491,12 +489,7 @@ impl MdocParser {
                             }
                         }
                     },
-                    Rule::bl_columns => {
-                        for col in opt_pair.into_inner() {
-                            columns.push(col.as_str().to_string());
-                        }
-                    }
-                    _ => {}
+                    _ => columns.push(opt_pair.as_str().to_string())
                 }
             }
 
@@ -1264,11 +1257,15 @@ impl MdocParser {
 }
 
 /// Trim `"` quotes from [`String`]
-pub fn trim_quotes(s: String) -> String{
-    s.strip_prefix("\"")
-        .map(|s|s.strip_suffix("\"").unwrap_or(&s))
-        .unwrap_or(&s)
-        .to_string()
+pub fn trim_quotes(mut s: String) -> String{
+    if let Some(stripped) = s.strip_prefix("\""){
+        s = stripped.to_string();
+    }
+    if let Some(stripped) = s.strip_suffix("\""){
+        s = stripped.to_string();
+    }
+
+    s
 }
 
 // In-line macros parsing
@@ -3253,15 +3250,15 @@ mod tests {
             let mut parameters_cases: HashMap<&str, (Option<u8>, Option<OffsetType>, bool, Vec<&str>)> = Default::default();
             parameters_cases.insert(
                 "-width 15 -width 15 -offset indent", 
-                (Some(15), None, false, "-width 15 -offset indent".split(" ").collect::<Vec<_>>())
+                (Some(15), Some(OffsetType::Indent), false, "-width 15".split(" ").collect::<Vec<_>>())
             );
             parameters_cases.insert(
                 "-offset indent -offset indent -compact", 
-                (None, Some(OffsetType::Indent), false, "-offset indent -compact".split(" ").collect::<Vec<_>>())
+                (None, Some(OffsetType::Indent), true, "-offset indent".split(" ").collect::<Vec<_>>())
             );
             parameters_cases.insert(
                 "-width 15 word -width 15 -offset indent", 
-                (Some(15), None, false, "word -width 15 -offset indent".split(" ").collect::<Vec<_>>())
+                (Some(15), Some(OffsetType::Indent), false, "word -width 15".split(" ").collect::<Vec<_>>())
             );
             parameters_cases.insert(
                 "-compact -width 15 -offset indent -width 15", 
@@ -3269,11 +3266,11 @@ mod tests {
             );
             parameters_cases.insert(
                 "-compact -compact -width 15", 
-                (None, None, true, "-compact -width 15".split(" ").collect::<Vec<_>>())
+                (Some(15), None, true, "-compact".split(" ").collect::<Vec<_>>())
             );
             parameters_cases.insert(
                 "-compact word -width 15", 
-                (None, None, true, "word -width 15".split(" ").collect::<Vec<_>>())
+                (Some(15), None, true, "word".split(" ").collect::<Vec<_>>())
             );
 
             for (input, output) in parameters_cases {
@@ -3734,7 +3731,10 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
-                    nodes: vec![],
+                    nodes: vec![
+                        Element::Text("name".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 }),
             ];
 
@@ -3755,7 +3755,10 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
-                    nodes: vec![],
+                    nodes: vec![
+                        Element::Text("name".to_string()),
+                        Element::Text("1".to_string()),
+                    ],
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Nm,
