@@ -286,8 +286,8 @@ block_line = { (!NEWLINE ~ ANY)+ }
 ta_head  = ${ (!"." ~ "Ta") | "    " | "\t" }
 ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 
-it_head  = ${ ((ws | NEWLINE)* ~ ".")* ~ "It" ~ !text_arg ~ (ws* ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
-it_body  = ${ (((ws | NEWLINE)* ~ ".")* ~ !("It") ~ !("El") ~ element ~ NEWLINE?)* }
+it_head  = ${ (ws | NEWLINE | ".")* ~ "."? ~ "It" ~ !text_arg ~ (ws* ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
+it_body  = ${ ((ws | NEWLINE | ".")* ~ !("It") ~ !("El") ~ element ~ NEWLINE?)* }
 it_block = ${ it_head ~ it_body }
 
 // -- Nd
