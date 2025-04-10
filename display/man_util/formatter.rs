@@ -8,10 +8,8 @@ use super::{
     parser::{Element, MacroNode, MdocDocument, trim_quotes},
 };
 
-// const NEW_LINE_ESCAPE: &str = "\\(nl)";
-
 /// Max Bl -width parameter value
-const MAX_INDENT: u8 = 20; 
+const MAX_INDENT: u8 = 20;
 
 /// Regex for converting escape sequences to true UTF-8 chars
 static REGEX_UNICODE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
@@ -165,6 +163,9 @@ impl MdocFormatter {
         let max_width = self.formatting_settings.width;
 
         for line in formatted.split("\n") {
+
+            // println!("169: Line:\n{}\n", line);
+
             let line = self.replace_mdoc_escapes(line);
 
             // println!("Current line:\n{}\n--------------------", line.replace("\n", "NEWLINE").replace(" ", "SPACE"));
@@ -963,7 +964,7 @@ impl MdocFormatter {
             // _ => String::new(),
             _ => {
 
-                println!("962: Macro Node: {:?}", macro_node);
+                // println!("962: Macro Node: {:?}", macro_node);
 
                 self.format_inline_macro(macro_node)
             }
@@ -987,11 +988,13 @@ impl MdocFormatter {
 
 /// Split words on lines no longer than [`width`] 
 fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
-    if width == 0{
-        return words.iter()
+    if width == 0 {
+        return words
+            .iter()
             .map(|s|s.to_string())
             .collect::<Vec<_>>();
     }
+
     let mut lines = Vec::new();
     let mut line = String::new();
     let mut i = 0; 
@@ -1333,70 +1336,90 @@ impl MdocFormatter {
     ) -> String {
         let indent = self.get_offset_indent(&offset);
         let mut offset = self.get_offset_from_offset_type(&offset);
-        if block_type == BdType::Centered{
-            offset = OffsetType::Center;
-        }
+        if block_type == BdType::Centered{ offset = OffsetType::Center; }
 
         self.formatting_state.current_indent += indent;
-        let current_indent = self.formatting_state.current_indent;
-        let indent_str = " ".repeat(current_indent);
+
+        let mut current_indent = self.formatting_state.current_indent;
         let line_width = self.formatting_settings.width.saturating_sub(current_indent);
+
+        // println!("1345: Bd macro:\n{:?}\n---------------------", macro_node.clone());
 
         let formatted_elements = macro_node.nodes
             .into_iter()
             .map(|el| {
-                let is_aligned_macro = if let Element::Macro( MacroNode{ mdoc_macro, .. } ) = el.clone(){
+                let is_aligned_macro = if let Element::Macro( MacroNode{ mdoc_macro, .. } ) = el.clone() {
                     matches!(mdoc_macro, Macro::Bl{ .. }) ||
                     matches!(mdoc_macro, Macro::Bd{ .. })
-                }else{
+                } else {
                     false
                 };
-                let string = self.format_node(el.clone());
-                let content = if is_aligned_macro{
-                    vec![string]
-                }else{
-                    string
+
+                let formatted_node = match el {
+                    Element::Text(text) => text,
+                    _ => self.format_node(el)
+                };
+                
+                let content = if is_aligned_macro {
+                    vec![formatted_node]
+                } else {
+                    formatted_node
                         .split_whitespace()
                         .map(|s|s.to_string())
                         .collect::<Vec<_>>()
                 };
+                
                 (is_aligned_macro, content)
             });
 
-        if line_width == 0{
+        if line_width == 0 {
             let content = formatted_elements
                 .flat_map(|(_, s)| s)
                 .collect::<Vec<_>>()
                 .join(" ");
+
             return content;
         }
 
         let mut lines = vec![];
         let mut is_last_aligned_macro = false;
-        for (is_aligned_macro, content) in formatted_elements{
-            if is_aligned_macro{            
+
+        for (is_aligned_macro, content) in formatted_elements {
+
+            // println!("1391: Format Bd block:\n{:#?}\n-------------------", content);
+
+            if is_aligned_macro {            
                 lines.extend(content);
-            }else{   
+            } else {
                 let mut content = content;
-                if let BdType::Centered | BdType::Filled | BdType::Ragged = block_type{
-                    if !is_last_aligned_macro{
-                        if let Some(current_line) = lines.last(){
-                            let current_line = current_line.split_whitespace()
+                
+                if let BdType::Centered | BdType::Filled | BdType::Ragged = block_type {
+                    if !is_last_aligned_macro {
+                        if let Some(current_line) = lines.last() {
+                            let current_line = current_line
+                                .split_whitespace()
                                 .map(|s|s.to_string())
                                 .collect::<Vec<_>>();
+
                             content = [current_line, content].concat();
                         }
                     }
-                }     
+                }
+
+                // println!("1405: Content in Bd macro:\n{:#?}\n------------------------", content.clone());
+
+                // let mut prev_elem = String::new();
                 let l = split_by_width(content, line_width);
                 let l = add_indent_to_lines(l, line_width, &offset)
                     .iter()
                     .map(|line|{
-                        indent_str.clone() + line
+                        format!("{}{}", " ".repeat(current_indent), line)
                     })
                     .collect::<Vec<_>>();
+
                 lines.extend(l);
             }
+
             is_last_aligned_macro = is_aligned_macro;
         }
 
@@ -1405,11 +1428,9 @@ impl MdocFormatter {
         let mut content = lines.join("\n");
         content = content.trim_end().to_string();
 
-        let delimeter_size = if compact{
-            1
-        }else{
-            2
-        };
+        // println!("1446: Prepared content:\n{}\n-------------------------", content.replace(" ", "SP"));
+
+        let delimeter_size = if compact{ 1 } else { 2 };
 
         "\n\n".to_string() + &remove_empty_lines(&content, delimeter_size) + "\n\n"
     }
@@ -6787,41 +6808,6 @@ footer text                     January 1, 1970                    footer text";
     mod delimiters {
         use super::*;
 
-//         #[test]
-//         fn delimiters_rs_submacros() {
-//             fn test(macro_str: &str) {
-//                 let input = vec![
-//                     format!(".Dd January 1, 1970\n.Dt PROGNAME section\n.Os footer text"),
-//                     format!(".Rs\n{} {} text {}\n.Re", macro_str, "(", ")"),
-//                     format!(".Rs\n{} {} text {}\n.Re", macro_str, "[", "]"),
-//                     format!(".Rs\n{} text {}\n.Re",    macro_str, "."),
-//                     format!(".Rs\n{} text {}\n.Re",    macro_str, ","),
-//                     format!(".Rs\n{} text {}\n.Re",    macro_str, "?"),
-//                     format!(".Rs\n{} text {}\n.Re",    macro_str, "!"),
-//                     format!(".Rs\n{} text {}\n.Re",    macro_str, ":"),
-//                     format!(".Rs\n{} text {}\n.Re",    macro_str, ";")
-//                 ].join("\n");
-    
-//                 let output = 
-// "PROGNAME(section)                   section                  PROGNAME(section)
-
-// (text). [text]. text.. text,. text?. text!. text:. text;.
-
-// footer text                     January 1, 1970                    footer text";
-        
-//                 test_formatting(&input, &output);
-//             }
-            
-//             let macros = vec![
-//                 "%A", "%B", "%C", "%D", "%I", "%J", "%N",
-//                 "%O", "%P", "%Q", "%R", "%T", "%U", "%V",
-//             ];
-    
-//             for macro_str in macros {
-//                 test(macro_str);
-//             }
-//         }
-
         #[test]
         fn delimiters_inline_common() {
             fn test(macro_str: &str) {
@@ -7116,7 +7102,7 @@ footer text                     January 1, 1970                    footer text";
 
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
-        // #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/mg.1")]
@@ -7151,20 +7137,20 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/talk.1")]
         // #[case("./test_files/mdoc/write.2")]
 
-        #[case("./test_files/mdoc/diff.1")]
-        #[case("./test_files/mdoc/getitimer.2")]
-        #[case("./test_files/mdoc/top.1")]
-        #[case("./test_files/mdoc/execve.2")]
-        #[case("./test_files/mdoc/open.2")]
-        #[case("./test_files/mdoc/scp.1")]
-        #[case("./test_files/mdoc/socket.2")]
-        #[case("./test_files/mdoc/socketpair.2")]
-        #[case("./test_files/mdoc/setuid.2")]
-        #[case("./test_files/mdoc/shmget.2")]
-        #[case("./test_files/mdoc/cvs.1")]
-        #[case("./test_files/mdoc/rcs.1")]
-        #[case("./test_files/mdoc/sftp.1")]
-        #[case("./test_files/mdoc/grep.1")]
+        // #[case("./test_files/mdoc/diff.1")]
+        // #[case("./test_files/mdoc/getitimer.2")]
+        // #[case("./test_files/mdoc/top.1")]
+        // #[case("./test_files/mdoc/execve.2")]
+        // #[case("./test_files/mdoc/open.2")]
+        // #[case("./test_files/mdoc/scp.1")]
+        // #[case("./test_files/mdoc/socket.2")]
+        // #[case("./test_files/mdoc/socketpair.2")]
+        // #[case("./test_files/mdoc/setuid.2")]
+        // #[case("./test_files/mdoc/shmget.2")]
+        // #[case("./test_files/mdoc/cvs.1")]
+        // #[case("./test_files/mdoc/rcs.1")]
+        // #[case("./test_files/mdoc/sftp.1")]
+        // #[case("./test_files/mdoc/grep.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")

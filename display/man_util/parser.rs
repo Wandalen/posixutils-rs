@@ -101,17 +101,26 @@ fn does_start_with_macro(word: &str) -> bool {
 pub fn prepare_document(text: &str) -> String {
     text.lines()
         .map(|line| {
-            let mut processed_line = {
-                let trimmed = line.trim_start();
-                if let Some(first_word) = trimmed.split_whitespace().next() {
-                    if does_start_with_macro(first_word) {
-                        format!("\\&{}", line)
-                    } else {
-                        line.to_string()
-                    }
+            let mut leading_spaces = 0;
+            let mut index = 0;
+            for (i, ch) in line.char_indices() {
+                if !ch.is_whitespace() { break; }
+            
+                leading_spaces += if ch.eq(&'\t') { 4 } else { 1 };
+
+                index = i + ch.len_utf8();
+            }
+
+            let transformed_line = format!("{}{}", "\\ ".repeat(leading_spaces), &line[index..]);
+
+            let mut processed_line = if let Some(first_word) = line.split_whitespace().next() {
+                if does_start_with_macro(first_word) {
+                    format!("\\&{}", transformed_line)
                 } else {
-                    line.to_string()
+                    transformed_line
                 }
+            } else {
+                transformed_line
             };
 
             let count_partials = processed_line
@@ -336,6 +345,9 @@ impl MdocParser {
     /// Parses (`Bd`)[https://man.openbsd.org/mdoc#Bd]:
     /// `Bd -type [-offset width] [-compact]`
     fn parse_bd_block(pair: Pair<Rule>) -> Element {
+
+        // println!("340 | parser.rs: Bd block:\n{:#?}\n---------------", pair.clone());
+
         fn parse_bd_open(pair: Pair<Rule>) -> Macro {
             let mut inner = pair.into_inner();
 
@@ -360,6 +372,22 @@ impl MdocParser {
             }
         }
 
+        // fn parse_bd_body(bd_macro: Macro, pair: Pair<Rule>) -> Element {
+        //     if let Macro::Bd { block_type, .. } = bd_macro {
+        //         match block_type {
+        //             BdType::Unfilled | BdType::Literal => {
+
+        //                 println!("371: {}", pair.as_str().replace(" ", "| S |"));
+
+        //                 Element::Text(pair.as_str().to_string())
+        //             },
+        //             _ => MdocParser::parse_element(pair),
+        //         }
+        //     } else {
+        //         unreachable!()
+        //     }
+        // }
+
         let mut pairs = pair.into_inner();
 
         let bd_macro = parse_bd_open(pairs.next().unwrap());
@@ -368,6 +396,7 @@ impl MdocParser {
             .take_while(|p| p.as_rule() != Rule::ed_close)
             .map(Self::parse_element)
             .collect();
+            // .map(|p| parse_bd_body(bd_macro.clone(), p))
 
         Element::Macro(MacroNode {
             mdoc_macro: bd_macro,
