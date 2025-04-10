@@ -10,10 +10,9 @@
 // ----- Basic rules
 // -- Shortened synonym
 
-WHITESPACE_VISISBLE =  { " " | "\t" }
-WHITESPACE          = _{ " " | "\t" }
-ws                  = _{ WHITESPACE }
-NEWLINE             = _{ "\r"? ~ "\n" }
+WHITESPACE = _{ " " | "\t" }
+ws         = _{ WHITESPACE }
+NEWLINE    = _{ "\r"? ~ "\n" }
 
 // -- Macro name separator to not allow merging macro name with arguments
 

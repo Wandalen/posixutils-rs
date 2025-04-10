@@ -99,19 +99,33 @@ fn does_start_with_macro(word: &str) -> bool {
 }
 
 pub fn prepare_document(text: &str) -> String {
+    let mut is_bd_literal_block = false;
+
     text.lines()
         .map(|line| {
-            let mut leading_spaces = 0;
-            let mut index = 0;
-            for (i, ch) in line.char_indices() {
-                if !ch.is_whitespace() { break; }
-            
-                leading_spaces += if ch.eq(&'\t') { 4 } else { 1 };
-
-                index = i + ch.len_utf8();
+            if line.contains(".Bd") && (line.contains("-literal") || line.contains("-unfilled")) {
+                is_bd_literal_block = true;
             }
 
-            let transformed_line = format!("{}{}", "\\ ".repeat(leading_spaces), &line[index..]);
+            if is_bd_literal_block && line.contains(".Ed") {
+                is_bd_literal_block = false;
+            }
+
+            let transformed_line = if is_bd_literal_block {
+                let mut leading_spaces = if line.is_empty() { 1 } else { 0 };
+                let mut index = 0;
+                for (i, ch) in line.char_indices() {
+                    if !ch.is_whitespace() { break; }
+                
+                    leading_spaces += if ch.eq(&'\t') { 4 } else { 1 };
+    
+                    index = i + ch.len_utf8();
+                }
+    
+                format!("{}{}", "\\~".repeat(leading_spaces), &line[index..])
+            } else {
+                line.to_string()
+            };
 
             let mut processed_line = if let Some(first_word) = line.split_whitespace().next() {
                 if does_start_with_macro(first_word) {
@@ -309,6 +323,11 @@ impl MdocParser {
     /// Parses full mdoc file
     pub fn parse_mdoc(input: &str) -> Result<MdocDocument, MdocError> {
         let input = prepare_document(&input);
+
+        // for line in input.lines() {
+        //     println!("{}", line);
+        // }
+
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
         // println!("Pairs:\n{pairs:#?}\n\n");
@@ -1130,7 +1149,7 @@ impl MdocParser {
     // `Oc`
     fn parse_oc(pair: Pair<Rule>) -> Element {
 
-        println!("Parsing Oc macro");
+        // println!("Parsing Oc macro");
 
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
@@ -1302,7 +1321,7 @@ impl MdocParser {
     fn parse_block_partial_explicit(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
 
-        println!("Rule: {:?}", pair.as_rule());
+        // println!("Rule: {:?}", pair.as_rule());
 
         match pair.as_rule() {
             Rule::ao_block => Self::parse_ao_block(pair),
@@ -1912,8 +1931,7 @@ impl MdocParser {
             let mut inner = pair.into_inner();
 
             let st_type = StType::from(inner.next().unwrap());
-
-            let nodes = inner.map(MdocParser::parse_element).collect();
+            let nodes: Vec<_> = inner.map(MdocParser::parse_element).collect();
 
             Element::Macro(MacroNode {
                 mdoc_macro: Macro::St(st_type),

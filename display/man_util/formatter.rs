@@ -973,11 +973,16 @@ impl MdocFormatter {
 
     /// Convert text node to [`String`]. Escape sequences is converted to true UTF-8 chars
     fn format_text_node(&self, text: &str) -> String {
-        let mut result = self.replace_mdoc_escapes(text);
-        result = self.replace_unicode_escapes(&result);
+        // let mut result = self.replace_mdoc_escapes(text);
+        // result = self.replace_unicode_escapes(&result);
         // result.replace("\r\n", NEW_LINE_ESCAPE)
         //     .replace("\n", NEW_LINE_ESCAPE)
-        result.trim().to_string()
+        // result.trim().to_string()
+
+        self
+            .replace_unicode_escapes(text)
+            .trim()
+            .to_string()
     }
 
     /// Special block macro ta formatting
@@ -1501,6 +1506,9 @@ impl MdocFormatter {
         list_type: BlType,
         compact: bool
     ) -> String{
+
+        // println!("1510: Items: {:#?}", items);
+
         let indent = self.get_width_indent(&width);
         let offset = self.get_offset_from_offset_type(&offset);
         let origin_indent = self.formatting_state.current_indent;
@@ -1516,10 +1524,13 @@ impl MdocFormatter {
 
         let mut symbol = get_symbol("", &list_type);
         let mut content = String::new();
-        for (_, body) in items{
+        for (_, body) in items {
             let mut body = body;
+
             body.retain(|s| !s.is_empty());
+            
             let mut multilined = get_multilined(&body);
+            
             multilined.iter_mut()
                 .for_each(|el|{ 
                     if let Some(s) = el.iter_mut().next(){
@@ -1528,7 +1539,9 @@ impl MdocFormatter {
                         }
                     }
                 });
+            
             let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
+            
             body = interleave(onelined, multilined)
                 .into_iter()
                 .flatten()
@@ -2042,12 +2055,23 @@ impl MdocFormatter {
         let heads = self.get_heads(macro_node.clone(), &list_type);
         let width_indent = self.get_width_indent(&width);
         let offset_indent = self.get_offset_indent(&offset);
+
         self.formatting_state.current_indent += offset_indent + width_indent;
+        
         let bodies = self.get_bodies(macro_node.clone(), &list_type);
+
+        // println!("Head: {:#?}", heads);
+        // println!("Bodies: {:#?}", bodies);
+        
         self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(width_indent);
-        let items = heads.into_iter()
-            .zip(bodies.clone())
-            .collect::<Vec<_>>();
+
+        let items: Vec<(String, Vec<String>)> = if heads.is_empty() {
+            bodies.clone().into_iter().map(|body| ("".to_string(), body)).collect()
+        } else {
+            heads.into_iter()
+                 .zip(bodies.clone())
+                 .collect()
+        };
 
         let mut content = match list_type {
             BlType::Bullet | BlType::Dash | BlType::Enum => self.format_bl_symbol_block(items, width, offset, list_type, compact),
@@ -3368,11 +3392,13 @@ impl MdocFormatter {
     fn format_st(&self, st_type: StType, macro_node: MacroNode) -> String {
         let content = self.format_inline_macro(macro_node);
 
+        // println!("St type:{:?} | content: {}", st_type, content);
+
         if is_first_char_delimiter(&content) {
-            return format!("{}{}", st_type, content);
+            return format!("{:?}{}", st_type, content);
         }
 
-        format!("{} {}", st_type, content)
+        format!("{:?} {}", st_type, content)
     }
 
     fn format_sx(&mut self, macro_node: MacroNode) -> String {
@@ -7102,9 +7128,9 @@ footer text                     January 1, 1970                    footer text";
 
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
-        #[case("./test_files/mdoc/tmux.1")]
+        // #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/nl.1")]
-        // #[case("./test_files/mdoc/bc.1")]
+        #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/mg.1")]
         // #[case("./test_files/mdoc/snmp.1")]
         // #[case("./test_files/mdoc/rdist.1")]
