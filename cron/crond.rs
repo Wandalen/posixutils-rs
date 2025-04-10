@@ -7,9 +7,11 @@
 // SPDX-License-Identifier: MIT
 //
 
+pub mod job;
+
+use crate::job::Database;
 use chrono::Local;
-use gettextrs::{bind_textdomain_codeset, gettext, setlocale, textdomain, LocaleCategory};
-use posixutils_cron::job::Database;
+use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
 use std::env;
 use std::error::Error;
 use std::fs;

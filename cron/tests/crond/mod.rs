@@ -7,10 +7,9 @@
 // SPDX-License-Identifier: MIT
 //
 
-use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
-use posixutils_cron::job::Database;
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use job::Database;
 use std::io::Write;
-use std::ops::Sub;
 use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::Duration;

@@ -7,6 +7,8 @@
 // SPDX-License-Identifier: MIT
 //
 
+mod kill;
+
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 use std::thread;
@@ -68,8 +70,14 @@ fn no_args() {
 
 #[test]
 fn dash_e() {
-    let output = run_test_base("crontab", &vec!["-e".to_string()], b"");
-    assert_eq!(output.status.code(), Some(1));
+    let test_thread = std::thread::spawn(|| {
+        let output = run_test_base("crontab", &vec!["-e".to_string()], b"");
+        assert_eq!(output.status.code(), Some(1));
+    });
+    std::thread::sleep(Duration::from_millis(200));
+    let editor = std::env::var("EDITOR").unwrap_or("vi".to_string());
+    let _ = kill::find_and_kill_impl(&editor);
+    let _ = test_thread.join();
 }
 
 #[test]
