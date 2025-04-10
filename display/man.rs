@@ -466,9 +466,10 @@ fn format_man_page(
 ) -> Result<Vec<u8>, ManError> {
     let content = String::from_utf8(man_bytes)
         .map_err(|err| ManError::ParseError(ParseError::FromUtf8Error(err)))?;
-    let mut formatter = MdocFormatter::new(*formatting);
 
-    let document = MdocParser::parse_mdoc(content)?;
+    let mut formatter = MdocFormatter::new(*formatting);
+    
+    let document = MdocParser::parse_mdoc(&content)?;
     let formatted_document = match synopsis {
         true  => formatter.format_synopsis_section(document),
         false => formatter.format_mdoc(document),
