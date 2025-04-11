@@ -99,19 +99,42 @@ fn does_start_with_macro(word: &str) -> bool {
 }
 
 pub fn prepare_document(text: &str) -> String {
+    let mut is_bd_literal_block = false;
+
     text.lines()
         .map(|line| {
-            let mut processed_line = {
-                let trimmed = line.trim_start();
-                if let Some(first_word) = trimmed.split_whitespace().next() {
-                    if does_start_with_macro(first_word) {
-                        format!("\\&{}", line)
-                    } else {
-                        line.to_string()
-                    }
-                } else {
-                    line.to_string()
+            if line.contains(".Bd") && (line.contains("-literal") || line.contains("-unfilled")) {
+                is_bd_literal_block = true;
+            }
+
+            if is_bd_literal_block && line.contains(".Ed") {
+                is_bd_literal_block = false;
+            }
+
+            let transformed_line = if is_bd_literal_block {
+                let mut leading_spaces = if line.is_empty() { 1 } else { 0 };
+                let mut index = 0;
+                for (i, ch) in line.char_indices() {
+                    if !ch.is_whitespace() { break; }
+                
+                    leading_spaces += if ch.eq(&'\t') { 4 } else { 1 };
+    
+                    index = i + ch.len_utf8();
                 }
+    
+                format!("{}{}", "\\~".repeat(leading_spaces), &line[index..])
+            } else {
+                line.to_string()
+            };
+
+            let mut processed_line = if let Some(first_word) = line.split_whitespace().next() {
+                if does_start_with_macro(first_word) {
+                    format!("\\&{}", transformed_line)
+                } else {
+                    transformed_line
+                }
+            } else {
+                transformed_line
             };
 
             let count_partials = processed_line
@@ -296,6 +319,11 @@ impl MdocParser {
     /// Parses full mdoc file
     pub fn parse_mdoc(input: &str) -> Result<MdocDocument, MdocError> {
         let input = prepare_document(&input);
+
+        // for line in input.lines() {
+        //     println!("{}", line);
+        // }
+
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
         // println!("Pairs:\n{pairs:#?}\n\n");
@@ -332,6 +360,9 @@ impl MdocParser {
     /// Parses (`Bd`)[https://man.openbsd.org/mdoc#Bd]:
     /// `Bd -type [-offset width] [-compact]`
     fn parse_bd_block(pair: Pair<Rule>) -> Element {
+
+        // println!("340 | parser.rs: Bd block:\n{:#?}\n---------------", pair.clone());
+
         fn parse_bd_open(pair: Pair<Rule>) -> Macro {
             let mut inner = pair.into_inner();
 
@@ -356,6 +387,22 @@ impl MdocParser {
             }
         }
 
+        // fn parse_bd_body(bd_macro: Macro, pair: Pair<Rule>) -> Element {
+        //     if let Macro::Bd { block_type, .. } = bd_macro {
+        //         match block_type {
+        //             BdType::Unfilled | BdType::Literal => {
+
+        //                 println!("371: {}", pair.as_str().replace(" ", "| S |"));
+
+        //                 Element::Text(pair.as_str().to_string())
+        //             },
+        //             _ => MdocParser::parse_element(pair),
+        //         }
+        //     } else {
+        //         unreachable!()
+        //     }
+        // }
+
         let mut pairs = pair.into_inner();
 
         let bd_macro = parse_bd_open(pairs.next().unwrap());
@@ -364,6 +411,7 @@ impl MdocParser {
             .take_while(|p| p.as_rule() != Rule::ed_close)
             .map(Self::parse_element)
             .collect();
+            // .map(|p| parse_bd_body(bd_macro.clone(), p))
 
         Element::Macro(MacroNode {
             mdoc_macro: bd_macro,
@@ -1094,7 +1142,7 @@ impl MdocParser {
     // `Oc`
     fn parse_oc(pair: Pair<Rule>) -> Element {
 
-        println!("Parsing Oc macro");
+        // println!("Parsing Oc macro");
 
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
@@ -1266,7 +1314,7 @@ impl MdocParser {
     fn parse_block_partial_explicit(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
 
-        println!("Rule: {:?}", pair.as_rule());
+        // println!("Rule: {:?}", pair.as_rule());
 
         match pair.as_rule() {
             Rule::ao_block => Self::parse_ao_block(pair),
@@ -1879,8 +1927,7 @@ impl MdocParser {
             let mut inner = pair.into_inner();
 
             let st_type = StType::from(inner.next().unwrap());
-
-            let nodes = inner.map(MdocParser::parse_element).collect();
+            let nodes: Vec<_> = inner.map(MdocParser::parse_element).collect();
 
             Element::Macro(MacroNode {
                 mdoc_macro: Macro::St(st_type),
