@@ -1840,13 +1840,13 @@ mod tests {
                 "w./tests/s\x04ed/assets/abc",
                 "a\n",
                 "",
-                "sed: read stdin: can't find './tests/s\u{4}ed/assets/abc': no such file or directory (os error 2)\n",
+                "sed: read stdin: can't find '../target/tmp/./tests/s\u{4}ed/assets/abc': no such file or directory (os error 2)\n",
             ),
             (
                 "w./tests/ard/assets/abc",
                 "a\n",
                 "",
-                "sed: read stdin: can't find './tests/ard/assets/abc': no such file or directory (os error 2)\n",
+                "sed: read stdin: can't find '../target/tmp/./tests/ard/assets/abc': no such file or directory (os error 2)\n",
             ),
         ];
 
