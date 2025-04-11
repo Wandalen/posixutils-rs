@@ -167,8 +167,6 @@ impl MdocFormatter {
         for line in formatted.split("\n") {
             let line = self.replace_mdoc_escapes(line);
 
-            // println!("Current line:\n{}\n--------------------", line.replace("\n", "NEWLINE").replace(" ", "SPACE"));
-
             if !is_one_line && !current_line.is_empty(){
                 lines.push(current_line.trim_end().to_string());
                 current_line.clear();
@@ -236,9 +234,6 @@ impl MdocFormatter {
 
     /// Format full [`MdocDocument`] and returns UTF-8 binary string 
     pub fn format_mdoc(&mut self, ast: MdocDocument) -> Vec<u8> {
-
-        // println!("Received ast:\n{:#?}\n-------------\n", ast);
-
         let mut lines = Vec::new();
         let mut current_line = String::new();
 
@@ -957,14 +952,7 @@ impl MdocFormatter {
                 section.as_str(), 
                 macro_node
             ),
-
-            // _ => String::new(),
-            _ => {
-
-                println!("962: Macro Node: {:?}", macro_node);
-
-                self.format_inline_macro(macro_node)
-            }
+            _ => self.format_inline_macro(macro_node)
         }
     }
 
@@ -2258,7 +2246,7 @@ impl MdocFormatter {
             .nodes
             .into_iter()
             .map(|node| {
-                let mut content = match node {
+                let content = match node {
                     Element::Macro(ref macro_node) => {
                         if title.eq_ignore_ascii_case("SYNOPSIS") {
                             let formatted = match &macro_node.mdoc_macro {
@@ -2310,7 +2298,6 @@ impl MdocFormatter {
 
                 current_lines_count += content.lines().count();
                 content
-                // println!("Content: {}\n------------", content.replace(" ", "SPACE").replace("\n", "NEWLINE"));
             })
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
@@ -2754,11 +2741,7 @@ impl MdocFormatter {
     }
 
     fn format_pq(&mut self, mut macro_node: MacroNode) -> String {
-        // println!("PQ Node:\n{:#?}\n----------------------------", macro_node.nodes.clone());
-
         let c = self.format_partial_implicit_block(&mut macro_node, "(", ")");
-
-        // println!("PQ Result:\n{}\n------------------------------", c);
 
         c
     }
@@ -2772,11 +2755,7 @@ impl MdocFormatter {
     }
 
     fn format_sq(&mut self, mut macro_node: MacroNode) -> String {
-        // println!("SQ Node:\n{:#?}\n----------------------------", macro_node.nodes.clone());
-
         let c = self.format_partial_implicit_block(&mut macro_node, "\'", "\'");
-    
-        // println!("SQ Result:\n{}\n------------------------------", c);
 
         c
     }
@@ -3413,9 +3392,6 @@ impl MdocFormatter {
     }
 
     fn format_sm(&mut self, sm_mode: Option<SmMode>, macro_node: MacroNode) -> String {
-        // println!("Split mode: {:?}", sm_mode.clone());
-        // println!("Nodes: {:?}", macro_node.clone());
-
         self.formatting_state.spacing = match sm_mode {
             Some(SmMode::On) => " ".to_string(),
             Some(SmMode::Off) => "".to_string(),
@@ -3522,10 +3498,7 @@ mod tests {
     /// Universal function for all tests
     fn test_formatting(input: &str, output: &str) {
         let ast = get_ast(input);
-        //println!("{:#?}", ast);
-
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
-        //println!("{:?}", formatter);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
         println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
             output, 
@@ -7128,109 +7101,108 @@ footer text                     January 1, 1970                    footer text";
 
         #[rstest]
         // Small
-        // #[case("./test_files/mdoc/rev.1")]
-        // #[case("./test_files/mdoc/adjfreq.2")]
-        // #[case("./test_files/mdoc/getgroups.2")]
-        // #[case("./test_files/mdoc/sigreturn.2")]
-        // #[case("./test_files/mdoc/size.1")]
-        // #[case("./test_files/mdoc/fgen.1")]
-        // #[case("./test_files/mdoc/getrtable.2")]
-        // #[case("./test_files/mdoc/wall.1")]
-        // #[case("./test_files/mdoc/getsid.2")]
-        // #[case("./test_files/mdoc/ypconnect.2")]
-        // #[case("./test_files/mdoc/closefrom.2")]
-        // #[case("./test_files/mdoc/moptrace.1")]
+        #[case("./test_files/mdoc/rev.1")]
+        #[case("./test_files/mdoc/adjfreq.2")]
+        #[case("./test_files/mdoc/getgroups.2")]
+        #[case("./test_files/mdoc/sigreturn.2")]
+        #[case("./test_files/mdoc/size.1")]
+        #[case("./test_files/mdoc/fgen.1")]
+        #[case("./test_files/mdoc/getrtable.2")]
+        #[case("./test_files/mdoc/wall.1")]
+        #[case("./test_files/mdoc/getsid.2")]
+        #[case("./test_files/mdoc/ypconnect.2")]
+        #[case("./test_files/mdoc/closefrom.2")]
+        #[case("./test_files/mdoc/moptrace.1")]
 
-        // Other
-        // #[case("./test_files/mdoc/rlog.1")]
-        // #[case("./test_files/mdoc/access.2")]
-        // #[case("./test_files/mdoc/munmap.2")]
-        // #[case("./test_files/mdoc/ipcs.1")]
-        // #[case("./test_files/mdoc/atq.1")]
-        // #[case("./test_files/mdoc/brk.2")]
-        // #[case("./test_files/mdoc/cal.1")]
-        // #[case("./test_files/mdoc/minherit.2")]
-        // #[case("./test_files/mdoc/cat.1")]
-        // #[case("./test_files/mdoc/file.1")]
-        // #[case("./test_files/mdoc/mkdir.1")] 
-        // #[case("./test_files/mdoc/getsockname.2")]
-        // #[case("./test_files/mdoc/mlockall.2")]
-        // #[case("./test_files/mdoc/cut.1")]
+        //Other
+        #[case("./test_files/mdoc/rlog.1")]
+        #[case("./test_files/mdoc/access.2")]
+        #[case("./test_files/mdoc/munmap.2")]
+        #[case("./test_files/mdoc/ipcs.1")]
+        #[case("./test_files/mdoc/atq.1")]
+        #[case("./test_files/mdoc/brk.2")]
+        #[case("./test_files/mdoc/cal.1")]
+        #[case("./test_files/mdoc/minherit.2")]
+        #[case("./test_files/mdoc/cat.1")]
+        #[case("./test_files/mdoc/file.1")]
+        #[case("./test_files/mdoc/mkdir.1")] 
+        #[case("./test_files/mdoc/getsockname.2")]
+        #[case("./test_files/mdoc/mlockall.2")]
+        #[case("./test_files/mdoc/cut.1")]
 
-        // without bl
-        // #[case("./test_files/mdoc/umask.2")]
-        // #[case("./test_files/mdoc/sched_yield.2")]
-        // #[case("./test_files/mdoc/sigsuspend.2")]
-        // #[case("./test_files/mdoc/mopa.out.1")]
-        // #[case("./test_files/mdoc/fsync.2")]
-        // #[case("./test_files/mdoc/shar.1")]
-        // #[case("./test_files/mdoc/sysarch.2")]
+        //without bl
+        #[case("./test_files/mdoc/umask.2")]
+        #[case("./test_files/mdoc/sched_yield.2")]
+        #[case("./test_files/mdoc/sigsuspend.2")]
+        #[case("./test_files/mdoc/mopa.out.1")]
+        #[case("./test_files/mdoc/fsync.2")]
+        #[case("./test_files/mdoc/shar.1")]
+        #[case("./test_files/mdoc/sysarch.2")]
 
-        // word as macro
-        // #[case("./test_files/mdoc/fork.2")]
-        // #[case("./test_files/mdoc/symlink.2")]
-        // #[case("./test_files/mdoc/sync.2")]
-        // #[case("./test_files/mdoc/futex.2")]
-        // #[case("./test_files/mdoc/reboot.2")]
-        // #[case("./test_files/mdoc/id.1")]
-        // #[case("./test_files/mdoc/rename.2")]
-        // #[case("./test_files/mdoc/cu.1")]
-        // #[case("./test_files/mdoc/getfh.2")]
-        // #[case("./test_files/mdoc/ioctl.2")]
-        // #[case("./test_files/mdoc/dup.2")]
-        // #[case("./test_files/mdoc/getpeername.2")]
-        // #[case("./test_files/mdoc/lpq.1")]
-        // #[case("./test_files/mdoc/nm.1")]
-        // #[case("./test_files/mdoc/truncate.2")]
-        // #[case("./test_files/mdoc/chdir.2")]
-        // #[case("./test_files/mdoc/mkfifo.2")]
-        // #[case("./test_files/mdoc/quotactl.2")]
-        // #[case("./test_files/mdoc/send.2")]
-        // #[case("./test_files/mdoc/getpriority.2")]
-        // #[case("./test_files/mdoc/select.2")]
-        // #[case("./test_files/mdoc/w.1")]
-        // #[case("./test_files/mdoc/chflags.2")]
-        // #[case("./test_files/mdoc/flock.2")]
+        //word as macro
+        #[case("./test_files/mdoc/fork.2")]
+        #[case("./test_files/mdoc/symlink.2")]
+        #[case("./test_files/mdoc/sync.2")]
+        #[case("./test_files/mdoc/futex.2")]
+        #[case("./test_files/mdoc/reboot.2")]
+        #[case("./test_files/mdoc/id.1")]
+        #[case("./test_files/mdoc/rename.2")]
+        #[case("./test_files/mdoc/cu.1")]
+        #[case("./test_files/mdoc/getfh.2")]
+        #[case("./test_files/mdoc/ioctl.2")]
+        #[case("./test_files/mdoc/dup.2")]
+        #[case("./test_files/mdoc/getpeername.2")]
+        #[case("./test_files/mdoc/lpq.1")]
+        #[case("./test_files/mdoc/nm.1")]
+        #[case("./test_files/mdoc/truncate.2")]
+        #[case("./test_files/mdoc/chdir.2")]
+        #[case("./test_files/mdoc/mkfifo.2")]
+        #[case("./test_files/mdoc/quotactl.2")]
+        #[case("./test_files/mdoc/send.2")]
+        #[case("./test_files/mdoc/getpriority.2")]
+        #[case("./test_files/mdoc/select.2")]
+        #[case("./test_files/mdoc/w.1")]
+        #[case("./test_files/mdoc/chflags.2")]
+        #[case("./test_files/mdoc/flock.2")]
 
-        // Bl -column
-        // #[case("./test_files/mdoc/shutdown.2")]
-        // #[case("./test_files/mdoc/tmux.1")]
-        // #[case("./test_files/mdoc/nl.1")]
-        // #[case("./test_files/mdoc/bc.1")]
-        // #[case("./test_files/mdoc/mg.1")]
-        // #[case("./test_files/mdoc/snmp.1")]
-        // #[case("./test_files/mdoc/rdist.1")]
+        //Bl -column
+        #[case("./test_files/mdoc/shutdown.2")]
+        #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/nl.1")]
+        #[case("./test_files/mdoc/bc.1")]
+        #[case("./test_files/mdoc/mg.1")]
+        #[case("./test_files/mdoc/snmp.1")]
+        #[case("./test_files/mdoc/rdist.1")]
         
-        // Block 1
-        // #[case("./test_files/mdoc/chmod.2")]
-        // #[case("./test_files/mdoc/cvs.1")]
-        // #[case("./test_files/mdoc/dc.1")]
-        // #[case("./test_files/mdoc/flex.1")]
-        // #[case("./test_files/mdoc/getdents.2")]
-        // #[case("./test_files/mdoc/getitimer.2")]
-        // #[case("./test_files/mdoc/getrusage.2")]
-        // #[case("./test_files/mdoc/getsockopt.2")]
+        //Block 1
+        #[case("./test_files/mdoc/chmod.2")]
+        #[case("./test_files/mdoc/cvs.1")]
+        #[case("./test_files/mdoc/dc.1")]
+        #[case("./test_files/mdoc/flex.1")]
+        #[case("./test_files/mdoc/getdents.2")]
+        #[case("./test_files/mdoc/getitimer.2")]
+        #[case("./test_files/mdoc/getrusage.2")]
+        #[case("./test_files/mdoc/getsockopt.2")]
 
-        // #[case("./test_files/mdoc/gettimeofday.2")]
-        // #[case("./test_files/mdoc/ktrace.2")]
-        // #[case("./test_files/mdoc/msgrcv.2")]
-        // #[case("./test_files/mdoc/msgsnd.2")]
-        // #[case("./test_files/mdoc/mv.1")]
-        // #[case("./test_files/mdoc/poll.2")]
-        // #[case("./test_files/mdoc/profil.2")]
-        // #[case("./test_files/mdoc/rcs.1")]
-        // #[case("./test_files/mdoc/read.2")]
-        // #[case("./test_files/mdoc/rup.1")]
-        // #[case("./test_files/mdoc/semget.2")]
-        // #[case("./test_files/mdoc/shmctl.2")]
-        // #[case("./test_files/mdoc/signify.1")]
-        // #[case("./test_files/mdoc/statfs.2")]
-        // #[case("./test_files/mdoc/t11.2")]
-        // #[case("./test_files/mdoc/talk.1")]
-        // #[case("./test_files/mdoc/write.2")]
+        #[case("./test_files/mdoc/gettimeofday.2")]
+        #[case("./test_files/mdoc/ktrace.2")]
+        #[case("./test_files/mdoc/msgrcv.2")]
+        #[case("./test_files/mdoc/msgsnd.2")]
+        #[case("./test_files/mdoc/mv.1")]
+        #[case("./test_files/mdoc/poll.2")]
+        #[case("./test_files/mdoc/profil.2")]
+        #[case("./test_files/mdoc/rcs.1")]
+        #[case("./test_files/mdoc/read.2")]
+        #[case("./test_files/mdoc/rup.1")]
+        #[case("./test_files/mdoc/semget.2")]
+        #[case("./test_files/mdoc/shmctl.2")]
+        #[case("./test_files/mdoc/signify.1")]
+        #[case("./test_files/mdoc/statfs.2")]
+        #[case("./test_files/mdoc/t11.2")]
+        #[case("./test_files/mdoc/talk.1")]
+        #[case("./test_files/mdoc/write.2")]
 
         #[case("./test_files/mdoc/diff.1")]
-        #[case("./test_files/mdoc/getitimer.2")]
         #[case("./test_files/mdoc/top.1")]
         #[case("./test_files/mdoc/execve.2")]
         #[case("./test_files/mdoc/open.2")]
@@ -7239,8 +7211,6 @@ footer text                     January 1, 1970                    footer text";
         #[case("./test_files/mdoc/socketpair.2")]
         #[case("./test_files/mdoc/setuid.2")]
         #[case("./test_files/mdoc/shmget.2")]
-        #[case("./test_files/mdoc/cvs.1")]
-        #[case("./test_files/mdoc/rcs.1")]
         #[case("./test_files/mdoc/sftp.1")]
         #[case("./test_files/mdoc/grep.1")]
         fn format_mdoc_file(#[case] path: &str){

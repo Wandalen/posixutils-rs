@@ -10,7 +10,6 @@
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 use text_production::{AtType, BsxType};
-use std::collections::HashSet;
 use thiserror::Error;
 use types::{BdType, BfType, OffsetType, SmMode};
 
@@ -183,10 +182,6 @@ pub enum MdocError {
     /// Pest rules violation
     #[error("mdoc: {0}")]
     Pest(#[from] Box<pest::error::Error<Rule>>),
-
-    /// Validation failed
-    #[error("mdoc: {0}")]
-    Validation(String),
 }
 
 /// Validates if parsing result AST meets the requirements  
@@ -453,8 +448,13 @@ impl MdocParser {
                         if let Ok(w) = str::parse::<u8>(&width_p){
                             *width = Some(w);
                         }
-                    }else{
-                        *width = width_p.len().try_into().ok();
+                    }else {
+                        *width = match width_p.as_str(){
+                            "Er" => Some(19),
+                            "Ds" => Some(8),
+                            "Ev" => Some(17),
+                            _ => width_p.len().try_into().ok()
+                        }
                     }
                 },
                 Rule::bl_offset => {
