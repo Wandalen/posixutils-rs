@@ -226,7 +226,7 @@ fn test_signal() {
     let file = format!("/var/at/tabs/{logname}");
     let mut tmp_file_created = false;
     let filepath = std::path::PathBuf::from_str(&file).unwrap();
-    if !filepath.exists(){
+    if !filepath.exists() {
         std::fs::File::create(&file).unwrap();
         tmp_file_created = true;
     }
@@ -236,8 +236,8 @@ fn test_signal() {
 
     let pids = pid::get_pids("target/debug/crond").unwrap();
     assert!(!pids.is_empty());
-    for pid in &pids{
-        unsafe{
+    for pid in &pids {
+        unsafe {
             libc::kill(*pid, libc::SIGHUP);
         }
     }
@@ -251,7 +251,7 @@ fn test_signal() {
 
     let _ = pid::kill("target/debug/crond").unwrap();
 
-    if tmp_file_created && filepath.starts_with("/var/at/tabs"){
+    if tmp_file_created && filepath.starts_with("/var/at/tabs") {
         let _ = std::fs::remove_file(file);
     }
 }

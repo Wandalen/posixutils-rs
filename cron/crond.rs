@@ -7,35 +7,36 @@
 // SPDX-License-Identifier: MIT
 //
 
-use cron::job::Database;
 use chrono::Local;
+use cron::job::Database;
 use gettextrs::{bind_textdomain_codeset, setlocale, textdomain, LocaleCategory};
+use std::cmp::Ordering::{Greater, Less};
 use std::env;
 use std::error::Error;
-use std::str::FromStr;
-use std::fs;
-use std::time::UNIX_EPOCH;
 use std::fmt;
+use std::fs;
+use std::str::FromStr;
 use std::sync::Mutex;
+use std::time::UNIX_EPOCH;
 
 static CRONTAB: Mutex<Option<Database>> = Mutex::new(None);
 static LAST_MODIFIED: Mutex<Option<u64>> = Mutex::new(None);
 
 #[derive(Debug)]
-enum CronError{
+enum CronError {
     Fork,
     NoLogname,
-    NoCrontab
+    NoCrontab,
 }
 
 impl Error for CronError {}
 
 impl fmt::Display for CronError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self{
+        match self {
             Self::NoLogname => write!(f, "Could not obtain the user's logname"),
             Self::NoCrontab => write!(f, "Could not format database"),
-            Self::Fork => write!(f, "Could not create child process")
+            Self::Fork => write!(f, "Could not create child process"),
         }
     }
 }
@@ -46,15 +47,15 @@ fn is_file_changed(filepath: &str) -> Result<bool, Box<dyn Error>> {
         .modified()?
         .duration_since(UNIX_EPOCH)?
         .as_secs();
-    
-    let Some(last_checked) = *LAST_MODIFIED.lock().unwrap() else{
+
+    let Some(last_checked) = *LAST_MODIFIED.lock().unwrap() else {
         *LAST_MODIFIED.lock().unwrap() = Some(last_modified);
         return Ok(true);
     };
-    if last_checked <= last_modified{
+    if last_checked <= last_modified {
         *LAST_MODIFIED.lock().unwrap() = Some(last_modified);
         Ok(true)
-    }else{
+    } else {
         Ok(false)
     }
 }
@@ -68,18 +69,19 @@ fn sync_cronfile() -> Result<(), Box<dyn Error>> {
     let file = format!("/var/spool/cron/{logname}");
     #[cfg(target_os = "macos")]
     let file = format!("/var/at/tabs/{logname}");
-    if (*CRONTAB.lock().unwrap()).is_none() || is_file_changed(&file)?{
+    if (*CRONTAB.lock().unwrap()).is_none() || is_file_changed(&file)? {
         let s = fs::read_to_string(&file)?;
-        let crontab = s.lines()
+        let crontab = s
+            .lines()
             .filter_map(|x| Database::from_str(x).ok())
             .fold(Database(vec![]), |acc, next| acc.merge(next));
-        *CRONTAB.lock().unwrap() = Some(crontab); 
+        *CRONTAB.lock().unwrap() = Some(crontab);
     }
     Ok(())
 }
 
 /// Create new daemon process of crond
-fn setup() -> i32{
+fn setup() -> i32 {
     unsafe {
         use libc::*;
 
@@ -94,15 +96,15 @@ fn setup() -> i32{
         close(STDIN_FILENO);
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
-        
-        return pid;
+
+        pid
     }
 }
 
 /// Handles incoming signals
 fn handle_signals(signal_code: libc::c_int) {
     if signal_code == libc::SIGHUP {
-        if let Err(err) = sync_cronfile(){
+        if let Err(err) = sync_cronfile() {
             eprintln!("{err}");
             std::process::exit(1);
         }
@@ -113,7 +115,7 @@ fn handle_signals(signal_code: libc::c_int) {
 fn daemon_loop() -> Result<(), Box<dyn Error>> {
     loop {
         sync_cronfile()?;
-        let Some(db) = CRONTAB.lock().unwrap().clone() else{
+        let Some(db) = CRONTAB.lock().unwrap().clone() else {
             return Err(Box::new(CronError::NoCrontab));
         };
         let Some(x) = db.nearest_job() else {
@@ -144,10 +146,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let pid = setup();
 
-    if pid < 0{
-        return Err(Box::new(CronError::Fork));
-    }else if pid > 0{
-        return Ok(());
+    match pid.cmp(&0) {
+        Less => return Err(Box::new(CronError::Fork)),
+        Greater => return Ok(()),
+        _ => {}
     }
 
     unsafe {
