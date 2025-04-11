@@ -1,6 +1,6 @@
 use crate::FormattingSettings;
 use aho_corasick::AhoCorasick;
-use std::collections::HashMap;
+use std::{collections::HashMap, thread::current};
 use terminfo::Database;
 
 use super::{
@@ -159,16 +159,19 @@ impl MdocFormatter {
                 .collect::<String>()
         };
 
-        let is_one_line = formatted.lines().count() == 1;
+        println!("165: Line:\n{}\n----------------", formatted.replace("\n", "NEWLINE"));
+        // let is_one_line = formatted.lines().count() == 1;
+        let is_one_line = !formatted.contains("\n");
+
+        println!("Is one line: {}", is_one_line);
+
         let max_width = self.formatting_settings.width;
 
         for line in formatted.split("\n") {
 
-            // println!("169: Line:\n{}\n", line);
-
             let line = self.replace_mdoc_escapes(line);
 
-            // println!("Current line:\n{}\n--------------------", line.replace("\n", "NEWLINE").replace(" ", "SPACE"));
+            // println!("174 line:\n{}\n--------------------", line.replace("\n", "NEWLINE").replace(" ", "SPACE"));
 
             if !is_one_line && !current_line.is_empty(){
                 lines.push(current_line.trim_end().to_string());
@@ -243,40 +246,40 @@ impl MdocFormatter {
         let mut lines = Vec::new();
         let mut current_line = String::new();
 
-        for node in ast.elements {
+        for node in ast.elements {            
+            let mut formatted_node = self.format_node(node.clone());
 
-            // println!("Node before formatting:\n{:#?}\n----------", node);
-
-            let mut formatted_node: String = self.format_node(node.clone());
-
-            // println!("[format_mdoc] Formatted node: {}", formatted_node);
-
-            if formatted_node.is_empty(){
+            if formatted_node.is_empty() {
                 continue;
             }
-
-            // match &node {
-            //     Element::Macro(macro_node) => println!("Macro: {:?}\nFormatted node: {}\n----------", macro_node.mdoc_macro, formatted_node),
-            //     Element::Text(text) => println!("Text node: {}\nFormatted node: {}\n----------", text, formatted_node),
-            //     Element::Eoi => println!("End of file.")
-            // }
-
-            if let Element::Macro(MacroNode { mdoc_macro, .. }) = node{
-                if !matches!(mdoc_macro, Macro::Sh{..} | Macro::Ss{..} | Macro::Bd{..}) && formatted_node.split("\n").count() > 1{
+        
+            if let Element::Macro(ref macro_node) = node {
+                if !matches!(macro_node.mdoc_macro, Macro::Sh { .. } | Macro::Ss { .. } | Macro::Bd { .. } | Macro::An { .. })
+                    && formatted_node.split("\n").count() > 1 {
+                        
+                    println!("Inside if statement");
                     formatted_node = formatted_node.trim().to_string();
                 }
-                if matches!(mdoc_macro, Macro::Bd{..}){
+                if matches!(macro_node.mdoc_macro, Macro::Bd { .. }) {
                     formatted_node.pop();
                     formatted_node.remove(0);
                 }
             }
-            
+        
+            // println!(
+            //     "Formatted node: {}\n----------",
+            //     formatted_node.replace("\n", "| NEWLINE |")
+            // );
+        
             self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
 
         // println!("Lines: {:?}", lines);
 
         if !current_line.is_empty() {
+
+            // println!("Current line: {}", current_line.replace("\n", "| NEWLINE |"));
+
             lines.push(current_line.trim_end().to_string());
         }
 
@@ -401,6 +404,7 @@ impl MdocFormatter {
         let replacements: HashMap<&str, &str> = [
             // (NEW_LINE_ESCAPE, "\n"),
             ("\\[pfmacroescape] ", ""),
+            ("\\[anmacroescape]", "\n"),
             // Spaces:
             (r"\ ", " "), // unpaddable space
             (r"\~", " "), // paddable space
@@ -961,13 +965,7 @@ impl MdocFormatter {
                 macro_node
             ),
 
-            // _ => String::new(),
-            _ => {
-
-                // println!("962: Macro Node: {:?}", macro_node);
-
-                self.format_inline_macro(macro_node)
-            }
+            _ => self.format_inline_macro(macro_node)
         }
     }
 
@@ -1345,7 +1343,7 @@ impl MdocFormatter {
 
         self.formatting_state.current_indent += indent;
 
-        let mut current_indent = self.formatting_state.current_indent;
+        let current_indent = self.formatting_state.current_indent;
         let line_width = self.formatting_settings.width.saturating_sub(current_indent);
 
         // println!("1345: Bd macro:\n{:?}\n---------------------", macro_node.clone());
@@ -2814,6 +2812,7 @@ impl MdocFormatter {
             AnType::Name => {
                 let content = self.format_inline_macro(macro_node);
                 match self.formatting_state.split_mod {
+                    // true => format!("\\[anmacroescape]{}", content),
                     true => format!("\n{}", content),
                     false => content,
                 }
@@ -3395,10 +3394,10 @@ impl MdocFormatter {
         // println!("St type:{:?} | content: {}", st_type, content);
 
         if is_first_char_delimiter(&content) {
-            return format!("{:?}{}", st_type, content);
+            return format!("{}{}", st_type, content);
         }
 
-        format!("{:?} {}", st_type, content)
+        format!("{} {}", st_type, content)
     }
 
     fn format_sx(&mut self, macro_node: MacroNode) -> String {
@@ -5812,11 +5811,11 @@ Debian                          January 1, 1970                         Debian";
 ".Dd January 1, 1970
 .Dt PROGNAME section
 .Os footer text
-.Ap Text Line Ns addr";
+.Ap Text Line";
             let output =
 "PROGNAME(section)                   section                  PROGNAME(section)
 
-'Text Lineaddr
+'Text Line
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -7130,8 +7129,8 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/shutdown.2")]
         // #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/nl.1")]
-        #[case("./test_files/mdoc/bc.1")]
-        // #[case("./test_files/mdoc/mg.1")]
+        // #[case("./test_files/mdoc/bc.1")]
+        #[case("./test_files/mdoc/mg.1")]
         // #[case("./test_files/mdoc/snmp.1")]
         // #[case("./test_files/mdoc/rdist.1")]
         
@@ -7177,6 +7176,8 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/rcs.1")]
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
+
+        #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")
