@@ -205,10 +205,6 @@ pub enum MdocError {
     /// Pest rules violation
     #[error("mdoc: {0}")]
     Pest(#[from] Box<pest::error::Error<Rule>>),
-
-    // /// Validation failed
-    // #[error("mdoc: {0}")]
-    // Validation(String),
 }
 
 /// Validates if parsing result AST meets the requirements  
@@ -500,8 +496,13 @@ impl MdocParser {
                         if let Ok(w) = str::parse::<u8>(&width_p){
                             *width = Some(w);
                         }
-                    }else{
-                        *width = width_p.len().try_into().ok();
+                    }else {
+                        *width = match width_p.as_str(){
+                            "Er" => Some(19),
+                            "Ds" => Some(8),
+                            "Ev" => Some(17),
+                            _ => width_p.len().try_into().ok()
+                        }
                     }
                 },
                 Rule::bl_offset => {
@@ -514,7 +515,7 @@ impl MdocParser {
                         .unwrap();
                     *offset = Some(OffsetType::from(offset_p));
                 },
-                Rule::bl_compact => {
+                Rule::compact => {
                     if count.2 > 0{
                         return true;
                     }
@@ -539,21 +540,18 @@ impl MdocParser {
             let mut columns = vec![];
             let mut count = (0,0,0);
 
-            let mut has_repeat = false;
             for opt_pair in inner {
                 match opt_pair.as_rule() {
                     Rule::bl_param => {
                         for parameter in opt_pair.into_inner() {
-                            if !has_repeat{ 
-                                has_repeat = parse_bl_parameter(
-                                    parameter.clone(),
-                                    &mut width,
-                                    &mut offset,
-                                    &mut compact,
-                                    &mut columns,
-                                    &mut count
-                                );
-                            }
+                            let has_repeat = parse_bl_parameter(
+                                parameter.clone(),
+                                &mut width,
+                                &mut offset,
+                                &mut compact,
+                                &mut columns,
+                                &mut count
+                            );
                             
                             if has_repeat{
                                 columns.extend(
@@ -566,12 +564,7 @@ impl MdocParser {
                             }
                         }
                     },
-                    Rule::bl_columns => {
-                        for col in opt_pair.into_inner() {
-                            columns.push(col.as_str().to_string());
-                        }
-                    }
-                    _ => {}
+                    _ => columns.push(opt_pair.as_str().to_string())
                 }
             }
 
@@ -1354,12 +1347,15 @@ impl MdocParser {
 }
 
 /// Trim `"` quotes from [`String`]
-pub fn trim_quotes(s: String) -> String{
-    // s.strip_prefix("\"")
-    //     .map(|s|s.strip_suffix("\"").unwrap_or(&s))
-    //     .unwrap_or(&s)
-    //     .to_string()
-    s.replace("\"", "")
+pub fn trim_quotes(mut s: String) -> String{
+    if let Some(stripped) = s.strip_prefix("\""){
+        s = stripped.to_string();
+    }
+    if let Some(stripped) = s.strip_suffix("\""){
+        s = stripped.to_string();
+    }
+
+    s
 }
 
 // In-line macros parsing
@@ -3344,15 +3340,15 @@ mod tests {
             let mut parameters_cases: HashMap<&str, (Option<u8>, Option<OffsetType>, bool, Vec<&str>)> = Default::default();
             parameters_cases.insert(
                 "-width 15 -width 15 -offset indent", 
-                (Some(15), None, false, "-width 15 -offset indent".split(" ").collect::<Vec<_>>())
+                (Some(15), Some(OffsetType::Indent), false, "-width 15".split(" ").collect::<Vec<_>>())
             );
             parameters_cases.insert(
                 "-offset indent -offset indent -compact", 
-                (None, Some(OffsetType::Indent), false, "-offset indent -compact".split(" ").collect::<Vec<_>>())
+                (None, Some(OffsetType::Indent), true, "-offset indent".split(" ").collect::<Vec<_>>())
             );
             parameters_cases.insert(
                 "-width 15 word -width 15 -offset indent", 
-                (Some(15), None, false, "word -width 15 -offset indent".split(" ").collect::<Vec<_>>())
+                (Some(15), Some(OffsetType::Indent), false, "word -width 15".split(" ").collect::<Vec<_>>())
             );
             parameters_cases.insert(
                 "-compact -width 15 -offset indent -width 15", 
@@ -3360,11 +3356,11 @@ mod tests {
             );
             parameters_cases.insert(
                 "-compact -compact -width 15", 
-                (None, None, true, "-compact -width 15".split(" ").collect::<Vec<_>>())
+                (Some(15), None, true, "-compact".split(" ").collect::<Vec<_>>())
             );
             parameters_cases.insert(
                 "-compact word -width 15", 
-                (None, None, true, "word -width 15".split(" ").collect::<Vec<_>>())
+                (Some(15), None, true, "word".split(" ").collect::<Vec<_>>())
             );
 
             for (input, output) in parameters_cases {
