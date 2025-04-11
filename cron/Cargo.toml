@@ -29,5 +29,5 @@ name = "crond"
 path = "./crond.rs"
 
 [lib]
-name = "job"
-path = "./job.rs"
+name = "cron"
+path = "./lib.rs"

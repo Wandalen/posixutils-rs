@@ -118,6 +118,7 @@ pub struct CronJob {
     pub command: String,
 }
 
+#[derive(Clone)]
 pub struct Database(pub Vec<CronJob>);
 
 impl Database {
