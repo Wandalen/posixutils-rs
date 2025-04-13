@@ -1,5 +1,4 @@
 use crate::FormattingSettings;
-// use aho_corasick::AhoCorasick;
 use terminfo::Database;
 use regex::Regex;
 use std::collections::HashMap;
@@ -433,8 +432,6 @@ lazy_static! {
         m.insert(r"\*(ga", "`");
         m.insert(r"\*(Px", "POSIX");
         m.insert(r"\*(Ai", "ANSI");
-        // m.insert(r"\[bkmacroescapestart]", "");
-        // m.insert(r"\[bkmacroescapeend]", "");
         m
     };
 
@@ -454,8 +451,8 @@ lazy_static! {
     };
 }
 
-pub fn replace_escapes_no_quotes(input: &str) -> String {
-    OUTER_REGEX
+pub fn replace_escapes(input: &str) -> String {
+    let mut input = OUTER_REGEX
         .replace_all(input, |caps: &regex::Captures| {
             if let Some(quoted) = caps.name("quoted") {
                 quoted.as_str().to_string()
@@ -468,17 +465,16 @@ pub fn replace_escapes_no_quotes(input: &str) -> String {
                 caps.get(0).unwrap().as_str().to_string()
             }
         })
-        .to_string()
-}
+        .to_string();
 
+    REGEX_NS_MACRO.replace_all(&input, "").to_string()
+}
 
 /// Formatter state
 #[derive(Debug)]
 pub struct FormattingState {
     /// Utility name; mdoc title
     first_name: Option<String>,
-    /// Suppress space printing
-    // suppress_space: bool,
     /// Header content
     header_text: Option<String>,
     /// Footer content
@@ -491,7 +487,6 @@ pub struct FormattingState {
     split_mod: bool,
     /// Indentation of current macros nesting level
     current_indent: usize,
-    // nm_value: Option<String>
 }
 
 impl Default for FormattingState {
@@ -505,7 +500,6 @@ impl Default for FormattingState {
             date: String::default(),
             split_mod: false,
             current_indent: 0,
-            // nm_value: None
         }
     }
 }
@@ -604,18 +598,10 @@ impl MdocFormatter {
         };
 
         let is_one_line = !formatted.contains("\n");
-        // let mut is_bk_block = false;
         let max_width = self.formatting_settings.width;
 
         for line in formatted.split("\n") {
-
-            println!("Line:\n{}\n------------------", line);
-
-            // if line.contains("\\[bkmacroescapestart]") {
-            //     is_bk_block = true;
-            // }
-
-            let line = replace_escapes_no_quotes(line);
+            let line = replace_escapes(line);
 
             if !is_one_line && !current_line.is_empty(){
                 lines.push(current_line.trim_end().to_string());
@@ -681,7 +667,7 @@ impl MdocFormatter {
             lines.push(current_line.trim_end().to_string());
         }
 
-        replace_escapes_no_quotes(&lines.join("\n")).into_bytes()
+        replace_escapes(&lines.join("\n")).into_bytes()
     }
 
     /// Format full [`MdocDocument`] and returns UTF-8 binary string 
@@ -754,7 +740,7 @@ impl MdocFormatter {
 
         let content = lines.join("\n");
         
-        replace_escapes_no_quotes(&content)
+        replace_escapes(&content)
             .into_bytes()
     }
 
@@ -853,423 +839,6 @@ impl MdocFormatter {
             Element::Eoi => "".to_string(),
         }
     }
-
-    // fn replace_mdoc_escapes(&self, input: &str) -> String{
-    //     let replacements: HashMap<&str, &str> = [
-    //         // (NEW_LINE_ESCAPE, "\n"),
-    //         ("\\[pfmacroescape] ", ""),
-    //         ("\\[anmacroescape]", "\n"),
-    //         // Spaces:
-    //         (r"\ ", " "), // unpaddable space
-    //         (r"\~", " "), // paddable space
-    //         (r"\0", " "), // digit-width space
-    //         (r"\|", " "), // one-sixth \(em narrow space
-    //         (r"\^", " "), // one-twelfth \(em half-narrow space
-    //         (r"\&", ""),  // zero-width space
-    //         (r"\)", ""),  // zero-width space (transparent to end-of-sentence detection)
-    //         (r"\%", ""),  // zero-width space allowing hyphenation
-    //         (r"\:", ""),  // zero-width space allowing line break
-    //         // Lines:
-    //         (r"\(ba", r"|"), // bar
-    //         (r"\(br", r"│"), // box rule
-    //         (r"\(ul", r"_"), // underscore
-    //         (r"\(ru", r"_"), // underscore (width 0.5m)
-    //         (r"\(rn", r"‾"), // overline
-    //         (r"\(bb", r"¦"), // broken bar
-    //         (r"\(sl", r"/"), // forward slash
-    //         (r"\(rs", r"\"), // backward slash
-    //         // Text markers:
-    //         (r"\(ci", r"○"), // circle
-    //         (r"\(bu", r"•"), // bullet
-    //         (r"\(dd", r"‡"), // double dagger
-    //         (r"\(dg", r"†"), // dagger
-    //         (r"\(lz", r"◊"), // lozenge
-    //         (r"\(sq", r"□"), // white square
-    //         (r"\(ps", r"¶"), // paragraph
-    //         (r"\(sc", r"§"), // section
-    //         (r"\(lh", r"☜"), // left hand
-    //         (r"\(rh", r"☞"), // right hand
-    //         (r"\(at", r"@"), // at
-    //         (r"\(sh", r"#"), // hash (pound)
-    //         (r"\(CR", r"↵"), // carriage return
-    //         (r"\(OK", r"✓"), // check mark
-    //         (r"\(CL", r"♣"), // club suit
-    //         (r"\(SP", r"♠"), // spade suit
-    //         (r"\(HE", r"♥"), // heart suit
-    //         (r"\(DI", r"♦"), // diamond suit
-    //         // Legal symbols:
-    //         (r"\(co", r"©"), // copyright
-    //         (r"\(rg", r"®"), // registered
-    //         (r"\(tm", r"™"), // trademarked
-    //         // Punctuation:
-    //         (r"\(em", r"—"), // em-dash
-    //         (r"\(en", r"–"), // en-dash
-    //         (r"\(hy", r"‐"), // hyphen
-    //         (r"\e",  r"\"),  // back-slash
-    //         (r"\(r!", r"¡"), // upside-down exclamation
-    //         (r"\(r?", r"¿"), // upside-down question
-    //         // Quotes:
-    //         (r"\(Bq", r"„"), // right low double-quote
-    //         (r"\(bq", r"‚"), // right low single-quote
-    //         (r"\(lq", r"“"), // left double-quote
-    //         (r"\(rq", r"”"), // right double-quote
-    //         (r"\(oq", r"‘"), // left single-quote
-    //         (r"\(cq", r"’"), // right single-quote
-    //         (r"\(aq", r"'"), // apostrophe quote (ASCII character)
-    //         (r"\(dq", "\""), // double quote (ASCII character)
-    //         (r"\(Fo", r"«"), // left guillemet
-    //         (r"\(Fc", r"»"), // right guillemet
-    //         (r"\(fo", r"‹"), // left single guillemet
-    //         (r"\(fc", r"›"), // right single guillemet
-    //         // Brackets:
-    //         (r"\(lB", r"["),              // left bracket
-    //         (r"\(rB", r"]"),              // right bracket
-    //         (r"\(lC", r"{"),              // left brace
-    //         (r"\(rC", r"}"),              // right brace
-    //         (r"\(la", r"⟨"),              // left angle
-    //         (r"\(ra", r"⟩"),              // right angle
-    //         (r"\(bv", r"⎪"),              // brace extension (special font)
-    //         (r"\[braceex]", r"⎪"),        // brace extension
-    //         (r"\[bracketlefttp]", r"⎡"),  // top-left hooked bracket
-    //         (r"\[bracketleftbt]", r"⎣"),  // bottom-left hooked bracket
-    //         (r"\[bracketleftex]", r"⎢"),  // left hooked bracket extension
-    //         (r"\[bracketrighttp]", r"⎤"), // top-right hooked bracket
-    //         (r"\[bracketrightbt]", r"⎦"), // bottom-right hooked bracket
-    //         (r"\[bracketrightex]", r"⎥"), // right hooked bracket extension
-    //         (r"\(lt", r"⎧"),              // top-left hooked brace
-    //         (r"\[bracelefttp]", r"⎧"),    // top-left hooked brace
-    //         (r"\(lk", r"⎨"),              // mid-left hooked brace
-    //         (r"\[braceleftmid]", r"⎨"),   // mid-left hooked brace
-    //         (r"\(lb", r"⎩"),              // bottom-left hooked brace
-    //         (r"\[braceleftbt]", r"⎩"),    // bottom-left hooked brace
-    //         (r"\[braceleftex]", r"⎪"),    // left hooked brace extension
-    //         (r"\(rt", r"⎫"),              // top-right hooked brace
-    //         (r"\[bracerighttp]", r"⎫"),   // top-right hooked brace
-    //         (r"\(rk", r"⎬"),              // mid-right hooked brace
-    //         (r"\[bracerightmid]", r"⎬"),  // mid-right hooked brace
-    //         (r"\(rb", r"⎭"),              // bottom-right hooked brace
-    //         (r"\[bracerightbt]", r"⎭"),   // bottom-right hooked brace
-    //         (r"\[bracerightex]", r"⎪"),   // right hooked brace extension
-    //         (r"\[parenlefttp]", r"⎛"),    // top-left hooked parenthesis
-    //         (r"\[parenleftbt]", r"⎝"),    // bottom-left hooked parenthesis
-    //         (r"\[parenleftex]", r"⎜"),    // left hooked parenthesis extension
-    //         (r"\[parenrighttp]", r"⎞"),   // top-right hooked parenthesis
-    //         (r"\[parenrightbt]", r"⎠"),   // bottom-right hooked parenthesis
-    //         (r"\[parenrightex]", r"⎟"),   // right hooked parenthesis extension
-    //         // Arrows:
-    //         (r"\(<-", r"←"), // left arrow
-    //         (r"\(->", r"→"), // right arrow
-    //         (r"\(<>", r"↔"), // left-right arrow
-    //         (r"\(da", r"↓"), // down arrow
-    //         (r"\(ua", r"↑"), // up arrow
-    //         (r"\(va", r"↕"), // up-down arrow
-    //         (r"\(lA", r"⇐"), // left double-arrow
-    //         (r"\(rA", r"⇒"), // right double-arrow
-    //         (r"\(hA", r"⇔"), // left-right double-arrow
-    //         (r"\(uA", r"⇑"), // up double-arrow
-    //         (r"\(dA", r"⇓"), // down double-arrow
-    //         (r"\(vA", r"⇕"), // up-down double-arrow
-    //         (r"\(an", r"⎯"), // horizontal arrow extension
-    //         // Logical:
-    //         (r"\(AN", r"∧"),   // logical and
-    //         (r"\(OR", r"∨"),   // logical or
-    //         (r"\[tno]", r"¬"), // logical not (text font)
-    //         (r"\(no", r"¬"),   // logical not (special font)
-    //         (r"\(te", r"∃"),   // existential quantifier
-    //         (r"\(fa", r"∀"),   // universal quantifier
-    //         (r"\(st", r"∋"),   // such that
-    //         (r"\(tf", r"∴"),   // therefore
-    //         (r"\(3d", r"∴"),   // therefore
-    //         (r"\(or", r"|"),   // bitwise or
-    //         // Mathematical:
-    //         (r"\-", r"-"),           // minus (text font)
-    //         (r"\(mi", r"−"),         // minus (special font)
-    //         (r"\+", r"+"),           // plus (text font)
-    //         (r"\(pl", r"+"),         // plus (special font)
-    //         (r"\(-+", r"∓"),         // minus-plus
-    //         (r"\[t+-]", r"±"),       // plus-minus (text font)
-    //         (r"\(+-", r"±"),         // plus-minus (special font)
-    //         (r"\(pc", r"·"),         // center-dot
-    //         (r"\[tmu]", r"×"),       // multiply (text font)
-    //         (r"\(mu", r"×"),         // multiply (special font)
-    //         (r"\(c*", r"⊗"),         // circle-multiply
-    //         (r"\(c+", r"⊕"),         // circle-plus
-    //         (r"\[tdi]", r"÷"),       // divide (text font)
-    //         (r"\(di", r"÷"),         // divide (special font)
-    //         (r"\(f/", r"⁄"),         // fraction
-    //         (r"\(**", r"∗"),         // asterisk
-    //         (r"\(<=", r"≤"),         // less-than-equal
-    //         (r"\(>=", r"≥"),         // greater-than-equal
-    //         (r"\(<<", r"≪"),         // much less
-    //         (r"\(>>", r"≫"),         // much greater
-    //         (r"\(eq", r"="),         // equal
-    //         (r"\(!=", r"≠"),         // not equal
-    //         (r"\(==", r"≡"),         // equivalent
-    //         (r"\(ne", r"≢"),         // not equivalent
-    //         (r"\(ap", r"∼"),         // tilde operator
-    //         (r"\(|=", r"≃"),         // asymptotically equal
-    //         (r"\(=~", r"≅"),         // approximately equal
-    //         (r"\(~~", r"≈"),         // almost equal
-    //         (r"\(~=", r"≈"),         // almost equal
-    //         (r"\(pt", r"∝"),         // proportionate
-    //         (r"\(es", r"∅"),         // empty set
-    //         (r"\(mo", r"∈"),         // element
-    //         (r"\(nm", r"∉"),         // not element
-    //         (r"\(sb", r"⊂"),         // proper subset
-    //         (r"\(nb", r"⊄"),         // not subset
-    //         (r"\(sp", r"⊃"),         // proper superset
-    //         (r"\(nc", r"⊅"),         // not superset
-    //         (r"\(ib", r"⊆"),         // reflexive subset
-    //         (r"\(ip", r"⊇"),         // reflexive superset
-    //         (r"\(ca", r"∩"),         // intersection
-    //         (r"\(cu", r"∪"),         // union
-    //         (r"\(/_", r"∠"),         // angle
-    //         (r"\(pp", r"⊥"),         // perpendicular
-    //         (r"\(is", r"∫"),         // integral
-    //         (r"\[integral]", r"∫"),  // integral
-    //         (r"\[sum]", r"∑"),       // summation
-    //         (r"\[product]", r"∏"),   // product
-    //         (r"\[coproduct]", r"∐"), // coproduct
-    //         (r"\(gr", r"∇"),         // gradient
-    //         (r"\(sr", r"√"),         // square root
-    //         (r"\[sqrt]", r"√"),      // square root
-    //         (r"\(lc", r"⌈"),         // left-ceiling
-    //         (r"\(rc", r"⌉"),         // right-ceiling
-    //         (r"\(lf", r"⌊"),         // left-floor
-    //         (r"\(rf", r"⌋"),         // right-floor
-    //         (r"\(if", r"∞"),         // infinity
-    //         (r"\(Ah", r"ℵ"),         // aleph
-    //         (r"\(Im", r"ℑ"),         // imaginary
-    //         (r"\(Re", r"ℜ"),         // real
-    //         (r"\(wp", r"℘"),         // Weierstrass p
-    //         (r"\(pd", r"∂"),         // partial differential
-    //         (r"\(-h", r"ℏ"),         // Planck constant over 2π
-    //         (r"\[hbar]", r"ℏ"),      // Planck constant over 2π
-    //         (r"\(12", r"½"),         // one-half
-    //         (r"\(14", r"¼"),         // one-fourth
-    //         (r"\(34", r"¾"),         // three-fourths
-    //         (r"\(18", r"⅛"),         // one-eighth
-    //         (r"\(38", r"⅜"),         // three-eighths
-    //         (r"\(58", r"⅝"),         // five-eighths
-    //         (r"\(78", r"⅞"),         // seven-eighths
-    //         (r"\(S1", r"¹"),         // superscript 1
-    //         (r"\(S2", r"²"),         // superscript 2
-    //         (r"\(S3", r"³"),         // superscript 3
-    //         // Ligatures:
-    //         (r"\(ff", r"ﬀ"), // ff ligature
-    //         (r"\(fi", r"ﬁ"), // fi ligature
-    //         (r"\(fl", r"ﬂ"), // fl ligature
-    //         (r"\(Fi", r"ﬃ"), // ffi ligature
-    //         (r"\(Fl", r"ﬄ"), // ffl ligature
-    //         (r"\(AE", r"Æ"), // AE
-    //         (r"\(ae", r"æ"), // ae
-    //         (r"\(OE", r"Œ"), // OE
-    //         (r"\(oe", r"œ"), // oe
-    //         (r"\(ss", r"ß"), // German eszett
-    //         (r"\(IJ", r"Ĳ"), // IJ ligature
-    //         (r"\(ij", r"ĳ"), // ij ligature
-    //         // Accents:
-    //         // ("\\(a\"", r"˝"), // Hungarian umlaut
-    //         (r"\(a-", r"¯"),  // macron
-    //         (r"\(a.", r"˙"),  // dotted
-    //         (r"\(a^", r"^"),  // circumflex
-    //         (r"\(aa", r"´"),  // acute
-    //         (r"\'", r"´"),    // acute
-    //         (r"\(ga", r"`"),  // grave
-    //         (r"\`", r"`"),    // grave
-    //         (r"\(ab", r"˘"),  // breve
-    //         (r"\(ac", r"¸"),  // cedilla
-    //         (r"\(ad", r"¨"),  // dieresis
-    //         (r"\(ah", r"ˇ"),  // caron
-    //         (r"\(ao", r"˚"),  // ring
-    //         (r"\(a~", r"~"),  // tilde
-    //         (r"\(ho", r"˛"),  // ogonek
-    //         (r"\(ha", r"^"),  // hat (ASCII character)
-    //         (r"\(ti", r"~"),  // tilde (ASCII character)
-    //         // Accented letters:
-    //         (r"\('A", r"Á"), // acute A
-    //         (r"\('E", r"É"), // acute E
-    //         (r"\('I", r"Í"), // acute I
-    //         (r"\('O", r"Ó"), // acute O
-    //         (r"\('U", r"Ú"), // acute U
-    //         (r"\('Y", r"Ý"), // acute Y
-    //         (r"\('a", r"á"), // acute a
-    //         (r"\('e", r"é"), // acute e
-    //         (r"\('i", r"í"), // acute i
-    //         (r"\('o", r"ó"), // acute o
-    //         (r"\('u", r"ú"), // acute u
-    //         (r"\('y", r"ý"), // acute y
-    //         (r"\(`A", r"À"), // grave A
-    //         (r"\(`E", r"È"), // grave E
-    //         (r"\(`I", r"Ì"), // grave I
-    //         (r"\(`O", r"Ò"), // grave O
-    //         (r"\(`U", r"Ù"), // grave U
-    //         (r"\(`a", r"à"), // grave a
-    //         (r"\(`e", r"è"), // grave e
-    //         (r"\(`i", r"ì"), // grave i
-    //         (r"\(`o", r"ò"), // grave o
-    //         (r"\(`u", r"ù"), // grave u
-    //         (r"\(~A", r"Ã"), // tilde A
-    //         (r"\(~N", r"Ñ"), // tilde N
-    //         (r"\(~O", r"Õ"), // tilde O
-    //         (r"\(~a", r"ã"), // tilde a
-    //         (r"\(~n", r"ñ"), // tilde n
-    //         (r"\(~o", r"õ"), // tilde o
-    //         (r"\(:A", r"Ä"), // dieresis A
-    //         (r"\(:E", r"Ë"), // dieresis E
-    //         (r"\(:I", r"Ï"), // dieresis I
-    //         (r"\(:O", r"Ö"), // dieresis O
-    //         (r"\(:U", r"Ü"), // dieresis U
-    //         (r"\(:a", r"ä"), // dieresis a
-    //         (r"\(:e", r"ë"), // dieresis e
-    //         (r"\(:i", r"ï"), // dieresis i
-    //         (r"\(:o", r"ö"), // dieresis o
-    //         (r"\(:u", r"ü"), // dieresis u
-    //         (r"\(:y", r"ÿ"), // dieresis y
-    //         (r"\(^A", r"Â"), // circumflex A
-    //         (r"\(^E", r"Ê"), // circumflex E
-    //         (r"\(^I", r"Î"), // circumflex I
-    //         (r"\(^O", r"Ô"), // circumflex O
-    //         (r"\(^U", r"Û"), // circumflex U
-    //         (r"\(^a", r"â"), // circumflex a
-    //         (r"\(^e", r"ê"), // circumflex e
-    //         (r"\(^i", r"î"), // circumflex i
-    //         (r"\(^o", r"ô"), // circumflex o
-    //         (r"\(^u", r"û"), // circumflex u
-    //         (r"\(,C", r"Ç"), // cedilla C
-    //         (r"\(,c", r"ç"), // cedilla c
-    //         (r"\(/L", r"Ł"), // stroke L
-    //         (r"\(/l", r"ł"), // stroke l
-    //         (r"\(/O", r"Ø"), // stroke O
-    //         (r"\(/o", r"ø"), // stroke o
-    //         (r"\(oA", r"Å"), // ring A
-    //         (r"\(oa", r"å"), // ring a
-    //         // Special letters:
-    //         (r"\(-D", r"Ð"), // Eth
-    //         (r"\(Sd", r"ð"), // eth
-    //         (r"\(TP", r"Þ"), // Thorn
-    //         (r"\(Tp", r"þ"), // thorn
-    //         (r"\(.i", r"ı"), // dotless i
-    //         (r"\(.j", r"ȷ"), // dotless j
-    //         // Currency:
-    //         (r"\(Do", r"$"), // dollar
-    //         (r"\(ct", r"¢"), // cent
-    //         (r"\(Eu", r"€"), // Euro symbol
-    //         (r"\(eu", r"€"), // Euro symbol
-    //         (r"\(Ye", r"¥"), // yen
-    //         (r"\(Po", r"£"), // pound
-    //         (r"\(Cs", r"¤"), // Scandinavian
-    //         (r"\(Fn", r"ƒ"), // florin
-    //         // Units:
-    //         (r"\(de", r"°"), // degree
-    //         (r"\(%0", r"‰"), // per-thousand
-    //         (r"\(fm", r"′"), // minute
-    //         (r"\(sd", r"″"), // second
-    //         (r"\(mc", r"µ"), // micro
-    //         (r"\(Of", r"ª"), // Spanish female ordinal
-    //         (r"\(Om", r"º"), // Spanish masculine ordinal
-    //         // Greek letters:
-    //         (r"\(*A", r"Α"), // Alpha
-    //         (r"\(*B", r"Β"), // Beta
-    //         (r"\(*G", r"Γ"), // Gamma
-    //         (r"\(*D", r"Δ"), // Delta
-    //         (r"\(*E", r"Ε"), // Epsilon
-    //         (r"\(*Z", r"Ζ"), // Zeta
-    //         (r"\(*Y", r"Η"), // Eta
-    //         (r"\(*H", r"Θ"), // Theta
-    //         (r"\(*I", r"Ι"), // Iota
-    //         (r"\(*K", r"Κ"), // Kappa
-    //         (r"\(*L", r"Λ"), // Lambda
-    //         (r"\(*M", r"Μ"), // Mu
-    //         (r"\(*N", r"Ν"), // Nu
-    //         (r"\(*C", r"Ξ"), // Xi
-    //         (r"\(*O", r"Ο"), // Omicron
-    //         (r"\(*P", r"Π"), // Pi
-    //         (r"\(*R", r"Ρ"), // Rho
-    //         (r"\(*S", r"Σ"), // Sigma
-    //         (r"\(*T", r"Τ"), // Tau
-    //         (r"\(*U", r"Υ"), // Upsilon
-    //         (r"\(*F", r"Φ"), // Phi
-    //         (r"\(*X", r"Χ"), // Chi
-    //         (r"\(*Q", r"Ψ"), // Psi
-    //         (r"\(*W", r"Ω"), // Omega
-    //         (r"\(*a", r"α"), // alpha
-    //         (r"\(*b", r"β"), // beta
-    //         (r"\(*g", r"γ"), // gamma
-    //         (r"\(*d", r"δ"), // delta
-    //         (r"\(*e", r"ε"), // epsilon
-    //         (r"\(*z", r"ζ"), // zeta
-    //         (r"\(*y", r"η"), // eta
-    //         (r"\(*h", r"θ"), // theta
-    //         (r"\(*i", r"ι"), // iota
-    //         (r"\(*k", r"κ"), // kappa
-    //         (r"\(*l", r"λ"), // lambda
-    //         (r"\(*m", r"μ"), // mu
-    //         (r"\(*n", r"ν"), // nu
-    //         (r"\(*c", r"ξ"), // xi
-    //         (r"\(*o", r"ο"), // omicron
-    //         (r"\(*p", r"π"), // pi
-    //         (r"\(*r", r"ρ"), // rho
-    //         (r"\(*s", r"σ"), // sigma
-    //         (r"\(*t", r"τ"), // tau
-    //         (r"\(*u", r"υ"), // upsilon
-    //         (r"\(*f", r"ϕ"), // phi
-    //         (r"\(*x", r"χ"), // chi
-    //         (r"\(*q", r"ψ"), // psi
-    //         (r"\(*w", r"ω"), // omega
-    //         (r"\(+h", r"ϑ"), // theta variant
-    //         (r"\(+f", r"φ"), // phi variant
-    //         (r"\(+p", r"ϖ"), // pi variant
-    //         (r"\(+e", r"ϵ"), // epsilon variant
-    //         (r"\(ts", r"ς"), // sigma terminal
-    //         // Predefined strings:
-    //         (r"\*(Ba", r"|"),        // vertical bar
-    //         (r"\*(Ne", r"≠"),        // not equal
-    //         (r"\*(Ge", r"≥"),        // greater-than-equal
-    //         (r"\*(Le", r"≤"),        // less-than-equal
-    //         (r"\*(Gt", r">"),        // greater-than
-    //         (r"\*(Lt", r"<"),        // less-than
-    //         (r"\*(Pm", r"±"),        // plus-minus
-    //         (r"\*(If", r"infinity"), // infinity
-    //         (r"\*(Pi", r"pi"),       // pi
-    //         (r"\*(Na", r"NaN"),      // NaN
-    //         (r"\*(Am", r"&"),        // ampersand
-    //         (r"\*R", r"®"),          // restricted mark
-    //         (r"\*(Tm", r"(Tm)"),     // trade mark
-    //         (r"\*q", "\""),          // double-quote
-    //         (r"\*(Rq", r"”"),        // right-double-quote
-    //         (r"\*(Lq", r"“"),        // left-double-quote
-    //         (r"\*(lp", r"("),        // right-parenthesis
-    //         (r"\*(rp", r")"),        // left-parenthesis
-    //         (r"\*(lq", r"“"),        // left double-quote
-    //         (r"\*(rq", r"”"),        // right double-quote
-    //         (r"\*(ua", r"↑"),        // up arrow
-    //         (r"\*(va", r"↕"),        // up-down arrow
-    //         (r"\*(<=", r"≤"),        // less-than-equal
-    //         (r"\*(>=", r"≥"),        // greater-than-equal
-    //         (r"\*(aa", r"´"),        // acute
-    //         (r"\*(ga", r"`"),        // grave
-    //         (r"\*(Px", r"POSIX"),    // POSIX standard name
-    //         (r"\*(Ai", r"ANSI"),     // ANSI standard name
-    //     ]
-    //     .iter()
-    //     .cloned()
-    //     .collect();
-    
-    //     let mut result = String::new();
-    
-    //     let ac = AhoCorasick::new(replacements.keys()).expect("Build error");
-    
-    //     ac.replace_all_with(input, &mut result, |_, key, dst| {
-    //         dst.push_str(replacements[key]);
-    //         true
-    //     });
-        
-    //     result = REGEX_NS_MACRO.replace_all(&result, "").to_string();
-    //     self.replace_unicode_escapes(&result)
-        
-    //     // result
-    // }
 
     /// Convert one [`MacroNode`] AST to [`String`] 
     fn format_macro_node(&mut self, macro_node: MacroNode) -> String {
@@ -1424,12 +993,6 @@ impl MdocFormatter {
 
     /// Convert text node to [`String`]. Escape sequences is converted to true UTF-8 chars
     fn format_text_node(&self, text: &str) -> String {
-        // let mut result = self.replace_mdoc_escapes(text);
-        // result = self.replace_unicode_escapes(&result);
-        // result.replace("\r\n", NEW_LINE_ESCAPE)
-        //     .replace("\n", NEW_LINE_ESCAPE)
-        // result.trim().to_string()
-
         self
             .replace_unicode_escapes(text)
             .trim()
@@ -7735,7 +7298,7 @@ footer text                     January 1, 1970                    footer text";
 
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
-        // #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/mg.1")]
@@ -7785,7 +7348,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
 
-        #[case("./test_files/mdoc/test.1")]
+        // #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")
