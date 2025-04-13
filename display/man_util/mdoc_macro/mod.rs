@@ -131,7 +131,9 @@ pub enum Macro {
     Ms,
     Mt,
     Nd,
-    Nm,
+    Nm {
+        name: Option<String>
+    },
     No,
     Ns,
     Nx,

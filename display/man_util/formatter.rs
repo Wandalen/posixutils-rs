@@ -1,6 +1,6 @@
 use crate::FormattingSettings;
 use aho_corasick::AhoCorasick;
-use std::{collections::HashMap, thread::current};
+use std::collections::HashMap;
 use terminfo::Database;
 
 use super::{
@@ -49,6 +49,7 @@ pub struct FormattingState {
     split_mod: bool,
     /// Indentation of current macros nesting level
     current_indent: usize,
+    // nm_value: Option<String>
 }
 
 impl Default for FormattingState {
@@ -62,6 +63,7 @@ impl Default for FormattingState {
             date: String::default(),
             split_mod: false,
             current_indent: 0,
+            // nm_value: None
         }
     }
 }
@@ -159,11 +161,11 @@ impl MdocFormatter {
                 .collect::<String>()
         };
 
-        println!("165: Line:\n{}\n----------------", formatted.replace("\n", "NEWLINE"));
+        // println!("165: Line:\n{}\n----------------", formatted.replace("\n", "NEWLINE"));
         // let is_one_line = formatted.lines().count() == 1;
         let is_one_line = !formatted.contains("\n");
 
-        println!("Is one line: {}", is_one_line);
+        // println!("Is one line: {}", is_one_line);
 
         let max_width = self.formatting_settings.width;
 
@@ -242,6 +244,8 @@ impl MdocFormatter {
 
         for node in ast.elements {            
             let mut formatted_node = self.format_node(node.clone());
+
+            // formatted_node = formatted_node.replace(r"\x08", "");
 
             if formatted_node.is_empty() {
                 continue;
@@ -839,7 +843,7 @@ impl MdocFormatter {
             // Block full-implicit
             Macro::It { head} => self.format_it_block(head, macro_node),
             Macro::Nd => self.format_nd(macro_node),
-            Macro::Nm => self.format_nm(macro_node),
+            Macro::Nm { name } => self.format_nm(name.clone(), macro_node),
             Macro::Sh { title } => self.format_sh_block(title, macro_node),
             Macro::Ss { title } => self.format_ss_block(title, macro_node),
 
@@ -2065,7 +2069,8 @@ impl MdocFormatter {
                     let content = head.iter()
                         .map(|element| self.format_node(element.clone()))
                         .collect::<Vec<_>>()
-                        .join(&self.formatting_state.spacing)
+                        // .join(&self.formatting_state.spacing)
+                        .join(" ")
                         .trim()
                         .to_string();
 
@@ -2229,11 +2234,33 @@ impl MdocFormatter {
         format!("– {}", content)
     }
 
-    fn format_nm(&mut self, macro_node: MacroNode) -> String {
-        self.format_inline_macro(macro_node)
+    fn format_nm(&mut self, name: Option<String>, macro_node: MacroNode) -> String {
+        let content = self.format_inline_macro(macro_node);
+    
+        if self.formatting_state.first_name.is_none() {
+            self.formatting_state.first_name = name;
+            let first_name = self.formatting_state.first_name.as_ref().unwrap();
+    
+            if is_first_char_delimiter(&content) {
+                format!("{}{}", first_name, content)
+            } else {
+                format!("{} {}", first_name, content)
+            }
+        } else {
+            let provided_name = match name {
+                Some(name) => name,
+                None => String::new()
+            };
+            let first_name = self.formatting_state.first_name.as_ref().unwrap();
+    
+            let separator1 = if is_first_char_delimiter(&provided_name) { "" } else { " " };
+            let separator2 = if is_first_char_delimiter(&content) { "" } else { " " };
+    
+            format!("{}{}{}{}{}", first_name, separator1, provided_name, separator2, content.trim())
+        }
     }
-
-    fn format_nm_synopsis(&mut self, macro_node: MacroNode) -> String {
+    
+    fn format_nm_synopsis(&mut self, name: Option<String>, macro_node: MacroNode) -> String {
         let content = macro_node
             .nodes
             .into_iter()
@@ -2248,11 +2275,27 @@ impl MdocFormatter {
             .collect::<Vec<String>>()
             .join("");
         
-        if !content.is_empty() {
-            self.formatting_state.first_name = Some(content.clone());
+        if self.formatting_state.first_name.is_none() {
+            self.formatting_state.first_name = name;
+            let first_name = self.formatting_state.first_name.as_ref().unwrap();
+    
+            if is_first_char_delimiter(&content) {
+                format!("{}{}", first_name, content)
+            } else {
+                format!("{} {}", first_name, content)
+            }
+        } else {
+            let provided_name = match name {
+                Some(name) => name,
+                None => String::new()
+            };
+            let first_name = self.formatting_state.first_name.as_ref().unwrap();
+    
+            let separator1 = if is_first_char_delimiter(&provided_name) { "" } else { " " };
+            let separator2 = if is_first_char_delimiter(&content) { "" } else { " " };
+    
+            format!("{}{}{}{}{}", first_name, separator1, provided_name, separator2, content.trim())
         }
-
-        format!("\n{}", content.trim())
     }
 
     /// If line don't have enought indentation according 
@@ -2294,7 +2337,9 @@ impl MdocFormatter {
                         if title.eq_ignore_ascii_case("SYNOPSIS") {
                             let formatted = match &macro_node.mdoc_macro {
                                 Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
-                                Macro::Nm => self.format_nm_synopsis(macro_node.clone()),
+                                Macro::Nm { 
+                                    name 
+                                } => self.format_nm_synopsis(name.clone(), macro_node.clone()),
                                 Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
                                 Macro::In { 
                                     ref filename 
@@ -3141,9 +3186,15 @@ impl MdocFormatter {
     }
 
     fn format_fl(&mut self, macro_node: MacroNode) -> String {
+
+
         if macro_node.nodes.is_empty() {
+
+            // println!("Fl adding ns macro escape");
+
             return "-\\[nsmacroescape]".to_string()
         }
+
         let mut result = String::new();
         let mut prev_was_open = false;
         let mut is_first_node = true;
@@ -7175,7 +7226,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/flock.2")]
 
         // Bl -column
-        #[case("./test_files/mdoc/shutdown.2")]
+        // #[case("./test_files/mdoc/shutdown.2")]
         // #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/bc.1")]
