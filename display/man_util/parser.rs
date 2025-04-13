@@ -207,74 +207,6 @@ pub enum MdocError {
     Pest(#[from] Box<pest::error::Error<Rule>>),
 }
 
-/// Validates if parsing result AST meets the requirements  
-// #[derive(Default)]
-// struct MdocValidator {
-//     /// Utility or current mdoc title
-//     first_name: Option<Vec<String>>,
-// }
-
-// impl MdocValidator {
-//     fn validate_nm(&mut self, nm_node: &mut MacroNode) -> Result<(), MdocError> {
-//         if let MacroNode {
-//             mdoc_macro: Macro::Nm,
-//             nodes: name,
-//         } = nm_node
-//         {
-//             match (&self.first_name, name) {
-//                 // Both remembered name and Nm name are present, or both are absent
-//                 (Some(_), name) if !name.is_empty() => {}
-//                 (None, name) if name.is_empty() => {}
-//                 // Nm has a name, but no remembered name
-//                 (None, name) if !name.is_empty() => {
-//                     self.first_name = Some(name.iter().cloned().map(Element::into).collect());
-//                 }
-//                 // Nm has no name, but remembered name is present
-//                 (Some(first_name), name) if name.is_empty() => {
-                    
-//                     // println!("Before changes\nNodes:{:#?}\n--------------", name.clone());
-                    
-//                     *name = first_name.iter().cloned().map(Element::from).collect();
-
-//                     // println!("After changes\nNodes:{:#?}\n--------------", name.clone());
-
-//                 }
-//                 _ => unreachable!(),
-//             }
-//         }
-//         Ok(())
-//     }
-
-//     /// Validates certain element
-//     fn validate_element(&mut self, element: &mut Element) -> Result<(), MdocError> {
-//         if let Element::Macro(macro_node) = element {
-//             match macro_node.mdoc_macro {
-//                 Macro::Nm => self.validate_nm(macro_node)?,
-//                 // Macro::Sh { .. } => self.validate_sh(macro_node)?,
-//                 // Macro::Ss { .. } => self.validate_ss(macro_node)?,
-//                 _ => {}
-//             }
-//         }
-
-//         // Recursively validate child nodes
-//         if let Element::Macro(MacroNode { nodes, .. }) = element {
-//             for child in nodes {
-//                 self.validate_element(child)?;
-//             }
-//         }
-
-//         Ok(())
-//     }
-
-//     /// Validate full [`MdocDocument`]
-//     pub fn validate(&mut self, document: &mut MdocDocument) -> Result<(), MdocError> {
-//         for element in &mut document.elements {
-//             self.validate_element(element)?;
-//         }
-//         Ok(())
-//     }
-// }
-
 impl MdocParser {
     fn parse_element(pair: Pair<Rule>) -> Element {
         // println!("\"{:?}\"", pair.as_str());
@@ -354,10 +286,7 @@ impl MdocParser {
         // TODO: debug only
         // elements.iter().for_each(|e| println!("{e:?}"));
 
-        let mut mdoc = MdocDocument { elements };
-
-        // let validator = &mut MdocValidator::default();
-        // validator.validate(&mut mdoc)?;
+        let mdoc = MdocDocument { elements };
 
         Ok(mdoc)
     }
@@ -394,22 +323,6 @@ impl MdocParser {
                 compact,
             }
         }
-
-        // fn parse_bd_body(bd_macro: Macro, pair: Pair<Rule>) -> Element {
-        //     if let Macro::Bd { block_type, .. } = bd_macro {
-        //         match block_type {
-        //             BdType::Unfilled | BdType::Literal => {
-
-        //                 println!("371: {}", pair.as_str().replace(" ", "| S |"));
-
-        //                 Element::Text(pair.as_str().to_string())
-        //             },
-        //             _ => MdocParser::parse_element(pair),
-        //         }
-        //     } else {
-        //         unreachable!()
-        //     }
-        // }
 
         let mut pairs = pair.into_inner();
 
@@ -703,9 +616,6 @@ impl MdocParser {
     // Parses (`Nm`)[https://man.openbsd.org/mdoc#Nm]
     // `Nm [name]`
     fn parse_nm(pair: Pair<Rule>) -> Element {
-
-        println!("701: PARSE_NM: Pair:\n{:#?}\n-------------------", pair.clone());
-
         let mut inner_pairs = pair.into_inner();
 
         let mut name = None;
@@ -714,9 +624,7 @@ impl MdocParser {
             name = Some(val.as_str().to_string());
         }
 
-        let nodes: Vec<_> = inner_pairs.map(Self::parse_element).collect();
-
-        // println!("701: PARSE_NM: Nm nodes:\n{:#?}\n-------------------", nodes.clone());
+        let nodes = inner_pairs.map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Nm { name },
