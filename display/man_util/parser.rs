@@ -52,6 +52,11 @@ static BLOCK_PARTIAL_IMPLICIT: &[&str] = &[
     "En", "Op", "Pq", "Ql", "Qq", "Sq", "Vt",
 ];
 
+static BLOCK_PARTIAL_EXPLICIT_CLOSE: &[&str] = &[
+    "Ac", "Bc", "Brc", "Dc", "Fc", "Oc",
+    "Pc", "Qc", "Re", "Sc", "Xc"
+];
+
 #[allow(unreachable_patterns)]
 fn does_start_with_macro(word: &str) -> bool {
     match word {
@@ -98,11 +103,34 @@ fn does_start_with_macro(word: &str) -> bool {
     }
 }
 
+fn correct_closing_macro_parsing(line: &mut String){
+    let Some(macros) = line.split('c').next() else{
+        return;
+    };
+    let Some(macros) = macros.strip_prefix(".") else{
+        return;
+    };
+    let macros = macros.to_string() + "c"; 
+    if BLOCK_PARTIAL_EXPLICIT_CLOSE.contains(&macros.as_str()){
+        let next_non_whitespace = line.chars()
+            .enumerate()
+            .skip(macros.len() + 1)
+            .skip_while(|(_, ch)|ch.is_whitespace())
+            .next();
+        if let Some((pos, '.')) = next_non_whitespace{
+            line.replace_range(pos..(pos+1), "\\&.");
+        }     
+    }
+}
+
 pub fn prepare_document(text: &str) -> String {
     let mut is_bd_literal_block = false;
 
     text.lines()
         .map(|line| {
+            let mut line = line.to_string(); 
+            correct_closing_macro_parsing(&mut line);
+
             if line.contains(".Bd") && (line.contains("-literal") || line.contains("-unfilled")) {
                 is_bd_literal_block = true;
             }
@@ -124,7 +152,7 @@ pub fn prepare_document(text: &str) -> String {
     
                 format!("{}{}", "\\~".repeat(leading_spaces), &line[index..])
             } else {
-                line.to_string()
+                line.clone()
             };
 
             let mut processed_line = if let Some(first_word) = line.split_whitespace().next() {
@@ -265,7 +293,7 @@ impl MdocParser {
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
 
-        // println!("Pairs:\n{pairs:#?}\n\n");
+        //println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -579,6 +607,8 @@ impl MdocParser {
             .into_inner()
             .map(Self::parse_element)
             .collect::<Vec<_>>();
+
+        //println!("It\nhead:\n{:#?}\nbody:\n{:#?}", head, nodes);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::It{
@@ -1060,6 +1090,7 @@ impl MdocParser {
             .take_while(|p| p.as_rule() != Rule::oc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Oo,

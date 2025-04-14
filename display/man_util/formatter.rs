@@ -1816,14 +1816,13 @@ impl MdocFormatter {
             if let Some((min, max)) = row_len_range.as_mut(){
                 let columns_total_width = max_line_width.saturating_sub(columns.iter()
                     .map(|c|c.len()).sum::<usize>());
-                bigger_row_len = Some(if *max < columns_total_width{
-                    *max
+                bigger_row_len = if *max < columns_total_width{
+                    Some(*max)
+                }else if *min == usize::MAX{
+                    None
                 }else{
-                    if *min == usize::MAX{
-                        *min = 0;
-                    }
-                    *min
-                });
+                    Some(*min)
+                }
             };
 
             if let Some(bigger_row_len) = bigger_row_len{
@@ -1838,6 +1837,8 @@ impl MdocFormatter {
                 }
                 if let Some(bigger_row_len) = bigger_row_len{
                     col_widths.push(bigger_row_len);
+                }else if let Some(last_col_width) = col_widths.last_mut(){
+                    *last_col_width = max_line_width - *total_width + *last_col_width;
                 }
             }else{
                 for row in table {
@@ -3634,7 +3635,7 @@ mod tests {
     /// Universal function for all tests
     fn test_formatting(input: &str, output: &str) {
         let ast = get_ast(input);
-        println!("{:#?}", ast);
+        //println!("{:#?}", ast);
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
         println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
@@ -7249,7 +7250,9 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/reboot.2")]
         // #[case("./test_files/mdoc/id.1")]
         // #[case("./test_files/mdoc/rename.2")]
+        
         // #[case("./test_files/mdoc/cu.1")]
+        
         // #[case("./test_files/mdoc/getfh.2")]
         // #[case("./test_files/mdoc/ioctl.2")]
         // #[case("./test_files/mdoc/dup.2")]
@@ -7271,14 +7274,15 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/shutdown.2")]
         // #[case("./test_files/mdoc/tmux.1")]
         
-        //#[case("./test_files/mdoc/nl.1")]
+        // #[case("./test_files/mdoc/nl.1")]
         
         // #[case("./test_files/mdoc/bc.1")]
         
-        //#[case("./test_files/mdoc/mg.1")]
+        // #[case("./test_files/mdoc/mg.1")]
         
-        #[case("./test_files/mdoc/snmp.1")]
-        // #[case("./test_files/mdoc/rdist.1")]
+        // #[case("./test_files/mdoc/snmp.1")]
+        
+        #[case("./test_files/mdoc/rdist.1")]
         
         //Block 1
         // #[case("./test_files/mdoc/chmod.2")]
@@ -7293,7 +7297,9 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/gettimeofday.2")]
         // #[case("./test_files/mdoc/ktrace.2")]
         // #[case("./test_files/mdoc/msgrcv.2")]
+        
         // #[case("./test_files/mdoc/msgsnd.2")]
+        
         // #[case("./test_files/mdoc/mv.1")]
         // #[case("./test_files/mdoc/poll.2")]
         // #[case("./test_files/mdoc/profil.2")]
