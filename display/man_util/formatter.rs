@@ -31,9 +31,8 @@ lazy_static! {
     };
 
     pub static ref SUBSTITUTIONS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::with_capacity(400);
+        let mut m = HashMap::with_capacity(410);
         m.insert(r"\[dq]", "\"");
-        m.insert(r"\e",   "\\");
         m.insert(r"\[ti]", "~");
         m.insert(r"\[aq]", "'");
         m.insert(r"\(em", "—");
@@ -729,9 +728,10 @@ impl MdocFormatter {
         lines.push(self.format_footer());
 
         let content = lines.join("\n");
-        
-        replace_escapes(&content)
-            .into_bytes()
+
+        content.into_bytes()        
+        // replace_escapes(&content)
+        //     .into_bytes()
     }
 
     fn format_default_header(&mut self) -> String {
@@ -7610,7 +7610,7 @@ footer text                     January 1, 1970                    footer text";
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
         // #[case("./test_files/mdoc/tmux.1")]
-        #[case("./test_files/mdoc/nl.1")]
+        // #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/mg.1")]
         // #[case("./test_files/mdoc/snmp.1")]
@@ -7659,7 +7659,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
 
-        // #[case("./test_files/mdoc/test.1")]
+        #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")

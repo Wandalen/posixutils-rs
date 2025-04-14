@@ -102,7 +102,14 @@ pub fn prepare_document(text: &str) -> String {
     let mut is_bd_literal_block = false;
 
     text.lines()
-        .map(|line| {
+        .map(|l| {
+            let line = if l.contains(".It") {
+                l.replace('\t', &format!("{}", "\\~".repeat(4)))
+                    .replace("    ", &format!("{}", "\\~".repeat(4)))
+            } else {
+                l.to_string()
+            };
+
             if line.contains(".Bd") && (line.contains("-literal") || line.contains("-unfilled")) {
                 is_bd_literal_block = true;
             }
@@ -116,15 +123,13 @@ pub fn prepare_document(text: &str) -> String {
                 let mut index = 0;
                 for (i, ch) in line.char_indices() {
                     if !ch.is_whitespace() { break; }
-                
-                    leading_spaces += if ch.eq(&'\t') { 4 } else { 1 };
-    
+                    leading_spaces += if ch == '\t' { 4 } else { 1 };
                     index = i + ch.len_utf8();
                 }
     
                 format!("{}{}", "\\~".repeat(leading_spaces), &line[index..])
             } else {
-                line.to_string()
+                line.clone()
             };
 
             let mut processed_line = if let Some(first_word) = line.split_whitespace().next() {
@@ -258,9 +263,9 @@ impl MdocParser {
     pub fn parse_mdoc(input: &str) -> Result<MdocDocument, MdocError> {
         let input = prepare_document(&input);
 
-        // for line in input.lines() {
-        //     println!("{}", line);
-        // }
+        for line in input.lines() {
+            println!("{}", line);
+        }
 
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
@@ -530,6 +535,9 @@ impl MdocParser {
     // Parses (`It`)[https://man.openbsd.org/mdoc#It]
     // `It [head]`
     fn parse_it_block(pair: Pair<Rule>) -> Element {
+
+        // println!("Pair:\n{:#?}", pair.clone());
+
         fn string_to_elements(input: &str) -> Vec<Element>{
             if let Ok(pairs) = MdocParser::parse(Rule::args, input){
                 pairs

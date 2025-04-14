@@ -287,10 +287,6 @@ ta  = ${ "Ta" ~ !text_arg ~ ws* ~ NEWLINE? }
 
 it_head  = ${ (ws* ~ ".")* ~ "It" ~ !text_arg ~ (ws* ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
 it_body  = ${ (!(".It") ~ !(".El") ~ ("." ~ comment_macro ~ NEWLINE)* ~ element ~ NEWLINE?)* }
-// =======
-// it_head  = ${ (ws | NEWLINE | ".")* ~ "."? ~ "It" ~ !text_arg ~ (ws* ~ (ta_head | macro_arg | word))* ~ ws* ~ NEWLINE? }
-// it_body  = ${ ((ws | NEWLINE | ".")* ~ !("It") ~ !("El") ~ element ~ NEWLINE?)* }
-// >>>>>>> origin/inline-macros-ms-xr
 it_block = ${ it_head ~ it_body }
 
 // -- Nd
