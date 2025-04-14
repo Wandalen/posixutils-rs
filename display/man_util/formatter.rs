@@ -7609,7 +7609,7 @@ footer text                     January 1, 1970                    footer text";
 
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
-        // #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/mg.1")]
@@ -7659,7 +7659,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
 
-        #[case("./test_files/mdoc/test.1")]
+        // #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")
