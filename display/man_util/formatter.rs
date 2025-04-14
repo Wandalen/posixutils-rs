@@ -452,7 +452,7 @@ lazy_static! {
 }
 
 pub fn replace_escapes(input: &str) -> String {
-    let mut input = OUTER_REGEX
+    let input = OUTER_REGEX
         .replace_all(input, |caps: &regex::Captures| {
             if let Some(quoted) = caps.name("quoted") {
                 quoted.as_str().to_string()
@@ -687,8 +687,6 @@ impl MdocFormatter {
             if let Element::Macro(ref macro_node) = node {
                 if !matches!(macro_node.mdoc_macro, Macro::Sh { .. } | Macro::Ss { .. } | Macro::Bd { .. } | Macro::An { .. })
                     && formatted_node.split("\n").count() > 1 {
-                        
-                    // println!("Inside if statement");
                     formatted_node = formatted_node.trim().to_string();
                 }
                 if matches!(macro_node.mdoc_macro, Macro::Bd { .. }) {
@@ -697,18 +695,10 @@ impl MdocFormatter {
                 }
             }
         
-            // println!(
-            //     "Formatted node: {}\n----------",
-            //     formatted_node.replace("\n", "| NEWLINE |")
-            // );
-        
             self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
 
         if !current_line.is_empty() {
-
-            // println!("Current line: {}", current_line.replace("\n", "| NEWLINE |"));
-
             lines.push(current_line.trim_end().to_string());
         }
 
@@ -2302,9 +2292,9 @@ impl MdocFormatter {
             let first_name = self.formatting_state.first_name.as_ref().unwrap();
     
             if is_first_char_delimiter(&content) {
-                format!("{}{}", first_name, content)
+                format!("\n{}{}", first_name, content)
             } else {
-                format!("{} {}", first_name, content)
+                format!("\n{} {}", first_name, content)
             }
         } else {
             let provided_name = match name {
@@ -2323,7 +2313,7 @@ impl MdocFormatter {
             let separator1 = if is_first_char_delimiter(&provided_name) { "" } else { " " };
             let separator2 = if is_first_char_delimiter(&content) { "" } else { " " };
     
-            format!("{}{}{}{}{}", first_name, separator1, provided_name, separator2, content.trim())
+            format!("\n{}{}{}{}{}", first_name.trim(), separator1, provided_name.trim(), separator2, content.trim())
         }
     }
 
@@ -2486,12 +2476,12 @@ impl MdocFormatter {
 
 // Formatting block partial-explicit.
 impl MdocFormatter {
-    fn format_partial_explicit_block(&mut self, macro_node: MacroNode) -> String {
+    fn format_partial_explicit_block(&mut self, iter: impl Iterator<Item = Element>) -> String {
         let mut result = String::new();
         let mut prev_was_open = false;
         let mut is_first_node = true;
     
-        for node in macro_node.nodes {
+        for node in iter {
             match node {
                 Element::Text(text) => {
                     match text.as_str() {
@@ -2533,27 +2523,123 @@ impl MdocFormatter {
     }
 
     fn format_a_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Ac)
+                } else {
+                    false
+                }
+            });
 
-        format!("⟨{}⟩ ", formatted_block.trim())
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Ac)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("⟨{}⟩{}", formatted_body, formatted_tail);
+        }
+
+        format!("⟨{}⟩ {}", formatted_body, formatted_tail)
     }
 
     fn format_b_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Bc)
+                } else {
+                    false
+                }
+            });
 
-        format!("[{}] ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Bc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("[{}]{}", formatted_body.trim(), formatted_tail.trim());
+        }
+
+        format!("[{}] {}", formatted_body.trim(), formatted_tail.trim())
     }
 
     fn format_br_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Brc)
+                } else {
+                    false
+                }
+            });
 
-        format!("{{{}}} ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Brc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("{{{}}}{}", formatted_body.trim(), formatted_tail.trim());
+        }
+
+        format!("{{{}}} {}", formatted_body, formatted_tail.trim())
     }
 
     fn format_d_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Dc)
+                } else {
+                    false
+                }
+            });
 
-        format!("“{}” ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Dc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("“{}”{}", formatted_body.trim(), formatted_tail.trim());
+        }
+
+        format!("“{}” {}", formatted_body.trim(), formatted_tail.trim())
     }
 
     fn format_e_block(
@@ -2562,24 +2648,44 @@ impl MdocFormatter {
         closing_delimiter: Option<char>,
         macro_node: MacroNode,
     ) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Dc)
+                } else {
+                    false
+                }
+            });
+
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Dc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
 
         match (opening_delimiter, closing_delimiter) {
             (Some(open), Some(close)) => {
-                format!("{}{}{} ", open, formatted_block, close)
+                format!("{}{}{} {} ", open, formatted_body.trim(), close, formatted_tail.trim())
             }
             (Some(open), None) => {
-                format!("{}{} ", open, formatted_block)
+                format!("{}{} {} ", open, formatted_body.trim(), formatted_tail.trim())
             }
             (None, Some(close)) => {
-                format!("{}{} ", formatted_block, close)
+                format!("{}{} {} ", formatted_body.trim(), close, formatted_tail.trim())
             }
-            (None, None) => formatted_block,
+            (None, None) => format!("{} {}", formatted_body.trim(), formatted_tail.trim()),
         }
     }
 
     fn format_f_block(&mut self, funcname: String, macro_node: MacroNode) -> String {
-        let mut content = macro_node
+        let mut body = macro_node
             .nodes
             .into_iter()
             .map(|node| {
@@ -2593,38 +2699,162 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
             .join("");
         
-        content.pop();
-        content.pop();
-        
-        format!("{}({})", funcname, content)
+        body.pop();
+        body.pop();
+
+        format!("{}({});", funcname, body)
     }
 
     fn format_o_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Oc)
+                } else {
+                    false
+                }
+            });
 
-        format!("[{}]", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Oc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("[{}]{}", formatted_body, formatted_tail);
+        }
+
+        format!("[{}] {}", formatted_body, formatted_tail)
     }
 
     fn format_p_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Pc)
+                } else {
+                    false
+                }
+            });
 
-        format!("({}) ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Pc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("({}){}", formatted_body, formatted_tail);
+        }
+
+        format!("({}) {} ", formatted_body.trim(), formatted_tail.trim())
     }
 
     fn format_q_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Qc)
+                } else {
+                    false
+                }
+            });
 
-        format!("\"{}\" ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Qc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("\"{}\"{} ", formatted_body, formatted_tail);
+        }
+
+        format!("\"{}\" {} ", formatted_body.trim(), formatted_tail.trim())
     }
 
     fn format_s_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Sc)
+                } else {
+                    false
+                }
+            });
 
-        format!("'{}' ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Sc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        println!("Formatted body: {}\nFormatted tail: {}", formatted_body, formatted_tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("'{}'{} ", formatted_body, formatted_tail);
+        }
+
+        format!("'{}' {} ", formatted_body, formatted_tail)
     }
 
     fn format_x_block(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_explicit_block(macro_node)
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Xc)
+                } else {
+                    false
+                }
+            });
+
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Xc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("{}{} ", formatted_body, formatted_tail);
+        }
+
+        format!("{} {} ", formatted_body, formatted_tail)
     }
 }
 
@@ -3642,6 +3872,13 @@ fn is_first_char_alnum(s: &str) -> bool {
 fn is_first_char_delimiter(s: &str) -> bool {
     s.chars().next().map(|c| match c {
         '(' | '[' | ')' | ']' | '.' | ',' | ':' | ';' | '!' | '?' => true,
+        _ => false
+    }).unwrap_or(false)
+}
+
+fn is_first_word_delimiter(s: &str) -> bool {
+    s.split_whitespace().next().map(|c| match c {
+        "(" | "[" | ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => true,
         _ => false
     }).unwrap_or(false)
 }
@@ -7298,7 +7535,7 @@ footer text                     January 1, 1970                    footer text";
 
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
-        #[case("./test_files/mdoc/tmux.1")]
+        // #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/mg.1")]
@@ -7348,7 +7585,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
 
-        // #[case("./test_files/mdoc/test.1")]
+        #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")

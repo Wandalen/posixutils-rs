@@ -868,11 +868,18 @@ impl MdocParser {
     // Parses (`Ao`)[https://man.openbsd.org/mdoc#Ao]:
     // `Ao block`
     fn parse_ao_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
             .take_while(|p| p.as_rule() != Rule::ac)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
+        let ac = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::ac)
+            .map(Self::parse_ac);
+
+        nodes.extend(ac);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Ao,
@@ -894,12 +901,18 @@ impl MdocParser {
     // Parses (`Bo`)[https://man.openbsd.org/mdoc#Bo]:
     // `Bo block`
     fn parse_bo_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
             .take_while(|p| p.as_rule() != Rule::bc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
 
+        let bc = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::bc)
+            .map(Self::parse_bc);
+
+        nodes.extend(bc);
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Bo,
             nodes,
@@ -908,21 +921,30 @@ impl MdocParser {
 
     // Parses (`Bc`)[https://man.openbsd.org/mdoc#Bc]:
     // `Bc`
-    fn parse_bc(_pair: Pair<Rule>) -> Element {
+    fn parse_bc(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Bc,
-            nodes: vec![],
+            nodes,
         })
     }
 
     // Parses (`Bro`)[https://man.openbsd.org/mdoc#Bro]:
     // `Bro`
     fn parse_bro_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
             .take_while(|p| p.as_rule() != Rule::brc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
+        let brc = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::brc)
+            .map(Self::parse_brc);
+
+        nodes.extend(brc);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Bro,
@@ -932,21 +954,30 @@ impl MdocParser {
 
     // Parses (`Brc`)[https://man.openbsd.org/mdoc#Brc]:
     // `Brc`
-    fn parse_brc(_pair: Pair<Rule>) -> Element {
+    fn parse_brc(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Brc,
-            nodes: vec![],
+            nodes,
         })
     }
 
     // Parses (`Do`)[https://man.openbsd.org/mdoc#Do]:
     // `Do`
     fn parse_do_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
             .take_while(|p| p.as_rule() != Rule::dc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
+        let dc = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::dc)
+            .map(Self::parse_dc);
+
+        nodes.extend(dc);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Do,
@@ -956,10 +987,12 @@ impl MdocParser {
 
     // Parses (`Dc`)[https://man.openbsd.org/mdoc#Dc]:
     // `Dc block`
-    fn parse_dc(_pair: Pair<Rule>) -> Element {
+    fn parse_dc(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Dc,
-            nodes: vec![],
+            nodes
         })
     }
 
@@ -1015,10 +1048,12 @@ impl MdocParser {
 
     // Parses (`Ec`)[https://man.openbsd.org/mdoc#Ec]:
     // `Ec`
-    fn parse_ec(_pair: Pair<Rule>) -> Element {
+    fn parse_ec(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Ec,
-            nodes: vec![],
+            nodes
         })
     }
 
@@ -1026,14 +1061,13 @@ impl MdocParser {
     // `Fo block`
     fn parse_fo_block(pair: Pair<Rule>) -> Element {
         let mut inner_pairs = pair.into_inner();
-
         let mut head = inner_pairs.next().unwrap().into_inner();
 
         let funcname = head.next().unwrap().as_str().to_string();
-
         let mut nodes: Vec<_> = head.map(Self::parse_element).collect();
 
         nodes.extend(inner_pairs
+            // .take_while(|p| p.as_rule() != Rule::fc)
             .filter_map(|p| p.into_inner().next().map(Self::parse_element))
         );
 
@@ -1045,21 +1079,30 @@ impl MdocParser {
 
     // Parses (`Fc`)[https://man.openbsd.org/mdoc#Fc]:
     // `Fc`
-    fn parse_fc(_pair: Pair<Rule>) -> Element {
+    fn parse_fc(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Fc,
-            nodes: vec![],
+            nodes
         })
     }
 
     // Parses (`Oo`)[https://man.openbsd.org/mdoc#Oo]:
     // `Oo block`
     fn parse_oo_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
             .take_while(|p| p.as_rule() != Rule::oc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
+        let oc = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::oc)
+            .map(Self::parse_oc);
+
+        nodes.extend(oc);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Oo,
@@ -1070,9 +1113,6 @@ impl MdocParser {
     // Parses (`Oc`)[https://man.openbsd.org/mdoc#Oc]:
     // `Oc`
     fn parse_oc(pair: Pair<Rule>) -> Element {
-
-        // println!("Parsing Oc macro");
-
         let nodes = pair.into_inner().map(Self::parse_element).collect();
 
         Element::Macro(MacroNode {
@@ -1085,11 +1125,18 @@ impl MdocParser {
     // Parses (`Po`)[https://man.openbsd.org/mdoc#Po]:
     // `Po block`
     fn parse_po_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
             .take_while(|p| p.as_rule() != Rule::pc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
+        let pc = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::pc)
+            .map(Self::parse_pc);
+
+        nodes.extend(pc);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Po,
@@ -1099,21 +1146,30 @@ impl MdocParser {
 
     // Parses (`Pc`)[https://man.openbsd.org/mdoc#Pc]:
     // `Pc`
-    fn parse_pc(_pair: Pair<Rule>) -> Element {
+    fn parse_pc(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Pc,
-            nodes: vec![],
+            nodes
         })
     }
 
     // Parses (`Qo`)[https://man.openbsd.org/mdoc#Qo]:
     // `Qo block`
     fn parse_qo_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
             .take_while(|p| p.as_rule() != Rule::qc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
+        let qc = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::qc)
+            .map(Self::parse_qc);
+
+        nodes.extend(qc);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Qo,
@@ -1123,10 +1179,12 @@ impl MdocParser {
 
     // Parses (`Qc`)[https://man.openbsd.org/mdoc#Qc]:
     // `Qc`
-    fn parse_qc(_pair: Pair<Rule>) -> Element {
+    fn parse_qc(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Qc,
-            nodes: vec![],
+            nodes
         })
     }
 
@@ -1185,21 +1243,30 @@ impl MdocParser {
 
     // Parses (`Re`)[https://man.openbsd.org/mdoc#Re]:
     // `Re`
-    fn parse_re(_pair: Pair<Rule>) -> Element {
+    fn parse_re(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Re,
-            nodes: vec![],
+            nodes
         })
     }
 
     // Parses (`So`)[https://man.openbsd.org/mdoc#So]:
     // `So block`
     fn parse_so_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
             .take_while(|p| p.as_rule() != Rule::sc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
+        let sc = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::sc)
+            .map(Self::parse_sc);
+
+        nodes.extend(sc);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::So,
@@ -1209,21 +1276,30 @@ impl MdocParser {
 
     // Parses (`Sc`)[https://man.openbsd.org/mdoc#Sc]:
     // `Sc`
-    fn parse_sc(_pair: Pair<Rule>) -> Element {
+    fn parse_sc(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+
         Element::Macro(MacroNode {
-            mdoc_macro: Macro::So,
-            nodes: vec![],
+            mdoc_macro: Macro::Sc,
+            nodes
         })
     }
 
     // Parses (`Xo`)[https://man.openbsd.org/mdoc#Xo]:
     // `Xo block`
     fn parse_xo_block(pair: Pair<Rule>) -> Element {
-        let nodes = pair
-            .into_inner()
-            .take_while(|p| p.as_rule() != Rule::pc)
+        let inner_pairs = pair.into_inner();
+        let mut nodes: Vec<_> = inner_pairs
+            .clone()
+            .take_while(|p| p.as_rule() != Rule::xc)
             .flat_map(|p| p.into_inner().map(Self::parse_element).collect::<Vec<_>>())
             .collect();
+
+        let xc = inner_pairs
+            .skip_while(|p| p.as_rule() != Rule::xc)
+            .map(Self::parse_xc);
+
+        nodes.extend(xc);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Xo,
@@ -1233,10 +1309,12 @@ impl MdocParser {
 
     // Parses (`Xc`)[https://man.openbsd.org/mdoc#Xc]:
     // `Xc`
-    fn parse_xc(_pair: Pair<Rule>) -> Element {
+    fn parse_xc(pair: Pair<Rule>) -> Element {
+        let nodes = pair.into_inner().map(Self::parse_element).collect();
+        
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Xc,
-            nodes: vec![],
+            nodes
         })
     }
 

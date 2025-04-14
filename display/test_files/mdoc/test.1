@@ -1,9 +1,27 @@
-.Dd $Mdocdate: March 24 2025 $
-.Dt TMUX 1
+.Dd $Mdocdate: March 31 2022 $
+.Dt SNMP 1
 .Os
 .Sh NAME
-.Nm tmux
-.Nd terminal multiplexer
+.Nm snmp
+.Nd simple SNMP client
 .Sh SYNOPSIS
-.Nm tmux
-.Ql mysession ) .
+.Nm
+.Ao Ar varoid type value Ac ...
+.Nm
+.Bo Ar varoid type value Bc ...
+.Nm
+.Bro Ar varoid type value Brc ...
+.Nm
+.Xo Ar varoid type value Xc ...
+.Nm
+.So Ar varoid type value Sc ...
+.Nm
+.Do Ar varoid type value Dc ...
+.Nm
+.Qo Ar varoid type value Qc ...
+.Nm
+.Po Ar varoid type value Pc ...
+.Nm
+.Fo funcname 
+varoid type value 
+.Fc
