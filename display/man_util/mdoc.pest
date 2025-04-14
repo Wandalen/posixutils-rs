@@ -19,7 +19,7 @@ NEWLINE    = _{ "\r"? ~ "\n" }
 comment_start = _{ "\\" ~ "\"" }
 comment_macro = _{ comment_start ~ (!(NEWLINE | EOI) ~ ANY)* }
 
-text_non_comment = ${ (!comment_start ~ word ~ ws*)+ }
+text_non_comment = ${ (!comment_start ~ ws* ~ word ~ ws*)+ }
 text_line        = { !"." ~ (comment_macro | text_non_comment)+ ~ (NEWLINE+ | EOI) }
 line             = { !"." ~ (comment_macro | text_non_comment)+ }
 
@@ -42,6 +42,7 @@ macro_arg = {
   ) 
   ~ 
   (
+    block_full_implicit | 
     block_partial_implicit |
     block_partial_explicit |
     inline | ta 
@@ -315,73 +316,74 @@ ss_block         =  { ss_open ~ (NEWLINE ~ ss_block_element*)? }
 
 // --- Ao & Ac
 
-ac       = ${ "Ac" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+ac       = ${ "Ac" ~ ws* }
 ao_head  = ${ "Ao" ~ !text_arg ~ (ws+ ~ !ac ~ text_arg)* ~ ws* ~ NEWLINE? }
 ao_body  = ${ !("."? ~ ac) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 ao_block = ${ ao_head ~ ao_body* ~ "."? ~ ac }
 
 // --- Bo & Bc
-bc       = ${ "Bc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+bc       = ${ "Bc" ~ ws* }
 bo_head  = ${ "Bo" ~ !text_arg ~ (ws+ ~ !bc ~ text_arg)* ~ ws* ~ NEWLINE? }
 bo_body  = ${ !("."? ~ bc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 bo_block = ${ bo_head ~ bo_body* ~ "."? ~ bc }
 
 // --- Bro & Brc
-brc       = ${ "Brc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+brc       = ${ "Brc" ~ ws* }
 bro_head  = ${ "Bro" ~ !text_arg ~ (ws+ ~ !brc ~ text_arg)* ~ ws* ~ NEWLINE? }
 bro_body  = ${ !("."? ~ brc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 bro_block = ${ bro_head ~ bro_body* ~ "."? ~ brc }
 
 // --- Do & Dc
-dc       = ${ "Dc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+dc       = ${ "Dc" ~ ws* }
 do_head  = ${ "Do" ~ !text_arg ~ (ws+ ~ !dc ~ text_arg)* ~ ws* ~ NEWLINE? }
 do_body  = ${ !("."? ~ dc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 do_block = ${ do_head ~ do_body* ~ "."? ~ dc }
 
 // --- Eo & Ec
-ec       = ${ "Ec" ~ !text_arg ~ (ws+ ~ closing_delimiter)? ~ ws* ~ NEWLINE? }
+ec       = ${ "Ec" ~ !text_arg ~ (ws+ ~ closing_delimiter)? ~ ws* }
 eo_head  = ${ "Eo" ~ !text_arg ~ (ws+ ~ opening_delimiter)? ~ (ws+ ~ !ec ~ text_arg)* ~ ws* ~ NEWLINE? }
 eo_body  = ${ !("."? ~ ec) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 eo_block = ${ eo_head ~ eo_body* ~ "."? ~ ec }
 
 // --- Fo & Fc
-fc       = ${ "Fc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+fc       = ${ "Fc" ~ ws* }
 fo_head  = ${ "Fo" ~ !text_arg ~ ws+ ~ word ~ (ws+ ~ !fc ~ (comment_macro | line))? ~ ws* ~ NEWLINE? }
 fo_body  = ${ !("."? ~ fc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 fo_block = ${ fo_head ~ fo_body* ~ "."? ~ fc }
 
 // --- Oo & Oc
-oc       = ${ "Oc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+oc       = ${ "Oc" ~ ws* }
+//oc       = ${ "Oc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* }
 oo_head  = ${ "Oo" ~ !text_arg ~ (ws+ ~ !oc ~ text_arg)* ~ ws* ~ NEWLINE? }
 oo_body  = ${ !("."? ~ oc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 oo_block = ${ oo_head ~ oo_body* ~ "."? ~ oc }
 
 // --- Po & Pc
-pc       = ${ "Pc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+pc       = ${ "Pc" ~ ws* }
 po_head  = ${ "Po" ~ !text_arg ~ (ws+ ~ !pc ~ text_arg)* ~ ws* ~ NEWLINE? }
 po_body  = ${ !("."? ~ pc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 po_block = ${ po_head ~ po_body* ~ "."? ~ pc }
 
 // --- Qo & Qc
-qc       = ${ "Qc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+qc       = ${ "Qc" ~ ws* }
 qo_head  = ${ "Qo" ~ !text_arg ~ (ws+ ~ !qc ~ text_arg)* ~ ws* ~ NEWLINE? }
 qo_body  = ${ !("."? ~ qc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 qo_block = ${ qo_head ~ qo_body* ~ "."? ~ qc }
 
 // --- Rs & Re
-re       = ${ "Re" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+re       = ${ "Re" ~ ws* }
 rs_head  = ${ "Rs" ~ !text_arg ~ (ws+ ~ (rs_submacro | comment_macro))* ~ ws* ~ NEWLINE? }
 rs_body  = ${ "."? ~ (rs_submacro | comment_macro) ~ ws* ~ NEWLINE? }
 rs_block = ${ rs_head ~ rs_body* ~ "."? ~ re }
 
 // --- So & Sc
-sc       = ${ "Sc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+sc       = ${ "Sc" ~ ws* }
 so_head  = ${ "So" ~ !text_arg ~ (ws+ ~ !sc ~ text_arg)* ~ ws* ~ NEWLINE? }
 so_body  = ${ !("."? ~ sc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 so_block = ${ so_head ~ so_body* ~ "."? ~ sc }
 
 // --- Xo & Xc
-xc       = ${ "Xc" ~ !text_arg ~ (ws+ ~ text_arg)* ~ ws* ~ NEWLINE? }
+xc       = ${ "Xc" ~ ws* }
 xo_head  = ${ "Xo" ~ !text_arg ~ (ws+ ~ !xc ~ text_arg)* ~ ws* ~ NEWLINE? }
 xo_body  = ${ !("."? ~ xc) ~ ("." ~ comment_macro ~ NEWLINE)* ~ element }
 xo_block = ${ xo_head ~ xo_body* ~ "."? ~ xc }
@@ -403,7 +405,6 @@ en_block  = ${ "En"  ~ !text_arg ~ (ws* ~ partial_implicit_element)+ ~ ws* ~ NEW
 op_block  = ${ "Op"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
 pq_block  = ${ "Pq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
 ql_block  = ${ "Ql"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
-// ql_block  = ${ "Ql"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* }
 qq_block  = ${ "Qq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
 sq_block  = ${ "Sq"  ~ !text_arg ~ (ws* ~ partial_implicit_element)* ~ ws* ~ NEWLINE? }
 vt_block  = ${ "Vt"  ~ !text_arg ~ (ws* ~ partial_implicit_element)+ ~ ws* ~ NEWLINE? }

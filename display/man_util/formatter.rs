@@ -41,7 +41,7 @@ lazy_static! {
         m.insert("\\[pfmacroescape] ", "");
         m.insert("\\[anmacroescape]", "\n");
         // Spaces:
-        m.insert(r"\ ", " "); // unpaddable space
+        //m.insert(r"\ ", " "); // unpaddable space
         m.insert(r"\~", " "); // paddable space
         m.insert(r"\0", " "); // digit-width space
         m.insert(r"\|", " "); // one-sixth \(em narrow space
@@ -49,7 +49,8 @@ lazy_static! {
         m.insert(r"\&", "");  // zero-width space
         m.insert(r"\)", "");  // zero-width space (transparent to end-of-sentence detection)
         m.insert(r"\%", "");  // zero-width space allowing hyphenation
-        m.insert(r"\:", "");  // zero-width space allowing line break
+        //m.insert(r"\:", "");  // zero-width space allowing line break
+
         // Lines:
         m.insert(r"\(ba", "|"); // bar
         m.insert(r"\(br", "│"); // box rule
@@ -607,13 +608,14 @@ impl MdocFormatter {
                 current_line.clear();
             }
 
-            if current_line.chars().count() + line.chars().count() > max_width || is_one_line {
+            let line_len = current_line.len() + line.len();
+            if line_len > max_width || is_one_line {
                 let indent = get_indent(&line);
                 let max_width = max_width.saturating_sub(indent.len());
 
                 for word in line.split_whitespace() {
-
-                    if current_line.chars().count() + word.chars().count() >= max_width {
+                    let line_len = current_line.len() + word.len();
+                    if line_len >= max_width {
                         lines.push(indent.clone() + current_line.trim());
                         current_line.clear(); 
                     }
@@ -823,11 +825,13 @@ impl MdocFormatter {
 
     /// Convert one [`Element`] AST to [`String`]
     fn format_node(&mut self, node: Element) -> String {
-        match node {
+        let result = match node {
             Element::Macro(macro_node) => self.format_macro_node(macro_node),
             Element::Text(text) => self.format_text_node(text.as_str()),
             Element::Eoi => "".to_string(),
-        }
+        };
+
+        replace_escapes(&result) 
     }
 
     /// Convert one [`MacroNode`] AST to [`String`] 
@@ -1009,7 +1013,7 @@ fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
     let mut i = 0; 
     while i < words.len(){
         let l = line.clone();
-        let word_len = remove_ansi_escapes(&words[i]).len();
+        let word_len = words[i].len();
         if l.is_empty() || word_len > width{
             lines.extend(words[i]
                 .chars()
@@ -1313,8 +1317,14 @@ fn remove_ansi_escapes(text: &str) -> String{
 
     let mut ends = vec![];
     for start in &starts{
-        if let Some(e) = text.chars().skip(*start).position(|ch|ch.is_alphabetic()){
-            ends.push(e);
+        let end = text.chars()
+            .enumerate()
+            .skip(*start + 5)
+            .find(|(_, ch)|ch.is_alphabetic())
+            .map(|(i, _)| i);
+
+        if let Some(end) = end{
+            ends.push(end);
         }
     }
 
@@ -1325,7 +1335,7 @@ fn remove_ansi_escapes(text: &str) -> String{
 
     for r in replace_ranges.clone().into_iter().rev(){
         text = text.chars().enumerate()
-            .filter_map(|(i,ch)| if r.contains(&&i){
+            .filter_map(|(i,ch)| if !r.contains(&&i){
                 Some(ch)
             }else{
                 None
@@ -1505,13 +1515,7 @@ impl MdocFormatter {
             .collect::<Vec<String>>()
             .join("");
 
-        let normal_font = if !font_change.is_empty() {
-            "\x1b[0m"
-        }else{
-            ""
-        };
-
-        font_change + &content + normal_font
+        content
     }
 
     fn format_bk_block(&mut self, macro_node: MacroNode) -> String {
@@ -1801,7 +1805,7 @@ impl MdocFormatter {
                             row_len_range = Some((usize::MAX, 0));
                         }
                         let end = row.split_off(col_count).join(" ");
-                        let end_len = remove_ansi_escapes(&end).len();
+                        let end_len = end.len();
                         row_len_range = row_len_range.map(|r|{
                             if end_len == 0{
                                 return (r.0, r.1.max(end_len)); 
@@ -1827,14 +1831,13 @@ impl MdocFormatter {
             if let Some((min, max)) = row_len_range.as_mut(){
                 let columns_total_width = max_line_width.saturating_sub(columns.iter()
                     .map(|c|c.len()).sum::<usize>());
-                bigger_row_len = Some(if *max < columns_total_width{
-                    *max
+                bigger_row_len = if *max < columns_total_width{
+                    Some(*max)
+                }else if *min == usize::MAX{
+                    None
                 }else{
-                    if *min == usize::MAX{
-                        *min = 0;
-                    }
-                    *min
-                });
+                    Some(*min)
+                }
             };
 
             if let Some(bigger_row_len) = bigger_row_len{
@@ -1849,6 +1852,8 @@ impl MdocFormatter {
                 }
                 if let Some(bigger_row_len) = bigger_row_len{
                     col_widths.push(bigger_row_len);
+                }else if let Some(last_col_width) = col_widths.last_mut(){
+                    *last_col_width = max_line_width - *total_width + *last_col_width;
                 }
             }else{
                 for row in table {
@@ -1967,16 +1972,17 @@ impl MdocFormatter {
                 .flatten()
                 .collect::<Vec<_>>(); 
 
-            let mut head = head; 
-            let space = if head.len() < indent{
+            let head = head.trim().to_string(); 
+            let space = if head.len() < indent.saturating_sub(1){
                 if let Some(line) = body.first_mut(){
                     *line = line.trim_start().to_string();
                 }
-                head.retain(|ch|!(ch.is_whitespace() || ch.is_control()));
                 " ".repeat(indent - head.len())
             }else{
                 "\n".to_string()
             };
+
+            //println!("{:?}", (origin_indent_str.clone(), head.clone(), space.clone(), body.join("\n"), "\n"));
 
             content.push_str(
                 &(origin_indent_str.clone() + &head + &space + &body.join("\n") + "\n")
@@ -2263,14 +2269,12 @@ impl MdocFormatter {
         } else {
             let provided_name = match name {
                 Some(name) => name,
-                None => String::new()
+                None => self.formatting_state.first_name.clone().unwrap()
             };
-            let first_name = self.formatting_state.first_name.as_ref().unwrap();
     
-            let separator1 = if is_first_char_delimiter(&provided_name) { "" } else { " " };
-            let separator2 = if is_first_char_delimiter(&content) { "" } else { " " };
+            let separator = if is_first_char_delimiter(&content) { "" } else { " " };
     
-            format!("{}{}{}{}{}", first_name.trim(), separator1, provided_name.trim(), separator2, content.trim())
+            format!("{}{}{}", provided_name.trim(), separator, content.trim())
         }
     }
 
@@ -3975,6 +3979,7 @@ mod tests {
     /// Universal function for all tests
     fn test_formatting(input: &str, output: &str) {
         let ast = get_ast(input);
+        //println!("{:#?}", ast);
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
         println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
@@ -7589,7 +7594,9 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/reboot.2")]
         // #[case("./test_files/mdoc/id.1")]
         // #[case("./test_files/mdoc/rename.2")]
+        
         // #[case("./test_files/mdoc/cu.1")]
+        
         // #[case("./test_files/mdoc/getfh.2")]
         // #[case("./test_files/mdoc/ioctl.2")]
         // #[case("./test_files/mdoc/dup.2")]
@@ -7610,11 +7617,16 @@ footer text                     January 1, 1970                    footer text";
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
         // #[case("./test_files/mdoc/tmux.1")]
+
         // #[case("./test_files/mdoc/nl.1")]
+        
         // #[case("./test_files/mdoc/bc.1")]
+        
         // #[case("./test_files/mdoc/mg.1")]
-        #[case("./test_files/mdoc/snmp.1")]
-        // #[case("./test_files/mdoc/rdist.1")]
+        
+        // #[case("./test_files/mdoc/snmp.1")]
+        
+        #[case("./test_files/mdoc/rdist.1")]
         
         //Block 1
         // #[case("./test_files/mdoc/chmod.2")]
@@ -7629,7 +7641,9 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/gettimeofday.2")]
         // #[case("./test_files/mdoc/ktrace.2")]
         // #[case("./test_files/mdoc/msgrcv.2")]
+        
         // #[case("./test_files/mdoc/msgsnd.2")]
+        
         // #[case("./test_files/mdoc/mv.1")]
         // #[case("./test_files/mdoc/poll.2")]
         // #[case("./test_files/mdoc/profil.2")]

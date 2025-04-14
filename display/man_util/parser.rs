@@ -52,6 +52,11 @@ static BLOCK_PARTIAL_IMPLICIT: &[&str] = &[
     "En", "Op", "Pq", "Ql", "Qq", "Sq", "Vt",
 ];
 
+static BLOCK_PARTIAL_EXPLICIT_CLOSE: &[&str] = &[
+    "Ac", "Bc", "Brc", "Dc", "Fc", "Oc",
+    "Pc", "Qc", "Re", "Sc", "Xc"
+];
+
 #[allow(unreachable_patterns)]
 fn does_start_with_macro(word: &str) -> bool {
     match word {
@@ -98,6 +103,26 @@ fn does_start_with_macro(word: &str) -> bool {
     }
 }
 
+fn correct_closing_macro_parsing(line: &mut String){
+    let Some(macros) = line.split('c').next() else{
+        return;
+    };
+    let Some(macros) = macros.strip_prefix(".") else{
+        return;
+    };
+    let macros = macros.to_string() + "c"; 
+    if BLOCK_PARTIAL_EXPLICIT_CLOSE.contains(&macros.as_str()){
+        let next_non_whitespace = line.chars()
+            .enumerate()
+            .skip(macros.len() + 1)
+            .skip_while(|(_, ch)|ch.is_whitespace())
+            .next();
+        if let Some((pos, '.')) = next_non_whitespace{
+            line.replace_range(pos..(pos+1), "\\&.");
+        }     
+    }
+}
+
 pub fn prepare_document(text: &str) -> String {
     let mut is_bd_literal_block = false;
 
@@ -107,7 +132,7 @@ pub fn prepare_document(text: &str) -> String {
                 l.replace('\t', &format!("{}", " Ta "))
                     .replace("    ", &format!("{}", " Ta "))
             } else {
-                l.to_string()
+                line.to_string()
             };
 
             if line.contains(".Bd") && (line.contains("-literal") || line.contains("-unfilled")) {
@@ -270,7 +295,7 @@ impl MdocParser {
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
 
-        // println!("Pairs:\n{pairs:#?}\n\n");
+        //println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -420,7 +445,7 @@ impl MdocParser {
                             .take_while(|ch| ch.is_ascii_digit())
                             .collect::<String>();
                         if let Ok(w) = str::parse::<u8>(&width_p){
-                            *width = Some(w);
+                            *width = Some(w.saturating_add(2));
                         }
                     }else {
                         *width = match width_p.as_str(){
@@ -587,6 +612,8 @@ impl MdocParser {
             .into_inner()
             .map(Self::parse_element)
             .collect::<Vec<_>>();
+
+        //println!("It\nhead:\n{:#?}\nbody:\n{:#?}", head, nodes);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::It{
