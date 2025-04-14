@@ -415,7 +415,7 @@ impl MdocParser {
                             .take_while(|ch| ch.is_ascii_digit())
                             .collect::<String>();
                         if let Ok(w) = str::parse::<u8>(&width_p){
-                            *width = Some(w);
+                            *width = Some(w.saturating_add(2));
                         }
                     }else {
                         *width = match width_p.as_str(){
