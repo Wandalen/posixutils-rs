@@ -2354,14 +2354,15 @@ impl MdocFormatter {
             indent: usize,
             max_width: usize,
         ) {
+            // println!("Formatted node:\n{}\n---------------------", formatted_node.replace("\n", "NL"));
             let formatted_node_len = formatted_node.chars().count();
             *current_len += formatted_node_len;
-        
+
             if !content.is_empty() && *current_len > max_width {
                 *current_len = indent + formatted_node_len + 1;
                 content.push_str(&format!("\n{}", " ".repeat(indent)));
             }
-        
+
             content.push_str(&format!("{} ", formatted_node.trim()));
         }
 
@@ -2421,24 +2422,12 @@ impl MdocFormatter {
 
                 append_formatted_node(&mut content, &formatted_node, &mut current_len, indent, max_width);
 
-                // let formatted_node_len = formatted_node.chars().count();
-
-                // current_len += formatted_node_len;
-
-                // if !content.is_empty() && current_len > max_width {
-                //     current_len = indent + formatted_node_len + 1;
-                //     content.push_str(&format!("\n{}", " ".repeat(indent)));
-                // }
-
-                // content.push_str(&format!("{} ", formatted_node.trim()));
-
                 if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })) {
                     ss_lines_positions.push(current_lines_count);
                 }
 
                 current_lines_count += content.lines().count();
             }
-
 
             content.trim().to_string()
         } else {
@@ -2486,6 +2475,8 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
             .join(&self.formatting_state.spacing)
         };
+
+        println!("SH content:\n{:#?}", content.replace("\n", "NL"));
 
         self.add_missing_indent(&mut content);
 
@@ -7626,7 +7617,7 @@ footer text                     January 1, 1970                    footer text";
         
         // #[case("./test_files/mdoc/snmp.1")]
         
-        #[case("./test_files/mdoc/rdist.1")]
+        // #[case("./test_files/mdoc/rdist.1")]
         
         //Block 1
         // #[case("./test_files/mdoc/chmod.2")]
@@ -7673,7 +7664,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
 
-        // #[case("./test_files/mdoc/test.1")]
+        #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")

@@ -132,7 +132,7 @@ pub fn prepare_document(text: &str) -> String {
                 l.replace('\t', &format!("{}", " Ta "))
                     .replace("    ", &format!("{}", " Ta "))
             } else {
-                line.to_string()
+                l.to_string()
             };
 
             if line.contains(".Bd") && (line.contains("-literal") || line.contains("-unfilled")) {
