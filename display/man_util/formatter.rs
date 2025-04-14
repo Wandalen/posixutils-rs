@@ -1,5 +1,5 @@
 use crate::FormattingSettings;
-use terminfo::Database;
+// use terminfo::Database;
 use regex::Regex;
 use std::collections::HashMap;
 use lazy_static::lazy_static;
@@ -31,7 +31,7 @@ lazy_static! {
     };
 
     pub static ref SUBSTITUTIONS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::with_capacity(400);
+        let mut m = HashMap::with_capacity(410);
         m.insert(r"\[dq]", "\"");
         m.insert(r"\[ti]", "~");
         m.insert(r"\[aq]", "'");
@@ -520,29 +520,29 @@ impl MdocFormatter {
         }
     }
 
-    /// Check if italic is supported for this terminal
-    fn supports_italic(&self) -> bool {
-        if let Ok(info) = Database::from_env() {
-            return info.raw("sitm").is_some();
-        }
-        false
-    }
+    // /// Check if italic is supported for this terminal
+    // fn supports_italic(&self) -> bool {
+    //     if let Ok(info) = Database::from_env() {
+    //         return info.raw("sitm").is_some();
+    //     }
+    //     false
+    // }
 
-    /// Check if bold is supported for this terminal
-    fn supports_bold(&self) -> bool {
-        if let Ok(info) = Database::from_env() {
-            return info.raw("bold").is_some();
-        }
-        false
-    }
+    // /// Check if bold is supported for this terminal
+    // fn supports_bold(&self) -> bool {
+    //     if let Ok(info) = Database::from_env() {
+    //         return info.raw("bold").is_some();
+    //     }
+    //     false
+    // }
 
-    /// Check if undeline is supported for this terminal
-    fn supports_underline(&self) -> bool {
-        if let Ok(info) = Database::from_env() {
-            return info.raw("smul").is_some();
-        }
-        false
-    }
+    // /// Check if undeline is supported for this terminal
+    // fn supports_underline(&self) -> bool {
+    //     if let Ok(info) = Database::from_env() {
+    //         return info.raw("smul").is_some();
+    //     }
+    //     false
+    // }
 
     /// Replaces escape sequences in [`text`] [`str`] to true UTF-8 chars 
     fn replace_unicode_escapes(&self, text: &str) -> String {
@@ -688,8 +688,6 @@ impl MdocFormatter {
             if let Element::Macro(ref macro_node) = node {
                 if !matches!(macro_node.mdoc_macro, Macro::Sh { .. } | Macro::Ss { .. } | Macro::Bd { .. } | Macro::An { .. })
                     && formatted_node.split("\n").count() > 1 {
-                        
-                    // println!("Inside if statement");
                     formatted_node = formatted_node.trim().to_string();
                 }
                 if matches!(macro_node.mdoc_macro, Macro::Bd { .. }) {
@@ -698,18 +696,10 @@ impl MdocFormatter {
                 }
             }
         
-            // println!(
-            //     "Formatted node: {}\n----------",
-            //     formatted_node.replace("\n", "| NEWLINE |")
-            // );
-        
             self.append_formatted_text(&formatted_node, &mut current_line, &mut lines);
         }
 
         if !current_line.is_empty() {
-
-            // println!("Current line: {}", current_line.replace("\n", "| NEWLINE |"));
-
             lines.push(current_line.trim_end().to_string());
         }
 
@@ -740,9 +730,10 @@ impl MdocFormatter {
         lines.push(self.format_footer());
 
         let content = lines.join("\n");
-        
-        replace_escapes(&content)
-            .into_bytes()
+
+        content.into_bytes()        
+        // replace_escapes(&content)
+        //     .into_bytes()
     }
 
     fn format_default_header(&mut self) -> String {
@@ -1486,6 +1477,30 @@ impl MdocFormatter {
     }
 
     fn format_bf_block(&mut self, bf_type: BfType, macro_node: MacroNode) -> String {
+        let font_change = match bf_type{
+            BfType::Emphasis => {
+                // if self.supports_italic() {
+                //     "\x1b[3m".to_string()
+                // } else if self.supports_underline() {
+                //     "\x1b[4m".to_string()
+                // } else{
+                //     String::new()
+                // }
+                String::new()
+            },
+            BfType::Literal => {
+                String::new()
+            },
+            BfType::Symbolic => {
+                // if self.supports_bold(){
+                //     "\x1b[1m".to_string()
+                // }else{
+                //     String::new()
+                // }
+                String::new()
+            }
+        };
+
         let content = macro_node
             .nodes
             .into_iter()
@@ -2283,9 +2298,9 @@ impl MdocFormatter {
             let first_name = self.formatting_state.first_name.as_ref().unwrap();
     
             if is_first_char_delimiter(&content) {
-                format!("{}{}", first_name, content)
+                format!("\n{}{}", first_name.trim(), content.trim())
             } else {
-                format!("{} {}", first_name, content)
+                format!("\n{} {}", first_name.trim(), content.trim())
             }
         } else {
             let provided_name = match name {
@@ -2304,7 +2319,7 @@ impl MdocFormatter {
             let separator1 = if is_first_char_delimiter(&provided_name) { "" } else { " " };
             let separator2 = if is_first_char_delimiter(&content) { "" } else { " " };
     
-            format!("{}{}{}{}{}", first_name, separator1, provided_name, separator2, content.trim())
+            format!("\n{}{}{}{}{}", first_name.trim(), separator1, provided_name.trim(), separator2, content.trim())
         }
     }
 
@@ -2332,74 +2347,145 @@ impl MdocFormatter {
     }
 
     fn format_sh_block(&mut self, title: String, macro_node: MacroNode) -> String {
+        fn append_formatted_node(
+            content: &mut String,
+            formatted_node: &str,
+            current_len: &mut usize,
+            indent: usize,
+            max_width: usize,
+        ) {
+            let formatted_node_len = formatted_node.chars().count();
+            *current_len += formatted_node_len;
+        
+            if !content.is_empty() && *current_len > max_width {
+                *current_len = indent + formatted_node_len + 1;
+                content.push_str(&format!("\n{}", " ".repeat(indent)));
+            }
+        
+            content.push_str(&format!("{} ", formatted_node.trim()));
+        }
+
         let mut ss_lines_positions = vec![];
         let mut current_lines_count = 0;
         let mut prev_node = Macro::Soi;
+        let mut is_first_an_in_authors_block = true;
 
         self.formatting_state.current_indent += self.formatting_settings.indent;
+
+        let mut content = if title.eq_ignore_ascii_case("SYNOPSIS") {
+            let indent = 
+                self.formatting_state.current_indent + 
+                self.formatting_state.first_name.as_ref().unwrap().len() + 1;
+
+            let max_width = self.formatting_settings.width - indent;
+            
+            let mut content = String::new();
+            let mut current_len = indent;
+
+            for node in macro_node.nodes.into_iter() {
+                let formatted_node = match &node {
+                    Element::Macro(macro_node) => {
+                        let formatted = match &macro_node.mdoc_macro {
+                            Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
+                            Macro::Nm { 
+                                name 
+                            } => self.format_nm_synopsis(name.clone(), macro_node.clone()).trim().to_string(),
+                            Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
+                            Macro::In { 
+                                ref filename 
+                            } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
+                            Macro::Fd {
+                                directive, 
+                                arguments 
+                            } => self.format_fd_synopsis(directive, arguments),
+                            Macro::Fn { 
+                                funcname 
+                            } => self.format_fn_synopsis(&funcname, macro_node.clone()),
+                            Macro::Bk => {
+                                for node in macro_node.nodes.clone().into_iter() {
+                                    let formatted_node = self.format_node(node);
+                                    append_formatted_node(&mut content, &formatted_node, &mut current_len, indent, max_width);
+                                }
+
+                                String::new()
+                            },
+                            _ => self.format_macro_node(macro_node.clone())
+                        };
         
-        let mut content = macro_node
-            .nodes
-            .into_iter()
-            .map(|node| {
-                let content = match node {
-                    Element::Macro(ref macro_node) => {
-                        if title.eq_ignore_ascii_case("SYNOPSIS") {
-                            let formatted = match &macro_node.mdoc_macro {
-                                Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
-                                Macro::Nm { 
-                                    name 
-                                } => self.format_nm_synopsis(name.clone(), macro_node.clone()),
-                                Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
-                                Macro::In { 
-                                    ref filename 
-                                } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
-                                Macro::Fd { 
-                                    directive, 
-                                    arguments 
-                                } => self.format_fd_synopsis(directive, arguments),
-                                Macro::Fn { 
-                                    funcname 
-                                } => self.format_fn_synopsis(&funcname, macro_node.clone()),
-                                _ => self.format_macro_node(macro_node.clone())
-                            };
-
-                            prev_node = macro_node.mdoc_macro.clone();
-                            return formatted;
-                        } else if title.eq_ignore_ascii_case("AUTHORS") {
-                            self.format_an_authors(AnType::Split, macro_node.clone());
-
-                            match &macro_node.mdoc_macro {
-                                Macro::An { author_name_type } => {
-                                    self.format_an_authors(author_name_type.clone(), macro_node.clone())
-                                },
-                                _ => self.format_macro_node(macro_node.clone())
-                            }
-                        } else if title.eq_ignore_ascii_case("SEE ALSO") {
-                            match &macro_node.mdoc_macro {
-                                Macro::Rs => self.format_rs_see_also(macro_node.clone()),
-                                _ => self.format_macro_node(macro_node.clone())
-                            }
-                        }
-                        
-                        else {
-                            self.format_macro_node(macro_node.clone())
-                        }
+                        prev_node = macro_node.mdoc_macro.clone();
+                        formatted
                     },
-                    Element::Text(ref text) => self.format_text_node(&text),
-                    Element::Eoi => String::new()
+                    Element::Text(text) => self.format_text_node(text),
+                    Element::Eoi => "".to_string()
                 };
 
-                if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })){
+                append_formatted_node(&mut content, &formatted_node, &mut current_len, indent, max_width);
+
+                // let formatted_node_len = formatted_node.chars().count();
+
+                // current_len += formatted_node_len;
+
+                // if !content.is_empty() && current_len > max_width {
+                //     current_len = indent + formatted_node_len + 1;
+                //     content.push_str(&format!("\n{}", " ".repeat(indent)));
+                // }
+
+                // content.push_str(&format!("{} ", formatted_node.trim()));
+
+                if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })) {
                     ss_lines_positions.push(current_lines_count);
                 }
 
                 current_lines_count += content.lines().count();
-                content
-            })
+            }
+
+
+            content.trim().to_string()
+        } else {
+            macro_node
+                .nodes
+                .into_iter()
+                .map(|node| {
+                    let content = match node {
+                        Element::Macro(ref macro_node) => {
+                            if title.eq_ignore_ascii_case("AUTHORS") {
+                                match &macro_node.mdoc_macro {
+                                    Macro::An { author_name_type } => {
+                                        if is_first_an_in_authors_block {
+                                            self.formatting_state.split_mod = false;
+                                            is_first_an_in_authors_block = false;
+                                        } else {
+                                            self.formatting_state.split_mod = true;
+                                        }
+
+                                        self.format_an_authors(author_name_type.clone(), macro_node.clone())
+                                    },
+                                    _ => self.format_macro_node(macro_node.clone())
+                                }
+                            } else if title.eq_ignore_ascii_case("SEE ALSO") {
+                                match &macro_node.mdoc_macro {
+                                    Macro::Rs => self.format_rs_see_also(macro_node.clone()),
+                                    _ => self.format_macro_node(macro_node.clone())
+                                }
+                            } else {
+                                self.format_macro_node(macro_node.clone())
+                            }
+                        },
+                        Element::Text(ref text) => self.format_text_node(&text),
+                        Element::Eoi => String::new()
+                    };
+
+                    if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })){
+                        ss_lines_positions.push(current_lines_count);
+                    }
+
+                    current_lines_count += content.lines().count();
+                    content
+                })
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
-            .join(&self.formatting_state.spacing);
+            .join(&self.formatting_state.spacing)
+        };
 
         self.add_missing_indent(&mut content);
 
@@ -2467,12 +2553,12 @@ impl MdocFormatter {
 
 // Formatting block partial-explicit.
 impl MdocFormatter {
-    fn format_partial_explicit_block(&mut self, macro_node: MacroNode) -> String {
+    fn format_partial_explicit_block(&mut self, iter: impl Iterator<Item = Element>) -> String {
         let mut result = String::new();
         let mut prev_was_open = false;
         let mut is_first_node = true;
     
-        for node in macro_node.nodes {
+        for node in iter {
             match node {
                 Element::Text(text) => {
                     match text.as_str() {
@@ -2514,27 +2600,123 @@ impl MdocFormatter {
     }
 
     fn format_a_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Ac)
+                } else {
+                    false
+                }
+            });
 
-        format!("⟨{}⟩ ", formatted_block.trim())
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Ac)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("⟨{}⟩{}", formatted_body, formatted_tail);
+        }
+
+        format!("⟨{}⟩ {}", formatted_body, formatted_tail)
     }
 
     fn format_b_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Bc)
+                } else {
+                    false
+                }
+            });
 
-        format!("[{}] ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Bc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("[{}]{}", formatted_body.trim(), formatted_tail.trim());
+        }
+
+        format!("[{}] {}", formatted_body.trim(), formatted_tail.trim())
     }
 
     fn format_br_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Brc)
+                } else {
+                    false
+                }
+            });
 
-        format!("{{{}}} ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Brc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("{{{}}}{}", formatted_body.trim(), formatted_tail.trim());
+        }
+
+        format!("{{{}}} {}", formatted_body, formatted_tail.trim())
     }
 
     fn format_d_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Dc)
+                } else {
+                    false
+                }
+            });
 
-        format!("“{}” ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Dc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("“{}”{}", formatted_body.trim(), formatted_tail.trim());
+        }
+
+        format!("“{}” {}", formatted_body.trim(), formatted_tail.trim())
     }
 
     fn format_e_block(
@@ -2543,24 +2725,44 @@ impl MdocFormatter {
         closing_delimiter: Option<char>,
         macro_node: MacroNode,
     ) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Dc)
+                } else {
+                    false
+                }
+            });
+
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Dc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
 
         match (opening_delimiter, closing_delimiter) {
             (Some(open), Some(close)) => {
-                format!("{}{}{} ", open, formatted_block, close)
+                format!("{}{}{} {} ", open, formatted_body.trim(), close, formatted_tail.trim())
             }
             (Some(open), None) => {
-                format!("{}{} ", open, formatted_block)
+                format!("{}{} {} ", open, formatted_body.trim(), formatted_tail.trim())
             }
             (None, Some(close)) => {
-                format!("{}{} ", formatted_block, close)
+                format!("{}{} {} ", formatted_body.trim(), close, formatted_tail.trim())
             }
-            (None, None) => formatted_block,
+            (None, None) => format!("{} {}", formatted_body.trim(), formatted_tail.trim()),
         }
     }
 
     fn format_f_block(&mut self, funcname: String, macro_node: MacroNode) -> String {
-        let mut content = macro_node
+        let mut body = macro_node
             .nodes
             .into_iter()
             .map(|node| {
@@ -2574,38 +2776,162 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
             .join("");
         
-        content.pop();
-        content.pop();
-        
-        format!("{}({})", funcname, content)
+        body.pop();
+        body.pop();
+
+        format!("{}({});", funcname, body)
     }
 
     fn format_o_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Oc)
+                } else {
+                    false
+                }
+            });
 
-        format!("[{}]", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Oc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("[{}]{}", formatted_body, formatted_tail);
+        }
+
+        format!("[{}] {}", formatted_body, formatted_tail)
     }
 
     fn format_p_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Pc)
+                } else {
+                    false
+                }
+            });
 
-        format!("({}) ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Pc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("({}){}", formatted_body, formatted_tail);
+        }
+
+        format!("({}) {} ", formatted_body.trim(), formatted_tail.trim())
     }
 
     fn format_q_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Qc)
+                } else {
+                    false
+                }
+            });
 
-        format!("\"{}\" ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Qc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("\"{}\"{} ", formatted_body, formatted_tail);
+        }
+
+        format!("\"{}\" {} ", formatted_body.trim(), formatted_tail.trim())
     }
 
     fn format_s_block(&mut self, macro_node: MacroNode) -> String {
-        let formatted_block = self.format_partial_explicit_block(macro_node);
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Sc)
+                } else {
+                    false
+                }
+            });
 
-        format!("'{}' ", formatted_block)
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Sc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        println!("Formatted body: {}\nFormatted tail: {}", formatted_body, formatted_tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("'{}'{} ", formatted_body, formatted_tail);
+        }
+
+        format!("'{}' {} ", formatted_body, formatted_tail)
     }
 
     fn format_x_block(&mut self, macro_node: MacroNode) -> String {
-        self.format_partial_explicit_block(macro_node)
+        let iter = macro_node.nodes.into_iter();
+        let body = iter
+            .clone()
+            .take_while(|p| {
+                if let Element::Macro(ref macro_node) = p {
+                    !matches!(macro_node.mdoc_macro, Macro::Xc)
+                } else {
+                    false
+                }
+            });
+
+        let tail = iter.skip_while(|p| {
+            if let Element::Macro(ref macro_node) = p {
+                !matches!(macro_node.mdoc_macro, Macro::Xc)
+            } else {
+                false
+            }
+        });
+
+        let formatted_body = self.format_partial_explicit_block(body);
+        let formatted_tail = self.format_partial_explicit_block(tail);
+
+        if is_first_word_delimiter(&formatted_tail) {
+            return format!("{}{} ", formatted_body, formatted_tail);
+        }
+
+        format!("{} {} ", formatted_body, formatted_tail)
     }
 }
 
@@ -2975,7 +3301,6 @@ impl MdocFormatter {
             AnType::Name => {
                 let content = self.format_inline_macro(macro_node);
                 match self.formatting_state.split_mod {
-                    // true => format!("\\[anmacroescape]{}", content),
                     true => format!("\n{}", content),
                     false => content,
                 }
@@ -2986,11 +3311,11 @@ impl MdocFormatter {
     fn format_an_authors(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
         match an_type {
             AnType::NoSplit => {
-                self.formatting_state.split_mod = false;
+                // self.formatting_state.split_mod = false;
                 String::new()
             }
             AnType::Split => {
-                self.formatting_state.split_mod = true;
+                // self.formatting_state.split_mod = true;
                 String::new()
             }
             AnType::Name => {
@@ -3032,9 +3357,16 @@ impl MdocFormatter {
     }
 
     fn format_em(&self, macro_node: MacroNode) -> String {
-        let line = self.format_inline_macro(macro_node);
+        // let line = self.format_inline_macro(macro_node);
 
-        line
+        // if self.supports_italic() {
+        //     format!("\x1b[3m{line}\x1b[0m")
+        // } else if self.supports_underline() {
+        //     format!("\x1b[4m{line}\x1b[0m")
+        // } else {
+        //     line
+        // }
+        self.format_inline_macro(macro_node)
     }
 
     fn format_dt(&mut self, title: Option<String>, section: &str, arch: Option<String>) -> String {
@@ -3563,9 +3895,14 @@ impl MdocFormatter {
     }
 
     fn format_sy(&mut self, macro_node: MacroNode) -> String {
-        let line = self.format_inline_macro(macro_node);
+        // let line = self.format_inline_macro(macro_node);
 
-        line
+        // if self.supports_bold() {
+        //     format!("\x1b[1m{line}\x1b[0m")
+        // } else {
+        //     line
+        // }
+        self.format_inline_macro(macro_node)
     }
 
     fn format_tg(&self, _term: Option<String>) -> String {
@@ -3613,6 +3950,13 @@ fn is_first_char_alnum(s: &str) -> bool {
 fn is_first_char_delimiter(s: &str) -> bool {
     s.chars().next().map(|c| match c {
         '(' | '[' | ')' | ']' | '.' | ',' | ':' | ';' | '!' | '?' => true,
+        _ => false
+    }).unwrap_or(false)
+}
+
+fn is_first_word_delimiter(s: &str) -> bool {
+    s.split_whitespace().next().map(|c| match c {
+        "(" | "[" | ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => true,
         _ => false
     }).unwrap_or(false)
 }

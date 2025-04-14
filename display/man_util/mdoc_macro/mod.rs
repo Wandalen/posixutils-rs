@@ -162,6 +162,7 @@ pub enum Macro {
     },
     Sm(Option<SmMode>),
     So,
+    Sc,
     Sq,
     Ss {
         title: String,
@@ -189,5 +190,4 @@ pub enum Macro {
     _Ek, // End a keep context started by Bk
     _El, // End a list context started by Bl
     _Ot, // Deprecated
-    _Sc, // Close single-quoted context opened by So
 }
