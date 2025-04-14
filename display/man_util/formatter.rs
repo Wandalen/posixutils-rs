@@ -1,5 +1,5 @@
 use crate::FormattingSettings;
-use terminfo::Database;
+// use terminfo::Database;
 use regex::Regex;
 use std::collections::HashMap;
 use lazy_static::lazy_static;
@@ -520,29 +520,29 @@ impl MdocFormatter {
         }
     }
 
-    /// Check if italic is supported for this terminal
-    fn supports_italic(&self) -> bool {
-        if let Ok(info) = Database::from_env() {
-            return info.raw("sitm").is_some();
-        }
-        false
-    }
+    // /// Check if italic is supported for this terminal
+    // fn supports_italic(&self) -> bool {
+    //     if let Ok(info) = Database::from_env() {
+    //         return info.raw("sitm").is_some();
+    //     }
+    //     false
+    // }
 
-    /// Check if bold is supported for this terminal
-    fn supports_bold(&self) -> bool {
-        if let Ok(info) = Database::from_env() {
-            return info.raw("bold").is_some();
-        }
-        false
-    }
+    // /// Check if bold is supported for this terminal
+    // fn supports_bold(&self) -> bool {
+    //     if let Ok(info) = Database::from_env() {
+    //         return info.raw("bold").is_some();
+    //     }
+    //     false
+    // }
 
-    /// Check if undeline is supported for this terminal
-    fn supports_underline(&self) -> bool {
-        if let Ok(info) = Database::from_env() {
-            return info.raw("smul").is_some();
-        }
-        false
-    }
+    // /// Check if undeline is supported for this terminal
+    // fn supports_underline(&self) -> bool {
+    //     if let Ok(info) = Database::from_env() {
+    //         return info.raw("smul").is_some();
+    //     }
+    //     false
+    // }
 
     /// Replaces escape sequences in [`text`] [`str`] to true UTF-8 chars 
     fn replace_unicode_escapes(&self, text: &str) -> String {
@@ -1469,23 +1469,25 @@ impl MdocFormatter {
     fn format_bf_block(&mut self, bf_type: BfType, macro_node: MacroNode) -> String {
         let font_change = match bf_type{
             BfType::Emphasis => {
-                if self.supports_italic() {
-                    "\x1b[3m".to_string()
-                } else if self.supports_underline() {
-                    "\x1b[4m".to_string()
-                }else{
-                    String::new()
-                }
+                // if self.supports_italic() {
+                //     "\x1b[3m".to_string()
+                // } else if self.supports_underline() {
+                //     "\x1b[4m".to_string()
+                // } else{
+                //     String::new()
+                // }
+                String::new()
             },
             BfType::Literal => {
                 String::new()
             },
             BfType::Symbolic => {
-                if self.supports_bold(){
-                    "\x1b[1m".to_string()
-                }else{
-                    String::new()
-                }
+                // if self.supports_bold(){
+                //     "\x1b[1m".to_string()
+                // }else{
+                //     String::new()
+                // }
+                String::new()
             }
         };
 
@@ -1514,33 +1516,6 @@ impl MdocFormatter {
 
     fn format_bk_block(&mut self, macro_node: MacroNode) -> String {
         let indent = self.formatting_state.current_indent;
-        let max_width = self.formatting_settings.width - indent;
-        
-        let mut content = String::new();
-        let mut current_len = indent;
-
-        for node in macro_node.nodes.into_iter() {
-            let formatted_node = self.format_node(node);
-            let formatted_node_len = formatted_node.chars().count();
-            
-            current_len += formatted_node_len;
-
-            if !content.is_empty() && current_len > max_width {
-                current_len = indent + formatted_node_len + 1;
-                content.push_str(&format!("\n{}", " ".repeat(indent)));
-            }
-
-            content.push_str(&format!("{} ", formatted_node.trim()));
-        }
-
-        content.trim().to_string()
-    }
-
-    fn format_bk_block_synopsis(&mut self, macro_node: MacroNode) -> String {
-        let indent = 
-            self.formatting_state.current_indent + 
-            self.formatting_state.first_name.as_ref().unwrap().len() + 1;
-
         let max_width = self.formatting_settings.width - indent;
         
         let mut content = String::new();
@@ -2368,81 +2343,145 @@ impl MdocFormatter {
     }
 
     fn format_sh_block(&mut self, title: String, macro_node: MacroNode) -> String {
+        fn append_formatted_node(
+            content: &mut String,
+            formatted_node: &str,
+            current_len: &mut usize,
+            indent: usize,
+            max_width: usize,
+        ) {
+            let formatted_node_len = formatted_node.chars().count();
+            *current_len += formatted_node_len;
+        
+            if !content.is_empty() && *current_len > max_width {
+                *current_len = indent + formatted_node_len + 1;
+                content.push_str(&format!("\n{}", " ".repeat(indent)));
+            }
+        
+            content.push_str(&format!("{} ", formatted_node.trim()));
+        }
+
         let mut ss_lines_positions = vec![];
         let mut current_lines_count = 0;
         let mut prev_node = Macro::Soi;
         let mut is_first_an_in_authors_block = true;
 
         self.formatting_state.current_indent += self.formatting_settings.indent;
+
+        let mut content = if title.eq_ignore_ascii_case("SYNOPSIS") {
+            let indent = 
+                self.formatting_state.current_indent + 
+                self.formatting_state.first_name.as_ref().unwrap().len() + 1;
+
+            let max_width = self.formatting_settings.width - indent;
+            
+            let mut content = String::new();
+            let mut current_len = indent;
+
+            for node in macro_node.nodes.into_iter() {
+                let formatted_node = match &node {
+                    Element::Macro(macro_node) => {
+                        let formatted = match &macro_node.mdoc_macro {
+                            Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
+                            Macro::Nm { 
+                                name 
+                            } => self.format_nm_synopsis(name.clone(), macro_node.clone()).trim().to_string(),
+                            Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
+                            Macro::In { 
+                                ref filename 
+                            } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
+                            Macro::Fd {
+                                directive, 
+                                arguments 
+                            } => self.format_fd_synopsis(directive, arguments),
+                            Macro::Fn { 
+                                funcname 
+                            } => self.format_fn_synopsis(&funcname, macro_node.clone()),
+                            Macro::Bk => {
+                                for node in macro_node.nodes.clone().into_iter() {
+                                    let formatted_node = self.format_node(node);
+                                    append_formatted_node(&mut content, &formatted_node, &mut current_len, indent, max_width);
+                                }
+
+                                String::new()
+                            },
+                            _ => self.format_macro_node(macro_node.clone())
+                        };
         
-        let mut content = macro_node
-            .nodes
-            .into_iter()
-            .map(|node| {
-                let content = match node {
-                    Element::Macro(ref macro_node) => {
-                        if title.eq_ignore_ascii_case("SYNOPSIS") {
-                            let formatted = match &macro_node.mdoc_macro {
-                                Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
-                                Macro::Nm { 
-                                    name 
-                                } => self.format_nm_synopsis(name.clone(), macro_node.clone()).trim().to_string(),
-                                Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
-                                Macro::In { 
-                                    ref filename 
-                                } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
-                                Macro::Fd {
-                                    directive, 
-                                    arguments 
-                                } => self.format_fd_synopsis(directive, arguments),
-                                Macro::Fn { 
-                                    funcname 
-                                } => self.format_fn_synopsis(&funcname, macro_node.clone()),
-                                Macro::Bk => self.format_bk_block_synopsis(macro_node.clone()),
-                                _ => self.format_macro_node(macro_node.clone())
-                            };
-
-                            prev_node = macro_node.mdoc_macro.clone();
-                            return formatted;
-                        } else if title.eq_ignore_ascii_case("AUTHORS") {
-                            match &macro_node.mdoc_macro {
-                                Macro::An { author_name_type } => {
-                                    if is_first_an_in_authors_block {
-                                        self.formatting_state.split_mod = false;
-                                        is_first_an_in_authors_block = false;
-                                    } else {
-                                        self.formatting_state.split_mod = true;
-                                    }
-
-                                    self.format_an_authors(author_name_type.clone(), macro_node.clone())
-                                },
-                                _ => self.format_macro_node(macro_node.clone())
-                            }
-                        } else if title.eq_ignore_ascii_case("SEE ALSO") {
-                            match &macro_node.mdoc_macro {
-                                Macro::Rs => self.format_rs_see_also(macro_node.clone()),
-                                _ => self.format_macro_node(macro_node.clone())
-                            }
-                        }
-                        
-                        else {
-                            self.format_macro_node(macro_node.clone()).trim().to_string()
-                        }
+                        prev_node = macro_node.mdoc_macro.clone();
+                        formatted
                     },
-                    Element::Text(ref text) => self.format_text_node(&text),
-                    Element::Eoi => String::new()
+                    Element::Text(text) => self.format_text_node(text),
+                    Element::Eoi => "".to_string()
                 };
 
-                if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })){
+                append_formatted_node(&mut content, &formatted_node, &mut current_len, indent, max_width);
+
+                // let formatted_node_len = formatted_node.chars().count();
+
+                // current_len += formatted_node_len;
+
+                // if !content.is_empty() && current_len > max_width {
+                //     current_len = indent + formatted_node_len + 1;
+                //     content.push_str(&format!("\n{}", " ".repeat(indent)));
+                // }
+
+                // content.push_str(&format!("{} ", formatted_node.trim()));
+
+                if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })) {
                     ss_lines_positions.push(current_lines_count);
                 }
 
                 current_lines_count += content.lines().count();
-                content
-            })
+            }
+
+
+            content.trim().to_string()
+        } else {
+            macro_node
+                .nodes
+                .into_iter()
+                .map(|node| {
+                    let content = match node {
+                        Element::Macro(ref macro_node) => {
+                            if title.eq_ignore_ascii_case("AUTHORS") {
+                                match &macro_node.mdoc_macro {
+                                    Macro::An { author_name_type } => {
+                                        if is_first_an_in_authors_block {
+                                            self.formatting_state.split_mod = false;
+                                            is_first_an_in_authors_block = false;
+                                        } else {
+                                            self.formatting_state.split_mod = true;
+                                        }
+
+                                        self.format_an_authors(author_name_type.clone(), macro_node.clone())
+                                    },
+                                    _ => self.format_macro_node(macro_node.clone())
+                                }
+                            } else if title.eq_ignore_ascii_case("SEE ALSO") {
+                                match &macro_node.mdoc_macro {
+                                    Macro::Rs => self.format_rs_see_also(macro_node.clone()),
+                                    _ => self.format_macro_node(macro_node.clone())
+                                }
+                            } else {
+                                self.format_macro_node(macro_node.clone())
+                            }
+                        },
+                        Element::Text(ref text) => self.format_text_node(&text),
+                        Element::Eoi => String::new()
+                    };
+
+                    if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })){
+                        ss_lines_positions.push(current_lines_count);
+                    }
+
+                    current_lines_count += content.lines().count();
+                    content
+                })
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
-            .join(&self.formatting_state.spacing);
+            .join(&self.formatting_state.spacing)
+        };
 
         self.add_missing_indent(&mut content);
 
@@ -3314,15 +3353,16 @@ impl MdocFormatter {
     }
 
     fn format_em(&self, macro_node: MacroNode) -> String {
-        let line = self.format_inline_macro(macro_node);
+        // let line = self.format_inline_macro(macro_node);
 
-        if self.supports_italic() {
-            format!("\x1b[3m{line}\x1b[0m")
-        } else if self.supports_underline() {
-            format!("\x1b[4m{line}\x1b[0m")
-        } else {
-            line
-        }
+        // if self.supports_italic() {
+        //     format!("\x1b[3m{line}\x1b[0m")
+        // } else if self.supports_underline() {
+        //     format!("\x1b[4m{line}\x1b[0m")
+        // } else {
+        //     line
+        // }
+        self.format_inline_macro(macro_node)
     }
 
     fn format_dt(&mut self, title: Option<String>, section: &str, arch: Option<String>) -> String {
@@ -3851,13 +3891,14 @@ impl MdocFormatter {
     }
 
     fn format_sy(&mut self, macro_node: MacroNode) -> String {
-        let line = self.format_inline_macro(macro_node);
+        // let line = self.format_inline_macro(macro_node);
 
-        if self.supports_bold() {
-            format!("\x1b[1m{line}\x1b[0m")
-        } else {
-            line
-        }
+        // if self.supports_bold() {
+        //     format!("\x1b[1m{line}\x1b[0m")
+        // } else {
+        //     line
+        // }
+        self.format_inline_macro(macro_node)
     }
 
     fn format_tg(&self, _term: Option<String>) -> String {
@@ -7569,7 +7610,7 @@ footer text                     January 1, 1970                    footer text";
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
         // #[case("./test_files/mdoc/tmux.1")]
-        // #[case("./test_files/mdoc/nl.1")]
+        #[case("./test_files/mdoc/nl.1")]
         // #[case("./test_files/mdoc/bc.1")]
         // #[case("./test_files/mdoc/mg.1")]
         // #[case("./test_files/mdoc/snmp.1")]
@@ -7618,7 +7659,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
 
-        #[case("./test_files/mdoc/test.1")]
+        // #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")
