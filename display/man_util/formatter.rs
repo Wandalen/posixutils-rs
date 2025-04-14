@@ -1536,6 +1536,33 @@ impl MdocFormatter {
         content.trim().to_string()
     }
 
+    fn format_bk_block_synopsis(&mut self, macro_node: MacroNode) -> String {
+        let indent = 
+            self.formatting_state.current_indent + 
+            self.formatting_state.first_name.as_ref().unwrap().len() + 1;
+
+        let max_width = self.formatting_settings.width - indent;
+        
+        let mut content = String::new();
+        let mut current_len = indent;
+
+        for node in macro_node.nodes.into_iter() {
+            let formatted_node = self.format_node(node);
+            let formatted_node_len = formatted_node.chars().count();
+            
+            current_len += formatted_node_len;
+
+            if !content.is_empty() && current_len > max_width {
+                current_len = indent + formatted_node_len + 1;
+                content.push_str(&format!("\n{}", " ".repeat(indent)));
+            }
+
+            content.push_str(&format!("{} ", formatted_node.trim()));
+        }
+
+        content.trim().to_string()
+    }
+
     fn format_bl_symbol_block(
         &self, 
         items: Vec<(String, Vec<String>)>,
@@ -2292,9 +2319,9 @@ impl MdocFormatter {
             let first_name = self.formatting_state.first_name.as_ref().unwrap();
     
             if is_first_char_delimiter(&content) {
-                format!("\n{}{}", first_name, content)
+                format!("\n{}{}", first_name.trim(), content.trim())
             } else {
-                format!("\n{} {}", first_name, content)
+                format!("\n{} {}", first_name.trim(), content.trim())
             }
         } else {
             let provided_name = match name {
@@ -2344,6 +2371,7 @@ impl MdocFormatter {
         let mut ss_lines_positions = vec![];
         let mut current_lines_count = 0;
         let mut prev_node = Macro::Soi;
+        let mut is_first_an_in_authors_block = true;
 
         self.formatting_state.current_indent += self.formatting_settings.indent;
         
@@ -2358,28 +2386,34 @@ impl MdocFormatter {
                                 Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
                                 Macro::Nm { 
                                     name 
-                                } => self.format_nm_synopsis(name.clone(), macro_node.clone()),
+                                } => self.format_nm_synopsis(name.clone(), macro_node.clone()).trim().to_string(),
                                 Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
                                 Macro::In { 
                                     ref filename 
                                 } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
-                                Macro::Fd { 
+                                Macro::Fd {
                                     directive, 
                                     arguments 
                                 } => self.format_fd_synopsis(directive, arguments),
                                 Macro::Fn { 
                                     funcname 
                                 } => self.format_fn_synopsis(&funcname, macro_node.clone()),
+                                Macro::Bk => self.format_bk_block_synopsis(macro_node.clone()),
                                 _ => self.format_macro_node(macro_node.clone())
                             };
 
                             prev_node = macro_node.mdoc_macro.clone();
                             return formatted;
                         } else if title.eq_ignore_ascii_case("AUTHORS") {
-                            self.format_an_authors(AnType::Split, macro_node.clone());
-
                             match &macro_node.mdoc_macro {
                                 Macro::An { author_name_type } => {
+                                    if is_first_an_in_authors_block {
+                                        self.formatting_state.split_mod = false;
+                                        is_first_an_in_authors_block = false;
+                                    } else {
+                                        self.formatting_state.split_mod = true;
+                                    }
+
                                     self.format_an_authors(author_name_type.clone(), macro_node.clone())
                                 },
                                 _ => self.format_macro_node(macro_node.clone())
@@ -2392,7 +2426,7 @@ impl MdocFormatter {
                         }
                         
                         else {
-                            self.format_macro_node(macro_node.clone())
+                            self.format_macro_node(macro_node.clone()).trim().to_string()
                         }
                     },
                     Element::Text(ref text) => self.format_text_node(&text),
@@ -3224,7 +3258,6 @@ impl MdocFormatter {
             AnType::Name => {
                 let content = self.format_inline_macro(macro_node);
                 match self.formatting_state.split_mod {
-                    // true => format!("\\[anmacroescape]{}", content),
                     true => format!("\n{}", content),
                     false => content,
                 }
@@ -3235,11 +3268,11 @@ impl MdocFormatter {
     fn format_an_authors(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
         match an_type {
             AnType::NoSplit => {
-                self.formatting_state.split_mod = false;
+                // self.formatting_state.split_mod = false;
                 String::new()
             }
             AnType::Split => {
-                self.formatting_state.split_mod = true;
+                // self.formatting_state.split_mod = true;
                 String::new()
             }
             AnType::Name => {
