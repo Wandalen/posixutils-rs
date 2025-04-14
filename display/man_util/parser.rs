@@ -104,8 +104,8 @@ pub fn prepare_document(text: &str) -> String {
     text.lines()
         .map(|l| {
             let line = if l.contains(".It") {
-                l.replace('\t', &format!("{}", "\\~".repeat(4)))
-                    .replace("    ", &format!("{}", "\\~".repeat(4)))
+                l.replace('\t', &format!("{}", " Ta "))
+                    .replace("    ", &format!("{}", " Ta "))
             } else {
                 l.to_string()
             };
