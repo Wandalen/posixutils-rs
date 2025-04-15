@@ -310,11 +310,16 @@ impl MdocParser {
             let mut offset: Option<OffsetType> = None;
             let mut compact = false;
 
-            for opt_pair in inner {
-                match opt_pair.as_rule() {
-                    Rule::offset => offset = Some(OffsetType::from(opt_pair)),
-                    Rule::compact => compact = true,
-                    _ => unreachable!(),
+            for arg_pair in inner {
+                if !matches!(arg_pair.as_rule(), Rule::bd_offset | Rule::bd_compact){
+                    unreachable!()
+                }
+                for arg_pair in arg_pair.into_inner(){
+                    match arg_pair.as_rule(){
+                        Rule::offset => offset = Some(OffsetType::from(arg_pair)),
+                        Rule::compact => compact = true,
+                        _ => unreachable!(),
+                    }
                 }
             }
 
@@ -1361,11 +1366,15 @@ impl MdocParser {
 
 /// Trim `"` quotes from [`String`]
 pub fn trim_quotes(mut s: String) -> String{
-    if let Some(stripped) = s.strip_prefix("\""){
-        s = stripped.to_string();
+    if !s.starts_with("\\&\""){
+        if let Some(stripped) = s.strip_prefix("\""){
+            s = stripped.to_string();
+        }
     }
-    if let Some(stripped) = s.strip_suffix("\""){
-        s = stripped.to_string();
+    if !s.ends_with("\\&\""){
+        if let Some(stripped) = s.strip_suffix("\""){
+            s = stripped.to_string();
+        }
     }
 
     s

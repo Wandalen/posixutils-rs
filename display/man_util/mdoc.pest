@@ -201,11 +201,14 @@ offset         = {
   | off_left
   | off_right
   | off_center
+  | word
 }
 
 compact = { "-compact" }
 
-bd_open  = ${ "Bd" ~ ws+ ~ bd_type ~ (ws+ ~ "-offset" ~ ws+ ~ offset)? ~ (ws+ ~ compact)? ~ ws* ~ NEWLINE }
+bd_offset = { ws+ ~ "-offset" ~ ws+ ~ offset }
+bd_compact = { ws+ ~ compact }
+bd_open  = ${ "Bd" ~ ws+ ~ bd_type ~ (bd_offset | bd_compact){,2} ~ ws* ~ NEWLINE }
 ed_close =  { ".Ed" ~ NEWLINE? }
 bd_block =  { bd_open ~ (("." ~ comment_macro ~ NEWLINE)* ~ element)* ~ ed_close }
 
