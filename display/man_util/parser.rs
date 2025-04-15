@@ -103,6 +103,7 @@ pub fn prepare_document(text: &str) -> String {
     let mut is_bd_literal_block = false;
 
     text.lines()
+        .filter(|l| !l.trim_start().starts_with(".Tg"))
         .map(|l| {
             let line = if l.contains(".It") {
                 l.replace('\t', &format!("{}", " Ta "))
