@@ -729,7 +729,7 @@ impl MdocFormatter {
 
         lines.push(self.format_footer());
 
-        let content = lines.join("\n");
+        let content = remove_empty_lines(&lines.join("\n"), 2);
 
         content.into_bytes()        
         // replace_escapes(&content)
@@ -1266,27 +1266,23 @@ fn split_nested_bl(bl: MacroNode) -> Vec<Element>{
     }
 }
 
-/// Trim, but leaves '\n' on ends
-fn trim(string: &mut String){
-    if let Some(position) = string.find(|ch| ch != '\n'){
-        if let Some(s) = string.strip_prefix(&("\n".repeat(position))){
-            *string = s.to_string();
-        }
-    }
-
-    if let Some(position) = string.rfind(|ch| ch != '\n'){
-        if let Some(s) = string.strip_suffix(&("\n".repeat(string.len().saturating_sub(position)))){
-            *string = s.to_string();
-        }
-    }
-}
-
 /// Removes reduntant empty lines or lines that contains only whitespaces from [`input`]
 fn remove_empty_lines(input: &str, delimiter_size: usize) -> String {
+    let input = input.lines()
+        .map(|line| {
+            if line.chars().all(|ch|ch.is_whitespace()){
+                return ""
+            } else {
+                return line;
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     let mut result = String::with_capacity(input.len());
     let mut iter = input.chars().peekable();
     let lines_delimiter_big = "\n".repeat(delimiter_size);
     let mut nl_count = 0;
+
     while let Some(current_char) = iter.next() {
         if current_char == '\n' {
             if iter.peek() != Some(&'\n') {
@@ -1349,7 +1345,12 @@ fn remove_ansi_escapes(text: &str) -> String{
 // Formatting block full-explicit.
 impl MdocFormatter {
     fn get_width_indent(&self, width: &Option<u8>) -> usize{
-        width.unwrap_or(0).min(MAX_INDENT) as usize
+        let mut width = width.unwrap_or(0).min(MAX_INDENT) as usize;
+        if width < 2{
+            width = 2;
+        }
+        width += 2;
+        width
     }
 
     fn get_offset_indent(&self, offset: &Option<OffsetType>) -> usize{
@@ -1357,8 +1358,8 @@ impl MdocFormatter {
             return 0;
         };
         let offset = match offset{
-            OffsetType::Indent => 8,
-            OffsetType::IndentTwo => 8 * 2,
+            OffsetType::Indent => 6,
+            OffsetType::IndentTwo => 6 * 2,
             _ => self.formatting_settings.indent
         };
 
@@ -1473,7 +1474,7 @@ impl MdocFormatter {
 
         let delimeter_size = if compact{ 1 } else { 2 };
 
-        "\n\n".to_string() + &remove_empty_lines(&content, delimeter_size) + "\n\n"
+        "\n\n".to_string() + &content + "\n\n"
     }
 
     fn format_bf_block(&mut self, bf_type: BfType, macro_node: MacroNode) -> String {
@@ -1559,7 +1560,7 @@ impl MdocFormatter {
         }else{
             1
         };
-        let full_indent = origin_indent + indent;
+        let full_indent = origin_indent + indent + symbol_range - 1;
         let line_width = width.saturating_sub(full_indent);
         let indent_str = " ".repeat(full_indent);
 
@@ -1594,13 +1595,13 @@ impl MdocFormatter {
                     first_line.replace_range(origin_indent..(origin_indent + symbol_range), &symbol);
                 }
             }
+
             content.push_str(&(body.join("\n") + "\n"));
+            
             if !compact{
                 content.push('\n');
             }
         }  
-
-        trim(&mut content);
 
         content
     }
@@ -1635,9 +1636,6 @@ impl MdocFormatter {
             body = add_indent_to_lines(body, line_width + indent, &offset);
             content.push_str(&(body.join(delimiter) + delimiter));
         } 
-
-        content = remove_empty_lines(&content, delimiter.len());
-        trim(&mut content);
 
         content
     }
@@ -1689,9 +1687,6 @@ impl MdocFormatter {
             }
             content.push_str(&(body.join(delimiter).trim_end().to_string() + "\n"));
         }
-
-        content = remove_empty_lines(&content, delimiter.len());
-        trim(&mut content);
 
         content
     }
@@ -1747,8 +1742,6 @@ impl MdocFormatter {
                 content.push('\n');
             }
         }
-
-        trim(&mut content);
 
         content
     }
@@ -1939,8 +1932,6 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
             .join("\n");
 
-        trim(&mut content);
-
         if !content.ends_with("\n"){
             content.push('\n');
         }
@@ -1965,6 +1956,7 @@ impl MdocFormatter {
 
         let mut content = String::new();
         for (head, body) in items{
+            //println!("Head:{:?}\nBody:{:?}", head, body);
             let multilined = get_multilined(&body);
             let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
             let mut body = interleave(onelined, multilined)
@@ -1982,17 +1974,16 @@ impl MdocFormatter {
                 "\n".to_string()
             };
 
-            //println!("{:?}", (origin_indent_str.clone(), head.clone(), space.clone(), body.join("\n"), "\n"));
-
             content.push_str(
-                &(origin_indent_str.clone() + &head + &space + &body.join("\n") + "\n")
+                &(origin_indent_str.clone() + &head + &space + &body.join("\n"))
             );
+            if !body.is_empty() || head.len() < indent.saturating_sub(1){
+                content.push('\n');
+            }
             if !compact{
                 content.push('\n');
             }
         } 
-
-        trim(&mut content);
 
         content
     }
@@ -2069,8 +2060,6 @@ impl MdocFormatter {
             }
         } 
 
-        trim(&mut content);
-
         content
     }
 
@@ -2089,16 +2078,11 @@ impl MdocFormatter {
                     let content = head.iter()
                         .map(|element| self.format_node(element.clone()))
                         .collect::<Vec<_>>()
-                        // .join(&self.formatting_state.spacing)
                         .join(" ")
                         .trim()
                         .to_string();
 
-                    if !content.is_empty(){
-                        Some(content)
-                    }else{
-                        None
-                    }
+                    Some(content)
                 }
             })
             .collect::<Vec<_>>()
@@ -2153,15 +2137,39 @@ impl MdocFormatter {
         columns: Vec<String>,
         macro_node: MacroNode,
     ) -> String {
+        fn get_symbol_width(list_type: &BlType, macro_node: &MacroNode) -> usize{
+            if !matches!(list_type, BlType::Bullet | BlType::Dash | BlType::Enum){
+                return 0;
+            }
+            let it_count = macro_node.nodes.iter()
+                .filter(|n|{
+                    matches!(n, Element::Macro(MacroNode { mdoc_macro: Macro::It{ .. }, .. }))
+                })
+                .count();
+            if let BlType::Enum = list_type{
+                it_count.to_string().len()
+            }else{
+                0
+            }
+        }
+
         let heads = self.get_heads(macro_node.clone(), &list_type);
         let width_indent = self.get_width_indent(&width);
         let offset_indent = self.get_offset_indent(&offset);
 
         self.formatting_state.current_indent += offset_indent + width_indent;
+        let symbol_width = get_symbol_width(&list_type, &macro_node);
+        let is_symbol = matches!(list_type, BlType::Bullet | BlType::Dash | BlType::Enum);
+        if is_symbol{
+            self.formatting_state.current_indent += symbol_width;
+        }
         
         let bodies = self.get_bodies(macro_node.clone(), &list_type);
         
         self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(width_indent);
+        if is_symbol{
+            self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(symbol_width);
+        }
 
         let items: Vec<(String, Vec<String>)> = if heads.is_empty() {
             bodies.clone().into_iter().map(|body| ("".to_string(), body)).collect()
@@ -2196,9 +2204,9 @@ impl MdocFormatter {
 
         self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(offset_indent);
 
-        content = "\n".to_string() + &content + "\n";
+        content = "\n\n".to_string() + &content + "\n";
 
-        remove_empty_lines(&content, 2)
+        content
     }
 
     fn format_bl_blocks(
@@ -2226,7 +2234,7 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
             .join("");
 
-        remove_empty_lines(&content, 2)
+        content
     }
 }
 
@@ -2476,7 +2484,7 @@ impl MdocFormatter {
             .join(&self.formatting_state.spacing)
         };
 
-        println!("SH content:\n{:#?}", content.replace("\n", "NL"));
+        //println!("SH content:\n{:#?}", content.replace("\n", "NL"));
 
         self.add_missing_indent(&mut content);
 
@@ -2886,7 +2894,7 @@ impl MdocFormatter {
         let formatted_body = self.format_partial_explicit_block(body);
         let formatted_tail = self.format_partial_explicit_block(tail);
 
-        println!("Formatted body: {}\nFormatted tail: {}", formatted_body, formatted_tail);
+        //println!("Formatted body: {}\nFormatted tail: {}", formatted_body, formatted_tail);
 
         if is_first_word_delimiter(&formatted_tail) {
             return format!("'{}'{} ", formatted_body, formatted_tail);
@@ -3973,12 +3981,16 @@ mod tests {
         //println!("{:#?}", ast);
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-        println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
-            output, 
+        println!("Formatted document:\nReal:\n{}\n{}\n", 
+            result, 
             vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
-            result
         );
-        assert_eq!(output, result)
+        // println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
+        //     output, 
+        //     vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
+        //     result
+        // );
+        panic!();
     }
 
     mod special_chars {
@@ -7607,7 +7619,7 @@ footer text                     January 1, 1970                    footer text";
 
         // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
-        // #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/tmux.1")]
 
         // #[case("./test_files/mdoc/nl.1")]
         
@@ -7664,7 +7676,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
 
-        #[case("./test_files/mdoc/test.1")]
+        // #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")

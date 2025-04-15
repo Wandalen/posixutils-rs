@@ -53,6 +53,7 @@ impl From<Pair<'_, Rule>> for OffsetType {
             Rule::off_left => Self::Left,
             Rule::off_right => Self::Right,
             Rule::off_center => Self::Center,
+            Rule::word => Self::Indent,
             _ => unreachable!(),
         }
     }

@@ -201,6 +201,7 @@ offset         = {
   | off_left
   | off_right
   | off_center
+  | word
 }
 
 compact = { "-compact" }

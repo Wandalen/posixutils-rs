@@ -288,9 +288,9 @@ impl MdocParser {
     pub fn parse_mdoc(input: &str) -> Result<MdocDocument, MdocError> {
         let input = prepare_document(&input);
 
-        for line in input.lines() {
-            println!("{}", line);
-        }
+        // for line in input.lines() {
+        //     println!("{}", line);
+        // }
 
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
@@ -1395,11 +1395,15 @@ impl MdocParser {
 
 /// Trim `"` quotes from [`String`]
 pub fn trim_quotes(mut s: String) -> String{
-    if let Some(stripped) = s.strip_prefix("\""){
-        s = stripped.to_string();
+    if !s.starts_with("\\&\""){
+        if let Some(stripped) = s.strip_prefix("\""){
+            s = stripped.to_string();
+        }
     }
-    if let Some(stripped) = s.strip_suffix("\""){
-        s = stripped.to_string();
+    if !s.ends_with("\\&\""){
+        if let Some(stripped) = s.strip_suffix("\""){
+            s = stripped.to_string();
+        }
     }
 
     s
