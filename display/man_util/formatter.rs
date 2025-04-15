@@ -32,6 +32,7 @@ lazy_static! {
 
     pub static ref SUBSTITUTIONS: HashMap<&'static str, &'static str> = {
         let mut m = HashMap::with_capacity(410);
+        m.insert(r"\[ssindent]", "   ");
         m.insert(r"\[dq]", "\"");
         m.insert(r"\[ti]", "~");
         m.insert(r"\[aq]", "'");
@@ -1012,9 +1013,9 @@ fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
     let mut line = String::new();
     let mut i = 0; 
     while i < words.len(){
-        let l = line.clone();
-        let word_len = words[i].len();
-        if l.is_empty() || word_len > width{
+        let word_len = replace_escapes(&words[i]).len();
+        let line_len = replace_escapes(&line).len();
+        if line.is_empty() || word_len > width{
             lines.extend(words[i]
                 .chars()
                 .collect::<Vec<_>>()
@@ -1025,12 +1026,12 @@ fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
             }
             i += 1;
             continue;
-        } else if line.len() + word_len + 1 > width{
-            lines.push(l);
+        } else if line_len + word_len + 1 > width{
+            lines.push(line.clone());
             line.clear();
             continue;
         }
-        if !line.is_empty() && line.len() < width{
+        if !line.is_empty() && line_len < width{
             if let Some(ch) = line.chars().last(){
                 if !ch.is_whitespace(){
                     line.push(' ');
@@ -1088,77 +1089,64 @@ fn get_symbol(last_symbol: &str, list_type: &BlType) -> String{
     }
 }
 
-/// Merge vectors in such manner: 
-/// [a, a, a], [b, b, b] -> [a, b, a, b, a, b]
-/// [a, a, a], [b, b] -> [a, b, a, b, a]
-/// [a, a], [b, b, b] -> [a, b, a, b, a, b]
-fn interleave<T: Clone + std::fmt::Debug>(v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
-    if v1.is_empty(){
-        return v2;
-    }else if v2.is_empty(){
-        return v1;
-    }
-
-    let len1 = v1.len();
-    let len2 = v2.len();
-
-    let mut result = Vec::with_capacity(len1 + len2);
-
-    let mut iter1 = v1.iter();
-    let mut iter2 = v2.iter();
-
-    for (item1, item2) in iter1.by_ref().zip(iter2.by_ref()) {
-        result.push(item1.clone()); 
-        result.push(item2.clone());
-    }
-
-    result.extend(iter1.cloned());
-    result.extend(iter2.cloned());
-
-    result
-}
-
-/// Returns only lines with '\n' from [`lines`]
-fn get_multilined(body: &[String]) -> Vec<Vec<String>> {
-    body.iter()
-        .filter(|el| el.lines().count() > 1)
-        .map(|s| {
-            s.split("\n")
-            .map(|l|l.to_string())
-            .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>()
-}
-
-/// Returns only lines without '\n' from [`lines`]. 
-/// Also split long lines and adds indent to them 
-fn get_onelined(
-    lines: &[String], 
+/// Merges adjacent oneline formatted nodes
+fn merge_onelined(
+    elements: Vec<String>, 
     line_width: usize, 
     indent_str: &str, 
     offset: &OffsetType
-) -> Vec<Vec<String>>{
-    lines.split(|el| el.lines().count() > 1)
-        .collect::<Vec<_>>()
-        .iter()
-        .filter(|s| !s.is_empty())
-        .map(|v|{
-            let mut content = split_by_width(
-                v.join(" ").split_whitespace()                    
+) -> Vec<String>{
+    fn merge(
+        v: &mut Vec<String>, 
+        lines: &mut Vec<String>, 
+        line_width: usize, 
+        indent_str: &str, 
+        offset: &OffsetType
+    ) {
+        if !v.is_empty(){
+            let s = v.join(" ")
+                .split_whitespace()                    
                 .map(|s| s.to_string())
-                .collect::<Vec<_>>(), 
-                line_width
-            );
+                .collect::<Vec<_>>();
 
-            //content = content.iter().map(|s| "<".to_string() + s + ">").collect::<>();
-
+            let mut content = split_by_width(s, line_width);
             content = add_indent_to_lines(content, line_width, offset);
             for line in content.iter_mut(){
                 *line = indent_str.to_string() + line;
             }
-            content
-        })
-        .collect::<Vec<_>>()
+            
+            lines.extend(content);
+            v.clear();
+        }
+    };
+
+    let mut lines = Vec::new();
+    let mut onelines = Vec::new();
+
+    for el in elements{
+        if el.trim().lines().count() > 1{
+            merge(&mut onelines, &mut lines, line_width, indent_str, offset);
+
+            let mut el = el.split("\n")
+                .map(|s|s.to_string())
+                .collect::<Vec<_>>();
+            if let Some(s) = el.iter_mut().next(){
+                if s.is_empty(){
+                    *s = indent_str.to_string();
+                }
+            }
+
+            lines.extend(el);
+        }else if el.chars().all(|ch|ch.is_whitespace()){
+            merge(&mut onelines, &mut lines, line_width, indent_str, offset);
+            lines.extend(el.lines().map(|_|String::new()));
+        }else{
+            onelines.push(el);
+        }
+    }
+    merge(&mut onelines, &mut lines, line_width, indent_str, offset);
+
+    lines
 }
 
 /// If Bl has nested Bl macros, then this function 
@@ -1349,7 +1337,6 @@ impl MdocFormatter {
         if width < 2{
             width = 2;
         }
-        width += 2;
         width
     }
 
@@ -1388,7 +1375,9 @@ impl MdocFormatter {
     ) -> String {
         let indent = self.get_offset_indent(&offset);
         let mut offset = self.get_offset_from_offset_type(&offset);
-        if block_type == BdType::Centered{ offset = OffsetType::Center; }
+        if block_type == BdType::Centered{ 
+            offset = OffsetType::Center; 
+        }
 
         self.formatting_state.current_indent += indent;
 
@@ -1566,28 +1555,8 @@ impl MdocFormatter {
 
         let mut symbol = get_symbol("", &list_type);
         let mut content = String::new();
-        for (_, body) in items {
-            let mut body = body;
-
-            body.retain(|s| !s.is_empty());
-            
-            let mut multilined = get_multilined(&body);
-            
-            multilined.iter_mut()
-                .for_each(|el|{ 
-                    if let Some(s) = el.iter_mut().next(){
-                        if s.is_empty(){
-                            *s = indent_str.clone();
-                        }
-                    }
-                });
-            
-            let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
-            
-            body = interleave(onelined, multilined)
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>();  
+        for (_, body) in items {                    
+            let mut body = merge_onelined(body, line_width, &indent_str, &offset);   
             
             if let Some(first_line) = body.get_mut(0){
                 symbol = get_symbol(symbol.as_str(), &list_type);
@@ -1956,14 +1925,7 @@ impl MdocFormatter {
 
         let mut content = String::new();
         for (head, body) in items{
-            //println!("Head:{:?}\nBody:{:?}", head, body);
-            let multilined = get_multilined(&body);
-            let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
-            let mut body = interleave(onelined, multilined)
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>(); 
-
+            let mut body = merge_onelined(body, line_width, &indent_str, &offset);   
             let head = head.trim().to_string(); 
             let space = if head.len() < indent.saturating_sub(1){
                 if let Some(line) = body.first_mut(){
@@ -2033,14 +1995,7 @@ impl MdocFormatter {
                 }
             }
 
-            let multilined = get_multilined(&body);
-            let onelined = get_onelined(&body, line_width, &indent_str, &offset);   
-            body = interleave(onelined, multilined)
-                 .into_iter()
-                 .flatten()
-                 .collect::<Vec<_>>(); 
-
-            body.retain(|s| !s.is_empty());
+            let mut body = merge_onelined(body, line_width, &indent_str, &offset);
 
             if head.len() < indent{
                 if let Some(line) = body.first_mut(){
@@ -2342,7 +2297,7 @@ impl MdocFormatter {
                     .count() < self.formatting_settings.indent;
 
                 let is_not_empty = !(line.chars().all(|ch| ch.is_whitespace()) || line.is_empty()); 
-                let line = if indent_is_small && is_not_empty{
+                let line = if indent_is_small && is_not_empty && !line.starts_with("\\[ssindent]"){
                     " ".repeat(self.formatting_settings.indent) + line.trim_start()
                 }else{
                     line.to_string()
@@ -2362,7 +2317,6 @@ impl MdocFormatter {
             indent: usize,
             max_width: usize,
         ) {
-            // println!("Formatted node:\n{}\n---------------------", formatted_node.replace("\n", "NL"));
             let formatted_node_len = formatted_node.chars().count();
             *current_len += formatted_node_len;
 
@@ -2374,7 +2328,6 @@ impl MdocFormatter {
             content.push_str(&format!("{} ", formatted_node.trim()));
         }
 
-        let mut ss_lines_positions = vec![];
         let mut current_lines_count = 0;
         let mut prev_node = Macro::Soi;
         let mut is_first_an_in_authors_block = true;
@@ -2430,10 +2383,6 @@ impl MdocFormatter {
 
                 append_formatted_node(&mut content, &formatted_node, &mut current_len, indent, max_width);
 
-                if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })) {
-                    ss_lines_positions.push(current_lines_count);
-                }
-
                 current_lines_count += content.lines().count();
             }
 
@@ -2472,10 +2421,6 @@ impl MdocFormatter {
                         Element::Eoi => String::new()
                     };
 
-                    if matches!(node, Element::Macro(MacroNode { mdoc_macro: Macro::Ss{ .. }, .. })){
-                        ss_lines_positions.push(current_lines_count);
-                    }
-
                     current_lines_count += content.lines().count();
                     content
                 })
@@ -2484,23 +2429,7 @@ impl MdocFormatter {
             .join(&self.formatting_state.spacing)
         };
 
-        //println!("SH content:\n{:#?}", content.replace("\n", "NL"));
-
         self.add_missing_indent(&mut content);
-
-        ss_lines_positions.reverse();
-
-        content = content.split("\n")
-            .enumerate()
-            .map(|(i, line)|{
-                if Some(&i) == ss_lines_positions.last(){
-                    ss_lines_positions.pop();
-                    return "   ".to_string() + line.trim_start()
-                }
-                line.to_string()
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
 
         self.formatting_state.current_indent = 0;
 
@@ -2537,16 +2466,8 @@ impl MdocFormatter {
 
         self.add_missing_indent(&mut content);
         self.formatting_state.current_indent = 0;
-
-        let mut title_ident = self.formatting_settings.indent.saturating_sub(2);
-        if title_ident == 0 {
-            title_ident = 1;
-        }
         
-        format!(
-            "{}{title}\n{content}",
-            " ".repeat(title_ident),
-        )
+        format!("\n\n\\[ssindent]{title}\n{content}\n")
     }
 }
 
@@ -2893,8 +2814,6 @@ impl MdocFormatter {
 
         let formatted_body = self.format_partial_explicit_block(body);
         let formatted_tail = self.format_partial_explicit_block(tail);
-
-        //println!("Formatted body: {}\nFormatted tail: {}", formatted_body, formatted_tail);
 
         if is_first_word_delimiter(&formatted_tail) {
             return format!("'{}'{} ", formatted_body, formatted_tail);
@@ -3563,12 +3482,7 @@ impl MdocFormatter {
     }
 
     fn format_fl(&mut self, macro_node: MacroNode) -> String {
-
-
         if macro_node.nodes.is_empty() {
-
-            // println!("Fl adding ns macro escape");
-
             return "-\\[nsmacroescape]".to_string()
         }
 
@@ -3978,18 +3892,13 @@ mod tests {
     /// Universal function for all tests
     fn test_formatting(input: &str, output: &str) {
         let ast = get_ast(input);
-        //println!("{:#?}", ast);
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-        println!("Formatted document:\nReal:\n{}\n{}\n", 
-            result, 
+        println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
+            output, 
             vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
+            result
         );
-        // println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
-        //     output, 
-        //     vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
-        //     result
-        // );
         panic!();
     }
 
@@ -7550,7 +7459,7 @@ footer text                     January 1, 1970                    footer text";
         use rstest::rstest;
 
         #[rstest]
-        // Small
+        // // Small
         // #[case("./test_files/mdoc/rev.1")]
         // #[case("./test_files/mdoc/adjfreq.2")]
         // #[case("./test_files/mdoc/getgroups.2")]
@@ -7564,7 +7473,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/closefrom.2")]
         // #[case("./test_files/mdoc/moptrace.1")]
 
-        //Other
+        // //Other
         // #[case("./test_files/mdoc/rlog.1")]
         // #[case("./test_files/mdoc/access.2")]
         // #[case("./test_files/mdoc/munmap.2")]
@@ -7580,7 +7489,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/mlockall.2")]
         // #[case("./test_files/mdoc/cut.1")]
 
-        //without bl
+        // //without bl
         // #[case("./test_files/mdoc/umask.2")]
         // #[case("./test_files/mdoc/sched_yield.2")]
         // #[case("./test_files/mdoc/sigsuspend.2")]
@@ -7589,7 +7498,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/shar.1")]
         // #[case("./test_files/mdoc/sysarch.2")]
 
-        //word as macro
+        // //word as macro
         // #[case("./test_files/mdoc/fork.2")]
         // #[case("./test_files/mdoc/symlink.2")]
         // #[case("./test_files/mdoc/sync.2")]
@@ -7597,9 +7506,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/reboot.2")]
         // #[case("./test_files/mdoc/id.1")]
         // #[case("./test_files/mdoc/rename.2")]
-        
         // #[case("./test_files/mdoc/cu.1")]
-        
         // #[case("./test_files/mdoc/getfh.2")]
         // #[case("./test_files/mdoc/ioctl.2")]
         // #[case("./test_files/mdoc/dup.2")]
@@ -7617,25 +7524,20 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/chflags.2")]
         // #[case("./test_files/mdoc/flock.2")]
 
-        // Bl -column
+        // // Bl -column
         // #[case("./test_files/mdoc/shutdown.2")]
-        #[case("./test_files/mdoc/tmux.1")]
-
+        // // #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/nl.1")]
-        
         // #[case("./test_files/mdoc/bc.1")]
-        
         // #[case("./test_files/mdoc/mg.1")]
-        
         // #[case("./test_files/mdoc/snmp.1")]
-        
         // #[case("./test_files/mdoc/rdist.1")]
         
-        //Block 1
+        // //Block 1
         // #[case("./test_files/mdoc/chmod.2")]
-        // #[case("./test_files/mdoc/cvs.1")]
+        // // #[case("./test_files/mdoc/cvs.1")]
         // #[case("./test_files/mdoc/dc.1")]
-        // #[case("./test_files/mdoc/flex.1")]
+        // // #[case("./test_files/mdoc/flex.1")]
         // #[case("./test_files/mdoc/getdents.2")]
         // #[case("./test_files/mdoc/getitimer.2")]
         // #[case("./test_files/mdoc/getrusage.2")]
@@ -7644,9 +7546,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/gettimeofday.2")]
         // #[case("./test_files/mdoc/ktrace.2")]
         // #[case("./test_files/mdoc/msgrcv.2")]
-        
         // #[case("./test_files/mdoc/msgsnd.2")]
-        
         // #[case("./test_files/mdoc/mv.1")]
         // #[case("./test_files/mdoc/poll.2")]
         // #[case("./test_files/mdoc/profil.2")]
@@ -7671,10 +7571,12 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/socketpair.2")]
         // #[case("./test_files/mdoc/setuid.2")]
         // #[case("./test_files/mdoc/shmget.2")]
-        // #[case("./test_files/mdoc/cvs.1")]
         // #[case("./test_files/mdoc/rcs.1")]
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
+
+        // #[case("./test_files/mdoc/tmux.1")]
+        #[case("./test_files/mdoc/cvs.1")]
 
         // #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
