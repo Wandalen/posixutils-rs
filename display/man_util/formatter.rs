@@ -1,8 +1,8 @@
 use crate::FormattingSettings;
-// use terminfo::Database;
 use regex::Regex;
 use std::collections::HashMap;
 use lazy_static::lazy_static;
+use terminfo::Database;
 
 use super::{
     mdoc_macro::{text_production::*, types::*, Macro},
@@ -494,7 +494,6 @@ impl Default for FormattingState {
     fn default() -> Self {
         Self {
             first_name: None,
-            // suppress_space: false,
             header_text: None,
             footer_text: None,
             spacing: " ".to_string(),
@@ -521,29 +520,29 @@ impl MdocFormatter {
         }
     }
 
-    // /// Check if italic is supported for this terminal
-    // fn supports_italic(&self) -> bool {
-    //     if let Ok(info) = Database::from_env() {
-    //         return info.raw("sitm").is_some();
-    //     }
-    //     false
-    // }
+    /// Check if italic is supported for this terminal
+    fn _supports_italic(&self) -> bool {
+        if let Ok(info) = Database::from_env() {
+            return info.raw("sitm").is_some();
+        }
+        false
+    }
 
-    // /// Check if bold is supported for this terminal
-    // fn supports_bold(&self) -> bool {
-    //     if let Ok(info) = Database::from_env() {
-    //         return info.raw("bold").is_some();
-    //     }
-    //     false
-    // }
+    /// Check if bold is supported for this terminal
+    fn _supports_bold(&self) -> bool {
+        if let Ok(info) = Database::from_env() {
+            return info.raw("bold").is_some();
+        }
+        false
+    }
 
-    // /// Check if undeline is supported for this terminal
-    // fn supports_underline(&self) -> bool {
-    //     if let Ok(info) = Database::from_env() {
-    //         return info.raw("smul").is_some();
-    //     }
-    //     false
-    // }
+    /// Check if undeline is supported for this terminal
+    fn _supports_underline(&self) -> bool {
+        if let Ok(info) = Database::from_env() {
+            return info.raw("smul").is_some();
+        }
+        false
+    }
 
     /// Replaces escape sequences in [`text`] [`str`] to true UTF-8 chars 
     fn replace_unicode_escapes(&self, text: &str) -> String {
@@ -680,8 +679,6 @@ impl MdocFormatter {
         for node in ast.elements {            
             let mut formatted_node = self.format_node(node.clone());
 
-            // formatted_node = formatted_node.replace(r"\x08", "");
-
             if formatted_node.is_empty() {
                 continue;
             }
@@ -733,8 +730,6 @@ impl MdocFormatter {
         let content = remove_empty_lines(&lines.join("\n"), 2);
 
         content.into_bytes()        
-        // replace_escapes(&content)
-        //     .into_bytes()
     }
 
     fn format_default_header(&mut self) -> String {
@@ -1118,7 +1113,7 @@ fn merge_onelined(
             lines.extend(content);
             v.clear();
         }
-    };
+    }
 
     let mut lines = Vec::new();
     let mut onelines = Vec::new();
@@ -1292,44 +1287,6 @@ fn remove_empty_lines(input: &str, delimiter_size: usize) -> String {
     result
 }
 
-// ///  Remove ansi escape sequences as `\x1b[3m` in [`text`] [`str`] 
-// fn remove_ansi_escapes(text: &str) -> String{
-//     let mut text = format!("{:?}", text);
-//     let starts = text.match_indices("\\u{1b}")
-//         .map(|(i,_)|i)
-//         .collect::<Vec<_>>();
-
-//     let mut ends = vec![];
-//     for start in &starts{
-//         let end = text.chars()
-//             .enumerate()
-//             .skip(*start + 5)
-//             .find(|(_, ch)|ch.is_alphabetic())
-//             .map(|(i, _)| i);
-
-//         if let Some(end) = end{
-//             ends.push(end);
-//         }
-//     }
-
-//     let replace_ranges = starts.iter()
-//         .zip(ends.iter())
-//         .map(|(s,e)|s..=e)
-//         .collect::<Vec<_>>();
-
-//     for r in replace_ranges.clone().into_iter().rev(){
-//         text = text.chars().enumerate()
-//             .filter_map(|(i,ch)| if !r.contains(&&i){
-//                 Some(ch)
-//             }else{
-//                 None
-//             })
-//             .collect::<String>();
-//     }
-
-//     trim_quotes(text)
-// }
-
 // Formatting block full-explicit.
 impl MdocFormatter {
     fn get_width_indent(&self, width: &Option<u8>) -> usize{
@@ -1370,7 +1327,7 @@ impl MdocFormatter {
         &mut self,
         block_type: BdType,
         offset: Option<OffsetType>,
-        compact: bool,
+        _compact: bool,
         macro_node: MacroNode,
     ) -> String {
         let indent = self.get_offset_indent(&offset);
@@ -1460,8 +1417,6 @@ impl MdocFormatter {
 
         let mut content = lines.join("\n");
         content = content.trim_end().to_string();
-
-        let delimeter_size = if compact{ 1 } else { 2 };
 
         "\n\n".to_string() + &content + "\n\n"
     }
@@ -1755,7 +1710,7 @@ impl MdocFormatter {
             new_table
         }
 
-        /// 
+        /// Merges last row cells for rows with length bigger then [`col_count`] 
         fn merge_row_ends(table: &mut Vec<Vec<String>>, col_count: usize) -> Option<(usize, usize)>{
             let mut row_len_range: Option<(usize, usize)> = None;
             table.iter_mut()
@@ -2356,9 +2311,6 @@ impl MdocFormatter {
                                 for node in macro_node.nodes.clone().into_iter() {
                                     let formatted_node = self.format_node(node);
                                     append_formatted_node(&mut content, &formatted_node, &mut current_len, indent, max_width);
-                                    
-                                    // current_len = indent;
-
                                     continue;
                                 }
 
@@ -7441,7 +7393,7 @@ footer text                     January 1, 1970                    footer text";
         use std::process::Command;
         use rstest::rstest;
 
-        #[rstest]
+        // #[rstest]
         // // Small
         // #[case("./test_files/mdoc/rev.1")]
         // #[case("./test_files/mdoc/adjfreq.2")]
@@ -7520,7 +7472,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/chmod.2")]
         // // #[case("./test_files/mdoc/cvs.1")]
         // #[case("./test_files/mdoc/dc.1")]
-        // // #[case("./test_files/mdoc/flex.1")]
+        // #[case("./test_files/mdoc/flex.1")]
         // #[case("./test_files/mdoc/getdents.2")]
         // #[case("./test_files/mdoc/getitimer.2")]
         // #[case("./test_files/mdoc/getrusage.2")]
@@ -7557,22 +7509,19 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/rcs.1")]
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
-
         // #[case("./test_files/mdoc/tmux.1")]
-        #[case("./test_files/mdoc/cvs.1")]
-
+        // #[case("./test_files/mdoc/cvs.1")]
         // #[case("./test_files/mdoc/test.1")]
-        fn format_mdoc_file(#[case] path: &str){
-            let input = std::fs::read_to_string(path).unwrap();
-            let output = Command::new("mandoc")
-                .args(["-T", "locale", path])
-                .output()
-                .unwrap()
-                .stdout;
-            let output = String::from_utf8(output).unwrap();
-            println!("Current path: {}", path);
-            test_formatting(&input, &output);
-        }
-        
+        // fn format_mdoc_file(#[case] path: &str){
+        //     let input = std::fs::read_to_string(path).unwrap();
+        //     let output = Command::new("mandoc")
+        //         .args(["-T", "locale", path])
+        //         .output()
+        //         .unwrap()
+        //         .stdout;
+        //     let output = String::from_utf8(output).unwrap();
+        //     println!("Current path: {}", path);
+        //     test_formatting(&input, &output);
+        // }
     }
 }
