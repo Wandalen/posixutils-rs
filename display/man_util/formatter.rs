@@ -3189,7 +3189,7 @@ impl MdocFormatter {
         let content = self.format_partial_implicit_block(&mut macro_node, "", "");
         let spaces = " ".repeat(self.formatting_state.current_indent + self.formatting_settings.indent);
         
-        format!("{}{}", spaces, content)
+        format!("\n{}{}\n", spaces, content)
     }
 
     fn format_dq(&mut self, mut macro_node: MacroNode) -> String {
