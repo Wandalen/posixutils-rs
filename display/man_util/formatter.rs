@@ -3961,16 +3961,17 @@ mod tests {
         //println!("{:#?}", ast);
         let mut formatter = MdocFormatter::new(FORMATTING_SETTINGS);
         let result = String::from_utf8(formatter.format_mdoc(ast)).unwrap();
-        println!("Formatted document:\nReal:\n{}\n{}\n", 
-            result, 
-            vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
-        );
         // println!("Formatted document:\nTarget:\n{}\n{}\nReal:\n{}\n", 
         //     output, 
         //     vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
         //     result
         // );
-        panic!();
+        println!("Formatted document:\n{}\nReal:\n{}\n", 
+            vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
+            result
+        );
+
+        panic!()
     }
 
     mod special_chars {

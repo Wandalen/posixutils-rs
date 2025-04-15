@@ -48,6 +48,11 @@ static BLOCK_PARTIAL_IMPLICIT: &[&str] = &[
     "En", "Op", "Pq", "Ql", "Qq", "Sq", "Vt",
 ];
 
+// static BLOCK_PARTIAL_EXPLICIT_CLOSE: &[&str] = &[
+//     "Ac", "Bc", "Brc", "Dc", "Fc",
+//     "Ec", "Oc", "Pc", "Qc", "Sc", "Xc", "Re"
+// ];
+
 #[allow(unreachable_patterns)]
 fn does_start_with_macro(word: &str) -> bool {
     match word {
