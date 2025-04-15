@@ -127,15 +127,12 @@ pub fn prepare_document(text: &str) -> String {
     let mut is_bd_literal_block = false;
 
     text.lines()
-        .map(|line| {
-            let mut line = line.to_string(); 
-            correct_closing_macro_parsing(&mut line);
-
-            line = if line.contains(".It") {
-                line.replace('\t', &format!("{}", "\\~".repeat(4)))
-                    .replace("    ", &format!("{}", "\\~".repeat(4)))
+        .map(|l| {
+            let line = if l.contains(".It") {
+                l.replace('\t', &format!("{}", " Ta "))
+                    .replace("    ", &format!("{}", " Ta "))
             } else {
-                line.to_string()
+                l.to_string()
             };
 
             if line.contains(".Bd") && (line.contains("-literal") || line.contains("-unfilled")) {
