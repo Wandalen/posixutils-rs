@@ -6,19 +6,68 @@
 .Nd simple SNMP client
 .Sh SYNOPSIS
 .Nm
-.Ao Ar varoid type value Ac ...
+.Cm get | getnext | bulkget
+.Op Ar options
+.Ar agent
+.Ar oid ...
 .Nm
-.Bo Ar varoid type value Bc ...
+.Cm walk | bulkwalk
+.Op Ar options
+.Ar agent
+.Op Ar oid
 .Nm
-.Bro Ar varoid type value Brc ...
+.Cm set
+.Op Ar options
+.Ar agent
+.Ar varoid type value
+.Oo Ar varoid type value Oc ...
 .Nm
-.Xo Ar varoid type value Xc ...
+.Cm trap
+.Op Ar options
+.Ar agent uptime trapoid
+.Oo Ar varoid type value Oc ...
 .Nm
-.So Ar varoid type value Sc ...
+.Cm df
+.Op Ar options
+.Ar agent
 .Nm
-.Do Ar varoid type value Dc ...
+.Cm mibtree
+.Op Fl O Ar fns
+.Op Ar oid ...
+.Sh SYNOPSIS
+.In unistd.h
+.Ft int
+.Fn access "const char *path" "int amode"
+.In fcntl.h
+.In unistd.h
+.Ft int
+.Fn faccessat "int fd" "const char *path" "int amode" "int flag"
+.Sh SYNOPSIS
+.In sys/types.h
+.In sys/time.h
+.Ft int
+.Fn adjfreq "const int64_t *freq" "int64_t *oldfreq"
+.Sh SYNOPSIS
+.In sys/time.h
+.Pp
+.Fd #define ITIMER_REAL		0
+.Fd #define ITIMER_VIRTUAL	1
+.Fd #define ITIMER_PROF		2
+.Ft int
+.Fn getitimer "int which" "struct itimerval *value"
+.Ft int
+.Fn setitimer "int which" "const struct itimerval *value" "struct itimerval *ovalue"
+.Sh SYNOPSIS
 .Nm
-.Qo Ar varoid type value Qc ...
-.Nm
-.Po Ar varoid type value Pc ...
-Text lalal
+.Bk -words
+.Op Fl flnQqRrtVvw
+.Op Fl d Ar root
+.Op Fl e Ar editor
+.Xo
+.Oo Fl s
+.Ar var Ns = Ns Ar val Oc
+.Xc
+.Op Fl T Ar tmpdir
+.Op Fl z Ar level
+.Ar command ...
+.Ek

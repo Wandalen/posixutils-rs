@@ -43,18 +43,9 @@ static RS_SUBMACRO_ORDER: LazyLock<Vec<Macro>> = LazyLock::new(|| {
     ]
 });
 
-// static REGEX_WIDTH: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
-//     regex::Regex::new(r"[+-]?[0-9]*.[0-9]*[:unit:]?").unwrap()
-// });
-
 static BLOCK_PARTIAL_IMPLICIT: &[&str] = &[
     "Aq", "Bq", "Brq", "D1", "Dl", "Dq",
     "En", "Op", "Pq", "Ql", "Qq", "Sq", "Vt",
-];
-
-static BLOCK_PARTIAL_EXPLICIT_CLOSE: &[&str] = &[
-    "Ac", "Bc", "Brc", "Dc", "Fc", "Oc",
-    "Pc", "Qc", "Re", "Sc", "Xc"
 ];
 
 #[allow(unreachable_patterns)]
@@ -100,26 +91,6 @@ fn does_start_with_macro(word: &str) -> bool {
         "Va" | "Vt" |
         "Xr" => true,
         _ => false,
-    }
-}
-
-fn correct_closing_macro_parsing(line: &mut String){
-    let Some(macros) = line.split('c').next() else{
-        return;
-    };
-    let Some(macros) = macros.strip_prefix(".") else{
-        return;
-    };
-    let macros = macros.to_string() + "c"; 
-    if BLOCK_PARTIAL_EXPLICIT_CLOSE.contains(&macros.as_str()){
-        let next_non_whitespace = line.chars()
-            .enumerate()
-            .skip(macros.len() + 1)
-            .skip_while(|(_, ch)|ch.is_whitespace())
-            .next();
-        if let Some((pos, '.')) = next_non_whitespace{
-            line.replace_range(pos..(pos+1), "\\&.");
-        }     
     }
 }
 
@@ -918,7 +889,7 @@ impl MdocParser {
 
         nodes.extend(ac);
 
-        Element::Macro(MacroNode {
+            Element::Macro(MacroNode {
             mdoc_macro: Macro::Ao,
             nodes,
         })

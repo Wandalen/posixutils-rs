@@ -190,11 +190,11 @@ bd_type     = {
 }
 
 // ! Try to parse "indent-two" before "indent"
-off_indent_two = { "indent-two" }
-off_indent     = { "indent" }
-off_left       = { "left" }
-off_right      = { "right" }
-off_center     = { "center" }
+off_indent_two = { "indent-two" ~ "."? }
+off_indent     = { "indent" ~ "."? }
+off_left       = { "left" ~ "."? }
+off_right      = { "right" ~ "."? }
+off_center     = { "center" ~ "."? }
 offset         = {
     off_indent_two
   | off_indent
