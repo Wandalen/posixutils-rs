@@ -1308,43 +1308,43 @@ fn remove_empty_lines(input: &str, delimiter_size: usize) -> String {
     result
 }
 
-///  Remove ansi escape sequences as `\x1b[3m` in [`text`] [`str`] 
-fn remove_ansi_escapes(text: &str) -> String{
-    let mut text = format!("{:?}", text);
-    let starts = text.match_indices("\\u{1b}")
-        .map(|(i,_)|i)
-        .collect::<Vec<_>>();
+// ///  Remove ansi escape sequences as `\x1b[3m` in [`text`] [`str`] 
+// fn remove_ansi_escapes(text: &str) -> String{
+//     let mut text = format!("{:?}", text);
+//     let starts = text.match_indices("\\u{1b}")
+//         .map(|(i,_)|i)
+//         .collect::<Vec<_>>();
 
-    let mut ends = vec![];
-    for start in &starts{
-        let end = text.chars()
-            .enumerate()
-            .skip(*start + 5)
-            .find(|(_, ch)|ch.is_alphabetic())
-            .map(|(i, _)| i);
+//     let mut ends = vec![];
+//     for start in &starts{
+//         let end = text.chars()
+//             .enumerate()
+//             .skip(*start + 5)
+//             .find(|(_, ch)|ch.is_alphabetic())
+//             .map(|(i, _)| i);
 
-        if let Some(end) = end{
-            ends.push(end);
-        }
-    }
+//         if let Some(end) = end{
+//             ends.push(end);
+//         }
+//     }
 
-    let replace_ranges = starts.iter()
-        .zip(ends.iter())
-        .map(|(s,e)|s..=e)
-        .collect::<Vec<_>>();
+//     let replace_ranges = starts.iter()
+//         .zip(ends.iter())
+//         .map(|(s,e)|s..=e)
+//         .collect::<Vec<_>>();
 
-    for r in replace_ranges.clone().into_iter().rev(){
-        text = text.chars().enumerate()
-            .filter_map(|(i,ch)| if !r.contains(&&i){
-                Some(ch)
-            }else{
-                None
-            })
-            .collect::<String>();
-    }
+//     for r in replace_ranges.clone().into_iter().rev(){
+//         text = text.chars().enumerate()
+//             .filter_map(|(i,ch)| if !r.contains(&&i){
+//                 Some(ch)
+//             }else{
+//                 None
+//             })
+//             .collect::<String>();
+//     }
 
-    trim_quotes(text)
-}
+//     trim_quotes(text)
+// }
 
 // Formatting block full-explicit.
 impl MdocFormatter {
@@ -1477,7 +1477,7 @@ impl MdocFormatter {
     }
 
     fn format_bf_block(&mut self, bf_type: BfType, macro_node: MacroNode) -> String {
-        let font_change = match bf_type{
+        let _font_change = match bf_type{
             BfType::Emphasis => {
                 // if self.supports_italic() {
                 //     "\x1b[3m".to_string()
@@ -2278,51 +2278,6 @@ impl MdocFormatter {
         }
     }
 
-    fn format_nm_synopsis(&mut self, name: Option<String>, macro_node: MacroNode) -> String {
-        let content = macro_node
-            .nodes
-            .into_iter()
-            .map(|node| {
-                let mut content = self.format_node(node);
-                if !content.ends_with('\n') && !content.is_empty() {
-                    content.push_str(&self.formatting_state.spacing);
-                }
-                content
-            })
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<String>>()
-            .join("");
-        
-        if self.formatting_state.first_name.is_none() {
-            self.formatting_state.first_name = name;
-            let first_name = self.formatting_state.first_name.as_ref().unwrap();
-    
-            if is_first_char_delimiter(&content) {
-                format!("\n{}{}", first_name.trim(), content.trim())
-            } else {
-                format!("\n{} {}", first_name.trim(), content.trim())
-            }
-        } else {
-            let provided_name = match name {
-                Some(name) => {
-                    let first_name = self.formatting_state.first_name.as_ref().unwrap();
-                    if name.eq(first_name) {
-                        String::new()
-                    } else {
-                        name
-                    }
-                }
-                None => String::new()
-            };
-            let first_name = self.formatting_state.first_name.as_ref().unwrap();
-    
-            let separator1 = if is_first_char_delimiter(&provided_name) { "" } else { " " };
-            let separator2 = if is_first_char_delimiter(&content) { "" } else { " " };
-    
-            format!("\n{}{}{}{}{}", first_name.trim(), separator1, provided_name.trim(), separator2, content.trim())
-        }
-    }
-
     /// If line don't have enought indentation according 
     /// to [`self.formatting_settings.indent`], then 
     /// indent is added to this line
@@ -2354,7 +2309,6 @@ impl MdocFormatter {
             indent: usize,
             max_width: usize,
         ) {
-            // println!("Formatted node:\n{}\n---------------------", formatted_node.replace("\n", "NL"));
             let formatted_node_len = formatted_node.chars().count();
             *current_len += formatted_node_len;
 
@@ -2363,7 +2317,7 @@ impl MdocFormatter {
                 content.push_str(&format!("\n{}", " ".repeat(indent)));
             }
 
-            content.push_str(&format!("{} ", formatted_node.trim()));
+            content.push_str(&format!("{} ", formatted_node.trim_end()));
         }
 
         let mut ss_lines_positions = vec![];
@@ -2378,7 +2332,7 @@ impl MdocFormatter {
                 self.formatting_state.current_indent + 
                 self.formatting_state.first_name.as_ref().unwrap().len() + 1;
 
-            let max_width = self.formatting_settings.width - indent;
+            let max_width = self.formatting_settings.width;
             
             let mut content = String::new();
             let mut current_len = indent;
@@ -2390,22 +2344,60 @@ impl MdocFormatter {
                             Macro::Vt => self.format_vt_synopsis(macro_node.clone()),
                             Macro::Nm { 
                                 name 
-                            } => self.format_nm_synopsis(name.clone(), macro_node.clone()).trim().to_string(),
-                            Macro::Ft => self.format_ft_synopsis(macro_node.clone()),
+                            } => {
+                                let formatted_node = self.format_nm(name.clone(), macro_node.clone());
+                                
+                                current_len = indent;
+                                
+                                format!("\n{}", formatted_node.trim_end())
+                            },
+                            Macro::Ft => {
+                                let formatted_node = self.format_ft_synopsis(macro_node.clone());
+                                content.push_str(&formatted_node);
+
+                                current_len = indent;
+
+                                continue;
+                            },
                             Macro::In { 
                                 ref filename 
-                            } => self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node),
+                            } => {
+                                let formatted_node = self.format_in_synopsis(filename.as_str(), macro_node.clone(), &prev_node);
+                                content.push_str(&formatted_node);
+
+                                current_len = indent;
+
+                                continue;
+                            },
                             Macro::Fd {
                                 directive, 
                                 arguments 
-                            } => self.format_fd_synopsis(directive, arguments),
+                            } => {
+                                let formatted_node = self.format_fd_synopsis(directive, arguments);
+                                content.push_str(&formatted_node);
+
+                                current_len = indent;
+
+                                continue;
+                            },
                             Macro::Fn { 
                                 funcname 
-                            } => self.format_fn_synopsis(&funcname, macro_node.clone()),
+                            } => {
+                                let formatted_node = self.format_fn_synopsis(&funcname, macro_node.clone());
+                                content.push_str(&formatted_node);
+
+                                current_len = indent;
+
+                                continue;
+                            },
                             Macro::Bk => {
                                 for node in macro_node.nodes.clone().into_iter() {
                                     let formatted_node = self.format_node(node);
                                     append_formatted_node(&mut content, &formatted_node, &mut current_len, indent, max_width);
+                                    
+                                    // current_len = indent;
+
+                                    continue;
                                 }
 
                                 String::new()
@@ -2475,8 +2467,6 @@ impl MdocFormatter {
             .collect::<Vec<_>>()
             .join(&self.formatting_state.spacing)
         };
-
-        println!("SH content:\n{:#?}", content.replace("\n", "NL"));
 
         self.add_missing_indent(&mut content);
 
@@ -3064,8 +3054,6 @@ impl MdocFormatter {
             matches!(s, ")" | "]" | "." | "," | ":" | ";" | "!" | "?")
         }
     
-        // Рекурсивная функция для извлечения последовательности завершающих делимитров
-        // с сохранением первоначального порядка.
         fn extract_trailing_delims(node: &mut MacroNode) -> String {
             let mut delim_sequence = String::new();
             loop {
@@ -3075,23 +3063,18 @@ impl MdocFormatter {
                 let last_index = node.nodes.len() - 1;
                 match &mut node.nodes[last_index] {
                     Element::Text(ref text) if is_closing_delimiter(text) => {
-                        // Извлекаем делимитер, если это закрывающий символ.
                         if let Some(Element::Text(delim)) = node.nodes.pop() {
-                            // Вставляем извлечённый делимитер перед ранее накопленными,
-                            // чтобы сохранить порядок.
                             delim_sequence = format!("{}{}", delim, delim_sequence);
                         } else {
                             break;
                         }
                     }
                     Element::Macro(ref mut inner_macro_node) => {
-                        // Рекурсивно обрабатываем вложенный макрос.
                         let inner_delims = extract_trailing_delims(inner_macro_node);
                         if inner_delims.is_empty() {
                             break;
                         }
                         delim_sequence = format!("{}{}", inner_delims, delim_sequence);
-                        // Если вложенный макрос после извлечения делимитров стал пустым — удаляем его.
                         if inner_macro_node.nodes.is_empty() {
                             node.nodes.pop();
                         }
@@ -3102,7 +3085,6 @@ impl MdocFormatter {
             delim_sequence
         }
     
-        // Извлекаем все завершающие делимитры из macro_node с сохранением их порядка.
         let trailing_punctuation = extract_trailing_delims(macro_node);
     
         let mut result = open_char.to_string();
@@ -3121,8 +3103,6 @@ impl MdocFormatter {
                             prev_was_open = false;
                             text.clone()
                         }
-                        // Для разделителей, которые уже извлекались в конце,
-                        // не добавляем их в основную строку.
                         "." | "," | ":" | ";" | "!" | "?" => {
                             prev_was_open = false;
                             String::new()
@@ -7553,20 +7533,20 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/moptrace.1")]
 
         //Other
-        // #[case("./test_files/mdoc/rlog.1")]
-        // #[case("./test_files/mdoc/access.2")]
-        // #[case("./test_files/mdoc/munmap.2")]
-        // #[case("./test_files/mdoc/ipcs.1")]
-        // #[case("./test_files/mdoc/atq.1")]
-        // #[case("./test_files/mdoc/brk.2")]
-        // #[case("./test_files/mdoc/cal.1")]
-        // #[case("./test_files/mdoc/minherit.2")]
-        // #[case("./test_files/mdoc/cat.1")]
-        // #[case("./test_files/mdoc/file.1")]
-        // #[case("./test_files/mdoc/mkdir.1")] 
-        // #[case("./test_files/mdoc/getsockname.2")]
-        // #[case("./test_files/mdoc/mlockall.2")]
-        // #[case("./test_files/mdoc/cut.1")]
+        #[case("./test_files/mdoc/rlog.1")]
+        #[case("./test_files/mdoc/access.2")]
+        #[case("./test_files/mdoc/munmap.2")]
+        #[case("./test_files/mdoc/ipcs.1")]
+        #[case("./test_files/mdoc/atq.1")]
+        #[case("./test_files/mdoc/brk.2")]
+        #[case("./test_files/mdoc/cal.1")]
+        #[case("./test_files/mdoc/minherit.2")]
+        #[case("./test_files/mdoc/cat.1")]
+        #[case("./test_files/mdoc/file.1")]
+        #[case("./test_files/mdoc/mkdir.1")] 
+        #[case("./test_files/mdoc/getsockname.2")]
+        #[case("./test_files/mdoc/mlockall.2")]
+        #[case("./test_files/mdoc/cut.1")]
 
         //without bl
         // #[case("./test_files/mdoc/umask.2")]
@@ -7618,7 +7598,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/snmp.1")]
         
         // #[case("./test_files/mdoc/rdist.1")]
-        
+
         //Block 1
         // #[case("./test_files/mdoc/chmod.2")]
         // #[case("./test_files/mdoc/cvs.1")]
@@ -7664,7 +7644,7 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/sftp.1")]
         // #[case("./test_files/mdoc/grep.1")]
 
-        #[case("./test_files/mdoc/test.1")]
+        // #[case("./test_files/mdoc/test.1")]
         fn format_mdoc_file(#[case] path: &str){
             let input = std::fs::read_to_string(path).unwrap();
             let output = Command::new("mandoc")
