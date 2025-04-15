@@ -126,6 +126,19 @@ fn correct_closing_macro_parsing(line: &mut String){
 pub fn prepare_document(text: &str) -> String {
     let mut is_bd_literal_block = false;
 
+    let text = text.split(".Bl ")
+        .map(|s|{
+            let Some((s1, s2)) = s.split_once(".It ") else{
+                return s.to_string();
+            };
+            let Some((s1, _)) = s1.split_once("\n") else{
+                return s.to_string();
+            };
+            s1.to_string() + "\n.It " + &s2
+        })
+        .collect::<Vec<_>>()
+        .join(".Bl ");
+
     text.lines()
         .map(|l| {
             let line = if l.contains(".It") {
@@ -152,7 +165,7 @@ pub fn prepare_document(text: &str) -> String {
                     index = i + ch.len_utf8();
                 }
     
-                format!("{}{}", "\\~".repeat(leading_spaces), &line[index..])
+                format!("{}{}", "\\^".repeat(leading_spaces), &line[index..])
             } else {
                 line.clone()
             };
@@ -239,8 +252,6 @@ pub enum MdocError {
 
 impl MdocParser {
     fn parse_element(pair: Pair<Rule>) -> Element {
-        // println!("\"{:?}\"", pair.as_str());
-
         match pair.as_rule() {
             Rule::element => Self::parse_element(pair.into_inner().next().unwrap()),
             Rule::block_full_explicit => Self::parse_block_full_explicit(pair),
@@ -287,15 +298,8 @@ impl MdocParser {
     /// Parses full mdoc file
     pub fn parse_mdoc(input: &str) -> Result<MdocDocument, MdocError> {
         let input = prepare_document(&input);
-
-        // for line in input.lines() {
-        //     println!("{}", line);
-        // }
-
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
-
-        //println!("Pairs:\n{pairs:#?}\n\n");
 
         // Iterate each pair (macro or text element)
         let mut elements: Vec<Element> = pairs
@@ -311,11 +315,6 @@ impl MdocParser {
             }
         }
 
-        //println!("{:#?}", elements);
-
-        // TODO: debug only
-        // elements.iter().for_each(|e| println!("{e:?}"));
-
         let mdoc = MdocDocument { elements };
 
         Ok(mdoc)
@@ -327,9 +326,6 @@ impl MdocParser {
     /// Parses (`Bd`)[https://man.openbsd.org/mdoc#Bd]:
     /// `Bd -type [-offset width] [-compact]`
     fn parse_bd_block(pair: Pair<Rule>) -> Element {
-
-        // println!("340 | parser.rs: Bd block:\n{:#?}\n---------------", pair.clone());
-
         fn parse_bd_open(pair: Pair<Rule>) -> Macro {
             let mut inner = pair.into_inner();
 
@@ -565,9 +561,6 @@ impl MdocParser {
     // Parses (`It`)[https://man.openbsd.org/mdoc#It]
     // `It [head]`
     fn parse_it_block(pair: Pair<Rule>) -> Element {
-
-        // println!("Pair:\n{:#?}", pair.clone());
-
         fn string_to_elements(input: &str) -> Vec<Element>{
             if let Ok(pairs) = MdocParser::parse(Rule::args, input){
                 pairs
@@ -618,8 +611,6 @@ impl MdocParser {
             .map(Self::parse_element)
             .collect::<Vec<_>>();
 
-        //println!("It\nhead:\n{:#?}\nbody:\n{:#?}", head, nodes);
-
         Element::Macro(MacroNode {
             mdoc_macro: Macro::It{
                 head
@@ -659,12 +650,18 @@ impl MdocParser {
         let mut inner_pairs = pair.into_inner();
 
         let mut name = None;
+        let mut nodes = vec![];
 
         if let Some(val) = inner_pairs.next() {
-            name = Some(val.as_str().to_string());
+            let val = val.as_str().to_string();
+            if val.chars().all(|ch|ch.is_alphanumeric()){
+                name = Some(val);
+            }else{
+                nodes.push(Element::Text(val));
+            }
         }
 
-        let nodes = inner_pairs.map(Self::parse_element).collect();
+        nodes.extend(inner_pairs.map(Self::parse_element));
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Nm { name },
@@ -1231,9 +1228,6 @@ impl MdocParser {
     // Parses (`Rs`)[https://man.openbsd.org/mdoc#Rs]:
     // `Rs`
     fn parse_rs_block(pair: Pair<Rule>) -> Element {
-
-        // println!("Rs block:\nNodes:\n{:#?}", pair);
-
         fn rs_submacro_cmp(a: &Element, b: &Element) -> std::cmp::Ordering {
             let get_macro_order_position = |n| {
                 RS_SUBMACRO_ORDER
@@ -1272,8 +1266,6 @@ impl MdocParser {
             .collect();
 
         nodes.sort_by(rs_submacro_cmp);
-
-        // println!("Rs block:\nFormatted nodes:\n{:#?}", nodes);
 
         Element::Macro(MacroNode {
             mdoc_macro: Macro::Rs,
@@ -1360,9 +1352,6 @@ impl MdocParser {
 
     fn parse_block_partial_explicit(pair: Pair<Rule>) -> Element {
         let pair = pair.into_inner().next().unwrap();
-
-        // println!("Rule: {:?}", pair.as_rule());
-
         match pair.as_rule() {
             Rule::ao_block => Self::parse_ao_block(pair),
             Rule::bo_block => Self::parse_bo_block(pair),
