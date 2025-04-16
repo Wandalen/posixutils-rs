@@ -443,10 +443,10 @@ lazy_static! {
             .collect::<Vec<_>>()
             .join("|");
 
-        let pattern = format!(
-            r#"(?P<quoted>"[^"]*")|(?P<esc>{})"#,
-            alternation
-        );
+            let pattern = format!(
+                r#"(?P<esc>{})"#,
+                alternation
+            );
 
         Regex::new(&pattern).unwrap()
     };
@@ -455,9 +455,7 @@ lazy_static! {
 pub fn replace_escapes(input: &str) -> String {
     let input = OUTER_REGEX
         .replace_all(input, |caps: &regex::Captures| {
-            if let Some(quoted) = caps.name("quoted") {
-                quoted.as_str().to_string()
-            } else if let Some(esc) = caps.name("esc") {
+            if let Some(esc) = caps.name("esc") {
                 SUBSTITUTIONS
                     .get(esc.as_str())
                     .map(|rep| rep.to_string())
@@ -3328,11 +3326,9 @@ impl MdocFormatter {
     fn format_an_authors(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
         match an_type {
             AnType::NoSplit => {
-                // self.formatting_state.split_mod = false;
                 String::new()
             }
             AnType::Split => {
-                // self.formatting_state.split_mod = true;
                 String::new()
             }
             AnType::Name => {
