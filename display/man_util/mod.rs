@@ -9,9 +9,9 @@
 
 /// Handle mdoc config file
 pub mod config;
-/// Store [`Macro`] enum 
-pub mod mdoc_macro;
-/// Converts input mdoc file macros to AST 
-pub mod parser;
 /// Converts AST to [`String`] and print it to terminal
 pub mod formatter;
+/// Store [`Macro`] enum
+pub mod mdoc_macro;
+/// Converts input mdoc file macros to AST
+pub mod parser;

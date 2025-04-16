@@ -61,7 +61,6 @@ block_full_explicit = {
 }
 
 block_full_implicit = { 
-  it_block | 
   nd_block | 
   nm_block | 
   sh_block | 
@@ -268,7 +267,7 @@ bl_type   = {
   | bl_tag
 }
 
-bl_width = { "-width" ~ ws+ ~ text_arg }
+bl_width = { "-width" ~ ws+ ~ word }
 bl_offset = { "-offset" ~ ws+ ~ offset }
 column = @{
     ("\\&" ~ (!(ws | NEWLINE) ~ ANY)+) 
@@ -276,10 +275,11 @@ column = @{
   | (!(ws | NEWLINE) ~ ANY)+ 
 }
 bl_param = { bl_width | bl_offset | compact | column }
+bl_skip = { !( it_block | comment_start | el_close ) ~ element }
 
 bl_open  = ${ "Bl" ~ ws+ ~ bl_type ~ (ws+ ~ bl_param)* ~ ws* ~ NEWLINE }
 el_close =  { ".El" ~ NEWLINE? }
-bl_block =  { bl_open ~ (it_block | comment_start)* ~ el_close }
+bl_block =  { bl_open ~ bl_skip* ~ (it_block | comment_start)* ~ el_close }
 
 // ----- Block full-implicit macros
 

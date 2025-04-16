@@ -249,7 +249,13 @@ mod tests {
     #[test]
     fn override_paths_multiple() {
         let output = Command::new(env!("CARGO_BIN_EXE_man"))
-            .args(["-M", "/tmp:/nonexistent:/usr/local/man", "ls", "-C", "man.test.conf"])
+            .args([
+                "-M",
+                "/tmp:/nonexistent:/usr/local/man",
+                "ls",
+                "-C",
+                "man.test.conf",
+            ])
             .output()
             .expect("Failed to run man -M with multiple paths ls");
 
@@ -280,7 +286,13 @@ mod tests {
     #[test]
     fn augment_paths_multiple() {
         let output = Command::new(env!("CARGO_BIN_EXE_man"))
-            .args(["-m", "/first/path:/second/path", "ls", "-C", "man.test.conf"])
+            .args([
+                "-m",
+                "/first/path:/second/path",
+                "ls",
+                "-C",
+                "man.test.conf",
+            ])
             .output()
             .expect("Failed to run man -m /first/path:/second/path ls");
 
