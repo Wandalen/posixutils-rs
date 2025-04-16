@@ -2399,9 +2399,13 @@ impl MdocFormatter {
         self.formatting_state.current_indent += self.formatting_settings.indent;
 
         let mut content = if title.eq_ignore_ascii_case("SYNOPSIS") {
-            let indent = self.formatting_state.current_indent
-                + self.formatting_state.first_name.as_ref().unwrap().len()
-                + 1;
+            let first_name_len = self
+                .formatting_state
+                .first_name
+                .clone()
+                .unwrap_or_default()
+                .len();
+            let indent = self.formatting_state.current_indent + first_name_len + 1;
 
             let max_width = self.formatting_settings.width;
 
