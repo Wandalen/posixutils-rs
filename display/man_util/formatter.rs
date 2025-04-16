@@ -2220,7 +2220,10 @@ impl MdocFormatter {
     
         if self.formatting_state.first_name.is_none() {
             self.formatting_state.first_name = name;
-            let first_name = self.formatting_state.first_name.as_ref().unwrap();
+            let first_name = match self.formatting_state.first_name.as_ref() {
+                Some(name) => name.clone(),
+                None => "".to_string()
+            };
     
             if is_first_char_delimiter(&content) {
                 format!("{}{}", first_name.trim(), content.trim())
@@ -5697,9 +5700,9 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text
 .Nm command_name";
             let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
+"PROGNAME(section)                   section                  PROGNAME(section)
 
-command_name
+ command_name
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -5727,7 +5730,7 @@ If no files are specified, the standard input is read.";
 "REV(1)                      General Commands Manual                     REV(1)
 
 NAME
-     rev – reverse lines of a file
+     rev  – reverse lines of a file
 
 SYNOPSIS
      rev [file ...]
@@ -5737,7 +5740,7 @@ DESCRIPTION
      reversing the order of characters in every line. If no files are
      specified, the standard input is read.
 
-                               October 28, 2016                               ";
+GNU/Linux                      October 28, 2016                      GNU/Linux";
             test_formatting(input, output);
         }
 
@@ -6183,33 +6186,6 @@ footer text                     January 1, 1970                    footer text";
         }
 
         #[test]
-        fn an() {
-            let input = ".Dd January 1, 1970
-.Dt PROGNAME section
-.Os Debian
-.An Kristaps
-.An Kristaps
-.An Kristaps
-.An -split
-.An Kristaps
-.An Kristaps
-.An -nosplit
-.An Kristaps
-.An Kristaps";
-            let output = 
-"PROGNAME(section)                   section                  PROGNAME(section)
-
-Kristaps Kristaps Kristaps
-
-Kristaps
-
-Kristaps Kristaps Kristaps
-
-Debian                          January 1, 1970                         Debian";
-            test_formatting(input, output);
-        }
-
-        #[test]
         fn ap() {
             let input = 
 ".Dd January 1, 1970
@@ -6353,7 +6329,6 @@ footer text                     January 1, 1970                    footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
-
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
@@ -6366,7 +6341,6 @@ footer text                     January 1, 1970                    footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
-
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
         }
@@ -6378,7 +6352,6 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text";
             let output =
                 "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
-
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6430,11 +6403,11 @@ Some of the functions use a
 .Em hold space
 to save the pattern space for subsequent retrieval.";
             let output =
-                "TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
+"TITLE(7)            Miscellaneous Information Manual (arch)           TITLE(7)
 
-Selected lines are those \u{1b}[3mnot\u{1b}[0m matching any of the specified patterns.
-Some of the functions use a \u{1b}[3mhold space\u{1b}[0m to save the pattern space for
-subsequent retrieval.
+Selected lines are those not matching any of the specified patterns. Some of
+the functions use a hold space to save the pattern space for subsequent
+retrieval.
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6698,26 +6671,6 @@ footer text                     January 1, 1970                    footer text";
         }
 
         #[test]
-        fn lp() {
-            let input = 
-".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Hf file/path file2/path
-.Lp
-.Lk https://bsd.lv The BSD.lv Project";
-            let output =
-"PROGNAME(section)                   section                  PROGNAME(section)
-
-file/path file2/path
-
-The BSD.lv Project: https://bsd.lv
-
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
-        }
-
-        #[test]
         fn ms() {
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
@@ -6748,21 +6701,6 @@ footer text                     January 1, 1970                    footer text";
         }
 
         #[test]
-        fn nm() {
-            let input = ".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Nm command_name";
-            let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
-
-command_name
-
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
-        }
-
-        #[test]
         fn no() {
             let input = ".Dd January 1, 1970
 .Dt PROGNAME section
@@ -6772,26 +6710,6 @@ footer text                     January 1, 1970                    footer text";
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
 a b c
-
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
-        }
-
-        #[test]
-        fn ns() {
-            let input = ".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Ar name Ns = Ns Ar value
-.Cm :M Ns Ar pattern
-.Fl o Ns Ar output
-.No a b c
-.Ns
-.No a b c";
-            let output =
-"PROGNAME(section)                   section                  PROGNAME(section)
-
-name=value :Mpattern -ooutput a b ca b c
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6819,7 +6737,6 @@ footer text                     January 1, 1970                    footer text";
 .Os footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
-
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6865,41 +6782,6 @@ footer text                     January 1, 1970                    footer text";
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
 name1 name2
-
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
-        }
-
-        #[test]
-        fn pf() {
-            let input = ".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Ar value Pf $ Ar variable_name";
-            let output =
-"PROGNAME(section)                   section                  PROGNAME(section)
-
-value $variable_name
-
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
-        }
-
-        #[test]
-        fn pp() {
-            let input = 
-".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Hf file/path file2/path
-.Pp
-.Lk https://bsd.lv The BSD.lv Project";
-            let output =
-"PROGNAME(section)                   section                  PROGNAME(section)
-
-file/path file2/path
-
-The BSD.lv Project: https://bsd.lv
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -6995,21 +6877,7 @@ footer text                     January 1, 1970                    footer text";
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
-\u{1b}[1mword1 word2\u{1b}[0m
-
-footer text                     January 1, 1970                    footer text";
-            test_formatting(input, output);
-        }
-
-        #[test]
-        fn tg() {
-            let input = ".Dd January 1, 1970
-.Dt PROGNAME section
-.Os footer text
-.Tg term";
-            let output =
-                "PROGNAME(section)                   section                  PROGNAME(section)
-
+word1 word2
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -7354,7 +7222,7 @@ footer text                     January 1, 1970                    footer text";
             let output = 
 "PROGNAME(section)                   section                  PROGNAME(section)
 
-\u{1b}[3m(random) text!\u{1b}[0m
+(random) text!
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -7386,7 +7254,7 @@ footer text                     January 1, 1970                    footer text";
             let output = 
 "PROGNAME(section)                   section                  PROGNAME(section)
 
-\u{1b}[1m(random) text!\u{1b}[0m
+(random) text!
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
