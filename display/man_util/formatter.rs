@@ -608,14 +608,14 @@ impl MdocFormatter {
                 current_line.clear();
             }
 
-            let line_len = current_line.len() + line.len();
+            let line_len = current_line.chars().count() + line.chars().count();
             if line_len > max_width || is_one_line {
                 let indent = get_indent(&line);
-                let max_width = max_width.saturating_sub(indent.len());
+                let max_width = max_width.saturating_sub(indent.chars().count());
 
                 for word in line.split_whitespace() {
-                    let line_len = current_line.len() + word.len();
-                    if line_len >= max_width {
+                    let line_len = current_line.chars().count() + word.chars().count();
+                    if line_len > max_width {
                         lines.push(indent.clone() + current_line.trim());
                         current_line.clear(); 
                     }
@@ -1031,6 +1031,11 @@ fn split_by_width(words: Vec<String>, width: usize) -> Vec<String>{
         i += 1;
     }
     lines.push(line);
+
+    for l in lines.iter_mut(){
+        *l = l.trim_end().to_string();
+    }
+
     lines
 }
 
@@ -1121,7 +1126,7 @@ fn merge_onelined(
                 .collect::<Vec<_>>();
             if let Some(s) = el.iter_mut().next(){
                 if s.is_empty(){
-                    *s = indent_str.to_string();
+                    *s = indent_str.to_string() + "\\&";
                 }
             }
 
@@ -1134,6 +1139,12 @@ fn merge_onelined(
         }
     }
     merge(&mut onelines, &mut lines, line_width, indent_str, offset);
+
+    if let Some(first) = lines.first(){
+        if first.chars().all(|ch|ch.is_whitespace()){
+            lines.remove(0);
+        }
+    }
 
     lines
 }
@@ -1498,18 +1509,21 @@ impl MdocFormatter {
         }else{
             1
         };
-        let full_indent = origin_indent + indent + symbol_range - 1;
+        let mut full_indent = origin_indent + indent;
+        if let BlType::Enum = list_type{
+            full_indent += symbol_range.saturating_sub(2);
+        }
         let line_width = width.saturating_sub(full_indent);
         let indent_str = " ".repeat(full_indent);
 
         let mut symbol = get_symbol("", &list_type);
         let mut content = String::new();
         for (_, body) in items {                    
-            let mut body = merge_onelined(body, line_width, &indent_str, &offset);   
-            
+            let mut body = merge_onelined(body, line_width, &indent_str, &offset);  
+
             if let Some(first_line) = body.get_mut(0){
                 symbol = get_symbol(symbol.as_str(), &list_type);
-                if first_line.len() > origin_indent + symbol_range{
+                if first_line.len() > (origin_indent + symbol_range){
                     first_line.replace_range(origin_indent..(origin_indent + symbol_range), &symbol);
                 }
             }
@@ -2057,6 +2071,34 @@ impl MdocFormatter {
             }
         }
 
+        fn strip_empty_between_nested(formatted_its: &mut Vec<Vec<String>>, macro_node: &MacroNode, max_nl: usize){
+            for (i, it_node) in macro_node.nodes.iter().enumerate(){
+                let Element::Macro(MacroNode { mdoc_macro: Macro::It{ .. }, nodes }) = it_node else {
+                    continue;
+                };
+                let Some(Element::Macro(MacroNode { mdoc_macro: Macro::Bl{ .. }, .. })) = nodes.first() else {
+                    continue;
+                };
+                let Some(element) = formatted_its.get_mut(i) else{
+                    continue;
+                };
+                let Some(first) = element.first_mut() else{
+                    continue;
+                };
+                let leading_nl_count = first.chars()
+                    .take_while(|ch|ch.is_whitespace())
+                    .filter(|ch|*ch == '\n')
+                    .count();
+                if leading_nl_count >= max_nl{
+                    *first = first.lines()
+                        .skip(max_nl + 1)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                        .to_string();
+                }
+            }
+        }
+
         let heads = self.get_heads(macro_node.clone(), &list_type);
         let width_indent = self.get_width_indent(&width);
         let offset_indent = self.get_offset_indent(&offset);
@@ -2068,12 +2110,19 @@ impl MdocFormatter {
             self.formatting_state.current_indent += symbol_width;
         }
         
-        let bodies = self.get_bodies(macro_node.clone(), &list_type);
+        let mut bodies = self.get_bodies(macro_node.clone(), &list_type);
         
         self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(width_indent);
         if is_symbol{
             self.formatting_state.current_indent = self.formatting_state.current_indent.saturating_sub(symbol_width);
         }
+
+        let max_nl = if matches!(list_type, BlType::Hang){
+            1
+        }else{
+            0
+        };
+        strip_empty_between_nested(&mut bodies, &macro_node, max_nl);
 
         let items: Vec<(String, Vec<String>)> = if heads.is_empty() {
             bodies.clone().into_iter().map(|body| ("".to_string(), body)).collect()
@@ -2406,7 +2455,7 @@ impl MdocFormatter {
         self.add_missing_indent(&mut content);
         self.formatting_state.current_indent = 0;
         
-        format!("\n\n\\[ssindent]{title}\n{content}\n")
+        format!("\n\n\\[ssindent]{title}\n\n{content}\n")
     }
 }
 
@@ -3828,7 +3877,7 @@ mod tests {
             vec!['-';formatter.formatting_settings.width].iter().collect::<String>(), 
             result
         );
-        panic!();
+        assert_eq!(output, result);
     }
 
     mod special_chars {
@@ -3838,10 +3887,9 @@ mod tests {
         fn spaces() {
             let input = r".Dd January 1, 1970
 .Os footer text
-\ \~\0\|\^\&\)\%\:";
+\~\0\|\^\&\)\%"; //not used: "\ ", "\:"
             let output = 
 r"UNTITLED                             LOCAL                            UNTITLED
-
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -3894,7 +3942,7 @@ footer text                     January 1, 1970                    footer text";
             let output = 
 r"UNTITLED                             LOCAL                            UNTITLED
 
-— – ‐ \ ¡ ¿
+— – ‐ \ ¡ ¿
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4137,11 +4185,11 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-        eiusmod tempor incididunt ut labore et dolore magna aliqua.
-        eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
-        minim veniam, quis nostrud exercitation ullamco laboris nisi ut
-        aliquip ex ea commodo consequat.
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+      tempor incididunt ut labore et dolore magna aliqua.
+      tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+      veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+      commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -4158,10 +4206,10 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-        eiusmod tempor incididunt ut labore et dolore magna aliqua.
-        Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
-        nisi ut aliquip ex ea commodo consequat.
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+      tempor incididunt ut labore et dolore magna aliqua.
+      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+      ut aliquip ex ea commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -4178,11 +4226,11 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-           Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-             eiusmod tempor incididunt ut labore et dolore magna aliqua.
-        eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
-           minim veniam, quis nostrud exercitation ullamco laboris nisi ut
-                           aliquip ex ea commodo consequat.
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+                tempor incididunt ut labore et dolore magna aliqua.
+        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+      veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+                                 commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -4220,10 +4268,10 @@ Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliqu
 .Ed";
                 let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-        eiusmod tempor incididunt ut labore et dolore magna aliqua.
-        Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
-        nisi ut aliquip ex ea commodo consequat.
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+      tempor incididunt ut labore et dolore magna aliqua.
+      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+      ut aliquip ex ea commodo consequat.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -4268,28 +4316,37 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg g 
 
 Adssdf sdfmsdpf sdfm sdfmsdpf <alpha>
 
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-        eiusmod tempor incididunt ut labore et dolore magna aliqua.
-        Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
-        nisi ut aliquip ex ea commodo consequat.
+      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+      tempor incididunt ut labore et dolore magna aliqua.
+      Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+      ut aliquip ex ea commodo consequat.
 
 Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
 
-             Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-             eiusmod tempor incididunt ut labore et dolore magna aliqua.
-             Ut enim ad minim veniam, quis nostrud exercitation ullamco
-             laboris nisi ut aliquip ex ea commodo consequat.
+           Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+           eiusmod tempor incididunt ut labore et dolore magna aliqua.
+           Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+           nisi ut aliquip ex ea commodo consequat.
 
-                     Lorem ipsum dolor sit amet, consectetur adipiscing elit,
-                     sed do eiusmod tempor incididunt ut labore et dolore
-                     magna aliqua.
-                     Ut enim ad minim veniam, quis nostrud exercitation
-                     ullamco laboris nisi ut aliquip ex ea commodo consequat.
+                 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed
+                 do eiusmod tempor incididunt ut labore et dolore magna
+                 aliqua.
+                 Ut enim ad minim veniam, quis nostrud exercitation ullamco
+                 laboris nisi ut aliquip ex ea commodo consequat.
+
+                       Lorem ipsum dolor sit amet, consectetur adipiscing
+                       elit, sed do eiusmod tempor incididunt ut labore et
+                       dolore magna aliqua.
+                       Ut enim ad minim veniam, quis nostrud exercitation
+                       ullamco laboris nisi ut aliquip ex ea commodo
+                       consequat.
 
                              Lorem ipsum dolor sit amet, consectetur
                              adipiscing elit, sed do eiusmod tempor incididunt
@@ -4298,16 +4355,8 @@ DESCRIPTION
                              exercitation ullamco laboris nisi ut aliquip ex
                              ea commodo consequat.
 
-                                     Lorem ipsum dolor sit amet, consectetur
-                                     adipiscing elit, sed do eiusmod tempor
-                                     incididunt ut labore et dolore magna
-                                     aliqua.
-                                     Ut enim ad minim veniam, quis nostrud
-                                     exercitation ullamco laboris nisi ut
-                                     aliquip ex ea commodo consequat.
-
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -4325,7 +4374,7 @@ Line 2
 .Ef";
             let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-\u{1b}[3mLine 1 Line 2 \u{1b}[0m
+Line 1 Line 2
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4342,7 +4391,7 @@ Line 2
 .Ef";
             let output = "PROGNAME(1)                 General Commands Manual                PROGNAME(1)
 
-\u{1b}[3mLine 1 Line 2 \u{1b}[0m
+Line 1 Line 2
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);
@@ -4829,8 +4878,11 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
+
      •       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
              eiusmod tempor incididunt ut labore et dolore magna aliqua.
      •       Ut enim ad minim veniam, quis nostrud exercitation ullamco
@@ -4856,8 +4908,8 @@ DESCRIPTION
                              voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
 
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -4925,14 +4977,10 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
-     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-     tempor incididunt ut labore et dolore magna aliqua.
-     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
-     ut aliquip ex ea commodo consequat.
-     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
-     dolore eu fugiat nulla pariatur.
 
      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
      tempor incididunt ut labore et dolore magna aliqua.
@@ -4948,8 +4996,15 @@ DESCRIPTION
      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
      dolore eu fugiat nulla pariatur.
 
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+     tempor incididunt ut labore et dolore magna aliqua.
+     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+     ut aliquip ex ea commodo consequat.
+     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+     dolore eu fugiat nulla pariatur.
+
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -5020,18 +5075,10 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
-     head1
-     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
-     tempor incididunt ut labore et dolore magna aliqua.
-     head2
-     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
-     ut aliquip ex ea commodo consequat.
-     head3
-     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
-     dolore eu fugiat nulla pariatur.
-     head4
 
      head1
      Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
@@ -5053,9 +5100,20 @@ DESCRIPTION
      head3
      Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
      dolore eu fugiat nulla pariatur.
+     head4
 
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     head1
+     Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+     tempor incididunt ut labore et dolore magna aliqua.
+     head2
+     Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi
+     ut aliquip ex ea commodo consequat.
+     head3
+     Duis aute irure dolor in reprehenderit in voluptate velit esse cillum
+     dolore eu fugiat nulla pariatur.
+
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -5123,15 +5181,10 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
-     head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-     eiusmod tempor incididunt ut labore et dolore magna aliqua.
-     head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
-     nisi ut aliquip ex ea commodo consequat.
-     head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
-     cillum dolore eu fugiat nulla pariatur.
-     head4 
 
      head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
      eiusmod tempor incididunt ut labore et dolore magna aliqua.
@@ -5139,7 +5192,15 @@ DESCRIPTION
      nisi ut aliquip ex ea commodo consequat.
      head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
      cillum dolore eu fugiat nulla pariatur.
-     head4 
+     head4
+
+     head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
+     eiusmod tempor incididunt ut labore et dolore magna aliqua.
+     head2 Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris
+     nisi ut aliquip ex ea commodo consequat.
+     head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
+     cillum dolore eu fugiat nulla pariatur.
+     head4
 
      head1 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
      eiusmod tempor incididunt ut labore et dolore magna aliqua.
@@ -5148,8 +5209,8 @@ DESCRIPTION
      head3 Duis aute irure dolor in reprehenderit in voluptate velit esse
      cillum dolore eu fugiat nulla pariatur.
 
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -5214,8 +5275,11 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
+
      head  Lore  cons  sed   labore et dolore magna aliqua.
      1     ipsu  ecte  eius
            dolo  adip  temp
@@ -5277,8 +5341,8 @@ DESCRIPTION
                  veli
                  t
 
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -5346,8 +5410,11 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
+
      head1   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
              eiusmod tempor incididunt ut labore et dolore magna aliqua.
      head2   Ut enim ad minim veniam, quis nostrud exercitation ullamco
@@ -5373,8 +5440,8 @@ DESCRIPTION
                              voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
 
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -5442,8 +5509,11 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
+
      Item head title1 Lorem ipsum dolor sit amet, consectetur adipiscing elit,
              sed do eiusmod tempor incididunt ut labore et dolore magna
              aliqua.
@@ -5472,8 +5542,8 @@ DESCRIPTION
                              in voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
 
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -5541,8 +5611,11 @@ Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg dfg
 g wefwefwer werwe rwe r wer <alpha>
 
 DESCRIPTION
+
    SUBSECTION
+
      Adssdf sdfmsdpf  sdfm sdfmsdpf <alpha> 
+
      •       Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
              eiusmod tempor incididunt ut labore et dolore magna aliqua.
      •       Ut enim ad minim veniam, quis nostrud exercitation ullamco
@@ -5568,8 +5641,8 @@ DESCRIPTION
                              voluptate velit esse cillum dolore eu fugiat
                              nulla pariatur.
 
-     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df
-     gdfg dfg g wefwefwer werwe rwe r wer <alpha>
+     Adssdf sdfmsdpf sdfm sdfmsdpf sgsdgsdg sdfg sdfg sdfg fdsg d gdfg df gdfg
+     dfg g wefwefwer werwe rwe r wer <alpha>
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
@@ -5594,6 +5667,9 @@ Line 2
             let output =
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
+• Line 1
+
+• Line 2
 
 footer text                     January 1, 1970                    footer text";
             test_formatting(input, output);

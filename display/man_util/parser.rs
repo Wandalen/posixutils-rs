@@ -418,7 +418,7 @@ impl MdocParser {
                             .take_while(|ch| ch.is_ascii_digit())
                             .collect::<String>();
                         if let Ok(w) = str::parse::<u8>(&width_p){
-                            *width = Some(w.saturating_add(2));
+                            *width = Some(w);
                         }
                     }else {
                         *width = match width_p.as_str(){
@@ -890,7 +890,7 @@ impl MdocParser {
 
         nodes.extend(ac);
 
-            Element::Macro(MacroNode {
+        Element::Macro(MacroNode {
             mdoc_macro: Macro::Ao,
             nodes,
         })
