@@ -443,10 +443,10 @@ lazy_static! {
             .collect::<Vec<_>>()
             .join("|");
 
-        let pattern = format!(
-            r#"(?P<quoted>"[^"]*")|(?P<esc>{})"#,
-            alternation
-        );
+            let pattern = format!(
+                r#"(?P<esc>{})"#,
+                alternation
+            );
 
         Regex::new(&pattern).unwrap()
     };
@@ -455,9 +455,7 @@ lazy_static! {
 pub fn replace_escapes(input: &str) -> String {
     let input = OUTER_REGEX
         .replace_all(input, |caps: &regex::Captures| {
-            if let Some(quoted) = caps.name("quoted") {
-                quoted.as_str().to_string()
-            } else if let Some(esc) = caps.name("esc") {
+            if let Some(esc) = caps.name("esc") {
                 SUBSTITUTIONS
                     .get(esc.as_str())
                     .map(|rep| rep.to_string())
@@ -3161,11 +3159,9 @@ impl MdocFormatter {
     fn format_an_authors(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
         match an_type {
             AnType::NoSplit => {
-                // self.formatting_state.split_mod = false;
                 String::new()
             }
             AnType::Split => {
-                // self.formatting_state.split_mod = true;
                 String::new()
             }
             AnType::Name => {
@@ -7256,7 +7252,7 @@ footer text                     January 1, 1970                    footer text";
         use std::process::Command;
         use rstest::rstest;
 
-        // #[rstest]
+        #[rstest]
         // // Small
         // #[case("./test_files/mdoc/rev.1")]
         // #[case("./test_files/mdoc/adjfreq.2")]
@@ -7323,13 +7319,13 @@ footer text                     January 1, 1970                    footer text";
         // #[case("./test_files/mdoc/flock.2")]
 
         // // Bl -column
-        // #[case("./test_files/mdoc/shutdown.2")]
-        // // #[case("./test_files/mdoc/tmux.1")]
-        // #[case("./test_files/mdoc/nl.1")]
-        // #[case("./test_files/mdoc/bc.1")]
-        // #[case("./test_files/mdoc/mg.1")]
-        // #[case("./test_files/mdoc/snmp.1")]
-        // #[case("./test_files/mdoc/rdist.1")]
+        // // #[case("./test_files/mdoc/shutdown.2")]
+        // #[case("./test_files/mdoc/tmux.1")]
+        // // #[case("./test_files/mdoc/nl.1")]
+        // // #[case("./test_files/mdoc/bc.1")]
+        // // #[case("./test_files/mdoc/mg.1")]
+        // // #[case("./test_files/mdoc/snmp.1")]
+        // // #[case("./test_files/mdoc/rdist.1")]
         
         // //Block 1
         // #[case("./test_files/mdoc/chmod.2")]
@@ -7375,17 +7371,17 @@ footer text                     January 1, 1970                    footer text";
 
         // #[case("./test_files/mdoc/tmux.1")]
         // #[case("./test_files/mdoc/cvs.1")]
-        // #[case("./test_files/mdoc/test.1")]
-        // fn format_mdoc_file(#[case] path: &str){
-        //     let input = std::fs::read_to_string(path).unwrap();
-        //     let output = Command::new("mandoc")
-        //         .args(["-T", "locale", path])
-        //         .output()
-        //         .unwrap()
-        //         .stdout;
-        //     let output = String::from_utf8(output).unwrap();
-        //     println!("Current path: {}", path);
-        //     test_formatting(&input, &output);
-        // }
+        #[case("./test_files/mdoc/test.1")]
+        fn format_mdoc_file(#[case] path: &str){
+            let input = std::fs::read_to_string(path).unwrap();
+            let output = Command::new("mandoc")
+                .args(["-T", "locale", path])
+                .output()
+                .unwrap()
+                .stdout;
+            let output = String::from_utf8(output).unwrap();
+            println!("Current path: {}", path);
+            test_formatting(&input, &output);
+        }
     }
 }
