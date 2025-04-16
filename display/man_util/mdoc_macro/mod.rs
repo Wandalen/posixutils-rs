@@ -7,9 +7,9 @@
 // SPDX-License-Identifier: MIT
 //
 
+use crate::man_util::parser::Element;
 use text_production::StType;
 use types::*;
-use crate::man_util::parser::Element;
 
 pub mod text_production;
 pub mod types;
@@ -50,7 +50,7 @@ pub enum Macro {
     Bk,
     Bf(BfType),
     Bl {
-        list_type: BlType, 
+        list_type: BlType,
         width: Option<u8>,
         offset: Option<OffsetType>,
         compact: bool,
@@ -117,8 +117,8 @@ pub enum Macro {
     In {
         filename: String,
     },
-    It{
-        head: Vec<Element>
+    It {
+        head: Vec<Element>,
     },
     Lb {
         lib_name: String,
@@ -132,7 +132,7 @@ pub enum Macro {
     Mt,
     Nd,
     Nm {
-        name: Option<String>
+        name: Option<String>,
     },
     No,
     Ns,

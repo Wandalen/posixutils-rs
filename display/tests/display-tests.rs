@@ -8,6 +8,6 @@
 //
 
 mod echo;
+mod man;
 mod more;
 mod printf;
-mod man;
