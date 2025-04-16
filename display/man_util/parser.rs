@@ -2833,7 +2833,19 @@ mod tests {
         #[test]
         fn bd_invalid_offset() {
             let input = ".Bd -literal -offset invalid_offset\n.Ed";
-            assert_eq!(MdocParser::parse_mdoc(input).unwrap().elements, vec![]);
+            let elements = vec![
+                Element::Macro(MacroNode {
+                    mdoc_macro: Macro::Bd {
+                        block_type: BdType::Literal,
+                        offset: Some(OffsetType::Indent),
+                        compact: false,
+                    },
+                    nodes: vec![],
+                })
+            ];
+
+            let mdoc = MdocParser::parse_mdoc(&input).unwrap();
+            assert_eq!(mdoc.elements, elements);
         }
 
         #[test]
@@ -3184,9 +3196,9 @@ mod tests {
                 mdoc_macro: Macro::Bl {
                     list_type: BlType::Bullet,
                     width: None,
-                    offset: None,
+                    offset: Some(OffsetType::Indent),
                     compact: false,
-                    columns: vec!["-offset".to_string(), "invalid_offset".to_string()],
+                    columns: vec![],
                 },
                 nodes: vec![],
             })];
@@ -11825,7 +11837,7 @@ Line
                 }),
                 Element::Macro(MacroNode {
                     mdoc_macro: Macro::Fo {
-                        funcname: "funcname".to_string(),
+                      funcname: "funcname".to_string(),
                     },
                     nodes: vec![Element::Text("Line".to_string())],
                 }),

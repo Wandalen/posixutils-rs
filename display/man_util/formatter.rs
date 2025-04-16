@@ -5755,6 +5755,7 @@ These are the available options.";
                 "PROGNAME(section)                   section                  PROGNAME(section)
 
    Options
+
      These are the available options. 
 
 footer text                     January 1, 1970                    footer text";
@@ -5972,8 +5973,8 @@ footer text                     January 1, 1970                    footer text";
                 let output =
                     "PROGNAME(section)                   section                  PROGNAME(section)
 
-Issue number. Issue number, Issue number. (Issue) number, Issue, number,
-Issue number!.
+Issue number. Issue number, Issue number. (Issue) number, Issue, number, Issue
+number!.
 
 footer text                     January 1, 1970                    footer text";
                 test_formatting(input, output);
