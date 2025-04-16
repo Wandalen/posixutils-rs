@@ -190,6 +190,9 @@ mod tests {
             .output()
             .expect("Failed to run man -h printf");
 
+        println!("Output: \"{}\"", String::from_utf8(output.stdout).unwrap());
+        println!("Error: \"{}\"", String::from_utf8(output.stderr).unwrap());
+
         assert!(
             output.status.success() || output.status.code() == Some(1),
             "Expected exit code 0 or 1, got: {:?}",
