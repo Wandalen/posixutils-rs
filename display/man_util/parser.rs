@@ -179,20 +179,6 @@ fn does_start_with_macro(word: &str) -> bool {
 pub fn prepare_document(text: &str) -> String {
     let mut is_bd_literal_block = false;
 
-    let text = text
-        .split(".Bl ")
-        .map(|s| {
-            let Some((s1, s2)) = s.split_once(".It ") else {
-                return s.to_string();
-            };
-            let Some((s1, _)) = s1.split_once("\n") else {
-                return s.to_string();
-            };
-            s1.to_string() + "\n.It " + s2
-        })
-        .collect::<Vec<_>>()
-        .join(".Bl ");
-
     text.lines()
         .filter(|l| !l.trim_start().starts_with(".Tg"))
         .map(|l| {
@@ -483,7 +469,7 @@ impl MdocParser {
                     count.0 += 1;
                     let mut width_p = pair
                         .into_inner()
-                        .find(|p| Rule::text_arg == p.as_rule())
+                        .find(|p| Rule::word == p.as_rule())
                         .map(|p| p.as_str().to_string())
                         .unwrap_or("".to_string());
 
@@ -502,6 +488,7 @@ impl MdocParser {
                             "Er" => Some(19),
                             "Ds" => Some(8),
                             "Ev" => Some(17),
+                            "Fl" => Some(12),
                             _ => width_p.len().try_into().ok(),
                         }
                     }
@@ -587,6 +574,7 @@ impl MdocParser {
 
         let nodes = pairs
             .take_while(|p| p.as_rule() != Rule::el_close)
+            .filter(|p| p.as_rule() != Rule::bl_skip)
             .map(Self::parse_it_block)
             .collect();
 

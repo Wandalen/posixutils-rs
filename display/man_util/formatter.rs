@@ -1579,7 +1579,7 @@ impl MdocFormatter {
         let origin_indent = self.formatting_state.current_indent;
         let width = self.formatting_settings.width;
         let line_width = width.saturating_sub(origin_indent + indent);
-
+        let origin_indent_str = " ".repeat(origin_indent);
         let delimiter = if compact { "\n" } else { "\n\n" };
 
         let mut content = String::new();
@@ -1592,6 +1592,9 @@ impl MdocFormatter {
                 line_width + indent,
             );
             body = add_indent_to_lines(body, line_width + indent, &offset);
+            for line in body.iter_mut() {
+                *line = origin_indent_str.clone() + line;
+            }
             content.push_str(&(body.join(delimiter) + delimiter));
         }
 
@@ -7497,7 +7500,10 @@ footer text                     January 1, 1970                    footer text";
 }
 
 /*
-/// Use this mod for testing whole mdoc files
+/// Use this mod for testing whole mdoc files.
+/// Test results may differ from original mdoc
+/// formatter. So this tests will not pass
+/// successfully. This is expected behavior
 #[cfg(test)]
 mod test_mdoc {
     use crate::man_util::formatter::tests::test_formatting;
@@ -7608,7 +7614,6 @@ mod test_mdoc {
     #[case("./test_files/mdoc/write.2")]
 
     #[case("./test_files/mdoc/diff.1")]
-    #[case("./test_files/mdoc/getitimer.2")]
     #[case("./test_files/mdoc/top.1")]
     #[case("./test_files/mdoc/execve.2")]
     #[case("./test_files/mdoc/open.2")]
@@ -7617,7 +7622,6 @@ mod test_mdoc {
     #[case("./test_files/mdoc/socketpair.2")]
     #[case("./test_files/mdoc/setuid.2")]
     #[case("./test_files/mdoc/shmget.2")]
-    #[case("./test_files/mdoc/rcs.1")]
     #[case("./test_files/mdoc/sftp.1")]
     #[case("./test_files/mdoc/grep.1")]
     fn format_mdoc_file(#[case] path: &str){
@@ -7631,4 +7635,5 @@ mod test_mdoc {
         println!("Current path: {}", path);
         test_formatting(&input, &output);
     }
-}*/
+}
+*/
