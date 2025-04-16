@@ -50,7 +50,8 @@ static BLOCK_PARTIAL_IMPLICIT: &[&str] = &[
 
 #[allow(unreachable_patterns)]
 fn does_start_with_macro(word: &str) -> bool {
-    match word {
+    matches!(
+        word,
         "Bd" | "Bf" | "Bk" | "Bl" |
         "Ed" | "Ef" | "Ek" | "El" |
         "It" | "Nd" | "Nm" | "Sh" | "Ss" |
@@ -89,9 +90,8 @@ fn does_start_with_macro(word: &str) -> bool {
         "Tg" | "Tn" |
         "Ud" | "Ux" |
         "Va" | "Vt" |
-        "Xr" => true,
-        _ => false,
-    }
+        "Xr"
+    )
 }
 
 pub fn prepare_document(text: &str) -> String {
@@ -105,7 +105,7 @@ pub fn prepare_document(text: &str) -> String {
             let Some((s1, _)) = s1.split_once("\n") else{
                 return s.to_string();
             };
-            s1.to_string() + "\n.It " + &s2
+            s1.to_string() + "\n.It " + s2
         })
         .collect::<Vec<_>>()
         .join(".Bl ");
@@ -114,8 +114,8 @@ pub fn prepare_document(text: &str) -> String {
         .filter(|l| !l.trim_start().starts_with(".Tg"))
         .map(|l| {
             let line = if l.contains(".It") {
-                l.replace('\t', &format!("{}", " Ta "))
-                    .replace("    ", &format!("{}", " Ta "))
+                l.replace('\t', " Ta ")
+                    .replace("    ", " Ta ")
             } else {
                 l.to_string()
             };
@@ -269,7 +269,7 @@ impl MdocParser {
 
     /// Parses full mdoc file
     pub fn parse_mdoc(input: &str) -> Result<MdocDocument, MdocError> {
-        let input = prepare_document(&input);
+        let input = prepare_document(input);
         let pairs = MdocParser::parse(Rule::mdoc, input.as_ref())
             .map_err(|err| MdocError::Pest(Box::new(err)))?;
 
@@ -281,10 +281,8 @@ impl MdocParser {
             })
             .collect();
 
-        if let Some(element) = elements.last(){
-            if let Element::Eoi = element {
-                elements.pop(); // Remove `Element::Eoi` element
-            }
+        if let Some(Element::Eoi) = elements.last(){
+            elements.pop(); // Remove `Element::Eoi` element
         }
 
         let mdoc = MdocDocument { elements };

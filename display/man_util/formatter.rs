@@ -620,7 +620,7 @@ impl MdocFormatter {
                         current_line.clear(); 
                     }
 
-                    current_line.push_str(&word);
+                    current_line.push_str(word);
                     
                     if !word.chars().all(|ch|ch.is_control()){
                         current_line.push(' ');
@@ -1259,9 +1259,9 @@ fn remove_empty_lines(input: &str, delimiter_size: usize) -> String {
     let input = input.lines()
         .map(|line| {
             if line.chars().all(|ch|ch.is_whitespace()){
-                return ""
+                ""
             } else {
-                return line;
+                line
             }
         })
         .collect::<Vec<_>>()
@@ -1306,13 +1306,11 @@ impl MdocFormatter {
         let Some(offset) = offset else {
             return 0;
         };
-        let offset = match offset{
+        match offset{
             OffsetType::Indent => 6,
             OffsetType::IndentTwo => 6 * 2,
             _ => self.formatting_settings.indent
-        };
-
-        offset
+        }
     }
 
     /// Converts [`OffsetType`] to block alignment type ([`OffsetType`]). 
@@ -1451,7 +1449,7 @@ impl MdocFormatter {
             }
         };
 
-        let content = macro_node
+        macro_node
             .nodes
             .into_iter()
             .map(|node| {
@@ -1463,9 +1461,7 @@ impl MdocFormatter {
             })
             .filter(|s| !s.is_empty())
             .collect::<Vec<String>>()
-            .join("");
-
-        content
+            .join("")
     }
 
     fn format_bk_block(&mut self, macro_node: MacroNode) -> String {
@@ -1719,25 +1715,27 @@ impl MdocFormatter {
         }
 
         /// Merges last row cells for rows with length bigger then [`col_count`] 
-        fn merge_row_ends(table: &mut Vec<Vec<String>>, col_count: usize) -> Option<(usize, usize)>{
+        fn merge_row_ends(table: &mut [Vec<String>], col_count: usize) -> Option<(usize, usize)>{
             let mut row_len_range: Option<(usize, usize)> = None;
             table.iter_mut()
                 .for_each(|row|{
-                    if row.len() < col_count{
-                        row.resize(col_count, "".to_string());
-                    }else if row.len() > col_count{
-                        if row_len_range.is_none(){
-                            row_len_range = Some((usize::MAX, 0));
-                        }
-                        let end = row.split_off(col_count).join(" ");
-                        let end_len = end.len();
-                        row_len_range = row_len_range.map(|r|{
-                            if end_len == 0{
-                                return (r.0, r.1.max(end_len)); 
+                    match row.len().cmp(&col_count){
+                        std::cmp::Ordering::Less => row.resize(col_count, "".to_string()),
+                        std::cmp::Ordering::Greater => {
+                            if row_len_range.is_none(){
+                                row_len_range = Some((usize::MAX, 0));
                             }
-                            (r.0.min(end_len), r.1.max(end_len))
-                        });
-                        row.push(trim_quotes(end.trim().to_string()));
+                            let end = row.split_off(col_count).join(" ");
+                            let end_len = end.len();
+                            row_len_range = row_len_range.map(|r|{
+                                if end_len == 0{
+                                    return (r.0, r.1.max(end_len)); 
+                                }
+                                (r.0.min(end_len), r.1.max(end_len))
+                            });
+                            row.push(trim_quotes(end.trim().to_string()));
+                        },
+                        _ => {}
                     }
                 });
 
@@ -1778,7 +1776,7 @@ impl MdocFormatter {
                 if let Some(bigger_row_len) = bigger_row_len{
                     col_widths.push(bigger_row_len);
                 }else if let Some(last_col_width) = col_widths.last_mut(){
-                    *last_col_width = max_line_width - *total_width + *last_col_width;
+                    *last_col_width += max_line_width - *total_width;
                 }
             }else{
                 for row in table {
@@ -1935,7 +1933,7 @@ impl MdocFormatter {
             let mut head = head.clone(); 
 
             if !is_first_block[i]{
-                let first_line = body.get(0)
+                let first_line = body.first()
                     .cloned()
                     .unwrap_or_default()
                     .split_whitespace()
@@ -2071,7 +2069,7 @@ impl MdocFormatter {
             }
         }
 
-        fn strip_empty_between_nested(formatted_its: &mut Vec<Vec<String>>, macro_node: &MacroNode, max_nl: usize){
+        fn strip_empty_between_nested(formatted_its: &mut [Vec<String>], macro_node: &MacroNode, max_nl: usize){
             for (i, it_node) in macro_node.nodes.iter().enumerate(){
                 let Element::Macro(MacroNode { mdoc_macro: Macro::It{ .. }, nodes }) = it_node else {
                     continue;
@@ -2144,7 +2142,7 @@ impl MdocFormatter {
                 let is_first_block = nodes.iter()
                     .map(|el|{
                         if let Element::Macro(MacroNode { nodes, .. }) = el{
-                            if let Some(Element::Macro(MacroNode { mdoc_macro, .. })) = nodes.get(0){
+                            if let Some(Element::Macro(MacroNode { mdoc_macro, .. })) = nodes.first(){
                                 return matches!(mdoc_macro, &Macro::Bl{ .. } | &Macro::Bd{ .. } );
                             }
                         }
@@ -2166,7 +2164,7 @@ impl MdocFormatter {
         &mut self,
         macro_node: MacroNode,
     ) -> String {
-        let content = split_nested_bl(macro_node)
+        split_nested_bl(macro_node)
             .into_iter()
             .map(|element|{
                 let Element::Macro(ref macro_node) = element else{
@@ -2185,9 +2183,7 @@ impl MdocFormatter {
                 self.format_bl_block(list_type, width, offset, compact, columns, macro_node.clone())
             })
             .collect::<Vec<_>>()
-            .join("");
-
-        content
+            .join("")
     }
 }
 
@@ -2346,7 +2342,7 @@ impl MdocFormatter {
                             Macro::Fn { 
                                 funcname 
                             } => {
-                                let formatted_node = self.format_fn_synopsis(&funcname, macro_node.clone());
+                                let formatted_node = self.format_fn_synopsis(funcname, macro_node.clone());
                                 content.push_str(&formatted_node);
 
                                 current_len = indent;
@@ -2408,7 +2404,7 @@ impl MdocFormatter {
                                 self.format_macro_node(macro_node.clone())
                             }
                         },
-                        Element::Text(ref text) => self.format_text_node(&text),
+                        Element::Text(ref text) => self.format_text_node(text),
                         Element::Eoi => String::new()
                     };
 
@@ -2446,7 +2442,7 @@ impl MdocFormatter {
             .into_iter()
             .map(|node| {
                 let mut content = self.format_node(node);
-                if content.chars().last() != Some('\n') && !content.is_empty() {
+                if !content.ends_with('\n') && !content.is_empty() {
                     content.push_str(&self.formatting_state.spacing);
                 }
                 content
@@ -3106,9 +3102,7 @@ impl MdocFormatter {
     }
 
     fn format_pq(&mut self, mut macro_node: MacroNode) -> String {
-        let c = self.format_partial_implicit_block(&mut macro_node, "(", ")");
-
-        c
+        self.format_partial_implicit_block(&mut macro_node, "(", ")")
     }
 
     fn format_ql(&mut self, mut macro_node: MacroNode) -> String {
@@ -3120,9 +3114,7 @@ impl MdocFormatter {
     }
 
     fn format_sq(&mut self, mut macro_node: MacroNode) -> String {
-        let c = self.format_partial_implicit_block(&mut macro_node, "\'", "\'");
-
-        c
+        self.format_partial_implicit_block(&mut macro_node, "\'", "\'")
     }
 
     fn format_vt(&mut self, macro_node: MacroNode) -> String {
@@ -3604,7 +3596,7 @@ impl MdocFormatter {
     }
 
     fn format_in(&self, filename: &str, macro_node: MacroNode) -> String {
-        let mut result = if is_first_char_delimiter(&filename) {
+        let mut result = if is_first_char_delimiter(filename) {
             let mut filename = filename.to_string();
             let del = filename.remove(0);
             format!("{}<{}>", del, filename)
@@ -3842,16 +3834,14 @@ fn is_first_char_alnum(s: &str) -> bool {
 }
 
 fn is_first_char_delimiter(s: &str) -> bool {
-    s.chars().next().map(|c| match c {
-        '(' | '[' | ')' | ']' | '.' | ',' | ':' | ';' | '!' | '?' => true,
-        _ => false
+    s.chars().next().map(|c| {
+        matches!(c, '(' | '[' | ')' | ']' | '.' | ',' | ':' | ';' | '!' | '?')
     }).unwrap_or(false)
 }
 
 fn is_first_word_delimiter(s: &str) -> bool {
-    s.split_whitespace().next().map(|c| match c {
-        "(" | "[" | ")" | "]" | "." | "," | ":" | ";" | "!" | "?" => true,
-        _ => false
+    s.split_whitespace().next().map(|c| {
+        matches!(c, "(" | "[" | ")" | "]" | "." | "," | ":" | ";" | "!" | "?")
     }).unwrap_or(false)
 }
 
