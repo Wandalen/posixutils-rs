@@ -111,6 +111,7 @@ pub fn prepare_document(text: &str) -> String {
         .join(".Bl ");
 
     text.lines()
+        .filter(|l| !l.trim_start().starts_with(".Tg"))
         .map(|l| {
             let line = if l.contains(".It") {
                 l.replace('\t', &format!("{}", " Ta "))
