@@ -3325,12 +3325,8 @@ impl MdocFormatter {
 
     fn format_an_authors(&mut self, an_type: AnType, macro_node: MacroNode) -> String {
         match an_type {
-            AnType::NoSplit => {
-                String::new()
-            }
-            AnType::Split => {
-                String::new()
-            }
+            AnType::NoSplit => String::new(),
+            AnType::Split => String::new(),
             AnType::Name => {
                 let content = self.format_inline_macro(macro_node);
                 match self.formatting_state.split_mod {
@@ -5899,7 +5895,7 @@ footer text                     January 1, 1970                    footer text";
         fn sh() {
             let input = ".Dd $Mdocdate: October 28 2016 $
 .Dt REV 1
-.Os
+.Os footer text
 .Sh NAME
 .Nm rev
 .Nd reverse lines of a file
@@ -5926,7 +5922,7 @@ DESCRIPTION
      reversing the order of characters in every line. If no files are
      specified, the standard input is read.
 
-GNU/Linux                      October 28, 2016                      GNU/Linux";
+footer text                    October 28, 2016                    footer text";
             test_formatting(input, output);
         }
 
