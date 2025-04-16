@@ -709,6 +709,8 @@ impl MdocFormatter {
 
         lines = lines.split_at(first_empty_count).1.to_vec();
 
+        lines.insert(0, "".to_string());
+
         lines.insert(
         0,
         self.formatting_state
@@ -716,14 +718,6 @@ impl MdocFormatter {
             .clone()
             .unwrap_or_else(|| self.format_default_header()),
         );
-
-        while let Some(line) = lines.last().cloned(){
-            if line.chars().all(|ch|ch.is_whitespace()){
-                lines.pop();
-            }else{
-                break;
-            }
-        }
 
         lines.push(self.format_footer());
 
