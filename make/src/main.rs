@@ -8,7 +8,7 @@
 //
 
 use core::str::FromStr;
-use std::collections::{HashMap, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
