@@ -1,5 +1,5 @@
 [package]
-name = "posixutils-display"
+name = "posixutils-man"
 version = "0.2.2"
 authors = ["Jeff Garzik"]
 repository.workspace = true
